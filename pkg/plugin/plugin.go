@@ -1,12 +1,12 @@
 package plugin
 
 import (
+	console "github.com/openshift/api/console/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -51,15 +51,15 @@ func NewPlugin(scheme *runtime.Scheme) *Plugin {
 		return nil
 	}
 
-	existingDaemonSet := &appsv1.Deployment{}
-	if err := k8s.GetDeployment(c, "portworx-operator", "openshift-operators", existingDaemonSet); err != nil {
-		logrus.Errorf("error during getting daemonset  %s", err)
+	deployment := &appsv1.Deployment{}
+	if err := k8s.GetDeployment(c, "portworx-operator", "openshift-operators", deployment); err != nil {
+		logrus.Errorf("error during getting operator deployment  %s", err)
 	}
 
 	return &Plugin{
 		client:   c,
 		scheme:   scheme,
-		ownerRef: metav1.GetControllerOf(existingDaemonSet),
+		ownerRef: metav1.NewControllerRef(deployment, v1.SchemeGroupVersion.WithKind("Deployment")),
 	}
 }
 
@@ -100,6 +100,9 @@ func (p *Plugin) DeployPlugin() {
 	}
 	if err := p.createJob(patchConsoleJobFile); err != nil {
 		logrus.Errorf("error during creating job %s ", err)
+	}
+	if err := p.createConsolePlugin(consolePluginFile); err != nil {
+		logrus.Errorf("error during creating console plugin %s ", err)
 	}
 }
 
@@ -156,6 +159,31 @@ func (p *Plugin) createConfigmap(filename string) error {
 	}
 	_, err = k8s.CreateOrUpdateConfigMap(p.client, cm, p.ownerRef)
 	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *Plugin) createConsolePlugin(filename string) error {
+	cp := &console.ConsolePlugin{}
+	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, cp)
+	if err != nil {
+		return err
+	}
+
+	existingPlugin := &console.ConsolePlugin{}
+	err = p.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      existingPlugin.Name,
+			Namespace: existingPlugin.Namespace,
+		},
+		existingPlugin,
+	)
+	if errors.IsNotFound(err) {
+		logrus.Infof("Creating %s Consoleplugin", existingPlugin.Name)
+		return p.client.Create(context.TODO(), cp)
+	} else if err != nil {
 		return err
 	}
 	return nil
