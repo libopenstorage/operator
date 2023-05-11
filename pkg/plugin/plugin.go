@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/operator-sdk/k8sutil"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -41,9 +42,18 @@ type Plugin struct {
 	client   client.Client
 	scheme   *runtime.Scheme
 	ownerRef *metav1.OwnerReference
+	ns       string
 }
 
 func NewPlugin(scheme *runtime.Scheme) *Plugin {
+	operatorName, err := k8sutil.GetOperatorName()
+	if err != nil {
+		logrus.Error(err)
+	}
+	ns, err := k8sutil.GetOperatorNamespace()
+	if err != nil {
+		logrus.Error(err)
+	}
 
 	c, err := client.New(config.GetConfigOrDie(), client.Options{})
 	if err != nil {
@@ -52,7 +62,7 @@ func NewPlugin(scheme *runtime.Scheme) *Plugin {
 	}
 
 	deployment := &appsv1.Deployment{}
-	if err := k8s.GetDeployment(c, "portworx-operator", "openshift-operators", deployment); err != nil {
+	if err := k8s.GetDeployment(c, operatorName, ns, deployment); err != nil {
 		logrus.Errorf("error during getting operator deployment  %s", err)
 	}
 
@@ -60,6 +70,7 @@ func NewPlugin(scheme *runtime.Scheme) *Plugin {
 		client:   c,
 		scheme:   scheme,
 		ownerRef: metav1.NewControllerRef(deployment, v1.SchemeGroupVersion.WithKind("Deployment")),
+		ns:       ns,
 	}
 }
 
@@ -108,14 +119,17 @@ func (p *Plugin) DeployPlugin() {
 
 func (p *Plugin) createDeployment(filename string) error {
 	deployment, err := k8s.GetDeploymentFromFile(filename, pxutil.SpecsBaseDir())
+	deployment.Namespace = p.ns
 	if err != nil {
 		return err
 	}
+	logrus.Info(*deployment)
 	return k8s.CreateOrUpdateDeployment(p.client, deployment, p.ownerRef)
 }
 
 func (p *Plugin) createClusterRole(filename string) error {
 	roleObj := &rbacv1.ClusterRole{}
+	roleObj.Namespace = p.ns
 	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, roleObj)
 	if err != nil {
 		return err
@@ -125,6 +139,7 @@ func (p *Plugin) createClusterRole(filename string) error {
 
 func (p *Plugin) createClusterRoleBinding(filename string) error {
 	roleBindingObj := &rbacv1.ClusterRoleBinding{}
+	roleBindingObj.Namespace = p.ns
 	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, roleBindingObj)
 	if err != nil {
 		return err
@@ -134,6 +149,7 @@ func (p *Plugin) createClusterRoleBinding(filename string) error {
 
 func (p *Plugin) createService(filename string) error {
 	service := &v1.Service{}
+	service.Namespace = p.ns
 	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, service)
 	if err != nil {
 		return err
@@ -143,6 +159,7 @@ func (p *Plugin) createService(filename string) error {
 
 func (p *Plugin) createServiceAccount(filename string) error {
 	serviceAccount := &v1.ServiceAccount{}
+	serviceAccount.Namespace = p.ns
 	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, serviceAccount)
 	if err != nil {
 		return err
@@ -152,6 +169,7 @@ func (p *Plugin) createServiceAccount(filename string) error {
 
 func (p *Plugin) createConfigmap(filename string) error {
 	cm := &v1.ConfigMap{}
+	cm.Namespace = p.ns
 	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, cm)
 	if err != nil {
 		return err
@@ -166,14 +184,15 @@ func (p *Plugin) createConfigmap(filename string) error {
 func (p *Plugin) createConsolePlugin(filename string) error {
 
 	if err := console.AddToScheme(p.scheme); err != nil {
-        return err
-    }
-
+		return err
+	}
 	cp := &console.ConsolePlugin{}
+	cp.Namespace = p.ns
 	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, cp)
 	if err != nil {
 		return err
 	}
+
 	existingPlugin := &console.ConsolePlugin{}
 	err = p.client.Get(
 		context.TODO(),
@@ -193,8 +212,8 @@ func (p *Plugin) createConsolePlugin(filename string) error {
 }
 
 func (p *Plugin) createJob(filename string) error {
-
 	job := &batchv1.Job{}
+	job.Namespace = p.ns
 	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, job)
 	if err != nil {
 		return err
