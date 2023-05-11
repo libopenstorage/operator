@@ -3,7 +3,7 @@
 apiVersion: console.openshift.io/v1alpha1
 kind: ConsolePlugin
 metadata:
-  name: px-plugin-test
+  name: portworx
   labels:
     app: px-plugin-test
     app.kubernetes.io/name: px-plugin-test
@@ -11,16 +11,22 @@ metadata:
     app.kubernetes.io/part-of: px-plugin-test
     app.kubernetes.io/managed-by: px-plugin-test
 spec:
+  backend:
+    service:
+      basePath: /
+      name: px-plugin-test
+      namespace: placeholder
+      port: 9443
+    type: Service
+  displayName: Portworx Plugin
+  i18n:
+    loadType: ''
   proxy:
-  - type: Service
-    alias: portworx-api
-    endpoint:
-      service:
-        name: px-plugin-test
-        namespace: openshift-operators
-  displayName: px-plugin-test Plugin
-  service:
-    name: px-plugin-test
-    namespace: openshift-operators
-    port: 9443
-    basePath: /
+    - alias: portworx-api
+      authorization: None
+      endpoint:
+        service:
+          name: portworx-console-proxy
+          namespace: placeholder
+          port: 443
+        type: Service

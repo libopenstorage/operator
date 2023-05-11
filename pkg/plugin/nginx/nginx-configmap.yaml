@@ -14,18 +14,18 @@ data:
     http {
       server {
         listen 8080;
-        server_name portworx-console-proxy.openshift-operators.svc.cluster.local;
+          server_name portworx-console-proxy.ocp-dyn-plugin.svc.cluster.local;
         location / {
-          proxy_pass http://portworx-api.openshift-operators.svc.cluster.local:9021;
+          proxy_pass http://portworx-api.ocp-dyn-plugin.svc.cluster.local:9021;
         }
       }
       server {
         listen 8443 ssl;
-        server_name portworx-console-proxy.openshift-operators.svc.cluster.local;
+        server_name portworx-console-proxy.ocp-dyn-plugin.svc.cluster.local;
         ssl_certificate /etc/nginx/certs/tls.crt;
         ssl_certificate_key /etc/nginx/certs/tls.key;
         location / {
-          proxy_pass http://portworx-api.openshift-operators.svc.cluster.local:9021;
+          proxy_pass http://portworx-api.ocp-dyn-plugin.svc.cluster.local:9021;
         }
       }
     }
