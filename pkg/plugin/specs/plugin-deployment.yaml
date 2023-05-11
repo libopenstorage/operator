@@ -4,7 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: px-plugin-test
-  namespace: default
+  namespace: openshift-operators
   labels:
     helm.sh/chart: openshift-console-plugin-0.1.0
     app: px-plugin-test
@@ -33,7 +33,7 @@ spec:
     spec:
       containers:
         - name: px-plugin-test
-          image: quay.io/kravichandran-px/portworx-dynamic-plugin
+          image: quay.io/kravichandran-px/portworx-dynamic-plugin:1.5.1
           ports:
             - containerPort: 9443
               protocol: TCP

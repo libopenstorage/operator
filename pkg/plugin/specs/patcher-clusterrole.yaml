@@ -4,7 +4,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: px-plugin-test-patcher
-  namespace: default
+  namespace: openshift-operators
   labels:
     helm.sh/chart: openshift-console-plugin-0.1.0
     app: px-plugin-test

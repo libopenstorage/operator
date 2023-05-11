@@ -111,7 +111,6 @@ func (p *Plugin) createDeployment(filename string) error {
 	if err != nil {
 		return err
 	}
-	logrus.Info(*deployment)
 	return k8s.CreateOrUpdateDeployment(p.client, deployment, p.ownerRef)
 }
 
@@ -165,18 +164,22 @@ func (p *Plugin) createConfigmap(filename string) error {
 }
 
 func (p *Plugin) createConsolePlugin(filename string) error {
+
+	if err := console.AddToScheme(p.scheme); err != nil {
+        return err
+    }
+
 	cp := &console.ConsolePlugin{}
 	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, cp)
 	if err != nil {
 		return err
 	}
-
 	existingPlugin := &console.ConsolePlugin{}
 	err = p.client.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      existingPlugin.Name,
-			Namespace: existingPlugin.Namespace,
+			Name:      cp.Name,
+			Namespace: cp.Namespace,
 		},
 		existingPlugin,
 	)
@@ -190,6 +193,7 @@ func (p *Plugin) createConsolePlugin(filename string) error {
 }
 
 func (p *Plugin) createJob(filename string) error {
+
 	job := &batchv1.Job{}
 	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, job)
 	if err != nil {

@@ -4,7 +4,7 @@ apiVersion: console.openshift.io/v1alpha1
 kind: ConsolePlugin
 metadata:
   name: px-plugin-test
-  namespace: default
+  namespace: openshift-operators
   labels:
     helm.sh/chart: openshift-console-plugin-0.1.0
     app: px-plugin-test

@@ -6,7 +6,7 @@ metadata:
   annotations:
     service.alpha.openshift.io/serving-cert-secret-name: px-plugin-test-cert
   name: px-plugin-test
-  namespace: default
+  namespace: openshift-operators
   labels:
     helm.sh/chart: openshift-console-plugin-0.1.0
     app: px-plugin-test

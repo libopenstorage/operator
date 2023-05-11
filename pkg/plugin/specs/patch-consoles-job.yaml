@@ -4,7 +4,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: px-plugin-test-patcher
-  namespace: default
+  namespace: openshift-operators
   labels:
     helm.sh/chart: openshift-console-plugin-0.1.0
     app: px-plugin-test
