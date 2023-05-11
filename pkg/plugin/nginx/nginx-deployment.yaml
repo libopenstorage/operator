@@ -2,7 +2,6 @@ kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: portworx-console-proxy
-  namespace: openshift-operators
 spec:
   replicas: 1
   selector:
@@ -16,7 +15,7 @@ spec:
       volumes:
         - name: nginx-conf
           configMap:
-            name: portworx-console-proxy-conf
+            name: nginx-conf
         - name: nginx-certs
           secret:
             secretName: portworx-console-proxy

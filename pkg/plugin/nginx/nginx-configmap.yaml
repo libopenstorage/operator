@@ -1,8 +1,10 @@
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: portworx-console-proxy-conf
-  namespace: openshift-operators
+  name: nginx-conf
+labels:
+    app: px-plugin-test
+    app.kubernetes.io/part-of: px-plugin-test
 data:
   nginx.conf: |
     pid /tmp/nginx.pid;
@@ -14,7 +16,7 @@ data:
         listen 8080;
         server_name portworx-console-proxy.openshift-operators.svc.cluster.local;
         location / {
-          proxy_pass http://portworx-api.portworx.svc.cluster.local:9021;
+          proxy_pass http://portworx-api.openshift-operators.svc.cluster.local:9021;
         }
       }
       server {
@@ -23,7 +25,7 @@ data:
         ssl_certificate /etc/nginx/certs/tls.crt;
         ssl_certificate_key /etc/nginx/certs/tls.key;
         location / {
-          proxy_pass http://portworx-api.portworx.svc.cluster.local:9021;
+          proxy_pass http://portworx-api.openshift-operators.svc.cluster.local:9021;
         }
       }
     }

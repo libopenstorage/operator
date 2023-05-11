@@ -4,32 +4,26 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: px-plugin-test
-  namespace: openshift-operators
   labels:
-    helm.sh/chart: openshift-console-plugin-0.1.0
-    app: px-plugin-test
+    app: portworx
     app.kubernetes.io/name: px-plugin-test
-    app.kubernetes.io/instance: test
+    app.kubernetes.io/instance: px-plugin-test
     app.kubernetes.io/part-of: px-plugin-test
-    app.kubernetes.io/managed-by: Helm
-    app.openshift.io/runtime-namespace: default
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: px-plugin-test
       app.kubernetes.io/name: px-plugin-test
-      app.kubernetes.io/instance: test
+      app.kubernetes.io/instance: px-plugin-test
       app.kubernetes.io/part-of: px-plugin-test
   template:
     metadata:
       labels:
-        helm.sh/chart: openshift-console-plugin-0.1.0
         app: px-plugin-test
         app.kubernetes.io/name: px-plugin-test
-        app.kubernetes.io/instance: test
+        app.kubernetes.io/instance: px-plugin-test
         app.kubernetes.io/part-of: px-plugin-test
-        app.kubernetes.io/managed-by: Helm
     spec:
       containers:
         - name: px-plugin-test

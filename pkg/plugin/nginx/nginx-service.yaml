@@ -2,7 +2,6 @@ kind: Service
 apiVersion: v1
 metadata:
   name: portworx-console-proxy
-  namespace: openshift-operators
   annotations:
     service.beta.openshift.io/serving-cert-secret-name: portworx-console-proxy
 spec:
