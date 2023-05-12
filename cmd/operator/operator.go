@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/libopenstorage/operator/pkg/plugin"
-
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	log "github.com/sirupsen/logrus"
@@ -189,23 +187,21 @@ func run(c *cli.Context) {
 	if err != nil {
 		log.Fatalf("Failed to create controller manager: %v", err)
 	}
-	k8sClient := mgr.GetClient()
-	scheme := mgr.GetScheme()
 
 	// Add custom resources to scheme
 	// TODO: AddToScheme should strictly follow createManager, after CRDs are registered. See comment above
-	if err := apis.AddToScheme(scheme); err != nil {
+	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add resources to the scheme: %v", err)
 	}
-	if err := monitoringv1.AddToScheme(scheme); err != nil {
+	if err := monitoringv1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add prometheus resources to the scheme: %v", err)
 	}
 
-	if err := cluster_v1alpha1.AddToScheme(scheme); err != nil {
+	if err := cluster_v1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
 
-	if err := ocp_configv1.AddToScheme(scheme); err != nil {
+	if err := ocp_configv1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
 
@@ -233,11 +229,11 @@ func run(c *cli.Context) {
 		log.Warnf("Failed to expose metrics port: %v", err)
 	}
 
-	if err := preflight.InitPreflightChecker(k8sClient); err != nil {
+	if err := preflight.InitPreflightChecker(mgr.GetClient()); err != nil {
 		log.Fatalf("Error initializing preflight checker: %v", err)
 	}
 
-	if err := d.Init(k8sClient, mgr.GetScheme(), mgr.GetEventRecorderFor(storagecluster.ControllerName)); err != nil {
+	if err := d.Init(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor(storagecluster.ControllerName)); err != nil {
 		log.Fatalf("Error initializing Storage driver %v: %v", driverName, err)
 	}
 
@@ -258,12 +254,6 @@ func run(c *cli.Context) {
 		log.Fatalf("Error starting watch on storage node controller: %v", err)
 	}
 
-	//register plugin
-	fmt.Println("Starting to create plugin configmap")
-	cm := plugin.NewPlugin(scheme)
-	cm.DeployPlugin()
-	fmt.Println("end to create plugin configmap")
-
 	if c.BoolT(flagMigration) {
 		log.Info("Migration is enabled")
 		migrationHandler := migration.New(&storageClusterController)
@@ -272,10 +262,7 @@ func run(c *cli.Context) {
 
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		log.Fatalf("Manager exited non-zero error: %v", err)
-	} else {
-		fmt.Println("manager started!!!!")
 	}
-
 }
 
 func getObjects(objectKinds string) []client.Object {
