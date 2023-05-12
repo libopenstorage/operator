@@ -13,7 +13,7 @@ require (
 	github.com/hashicorp/go-version v1.6.0
 	github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1
 	github.com/libopenstorage/openstorage v9.4.20+incompatible
-	github.com/openshift/api v0.0.0-20210105115604-44119421ec6b
+	github.com/openshift/api v0.0.0-20230426193520-54a14470e5dc
 	github.com/pborman/uuid v1.2.1
 	github.com/portworx/kvdb v0.0.0-20230405233801-87666830d3fd
 	github.com/portworx/sched-ops v1.20.4-rc1.0.20220725231657-5a6a43c6a5b3
@@ -25,9 +25,9 @@ require (
 	golang.org/x/sys v0.7.0
 	google.golang.org/grpc v1.54.0
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.26.0
+	k8s.io/api v0.26.1
 	k8s.io/apiextensions-apiserver v0.26.0
-	k8s.io/apimachinery v0.25.1
+	k8s.io/apimachinery v0.26.1
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/code-generator v0.25.1
 	k8s.io/component-base v0.26.0
@@ -35,7 +35,7 @@ require (
 	k8s.io/klog v1.0.0
 	k8s.io/kube-scheduler v0.0.0
 	k8s.io/kubernetes v1.25.1
-	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed
+	k8s.io/utils v0.0.0-20221107191617-1a15be271d1d
 	sigs.k8s.io/cluster-api v0.2.11
 	sigs.k8s.io/controller-runtime v0.13.0
 	sigs.k8s.io/yaml v1.3.0
