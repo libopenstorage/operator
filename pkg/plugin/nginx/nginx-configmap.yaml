@@ -5,27 +5,3 @@ metadata:
 labels:
     app: portworx-plugin
     app.kubernetes.io/part-of: portworx-plugin
-data:
-  nginx.conf: |
-    pid /tmp/nginx.pid;
-    events {
-      worker_connections 1024;
-    }
-    http {
-      server {
-        listen 8080;
-          server_name portworx-console-proxy.<placeholder>.svc.cluster.local;
-        location / {
-          proxy_pass http://portworx-api.<placeholder>.svc.cluster.local:9021;
-        }
-      }
-      server {
-        listen 8443 ssl;
-        server_name portworx-console-proxy.<placeholder>.svc.cluster.local;
-        ssl_certificate /etc/nginx/certs/tls.crt;
-        ssl_certificate_key /etc/nginx/certs/tls.key;
-        location / {
-          proxy_pass http://portworx-api.<placeholder>.svc.cluster.local:9021;
-        }
-      }
-    }

@@ -113,6 +113,7 @@ func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
 
 func (p *plugin) Reconcile(cluster *corev1.StorageCluster) error {
 	//create nginx resources
+	logrus.Info("##################################################################")
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
 	var errList []string
@@ -149,6 +150,8 @@ func (p *plugin) Reconcile(cluster *corev1.StorageCluster) error {
 		errList = append(errList, err.Error())
 		logrus.Errorf("error during creating console plugin %s ", err)
 	}
+	logrus.Info("##################################################################")
+
 
 	if len(errList) > 0 {
 		return commonerrors.New(strings.Join(errList, ","))
@@ -206,8 +209,9 @@ func (p *plugin) createConfigmap(filename string, ownerRef *metav1.OwnerReferenc
 	cm.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 
 	if cm.Name == "nginx-conf" {
-		cm.Data["nginx.conf"] = `  nginx.conf: |
-    pid /tmp/nginx.pid;
+		cm.Data = map[string]string{
+			"nginx.conf": 
+	`pid /tmp/nginx.pid;
     events {
       worker_connections 1024;
     }
@@ -228,7 +232,8 @@ func (p *plugin) createConfigmap(filename string, ownerRef *metav1.OwnerReferenc
           proxy_pass http://portworx-api.` + stcNamespace + `.svc.cluster.local:9021;
         }
       }
-    }`
+    }`,
+		}
 	}
 
 	_, err = k8s.CreateOrUpdateConfigMap(p.client, cm, ownerRef)
