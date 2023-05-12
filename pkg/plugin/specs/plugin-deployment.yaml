@@ -5,7 +5,7 @@ kind: Deployment
 metadata:
   name: px-plugin-test
   labels:
-    app: portworx
+    app: px-plugin-test
     app.kubernetes.io/name: px-plugin-test
     app.kubernetes.io/instance: px-plugin-test
     app.kubernetes.io/part-of: px-plugin-test
@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: px-plugin-test
-          image: quay.io/kravichandran-px/portworx-dynamic-plugin:1.5.1
+          image: quay.io/kravichandran-px/portworx-dynamic-plugin:1.5.3
           ports:
             - containerPort: 9443
               protocol: TCP
