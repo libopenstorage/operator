@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"fmt"
 	console "github.com/openshift/api/console/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -103,7 +104,6 @@ func (p *Plugin) createDeployment(filename string) error {
 	if err != nil {
 		return err
 	}
-	logrus.Info(*deployment)
 	return k8s.CreateOrUpdateDeployment(p.client, deployment, p.ownerRef)
 }
 
@@ -119,11 +119,40 @@ func (p *Plugin) createService(filename string) error {
 
 func (p *Plugin) createConfigmap(filename string) error {
 	cm := &v1.ConfigMap{}
-	cm.Namespace = p.ns
+
 	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, cm)
 	if err != nil {
 		return err
 	}
+
+	cm.Namespace = p.ns
+
+	if cm.Name == "nginx-conf" {
+		cm.Data["nginx.conf"] = `  nginx.conf: |
+    pid /tmp/nginx.pid;
+    events {
+      worker_connections 1024;
+    }
+    http {
+      server {
+        listen 8080;
+          server_name portworx-console-proxy.<placeholder>.svc.cluster.local;
+        location / {
+          proxy_pass http://portworx-api.<placeholder>.svc.cluster.local:9021;
+        }
+      }
+      server {
+        listen 8443 ssl;
+        server_name portworx-console-proxy.<placeholder>.svc.cluster.local;
+        ssl_certificate /etc/nginx/certs/tls.crt;
+        ssl_certificate_key /etc/nginx/certs/tls.key;
+        location / {
+          proxy_pass http://portworx-api.<placeholder>.svc.cluster.local:9021;
+        }
+      }
+    }`
+	}
+
 	_, err = k8s.CreateOrUpdateConfigMap(p.client, cm, p.ownerRef)
 	if err != nil {
 		return err
@@ -137,10 +166,21 @@ func (p *Plugin) createConsolePlugin(filename string) error {
 		return err
 	}
 	cp := &console.ConsolePlugin{}
-	cp.Namespace = p.ns
+	
+
 	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, cp)
 	if err != nil {
 		return err
+	}
+
+	cp.Namespace = p.ns
+	fmt.Println(cp.Spec.Proxy)
+	cp.Spec.Proxy[0].Service.Namespace = p.ns
+
+	fmt.Println(cp.Spec.Service)
+	if cp.Spec.Service.Namespace != "" {
+		cp.Spec.Service.Namespace = p.ns
+
 	}
 
 	existingPlugin := &console.ConsolePlugin{}
@@ -152,8 +192,9 @@ func (p *Plugin) createConsolePlugin(filename string) error {
 		},
 		existingPlugin,
 	)
+
 	if errors.IsNotFound(err) {
-		logrus.Infof("Creating %s Consoleplugin", existingPlugin.Name)
+		logrus.Infof("Creating %s Consoleplugin", cp.Name)
 		return p.client.Create(context.TODO(), cp)
 	} else if err != nil {
 		return err
