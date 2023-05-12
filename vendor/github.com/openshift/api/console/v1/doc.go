@@ -3,4 +3,5 @@
 // +k8s:openapi-gen=true
 
 // +groupName=console.openshift.io
-package v1alpha1
+// Package v1 is the v1 version of the API.
+package v1

@@ -1,8 +1,7 @@
 package plugin
 
 import (
-	"fmt"
-	console "github.com/openshift/api/console/v1alpha1"
+	console "github.com/openshift/api/console/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -101,6 +100,7 @@ func (p *Plugin) DeployPlugin() {
 func (p *Plugin) createDeployment(filename string) error {
 	deployment, err := k8s.GetDeploymentFromFile(filename, pxutil.SpecsBaseDir())
 	deployment.Namespace = p.ns
+	deployment.OwnerReferences = []metav1.OwnerReference{*p.ownerRef}
 	if err != nil {
 		return err
 	}
@@ -110,6 +110,7 @@ func (p *Plugin) createDeployment(filename string) error {
 func (p *Plugin) createService(filename string) error {
 	service := &v1.Service{}
 	service.Namespace = p.ns
+	service.OwnerReferences = []metav1.OwnerReference{*p.ownerRef}
 	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, service)
 	if err != nil {
 		return err
@@ -126,6 +127,7 @@ func (p *Plugin) createConfigmap(filename string) error {
 	}
 
 	cm.Namespace = p.ns
+	cm.OwnerReferences = []metav1.OwnerReference{*p.ownerRef}
 
 	if cm.Name == "nginx-conf" {
 		cm.Data["nginx.conf"] = `  nginx.conf: |
@@ -173,13 +175,13 @@ func (p *Plugin) createConsolePlugin(filename string) error {
 	}
 
 	cp.Namespace = p.ns
-	fmt.Println(cp.Spec.Proxy)
-	cp.Spec.Proxy[0].Service.Namespace = p.ns
+	cp.OwnerReferences = []metav1.OwnerReference{*p.ownerRef}
+	if cp.Spec.Backend.Service != nil {
+		cp.Spec.Backend.Service.Namespace = p.ns
+	}
 
-	fmt.Println(cp.Spec.Service)
-	if cp.Spec.Service.Namespace != "" {
-		cp.Spec.Service.Namespace = p.ns
-
+	if len(cp.Spec.Proxy) > 0 && cp.Spec.Proxy[0].Endpoint.Service != nil {
+		cp.Spec.Proxy[0].Endpoint.Service.Namespace = p.ns
 	}
 
 	existingPlugin := &console.ConsolePlugin{}
