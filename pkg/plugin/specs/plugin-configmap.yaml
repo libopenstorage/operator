@@ -1,14 +1,12 @@
----
-# Source: openshift-console-plugin/templates/configmap.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: px-plugin-test
+  name: portworx-plugin
   labels:
-    app: px-plugin-test
-    app.kubernetes.io/name: px-plugin-test
-    app.kubernetes.io/instance: px-plugin-test
-    app.kubernetes.io/part-of: px-plugin-test
+    app: portworx-plugin
+    app.kubernetes.io/name: portworx-plugin
+    app.kubernetes.io/instance: portworx-plugin
+    app.kubernetes.io/part-of: portworx-plugin
 data:
   nginx.conf: |
     error_log /dev/stdout info;

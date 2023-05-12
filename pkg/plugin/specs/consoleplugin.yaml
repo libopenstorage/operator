@@ -1,21 +1,19 @@
----
-# Source: openshift-console-plugin/templates/consoleplugin.yaml
 apiVersion: console.openshift.io/v1alpha1
 kind: ConsolePlugin
 metadata:
   name: portworx
   labels:
-    app: px-plugin-test
-    app.kubernetes.io/name: px-plugin-test
-    app.kubernetes.io/instance: px-plugin-test
-    app.kubernetes.io/part-of: px-plugin-test
-    app.kubernetes.io/managed-by: px-plugin-test
+    app: portworx-plugin
+    app.kubernetes.io/name: portworx-plugin
+    app.kubernetes.io/instance: portworx-plugin
+    app.kubernetes.io/part-of: portworx-plugin
+    app.kubernetes.io/managed-by: portworx-plugin
 spec:
   backend:
     service:
       basePath: /
-      name: px-plugin-test
-      namespace: ocp-dyn-plugin
+      name: portworx-plugin
+      namespace: <placeholder>
       port: 9443
     type: Service
   displayName: Portworx Plugin
@@ -27,6 +25,6 @@ spec:
       endpoint:
         service:
           name: portworx-console-proxy
-          namespace: ocp-dyn-plugin
+          namespace: <placeholder>
           port: 443
         type: Service

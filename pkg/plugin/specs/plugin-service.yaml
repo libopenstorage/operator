@@ -1,17 +1,15 @@
----
-# Source: openshift-console-plugin/templates/service.yaml
 apiVersion: v1
 kind: Service
 metadata:
   annotations:
-    service.alpha.openshift.io/serving-cert-secret-name: px-plugin-test-cert
-  name: px-plugin-test
+    service.alpha.openshift.io/serving-cert-secret-name: portworx-plugin-cert
+  name: portworx-plugin
   labels:
     helm.sh/chart: openshift-console-plugin-0.1.0
-    app: px-plugin-test
-    app.kubernetes.io/name: px-plugin-test
-    app.kubernetes.io/instance: px-plugin-test
-    app.kubernetes.io/part-of: px-plugin-test
+    app: portworx-plugin
+    app.kubernetes.io/name: portworx-plugin
+    app.kubernetes.io/instance: portworx-plugin
+    app.kubernetes.io/part-of: portworx-plugin
 spec:
   ports:
     - name: 9443-tcp
@@ -19,9 +17,9 @@ spec:
       port: 9443
       targetPort: 9443
   selector:
-    app: px-plugin-test
-    app.kubernetes.io/name: px-plugin-test
-    app.kubernetes.io/instance: px-plugin-test
-    app.kubernetes.io/part-of: px-plugin-test
+    app: portworx-plugin
+    app.kubernetes.io/name: portworx-plugin
+    app.kubernetes.io/instance: portworx-plugin
+    app.kubernetes.io/part-of: portworx-plugin
   type: ClusterIP
   sessionAffinity: None

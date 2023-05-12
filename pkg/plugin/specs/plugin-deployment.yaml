@@ -1,32 +1,30 @@
----
-# Source: openshift-console-plugin/templates/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: px-plugin-test
+  name: portworx-plugin
   labels:
-    app: px-plugin-test
-    app.kubernetes.io/name: px-plugin-test
-    app.kubernetes.io/instance: px-plugin-test
-    app.kubernetes.io/part-of: px-plugin-test
+    app: portworx-plugin
+    app.kubernetes.io/name: portworx-plugin
+    app.kubernetes.io/instance: portworx-plugin
+    app.kubernetes.io/part-of: portworx-plugin
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: px-plugin-test
-      app.kubernetes.io/name: px-plugin-test
-      app.kubernetes.io/instance: px-plugin-test
-      app.kubernetes.io/part-of: px-plugin-test
+      app: portworx-plugin
+      app.kubernetes.io/name: portworx-plugin
+      app.kubernetes.io/instance: portworx-plugin
+      app.kubernetes.io/part-of: portworx-plugin
   template:
     metadata:
       labels:
-        app: px-plugin-test
-        app.kubernetes.io/name: px-plugin-test
-        app.kubernetes.io/instance: px-plugin-test
-        app.kubernetes.io/part-of: px-plugin-test
+        app: portworx-plugin
+        app.kubernetes.io/name: portworx-plugin
+        app.kubernetes.io/instance: portworx-plugin
+        app.kubernetes.io/part-of: portworx-plugin
     spec:
       containers:
-        - name: px-plugin-test
+        - name: portworx-plugin
           image: quay.io/kravichandran-px/portworx-dynamic-plugin:1.5.3
           ports:
             - containerPort: 9443
@@ -42,7 +40,7 @@ spec:
               cpu: 10m
               memory: 50Mi
           volumeMounts:
-            - name: px-plugin-test-cert
+            - name: portworx-plugin-cert
               readOnly: true
               mountPath: /var/cert
             - name: nginx-conf
@@ -50,13 +48,13 @@ spec:
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
       volumes:
-        - name: px-plugin-test-cert
+        - name: portworx-plugin-cert
           secret:
-            secretName: px-plugin-test-cert
+            secretName: portworx-plugin-cert
             defaultMode: 420
         - name: nginx-conf
           configMap:
-            name: px-plugin-test
+            name: portworx-plugin
             defaultMode: 420
       restartPolicy: Always
       dnsPolicy: ClusterFirst

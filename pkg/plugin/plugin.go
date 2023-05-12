@@ -13,7 +13,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"context"
@@ -22,18 +21,14 @@ import (
 )
 
 const (
-	baseDir                       = "/configs/"
-	nginxConfigMapFile            = "nginx-configmap.yaml"
-	nginxDeploymentFile           = "nginx-deployment.yaml"
-	nginxServiceFile              = "nginx-service.yaml"
-	consolePluginFile             = "consoleplugin.yaml"
-	patcherClusterRoleFile        = "patcher-clusterrole.yaml"
-	patcherClusterRoleBindingFile = "patcher-clusterrolebinding.yaml"
-	patcherServiceAccountFile     = "patcher-serviceaccount.yaml"
-	pluginConfigmapFile           = "plugin-configmap.yaml"
-	pluginDeploymentFile          = "plugin-deployment.yaml"
-	pluginServiceFile             = "plugin-service.yaml"
-	pluginServiceAccountFile      = "plugin-serviceaccount.yaml"
+	baseDir              = "/configs/"
+	nginxConfigMapFile   = "nginx-configmap.yaml"
+	nginxDeploymentFile  = "nginx-deployment.yaml"
+	nginxServiceFile     = "nginx-service.yaml"
+	consolePluginFile    = "consoleplugin.yaml"
+	pluginConfigmapFile  = "plugin-configmap.yaml"
+	pluginDeploymentFile = "plugin-deployment.yaml"
+	pluginServiceFile    = "plugin-service.yaml"
 )
 
 type Plugin struct {
@@ -74,7 +69,7 @@ func NewPlugin(scheme *runtime.Scheme) *Plugin {
 
 func (p *Plugin) DeployPlugin() {
 
-	//create nginx services
+	//create nginx resources
 	if err := p.createConfigmap(nginxConfigMapFile); err != nil {
 		logrus.Errorf("error during creating nginx configmap %s ", err)
 	}
@@ -85,7 +80,7 @@ func (p *Plugin) DeployPlugin() {
 		logrus.Errorf("error during creating nginx configmap %s ", err)
 	}
 
-	//create plugin
+	//create portworx plugin resources
 	if err := p.createDeployment(pluginDeploymentFile); err != nil {
 		logrus.Errorf("error during creating deployment %s ", err)
 	}
@@ -95,18 +90,8 @@ func (p *Plugin) DeployPlugin() {
 	if err := p.createConfigmap(pluginConfigmapFile); err != nil {
 		logrus.Errorf("error during creating config map  %s ", err)
 	}
-	if err := p.createServiceAccount(pluginServiceAccountFile); err != nil {
-		logrus.Errorf("error during creating service acount %s ", err)
-	}
-	if err := p.createServiceAccount(patcherServiceAccountFile); err != nil {
-		logrus.Errorf("error during creating service acount %s ", err)
-	}
-	if err := p.createClusterRole(patcherClusterRoleFile); err != nil {
-		logrus.Errorf("error during creating cluster role %s ", err)
-	}
-	if err := p.createClusterRoleBinding(patcherClusterRoleBindingFile); err != nil {
-		logrus.Errorf("error during creating cluster role binding %s ", err)
-	}
+
+	//create console plugin
 	if err := p.createConsolePlugin(consolePluginFile); err != nil {
 		logrus.Errorf("error during creating console plugin %s ", err)
 	}
@@ -122,26 +107,6 @@ func (p *Plugin) createDeployment(filename string) error {
 	return k8s.CreateOrUpdateDeployment(p.client, deployment, p.ownerRef)
 }
 
-func (p *Plugin) createClusterRole(filename string) error {
-	roleObj := &rbacv1.ClusterRole{}
-	roleObj.Namespace = p.ns
-	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, roleObj)
-	if err != nil {
-		return err
-	}
-	return k8s.CreateOrUpdateClusterRole(p.client, roleObj)
-}
-
-func (p *Plugin) createClusterRoleBinding(filename string) error {
-	roleBindingObj := &rbacv1.ClusterRoleBinding{}
-	roleBindingObj.Namespace = p.ns
-	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, roleBindingObj)
-	if err != nil {
-		return err
-	}
-	return k8s.CreateOrUpdateClusterRoleBinding(p.client, roleBindingObj)
-}
-
 func (p *Plugin) createService(filename string) error {
 	service := &v1.Service{}
 	service.Namespace = p.ns
@@ -150,16 +115,6 @@ func (p *Plugin) createService(filename string) error {
 		return err
 	}
 	return k8s.CreateOrUpdateService(p.client, service, p.ownerRef)
-}
-
-func (p *Plugin) createServiceAccount(filename string) error {
-	serviceAccount := &v1.ServiceAccount{}
-	serviceAccount.Namespace = p.ns
-	err := k8s.ParseObjectFromFile(baseDir+filename, p.scheme, serviceAccount)
-	if err != nil {
-		return err
-	}
-	return k8s.CreateOrUpdateServiceAccount(p.client, serviceAccount, p.ownerRef)
 }
 
 func (p *Plugin) createConfigmap(filename string) error {
