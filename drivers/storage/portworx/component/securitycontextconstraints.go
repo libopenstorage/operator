@@ -224,6 +224,7 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, ServiceAccountNameTelemetry),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-node-wiper"),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-prometheus"),
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "stork-scheduler"),
 			},
 		},
 		{

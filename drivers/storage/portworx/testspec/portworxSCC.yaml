@@ -33,5 +33,6 @@ users:
 - system:serviceaccount:kube-test:px-telemetry
 - system:serviceaccount:kube-test:px-node-wiper
 - system:serviceaccount:kube-test:px-prometheus
+- system:serviceaccount:kube-test:stork-scheduler
 volumes:
 - '*'

@@ -53,3 +53,7 @@ rules:
     resources: ["podsecuritypolicies"]
     resourceNames: ["px-restricted"]
     verbs: ["use"]
+  - apiGroups: ["security.openshift.io"]
+    resources: ["securitycontextconstraints"]
+    resourceNames: ["portworx"]
+    verbs: ["use"]
