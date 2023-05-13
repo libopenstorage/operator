@@ -27,16 +27,22 @@ import (
 
 const (
 	PluginComponentName       = "Portworx"
+	PluginDeloymentName       = "portworx-plugin"
+	PluginConfigMapName       = "portworx-plugin"
+	PluginServiceName         = "portworx-plugin"
+	NginxDeploymentName       = "portworx-console-proxy"
+	NginxConfigMapName        = "nginx-conf"
+	NginxServiceName          = "portworx-console-proxy"
 	OpenshiftClusterName      = "openshift-apiserver"
 	OpenshiftSupportedVersion = "4.12"
 	BaseDir                   = "/configs/"
-	NginxConfigMapFile        = "nginx-configmap.yaml"
-	NginxDeploymentFile       = "nginx-deployment.yaml"
-	NginxServiceFile          = "nginx-service.yaml"
-	ConsolePluginFile         = "consoleplugin.yaml"
-	PluginConfigmapFile       = "plugin-configmap.yaml"
-	PluginDeploymentFile      = "plugin-deployment.yaml"
-	PluginServiceFile         = "plugin-service.yaml"
+	nginxConfigMapFileName    = "nginx-configmap.yaml"
+	nginxDeploymentFileName   = "nginx-deployment.yaml"
+	nginxServiceFileName      = "nginx-service.yaml"
+	consolePluginFileName     = "consoleplugin.yaml"
+	pluginConfigmapFileName   = "plugin-configmap.yaml"
+	pluginDeploymentFileName  = "plugin-deployment.yaml"
+	pluginServiceFileName     = "plugin-service.yaml"
 )
 
 type plugin struct {
@@ -112,60 +118,87 @@ func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
 }
 
 func (p *plugin) Reconcile(cluster *corev1.StorageCluster) error {
-	//create nginx resources
-	logrus.Info("##################################################################")
-	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+
+	ownRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
 	var errList []string
-
-	if err := p.createConfigmap(NginxConfigMapFile, ownerRef, cluster.Namespace); err != nil {
+	//create nginx resources
+	if err := p.createConfigmap(nginxConfigMapFileName, ownRef, cluster.Namespace); err != nil {
 		errList = append(errList, err.Error())
 		logrus.Errorf("error during creating nginx configmap %s ", err)
 	}
-	if err := p.createDeployment(NginxDeploymentFile, ownerRef); err != nil {
+	if err := p.createDeployment(nginxDeploymentFileName, ownRef); err != nil {
 		errList = append(errList, err.Error())
 		logrus.Errorf("error during creating nginx configmap %s ", err)
 	}
-	if err := p.createService(NginxServiceFile, ownerRef); err != nil {
+	if err := p.createService(nginxServiceFileName, ownRef); err != nil {
 		errList = append(errList, err.Error())
 		logrus.Errorf("error during creating nginx configmap %s ", err)
 	}
 
 	//create portworx plugin resources
-	if err := p.createDeployment(PluginDeploymentFile, ownerRef); err != nil {
+	if err := p.createDeployment(pluginDeploymentFileName, ownRef); err != nil {
 		errList = append(errList, err.Error())
 		logrus.Errorf("error during creating deployment %s ", err)
 	}
-	if err := p.createService(PluginServiceFile, ownerRef); err != nil {
+	if err := p.createService(pluginServiceFileName, ownRef); err != nil {
 		errList = append(errList, err.Error())
 		logrus.Errorf("error during creating service %s ", err)
 	}
-	if err := p.createConfigmap(PluginConfigmapFile, ownerRef, ""); err != nil {
+	if err := p.createConfigmap(pluginConfigmapFileName, ownRef, ""); err != nil {
 		errList = append(errList, err.Error())
 		logrus.Errorf("error during creating config map  %s ", err)
 	}
 
 	//create console plugin
-	if err := p.createConsolePlugin(ConsolePluginFile, ownerRef); err != nil {
+	if err := p.createConsolePlugin(consolePluginFileName, ownRef); err != nil {
 		errList = append(errList, err.Error())
 		logrus.Errorf("error during creating console plugin %s ", err)
 	}
-	logrus.Info("##################################################################")
-
 
 	if len(errList) > 0 {
-		return commonerrors.New(strings.Join(errList, ","))
+		return commonerrors.New(strings.Join(errList, " , "))
 	}
 	return nil
 }
 
-func (c *plugin) Delete(cluster *corev1.StorageCluster) error {
+func (p *plugin) Delete(cluster *corev1.StorageCluster) error {
+	var errList []string
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+
+	//delete plugin configs
+	if err := k8s.DeleteDeployment(p.client, PluginDeloymentName, p.operatorNs, *ownerRef); err != nil {
+		errList = append(errList, err.Error())
+	}
+	if err := k8s.DeleteConfigMap(p.client, PluginConfigMapName, p.operatorNs, *ownerRef); err != nil {
+		errList = append(errList, err.Error())
+	}
+	if err := k8s.DeleteService(p.client, PluginServiceName, p.operatorNs, *ownerRef); err != nil {
+		errList = append(errList, err.Error())
+	}
+
+	//delete nginx configs
+	if err := k8s.DeleteDeployment(p.client, NginxDeploymentName, p.operatorNs, *ownerRef); err != nil {
+		errList = append(errList, err.Error())
+	}
+	if err := k8s.DeleteConfigMap(p.client, NginxConfigMapName, p.operatorNs, *ownerRef); err != nil {
+		errList = append(errList, err.Error())
+	}
+	if err := k8s.DeleteService(p.client, NginxServiceName, p.operatorNs, *ownerRef); err != nil {
+		errList = append(errList, err.Error())
+	}
+
+	//delete console plugin
+	if err := p.deleteConsolePlugin(PluginComponentName, *ownerRef); err != nil {
+		errList = append(errList, err.Error())
+	}
+	if len(errList) > 0 {
+		return commonerrors.New(strings.Join(errList, " , "))
+	}
 	return nil
 }
 
-func (c *plugin) MarkDeleted() {
-
-}
+func (c *plugin) MarkDeleted() {}
 
 // RegisterPortworxPluginComponent registers the PortworxPlugin component
 func RegisterPortworxPluginComponent() {
@@ -178,69 +211,37 @@ func init() {
 
 func (p *plugin) createDeployment(filename string, ownerRef *metav1.OwnerReference) error {
 	deployment, err := k8s.GetDeploymentFromFile(filename, pxutil.SpecsBaseDir())
-	deployment.Namespace = p.operatorNs
-	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	if err != nil {
 		return err
 	}
+	deployment.Namespace = p.operatorNs
+	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	return k8s.CreateOrUpdateDeployment(p.client, deployment, ownerRef)
 }
 
 func (p *plugin) createService(filename string, ownerRef *metav1.OwnerReference) error {
 	service := &v1.Service{}
-	service.Namespace = p.operatorNs
-	service.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	err := k8s.ParseObjectFromFile(BaseDir+filename, p.scheme, service)
 	if err != nil {
 		return err
 	}
+	service.Namespace = p.operatorNs
+	service.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	return k8s.CreateOrUpdateService(p.client, service, ownerRef)
 }
 
 func (p *plugin) createConfigmap(filename string, ownerRef *metav1.OwnerReference, stcNamespace string) error {
 	cm := &v1.ConfigMap{}
-
 	err := k8s.ParseObjectFromFile(BaseDir+filename, p.scheme, cm)
 	if err != nil {
 		return err
 	}
-
 	cm.Namespace = p.operatorNs
 	cm.OwnerReferences = []metav1.OwnerReference{*ownerRef}
-
-	if cm.Name == "nginx-conf" {
-		cm.Data = map[string]string{
-			"nginx.conf": 
-	`pid /tmp/nginx.pid;
-    events {
-      worker_connections 1024;
-    }
-    http {
-      server {
-        listen 8080;
-          server_name portworx-console-proxy.` + p.operatorNs + `.svc.cluster.local;
-        location / {
-          proxy_pass http://portworx-api.` + stcNamespace + `.svc.cluster.local:9021;
-        }
-      }
-      server {
-        listen 8443 ssl;
-        server_name portworx-console-proxy.` + p.operatorNs + `.svc.cluster.local;
-        ssl_certificate /etc/nginx/certs/tls.crt;
-        ssl_certificate_key /etc/nginx/certs/tls.key;
-        location / {
-          proxy_pass http://portworx-api.` + stcNamespace + `.svc.cluster.local:9021;
-        }
-      }
-    }`,
-		}
-	}
+	updateDataIfNginxConfigMap(cm, p.operatorNs, stcNamespace)
 
 	_, err = k8s.CreateOrUpdateConfigMap(p.client, cm, ownerRef)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (p *plugin) createConsolePlugin(filename string, ownerRef *metav1.OwnerReference) error {
@@ -248,10 +249,9 @@ func (p *plugin) createConsolePlugin(filename string, ownerRef *metav1.OwnerRefe
 	if err := console.AddToScheme(p.scheme); err != nil {
 		return err
 	}
-	cp := &console.ConsolePlugin{}
 
-	err := k8s.ParseObjectFromFile(BaseDir+filename, p.scheme, cp)
-	if err != nil {
+	cp := &console.ConsolePlugin{}
+	if err := k8s.ParseObjectFromFile(BaseDir+filename, p.scheme, cp); err != nil {
 		return err
 	}
 
@@ -266,7 +266,7 @@ func (p *plugin) createConsolePlugin(filename string, ownerRef *metav1.OwnerRefe
 	}
 
 	existingPlugin := &console.ConsolePlugin{}
-	err = p.client.Get(
+	err := p.client.Get(
 		context.TODO(),
 		types.NamespacedName{
 			Name:      cp.Name,
@@ -282,6 +282,69 @@ func (p *plugin) createConsolePlugin(filename string, ownerRef *metav1.OwnerRefe
 		return err
 	}
 	return nil
+}
+
+func (p *plugin) deleteConsolePlugin(name string, owners ...metav1.OwnerReference) error {
+	resource := types.NamespacedName{
+		Name:      name,
+		Namespace: p.operatorNs,
+	}
+
+	consolePlugin := &console.ConsolePlugin{}
+	err := p.client.Get(context.TODO(), resource, consolePlugin)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	newOwners := k8s.RemoveOwners(consolePlugin.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(consolePlugin.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(consolePlugin.OwnerReferences) > 0 && len(consolePlugin.OwnerReferences) == len(newOwners)) {
+		logrus.Infof("Cannot delete consolePlugin %s/%s as it is not owned",
+			p.operatorNs, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Infof("Deleting %s/%s consolePlugin", p.operatorNs, name)
+		return p.client.Delete(context.TODO(), consolePlugin)
+	}
+	consolePlugin.OwnerReferences = newOwners
+	logrus.Infof("Disowning %s/%s consolePlugin", p.operatorNs, name)
+	return p.client.Update(context.TODO(), consolePlugin)
+}
+
+func updateDataIfNginxConfigMap(cm *v1.ConfigMap, operaterNs, pxNs string) {
+	if cm.Name == NginxConfigMapName {
+		cm.Data = map[string]string{
+			"nginx.conf": `pid /tmp/nginx.pid;
+    events {
+      worker_connections 1024;
+    }
+    http {
+      server {
+        listen 8080;
+          server_name portworx-console-proxy.` + operaterNs + `.svc.cluster.local;
+        location / {
+          proxy_pass http://portworx-api.` + pxNs + `.svc.cluster.local:9021;
+        }
+      }
+      server {
+        listen 8443 ssl;
+        server_name portworx-console-proxy.` + operaterNs + `.svc.cluster.local;
+        ssl_certificate /etc/nginx/certs/tls.crt;
+        ssl_certificate_key /etc/nginx/certs/tls.key;
+        location / {
+          proxy_pass http://portworx-api.` + pxNs + `.svc.cluster.local:9021;
+        }
+      }
+    }`,
+		}
+	}
 }
 
 func isVersionGreaterOrEqual(version string, targetVersion string) bool {

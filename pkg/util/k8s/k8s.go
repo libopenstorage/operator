@@ -244,7 +244,7 @@ func DeleteServiceAccount(
 		return err
 	}
 
-	newOwners := removeOwners(serviceAccount.OwnerReferences, owners)
+	newOwners := RemoveOwners(serviceAccount.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -321,7 +321,7 @@ func DeleteRole(
 		return err
 	}
 
-	newOwners := removeOwners(role.OwnerReferences, owners)
+	newOwners := RemoveOwners(role.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -400,7 +400,7 @@ func DeleteRoleBinding(
 		return err
 	}
 
-	newOwners := removeOwners(roleBinding.OwnerReferences, owners)
+	newOwners := RemoveOwners(roleBinding.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -600,7 +600,7 @@ func DeleteConfigMap(
 		return err
 	}
 
-	newOwners := removeOwners(configMap.OwnerReferences, owners)
+	newOwners := RemoveOwners(configMap.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -927,7 +927,7 @@ func DeleteService(
 		return err
 	}
 
-	newOwners := removeOwners(service.OwnerReferences, owners)
+	newOwners := RemoveOwners(service.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1022,7 +1022,7 @@ func DeleteDeployment(
 		return err
 	}
 
-	newOwners := removeOwners(deployment.OwnerReferences, owners)
+	newOwners := RemoveOwners(deployment.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1093,7 +1093,7 @@ func DeleteStatefulSet(
 		return err
 	}
 
-	newOwners := removeOwners(statefulSet.OwnerReferences, owners)
+	newOwners := RemoveOwners(statefulSet.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1201,7 +1201,7 @@ func DeleteDaemonSet(
 		return err
 	}
 
-	newOwners := removeOwners(ds.OwnerReferences, owners)
+	newOwners := RemoveOwners(ds.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1345,7 +1345,7 @@ func DeleteServiceMonitor(
 		return err
 	}
 
-	newOwners := removeOwners(monitor.OwnerReferences, owners)
+	newOwners := RemoveOwners(monitor.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1426,7 +1426,7 @@ func DeletePrometheusRule(
 		return err
 	}
 
-	newOwners := removeOwners(rule.OwnerReferences, owners)
+	newOwners := RemoveOwners(rule.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1501,7 +1501,7 @@ func DeletePrometheus(
 		return err
 	}
 
-	newOwners := removeOwners(prometheus.OwnerReferences, owners)
+	newOwners := RemoveOwners(prometheus.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1576,7 +1576,7 @@ func DeleteAlertManager(
 		return err
 	}
 
-	newOwners := removeOwners(alertManager.OwnerReferences, owners)
+	newOwners := RemoveOwners(alertManager.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1651,7 +1651,7 @@ func DeletePodDisruptionBudget(
 		return err
 	}
 
-	newOwners := removeOwners(pdb.OwnerReferences, owners)
+	newOwners := RemoveOwners(pdb.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1747,7 +1747,7 @@ func GetValueFromEnv(imageKey string, envs []v1.EnvVar) string {
 	return ""
 }
 
-func removeOwners(current, toBeDeleted []metav1.OwnerReference) []metav1.OwnerReference {
+func RemoveOwners(current, toBeDeleted []metav1.OwnerReference) []metav1.OwnerReference {
 	toBeDeletedOwnerMap := make(map[types.UID]bool)
 	for _, owner := range toBeDeleted {
 		toBeDeletedOwnerMap[owner.UID] = true
@@ -1862,7 +1862,7 @@ func DeleteSecret(
 		return err
 	}
 
-	newOwners := removeOwners(secret.OwnerReferences, owners)
+	newOwners := RemoveOwners(secret.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
