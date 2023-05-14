@@ -7,7 +7,7 @@ spec:
     service:
       basePath: /
       name: portworx-plugin
-      namespace: <ocp-dyn-plugin>
+      namespace: <placeholder>
       port: 9443
     type: Service
   displayName: Portworx Plugin
@@ -16,6 +16,6 @@ spec:
       endpoint:
         service:
           name: portworx-console-proxy
-          namespace: <ocp-dyn-plugin>
+          namespace: <placeholder>
           port: 443
         type: Service
