@@ -26,7 +26,8 @@ import (
 )
 
 const (
-	PluginComponentName       = "Portworx"
+	PluginComponentName       = "Portworx Plugin"
+	PluginName                = "portworx"
 	PluginDeloymentName       = "portworx-plugin"
 	PluginConfigMapName       = "portworx-plugin"
 	PluginServiceName         = "portworx-plugin"
@@ -189,7 +190,7 @@ func (p *plugin) Delete(cluster *corev1.StorageCluster) error {
 	}
 
 	//delete console plugin
-	if err := p.deleteConsolePlugin(PluginComponentName, *ownerRef); err != nil {
+	if err := p.deleteConsolePlugin(PluginName, *ownerRef); err != nil {
 		errList = append(errList, err.Error())
 	}
 	if len(errList) > 0 {
@@ -285,6 +286,10 @@ func (p *plugin) createConsolePlugin(filename string, ownerRef *metav1.OwnerRefe
 }
 
 func (p *plugin) deleteConsolePlugin(name string, owners ...metav1.OwnerReference) error {
+	if err := console.AddToScheme(p.scheme); err != nil {
+		return err
+	}
+
 	resource := types.NamespacedName{
 		Name:      name,
 		Namespace: p.operatorNs,
