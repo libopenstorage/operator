@@ -23,8 +23,6 @@ spec:
         imagePullPolicy: Always
         name: collector
         resources:
-          limits:
-            memory: 128Mi
           requests:
             cpu: 200m
             memory: 64Mi
