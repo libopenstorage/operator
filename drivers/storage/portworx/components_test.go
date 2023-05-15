@@ -72,7 +72,7 @@ func TestOrderOfComponents(t *testing.T) {
 	for i, comp := range components {
 		componentNames[i] = comp.Name()
 	}
-	require.Len(t, components, 17)
+	require.Len(t, components, 18)
 	// Higher priority components come first
 	require.ElementsMatch(t,
 		[]string{
@@ -98,6 +98,7 @@ func TestOrderOfComponents(t *testing.T) {
 			component.PrometheusComponentName,
 			component.PVCControllerComponentName,
 			component.AlertManagerComponentName,
+			component.PluginComponentName,
 		},
 		componentNames[3:],
 	)
@@ -14798,6 +14799,7 @@ func reregisterComponents() {
 	component.RegisterPSPComponent()
 	component.RegisterTelemetryComponent()
 	component.RegisterSCCComponent()
+	component.RegisterPortworxPluginComponent()
 	pxutil.SpecsBaseDir = func() string {
 		return "../../../bin/configs"
 	}
