@@ -98,7 +98,6 @@ func TestOrderOfComponents(t *testing.T) {
 			component.PrometheusComponentName,
 			component.PVCControllerComponentName,
 			component.AlertManagerComponentName,
-			component.PluginComponentName,
 		},
 		componentNames[3:],
 	)
