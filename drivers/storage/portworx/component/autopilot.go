@@ -257,9 +257,39 @@ func (c *autopilot) createServiceAccount(
 func (c *autopilot) createClusterRole() error {
 	rules := []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{"*"},
-			Resources: []string{"*"},
+			APIGroups: []string{""},
+			Resources: []string{"events"},
+			Verbs:     []string{"create", "patch"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services", "secrets"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"namespaces", "pods"},
+			Verbs:     []string{"list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"persistentvolumeclaims", "persistentvolumes"},
+			Verbs:     []string{"get", "list", "update"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"get", "list", "patch", "update"},
+		},
+		{
+			APIGroups: []string{"autopilot.libopenstorage.org"},
+			Resources: []string{"actionapprovals", "autopilotrules", "autopilotruleobjects"},
 			Verbs:     []string{"*"},
+		},
+		{
+			APIGroups: []string{"apiextensions.k8s.io"},
+			Resources: []string{"customresourcedefinitions"},
+			Verbs:     []string{"create", "get", "update"},
 		},
 	}
 	if c.k8sVersion.LessThan(k8sutil.K8sVer1_25) {
