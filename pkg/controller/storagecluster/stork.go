@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -481,6 +482,12 @@ func (c *Controller) createStorkSchedClusterRole() error {
 					APIGroups:     []string{"policy"},
 					Resources:     []string{"podsecuritypolicies"},
 					ResourceNames: []string{constants.RestrictedPSPName},
+					Verbs:         []string{"use"},
+				},
+				{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					ResourceNames: []string{component.PxSCCName},
 					Verbs:         []string{"use"},
 				},
 			},
