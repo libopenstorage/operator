@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	commonerrors "errors"
+	appsv1 "k8s.io/api/apps/v1"
 	"strings"
 
 	version "github.com/hashicorp/go-version"
@@ -44,8 +45,9 @@ const (
 )
 
 type plugin struct {
-	client client.Client
-	scheme *runtime.Scheme
+	client            client.Client
+	scheme            *runtime.Scheme
+	isOperatorCreated bool
 }
 
 func (p *plugin) Initialize(
@@ -103,7 +105,7 @@ func (p *plugin) Reconcile(cluster *corev1.StorageCluster) error {
 		errList = append(errList, err.Error())
 		logrus.Errorf("error during creating %s configmap %s ", NginxConfigMapName, err)
 	}
-	if err := p.createDeployment(nginxDeploymentFileName, cluster.Namespace, ownRef); err != nil {
+	if err := p.createDeployment(nginxDeploymentFileName, NginxDeploymentName, ownRef, cluster); err != nil {
 		errList = append(errList, err.Error())
 		logrus.Errorf("error during creating %s deployment %s ", NginxDeploymentName, err)
 	}
@@ -113,7 +115,7 @@ func (p *plugin) Reconcile(cluster *corev1.StorageCluster) error {
 	}
 
 	// create portworx plugin resources
-	if err := p.createDeployment(pluginDeploymentFileName, cluster.Namespace, ownRef); err != nil {
+	if err := p.createDeployment(pluginDeploymentFileName, PluginDeploymentName, ownRef, cluster); err != nil {
 		errList = append(errList, err.Error())
 		logrus.Errorf("error during creating %s deployment %s ", PluginDeploymentName, err)
 	}
@@ -174,7 +176,9 @@ func (p *plugin) Delete(cluster *corev1.StorageCluster) error {
 	return nil
 }
 
-func (c *plugin) MarkDeleted() {}
+func (p *plugin) MarkDeleted() {
+	p.isOperatorCreated = false
+}
 
 // RegisterPortworxPluginComponent registers the PortworxPlugin component
 func RegisterPortworxPluginComponent() {
@@ -185,14 +189,64 @@ func init() {
 	RegisterPortworxPluginComponent()
 }
 
-func (p *plugin) createDeployment(filename, storageNs string, ownerRef *metav1.OwnerReference) error {
+func (p *plugin) createDeployment(filename, deploymentName string, ownerRef *metav1.OwnerReference, cluster *corev1.StorageCluster) error {
 	deployment, err := k8s.GetDeploymentFromFile(filename, pxutil.SpecsBaseDir())
 	if err != nil {
 		return err
 	}
-	deployment.Namespace = storageNs
+	deployment.Namespace = cluster.Namespace
 	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
-	return k8s.CreateOrUpdateDeployment(p.client, deployment, ownerRef)
+
+	existingDeployment := &appsv1.Deployment{}
+	getErr := p.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      deploymentName,
+			Namespace: cluster.Namespace,
+		},
+		existingDeployment,
+	)
+	if getErr != nil && !errors.IsNotFound(getErr) {
+		return getErr
+	}
+
+	equal, _ := util.DeepEqualPodTemplate(&deployment.Spec.Template, &existingDeployment.Spec.Template)
+
+	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	if cluster.Spec.Placement != nil {
+		if cluster.Spec.Placement.NodeAffinity != nil {
+			deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+
+		if len(cluster.Spec.Placement.Tolerations) > 0 {
+			deployment.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+			for _, toleration := range cluster.Spec.Placement.Tolerations {
+				deployment.Spec.Template.Spec.Tolerations = append(
+					deployment.Spec.Template.Spec.Tolerations,
+					*(toleration.DeepCopy()),
+				)
+			}
+		}
+	}
+
+	if !equal {
+		if err := k8s.CreateOrUpdateDeployment(p.client, deployment, ownerRef); err != nil {
+			return err
+		}
+	}
+	p.isOperatorCreated = true
+
+	return nil
 }
 
 func (p *plugin) createService(filename, storageNs string, ownerRef *metav1.OwnerReference) error {
