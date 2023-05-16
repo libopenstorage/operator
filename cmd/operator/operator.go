@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	console "github.com/openshift/api/console/v1"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"strings"
 	"time"
+
+	consolev1 "github.com/openshift/api/console/v1"
 
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -206,7 +207,7 @@ func run(c *cli.Context) {
 		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
 
-	if err := console.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := consolev1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
 
