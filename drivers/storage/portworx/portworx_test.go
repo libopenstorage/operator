@@ -14,6 +14,7 @@ import (
 	version "github.com/hashicorp/go-version"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -9450,6 +9451,38 @@ func TestStorageClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 	testClusterDefaultsMaxStorageNodesPerZone(t, 25, 103, 4)
 	testClusterDefaultsMaxStorageNodesPerZone(t, 26, 104, 4)
 	testClusterDefaultsMaxStorageNodesPerZoneValueSpecified(t)
+}
+
+func TestHasKubernetesVersionChanged(t *testing.T) {
+	dummyVer, err := version.NewVersion("1.2.3")
+	require.NoError(t, err)
+
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{},
+		},
+	}
+	assert.False(t, driver.hasKubernetesVersionChanged(cluster))
+
+	driver.k8sVersion = dummyVer
+	assert.False(t, driver.hasKubernetesVersionChanged(cluster))
+
+	cluster.Status.DesiredImages.KubeControllerManager = "foo:1.2.3"
+	cluster.Status.DesiredImages.KubeScheduler = "bar:1.2.3"
+	assert.False(t, driver.hasKubernetesVersionChanged(cluster))
+
+	cluster.Status.DesiredImages.KubeControllerManager = "foo:9.9.9"
+	cluster.Status.DesiredImages.KubeScheduler = "bar:1.2.3"
+	assert.True(t, driver.hasKubernetesVersionChanged(cluster))
+
+	cluster.Status.DesiredImages.KubeControllerManager = "foo:1.2.3"
+	cluster.Status.DesiredImages.KubeScheduler = "bar:9.9.9"
+	assert.True(t, driver.hasKubernetesVersionChanged(cluster))
+
+	cluster.Status.DesiredImages.KubeControllerManager = "foo:9.9.9"
+	cluster.Status.DesiredImages.KubeScheduler = "bar:9.9.9"
+	assert.True(t, driver.hasKubernetesVersionChanged(cluster))
 }
 
 func testClusterDefaultsMaxStorageNodesPerZoneCase1(t *testing.T) {

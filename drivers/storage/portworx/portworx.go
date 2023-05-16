@@ -1518,7 +1518,8 @@ func (p *portworx) hasComponentChanged(cluster *corev1.StorageCluster) bool {
 		hasPrometheusChanged(cluster) ||
 		hasAlertManagerChanged(cluster) ||
 		p.hasPrometheusVersionChanged(cluster) ||
-		hasPxRepoChanged(cluster)
+		hasPxRepoChanged(cluster) ||
+		p.hasKubernetesVersionChanged(cluster)
 }
 
 func hasStorkChanged(cluster *corev1.StorageCluster) bool {
@@ -1580,6 +1581,27 @@ func hasPrometheusChanged(cluster *corev1.StorageCluster) bool {
 		cluster.Spec.Monitoring.Prometheus != nil &&
 		cluster.Spec.Monitoring.Prometheus.Enabled &&
 		cluster.Status.DesiredImages.PrometheusOperator == ""
+}
+
+func (p *portworx) hasKubernetesVersionChanged(cluster *corev1.StorageCluster) bool {
+	if p.k8sVersion == nil {
+		return false
+	} else if cluster.Status.DesiredImages.KubeControllerManager == "" &&
+		cluster.Status.DesiredImages.KubeScheduler == "" {
+		return false
+	}
+
+	list := []string{cluster.Status.DesiredImages.KubeControllerManager, cluster.Status.DesiredImages.KubeScheduler}
+	for _, img := range list {
+		parts := strings.Split(img, ":")
+		if len(parts) > 1 {
+			v, err := version.NewVersion(parts[1])
+			if err == nil && !v.Equal(p.k8sVersion) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (p *portworx) hasPrometheusVersionChanged(cluster *corev1.StorageCluster) bool {
