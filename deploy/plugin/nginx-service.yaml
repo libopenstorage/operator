@@ -1,12 +1,12 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: portworx-console-proxy
+  name: px-plugin-proxy
   annotations:
-    service.beta.openshift.io/serving-cert-secret-name: portworx-console-proxy
+    service.beta.openshift.io/serving-cert-secret-name: px-plugin-proxy
 spec:
   selector:
-    name: portworx-console-proxy
+    name: px-plugin-proxy
   ports:
     - name: http
       protocol: TCP

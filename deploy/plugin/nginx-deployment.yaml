@@ -1,24 +1,24 @@
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: portworx-console-proxy
+  name: px-plugin-proxy
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: portworx-console-proxy
+      name: px-plugin-proxy
   template:
     metadata:
       labels:
-        name: portworx-console-proxy
+        name: px-plugin-proxy
     spec:
       volumes:
-        - name: nginx-conf
+        - name: px-plugin-proxy-conf
           configMap:
-            name: nginx-conf
+            name: px-plugin-proxy-conf
         - name: nginx-certs
           secret:
-            secretName: portworx-console-proxy
+            secretName: px-plugin-proxy-conf
       containers:
         - name: nginx
           image: nginxinc/nginx-unprivileged:1.23
@@ -30,7 +30,7 @@ spec:
               containerPort: 8443
               protocol: TCP
           volumeMounts:
-            - name: nginx-conf
+            - name: px-plugin-proxy-conf
               mountPath: /etc/nginx
             - name: nginx-certs
               mountPath: /etc/nginx/certs

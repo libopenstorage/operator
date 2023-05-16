@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	console "github.com/openshift/api/console/v1"
 	"os"
 	"path"
 	"reflect"
@@ -163,7 +164,7 @@ func CreateOrUpdateCRD(
 	// We only compare spec, as other fields will change after it's deployed, for example: creationTimestamp: null will
 	// be changed to a real timestamp.
 	if !equality.Semantic.DeepDerivative(crd.Spec, deployedCRD.Spec) {
-		//if !reflect.DeepEqual(crd.Spec, deployedCRD.Spec) {
+		// if !reflect.DeepEqual(crd.Spec, deployedCRD.Spec) {
 		logrus.Infof("Updating CRD %s", crd.Name)
 		crd.ResourceVersion = deployedCRD.ResourceVersion
 		if _, err = apiextensionsops.Instance().UpdateCRD(crd); err != nil {
@@ -244,7 +245,7 @@ func DeleteServiceAccount(
 		return err
 	}
 
-	newOwners := RemoveOwners(serviceAccount.OwnerReferences, owners)
+	newOwners := removeOwners(serviceAccount.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -321,7 +322,7 @@ func DeleteRole(
 		return err
 	}
 
-	newOwners := RemoveOwners(role.OwnerReferences, owners)
+	newOwners := removeOwners(role.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -400,7 +401,7 @@ func DeleteRoleBinding(
 		return err
 	}
 
-	newOwners := RemoveOwners(roleBinding.OwnerReferences, owners)
+	newOwners := removeOwners(roleBinding.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -600,7 +601,7 @@ func DeleteConfigMap(
 		return err
 	}
 
-	newOwners := RemoveOwners(configMap.OwnerReferences, owners)
+	newOwners := removeOwners(configMap.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -927,7 +928,7 @@ func DeleteService(
 		return err
 	}
 
-	newOwners := RemoveOwners(service.OwnerReferences, owners)
+	newOwners := removeOwners(service.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1022,7 +1023,7 @@ func DeleteDeployment(
 		return err
 	}
 
-	newOwners := RemoveOwners(deployment.OwnerReferences, owners)
+	newOwners := removeOwners(deployment.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1093,7 +1094,7 @@ func DeleteStatefulSet(
 		return err
 	}
 
-	newOwners := RemoveOwners(statefulSet.OwnerReferences, owners)
+	newOwners := removeOwners(statefulSet.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1201,7 +1202,7 @@ func DeleteDaemonSet(
 		return err
 	}
 
-	newOwners := RemoveOwners(ds.OwnerReferences, owners)
+	newOwners := removeOwners(ds.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1345,7 +1346,7 @@ func DeleteServiceMonitor(
 		return err
 	}
 
-	newOwners := RemoveOwners(monitor.OwnerReferences, owners)
+	newOwners := removeOwners(monitor.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1426,7 +1427,7 @@ func DeletePrometheusRule(
 		return err
 	}
 
-	newOwners := RemoveOwners(rule.OwnerReferences, owners)
+	newOwners := removeOwners(rule.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1501,7 +1502,7 @@ func DeletePrometheus(
 		return err
 	}
 
-	newOwners := RemoveOwners(prometheus.OwnerReferences, owners)
+	newOwners := removeOwners(prometheus.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1576,7 +1577,7 @@ func DeleteAlertManager(
 		return err
 	}
 
-	newOwners := RemoveOwners(alertManager.OwnerReferences, owners)
+	newOwners := removeOwners(alertManager.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1651,7 +1652,7 @@ func DeletePodDisruptionBudget(
 		return err
 	}
 
-	newOwners := RemoveOwners(pdb.OwnerReferences, owners)
+	newOwners := removeOwners(pdb.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner
@@ -1668,6 +1669,85 @@ func DeletePodDisruptionBudget(
 	pdb.OwnerReferences = newOwners
 	logrus.Infof("Disowning %s/%s PodDisruptionBudget", namespace, name)
 	return k8sClient.Update(context.TODO(), pdb)
+}
+
+// CreateOrUpdateConsolePlugin creates a Portworx ConsolePlougin instance of ConsolePlugin CRD if not present, else updates it
+func CreateOrUpdateConsolePlugin(
+	k8sClient client.Client,
+	cp *console.ConsolePlugin,
+	ownerRef *metav1.OwnerReference,
+) error {
+
+	existingPlugin := &console.ConsolePlugin{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      cp.Name,
+			Namespace: cp.Namespace,
+		},
+		existingPlugin,
+	)
+
+	if errors.IsNotFound(err) {
+		logrus.Infof("Creating %s Consoleplugin", cp.Name)
+		return k8sClient.Create(context.TODO(), cp)
+	} else if err != nil {
+		return err
+	}
+
+	modified := !reflect.DeepEqual(cp.Spec, existingPlugin.Spec)
+
+	for _, o := range existingPlugin.OwnerReferences {
+		if o.UID != ownerRef.UID {
+			cp.OwnerReferences = append(cp.OwnerReferences, o)
+		}
+	}
+
+	if modified || len(cp.OwnerReferences) > len(existingPlugin.OwnerReferences) {
+		cp.ResourceVersion = existingPlugin.ResourceVersion
+		logrus.Infof("Updating Console Plugin %s/%s", cp.Namespace, cp.Name)
+		return k8sClient.Update(context.TODO(), cp)
+	}
+	return nil
+}
+
+// DeleteConsolePlugin deletes Portworx ConsolePlugin instance of ConsolePlugin CRD if present and owned
+func DeleteConsolePlugin(
+	k8sClient client.Client,
+	name, namespace string,
+	owners ...metav1.OwnerReference,
+) error {
+	resource := types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}
+
+	consolePlugin := &console.ConsolePlugin{}
+	err := k8sClient.Get(context.TODO(), resource, consolePlugin)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	newOwners := removeOwners(consolePlugin.OwnerReferences, owners)
+
+	// Do not delete the object if it does not have the owner that was passed;
+	// even if the object has no owner
+	if (len(consolePlugin.OwnerReferences) == 0 && len(owners) > 0) ||
+		(len(consolePlugin.OwnerReferences) > 0 && len(consolePlugin.OwnerReferences) == len(newOwners)) {
+		logrus.Infof("Cannot delete consolePlugin %s/%s as it is not owned",
+			namespace, name)
+		return nil
+	}
+
+	if len(newOwners) == 0 {
+		logrus.Infof("Deleting %s/%s consolePlugin", namespace, name)
+		return k8sClient.Delete(context.TODO(), consolePlugin)
+	}
+	consolePlugin.OwnerReferences = newOwners
+	logrus.Infof("Disowning %s/%s consolePlugin", namespace, name)
+	return k8sClient.Update(context.TODO(), consolePlugin)
 }
 
 // GetDaemonSetPods returns a list of pods for the given daemon set
@@ -1747,7 +1827,7 @@ func GetValueFromEnv(imageKey string, envs []v1.EnvVar) string {
 	return ""
 }
 
-func RemoveOwners(current, toBeDeleted []metav1.OwnerReference) []metav1.OwnerReference {
+func removeOwners(current, toBeDeleted []metav1.OwnerReference) []metav1.OwnerReference {
 	toBeDeletedOwnerMap := make(map[types.UID]bool)
 	for _, owner := range toBeDeleted {
 		toBeDeletedOwnerMap[owner.UID] = true
@@ -1862,7 +1942,7 @@ func DeleteSecret(
 		return err
 	}
 
-	newOwners := RemoveOwners(secret.OwnerReferences, owners)
+	newOwners := removeOwners(secret.OwnerReferences, owners)
 
 	// Do not delete the object if it does not have the owner that was passed;
 	// even if the object has no owner

@@ -1,30 +1,30 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: portworx-plugin
+  name: px-plugin
   labels:
-    app: portworx-plugin
-    app.kubernetes.io/name: portworx-plugin
-    app.kubernetes.io/instance: portworx-plugin
-    app.kubernetes.io/part-of: portworx-plugin
+    app: px-plugin
+    app.kubernetes.io/name: px-plugin
+    app.kubernetes.io/instance: px-plugin
+    app.kubernetes.io/part-of: px-plugin
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: portworx-plugin
-      app.kubernetes.io/name: portworx-plugin
-      app.kubernetes.io/instance: portworx-plugin
-      app.kubernetes.io/part-of: portworx-plugin
+      app: px-plugin
+      app.kubernetes.io/name: px-plugin
+      app.kubernetes.io/instance: px-plugin
+      app.kubernetes.io/part-of: px-plugin
   template:
     metadata:
       labels:
-        app: portworx-plugin
-        app.kubernetes.io/name: portworx-plugin
-        app.kubernetes.io/instance: portworx-plugin
-        app.kubernetes.io/part-of: portworx-plugin
+        app: px-plugin
+        app.kubernetes.io/name: px-plugin
+        app.kubernetes.io/instance: px-plugin
+        app.kubernetes.io/part-of: px-plugin
     spec:
       containers:
-        - name: portworx-plugin
+        - name: px-plugin
           image: quay.io/kravichandran-px/portworx-dynamic-plugin:1.5.3
           ports:
             - containerPort: 9443
@@ -40,7 +40,7 @@ spec:
               cpu: 10m
               memory: 50Mi
           volumeMounts:
-            - name: portworx-plugin-cert
+            - name: px-plugin-cert
               readOnly: true
               mountPath: /var/cert
             - name: nginx-conf
@@ -48,13 +48,13 @@ spec:
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
       volumes:
-        - name: portworx-plugin-cert
+        - name: px-plugin-cert
           secret:
-            secretName: portworx-plugin-cert
+            secretName: px-plugin-cert
             defaultMode: 420
         - name: nginx-conf
           configMap:
-            name: portworx-plugin
+            name: px-plugin
             defaultMode: 420
       restartPolicy: Always
       dnsPolicy: ClusterFirst

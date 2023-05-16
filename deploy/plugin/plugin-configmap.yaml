@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: portworx-plugin
+  name: px-plugin
   labels:
-    app: portworx-plugin
-    app.kubernetes.io/name: portworx-plugin
-    app.kubernetes.io/instance: portworx-plugin
-    app.kubernetes.io/part-of: portworx-plugin
+    app: px-plugin
+    app.kubernetes.io/name: px-plugin
+    app.kubernetes.io/instance: px-plugin
+    app.kubernetes.io/part-of: px-plugin
 data:
   nginx.conf: |
     error_log /dev/stdout info;

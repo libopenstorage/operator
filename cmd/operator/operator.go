@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	console "github.com/openshift/api/console/v1"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -202,6 +203,10 @@ func run(c *cli.Context) {
 	}
 
 	if err := ocp_configv1.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
+	}
+
+	if err := console.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
 

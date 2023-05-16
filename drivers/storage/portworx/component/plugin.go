@@ -3,8 +3,9 @@ package component
 import (
 	"context"
 	commonerrors "errors"
-	"fmt"
-	"github.com/hashicorp/go-version"
+	"strings"
+
+	version "github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -19,19 +20,18 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 )
 
 const (
 	PluginComponentName       = "Portworx Plugin"
 	PluginName                = "portworx"
-	PluginDeloymentName       = "portworx-plugin"
-	PluginConfigMapName       = "portworx-plugin"
-	PluginServiceName         = "portworx-plugin"
-	NginxDeploymentName       = "portworx-console-proxy"
+	PluginDeploymentName      = "px-plugin"
+	PluginConfigMapName       = "px-plugin"
+	PluginServiceName         = "px-plugin"
+	NginxDeploymentName       = "px-plugin-proxy"
 	NginxConfigMapName        = "nginx-conf"
-	NginxServiceName          = "portworx-console-proxy"
-	OpenshiftClusterName      = "openshift-apiserver"
+	NginxServiceName          = "px-plugin-proxy"
+	OpenshiftAPIServer        = "openshift-apiserver"
 	OpenshiftSupportedVersion = "4.12"
 	BaseDir                   = "/configs/"
 	nginxConfigMapFileName    = "nginx-configmap.yaml"
@@ -75,7 +75,7 @@ func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
 	err := p.client.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name: OpenshiftClusterName,
+			Name: OpenshiftAPIServer,
 		},
 		operator,
 	)
@@ -85,7 +85,7 @@ func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
 	}
 
 	for _, v := range operator.Status.Versions {
-		if v.Name == OpenshiftClusterName && isVersionGreaterOrEqual(v.Version, OpenshiftSupportedVersion) {
+		if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version) {
 			return true
 		}
 	}
@@ -98,35 +98,35 @@ func (p *plugin) Reconcile(cluster *corev1.StorageCluster) error {
 	ownRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
 	var errList []string
-	//create nginx resources
+	// create nginx resources
 	if err := p.createConfigmap(nginxConfigMapFileName, cluster.Namespace, ownRef); err != nil {
 		errList = append(errList, err.Error())
-		logrus.Errorf("error during creating nginx configmap %s ", err)
+		logrus.Errorf("error during creating %s configmap %s ", NginxConfigMapName, err)
 	}
 	if err := p.createDeployment(nginxDeploymentFileName, cluster.Namespace, ownRef); err != nil {
 		errList = append(errList, err.Error())
-		logrus.Errorf("error during creating nginx configmap %s ", err)
+		logrus.Errorf("error during creating %s deployment %s ", NginxDeploymentName, err)
 	}
 	if err := p.createService(nginxServiceFileName, cluster.Namespace, ownRef); err != nil {
 		errList = append(errList, err.Error())
-		logrus.Errorf("error during creating nginx configmap %s ", err)
+		logrus.Errorf("error during creating %s service %s ", NginxServiceName, err)
 	}
 
-	//create portworx plugin resources
+	// create portworx plugin resources
 	if err := p.createDeployment(pluginDeploymentFileName, cluster.Namespace, ownRef); err != nil {
 		errList = append(errList, err.Error())
-		logrus.Errorf("error during creating deployment %s ", err)
+		logrus.Errorf("error during creating %s deployment %s ", PluginDeploymentName, err)
 	}
 	if err := p.createService(pluginServiceFileName, cluster.Namespace, ownRef); err != nil {
 		errList = append(errList, err.Error())
-		logrus.Errorf("error during creating service %s ", err)
+		logrus.Errorf("error during creating %s service %s ", PluginServiceName, err)
 	}
 	if err := p.createConfigmap(pluginConfigmapFileName, cluster.Namespace, ownRef); err != nil {
 		errList = append(errList, err.Error())
-		logrus.Errorf("error during creating config map  %s ", err)
+		logrus.Errorf("error during creating %s config map  %s ", PluginConfigMapName, err)
 	}
 
-	//create console plugin
+	// create console plugin
 	if err := p.createConsolePlugin(consolePluginFileName, cluster.Namespace, ownRef); err != nil {
 		errList = append(errList, err.Error())
 		logrus.Errorf("error during creating console plugin %s ", err)
@@ -142,8 +142,8 @@ func (p *plugin) Delete(cluster *corev1.StorageCluster) error {
 	var errList []string
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
-	//delete plugin configs
-	if err := k8s.DeleteDeployment(p.client, PluginDeloymentName, cluster.Namespace, *ownerRef); err != nil {
+	// delete plugin configs
+	if err := k8s.DeleteDeployment(p.client, PluginDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		errList = append(errList, err.Error())
 	}
 	if err := k8s.DeleteConfigMap(p.client, PluginConfigMapName, cluster.Namespace, *ownerRef); err != nil {
@@ -153,7 +153,7 @@ func (p *plugin) Delete(cluster *corev1.StorageCluster) error {
 		errList = append(errList, err.Error())
 	}
 
-	//delete nginx configs
+	// delete nginx configs
 	if err := k8s.DeleteDeployment(p.client, NginxDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		errList = append(errList, err.Error())
 	}
@@ -164,8 +164,8 @@ func (p *plugin) Delete(cluster *corev1.StorageCluster) error {
 		errList = append(errList, err.Error())
 	}
 
-	//delete console plugin
-	if err := p.deleteConsolePlugin(PluginName, cluster.Namespace, *ownerRef); err != nil {
+	// delete console plugin
+	if err := k8s.DeleteConsolePlugin(p.client, PluginName, cluster.Namespace, *ownerRef); err != nil {
 		errList = append(errList, err.Error())
 	}
 	if len(errList) > 0 {
@@ -222,10 +222,6 @@ func (p *plugin) createConfigmap(filename, storageNs string, ownerRef *metav1.Ow
 
 func (p *plugin) createConsolePlugin(filename, storageNs string, ownerRef *metav1.OwnerReference) error {
 
-	if err := console.AddToScheme(p.scheme); err != nil {
-		return err
-	}
-
 	cp := &console.ConsolePlugin{}
 	if err := k8s.ParseObjectFromFile(BaseDir+filename, p.scheme, cp); err != nil {
 		return err
@@ -241,61 +237,7 @@ func (p *plugin) createConsolePlugin(filename, storageNs string, ownerRef *metav
 		cp.Spec.Proxy[0].Endpoint.Service.Namespace = storageNs
 	}
 
-	existingPlugin := &console.ConsolePlugin{}
-	err := p.client.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      cp.Name,
-			Namespace: cp.Namespace,
-		},
-		existingPlugin,
-	)
-
-	if errors.IsNotFound(err) {
-		logrus.Infof("Creating %s Consoleplugin", cp.Name)
-		return p.client.Create(context.TODO(), cp)
-	} else if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (p *plugin) deleteConsolePlugin(name, storageNs string, owners ...metav1.OwnerReference) error {
-	if err := console.AddToScheme(p.scheme); err != nil {
-		return err
-	}
-
-	resource := types.NamespacedName{
-		Name:      name,
-		Namespace: storageNs,
-	}
-
-	consolePlugin := &console.ConsolePlugin{}
-	err := p.client.Get(context.TODO(), resource, consolePlugin)
-	if errors.IsNotFound(err) {
-		return nil
-	} else if err != nil {
-		return err
-	}
-
-	newOwners := k8s.RemoveOwners(consolePlugin.OwnerReferences, owners)
-
-	// Do not delete the object if it does not have the owner that was passed;
-	// even if the object has no owner
-	if (len(consolePlugin.OwnerReferences) == 0 && len(owners) > 0) ||
-		(len(consolePlugin.OwnerReferences) > 0 && len(consolePlugin.OwnerReferences) == len(newOwners)) {
-		logrus.Infof("Cannot delete consolePlugin %s/%s as it is not owned",
-			storageNs, name)
-		return nil
-	}
-
-	if len(newOwners) == 0 {
-		logrus.Infof("Deleting %s/%s consolePlugin", storageNs, name)
-		return p.client.Delete(context.TODO(), consolePlugin)
-	}
-	consolePlugin.OwnerReferences = newOwners
-	logrus.Infof("Disowning %s/%s consolePlugin", storageNs, name)
-	return p.client.Update(context.TODO(), consolePlugin)
+	return k8s.CreateOrUpdateConsolePlugin(p.client, cp, ownerRef)
 }
 
 func updateDataIfNginxConfigMap(cm *v1.ConfigMap, storageNs string) {
@@ -308,14 +250,14 @@ func updateDataIfNginxConfigMap(cm *v1.ConfigMap, storageNs string) {
     http {
       server {
         listen 8080;
-          server_name portworx-console-proxy.` + storageNs + `.svc.cluster.local;
+          server_name px-plugin-proxy.` + storageNs + `.svc.cluster.local;
         location / {
           proxy_pass http://portworx-api.` + storageNs + `.svc.cluster.local:9021;
         }
       }
       server {
         listen 8443 ssl;
-        server_name portworx-console-proxy.` + storageNs + `.svc.cluster.local;
+        server_name px-plugin-proxy.` + storageNs + `.svc.cluster.local;
         ssl_certificate /etc/nginx/certs/tls.crt;
         ssl_certificate_key /etc/nginx/certs/tls.key;
         location / {
@@ -327,33 +269,16 @@ func updateDataIfNginxConfigMap(cm *v1.ConfigMap, storageNs string) {
 	}
 }
 
-func isVersionGreaterOrEqual(version string, targetVersion string) bool {
-	// Split the version strings into individual parts
-	versionParts := strings.Split(version, ".")
-	targetVersionParts := strings.Split(targetVersion, ".")
-
-	// Iterate through each part of the version and compare them
-	for i := 0; i < len(versionParts) && i < len(targetVersionParts); i++ {
-		versionPart := parseVersionPart(versionParts[i])
-		targetVersionPart := parseVersionPart(targetVersionParts[i])
-
-		if versionPart > targetVersionPart {
-			return true
-		} else if versionPart < targetVersionPart {
-			return false
-		}
-	}
-
-	// If all parts are equal so far, check if the version has more parts remaining
-	return len(versionParts) >= len(targetVersionParts)
-}
-
-func parseVersionPart(versionPart string) int {
-	var versionPartInt int
-	_, err := fmt.Sscanf(versionPart, "%d", &versionPartInt)
+func isVersionSupported(v string) bool {
+	targetVersion, err := version.NewVersion(OpenshiftSupportedVersion)
 	if err != nil {
-		// If the part cannot be parsed as an integer, treat it as 0
-		return 0
+		return false
 	}
-	return versionPartInt
+
+	currentVersion, err := version.NewVersion(v)
+	if err != nil {
+		return false
+	}
+
+	return currentVersion.GreaterThanOrEqual(targetVersion)
 }
