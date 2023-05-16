@@ -11,7 +11,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	ocpconfig "github.com/openshift/api/config/v1"
-	console "github.com/openshift/api/console/v1"
+	consolev1 "github.com/openshift/api/console/v1"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -222,7 +222,7 @@ func (p *plugin) createConfigmap(filename, storageNs string, ownerRef *metav1.Ow
 
 func (p *plugin) createConsolePlugin(filename, storageNs string, ownerRef *metav1.OwnerReference) error {
 
-	cp := &console.ConsolePlugin{}
+	cp := &consolev1.ConsolePlugin{}
 	if err := k8s.ParseObjectFromFile(BaseDir+filename, p.scheme, cp); err != nil {
 		return err
 	}
