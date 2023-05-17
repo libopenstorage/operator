@@ -3622,10 +3622,14 @@ func TestAutopilotSecurityContext(t *testing.T) {
 	require.NoError(t, err)
 
 	autopilotDeployment := &appsv1.Deployment{}
+	expectedUserGroup := int64(1000)
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.False(t, *autopilotDeployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation)
 	require.False(t, *autopilotDeployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged)
+	require.True(t, *autopilotDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot)
+	require.Equal(t, expectedUserGroup, *autopilotDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser)
+	require.Equal(t, expectedUserGroup, *autopilotDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup)
 }
 
 func TestAutopilotVolumesChange(t *testing.T) {
