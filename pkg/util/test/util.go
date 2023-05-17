@@ -157,6 +157,9 @@ func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 	if err := ocp_configv1.AddToScheme(s); err != nil {
 		logrus.Error(err)
 	}
+	if err := consolev1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
 	return fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(initObjects...).Build()
 }
 
