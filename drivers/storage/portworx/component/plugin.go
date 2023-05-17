@@ -3,7 +3,6 @@ package component
 import (
 	"context"
 	commonerrors "errors"
-	appsv1 "k8s.io/api/apps/v1"
 	"strings"
 
 	version "github.com/hashicorp/go-version"
@@ -13,11 +12,14 @@ import (
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	ocpconfig "github.com/openshift/api/config/v1"
 	consolev1 "github.com/openshift/api/console/v1"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,6 +34,8 @@ const (
 	NginxDeploymentName       = "px-plugin-proxy"
 	NginxConfigMapName        = "nginx-conf"
 	NginxServiceName          = "px-plugin-proxy"
+	ClusterOperatorVersion    = "config.openshift.io/v1"
+	ClusterOperatorKind       = "ClusterOperator"
 	OpenshiftAPIServer        = "openshift-apiserver"
 	OpenshiftSupportedVersion = "4.12"
 	BaseDir                   = "/configs/"
@@ -45,9 +49,11 @@ const (
 )
 
 type plugin struct {
-	client            client.Client
-	scheme            *runtime.Scheme
-	isOperatorCreated bool
+	client                    client.Client
+	scheme                    *runtime.Scheme
+	isPluginDeploymentCreated bool
+	isProxyDeploymentCreated  bool
+	isPluginSupported         bool
 }
 
 func (p *plugin) Initialize(
@@ -73,22 +79,38 @@ func (c *plugin) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
 }
 
 func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
-	operator := &ocpconfig.ClusterOperator{}
-	err := p.client.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name: OpenshiftAPIServer,
-		},
-		operator,
-	)
-
-	if errors.IsNotFound(err) {
+	if p.isPluginSupported {
+		return true
+	}
+	gvk := schema.GroupVersionKind{
+		Kind:    ClusterOperatorKind,
+		Version: ClusterOperatorVersion,
+	}
+	exists, err := coreops.Instance().ResourceExists(gvk)
+	if err != nil {
+		logrus.Error(err)
 		return false
 	}
 
-	for _, v := range operator.Status.Versions {
-		if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version) {
-			return true
+	if exists {
+		operator := &ocpconfig.ClusterOperator{}
+		err := p.client.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name: OpenshiftAPIServer,
+			},
+			operator,
+		)
+
+		if errors.IsNotFound(err) {
+			return false
+		}
+
+		for _, v := range operator.Status.Versions {
+			if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version) {
+				p.isPluginSupported = true
+				return true
+			}
 		}
 	}
 
@@ -177,7 +199,9 @@ func (p *plugin) Delete(cluster *corev1.StorageCluster) error {
 }
 
 func (p *plugin) MarkDeleted() {
-	p.isOperatorCreated = false
+	p.isPluginDeploymentCreated = false
+	p.isProxyDeploymentCreated = false
+	p.isPluginSupported = false
 }
 
 // RegisterPortworxPluginComponent registers the PortworxPlugin component
@@ -210,41 +234,23 @@ func (p *plugin) createDeployment(filename, deploymentName string, ownerRef *met
 		return getErr
 	}
 
+	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
+
 	equal, _ := util.DeepEqualPodTemplate(&deployment.Spec.Template, &existingDeployment.Spec.Template)
 
-	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
-		deployment.Spec.Template.Spec.ImagePullSecrets = append(
-			[]v1.LocalObjectReference{},
-			v1.LocalObjectReference{
-				Name: *cluster.Spec.ImagePullSecret,
-			},
-		)
-	}
-
-	if cluster.Spec.Placement != nil {
-		if cluster.Spec.Placement.NodeAffinity != nil {
-			deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
-				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
-			}
-		}
-
-		if len(cluster.Spec.Placement.Tolerations) > 0 {
-			deployment.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
-			for _, toleration := range cluster.Spec.Placement.Tolerations {
-				deployment.Spec.Template.Spec.Tolerations = append(
-					deployment.Spec.Template.Spec.Tolerations,
-					*(toleration.DeepCopy()),
-				)
-			}
-		}
-	}
-
-	if !equal {
+	if (!p.isPluginDeploymentCreated && deployment.Name == PluginDeploymentName) ||
+		(!p.isProxyDeploymentCreated && deployment.Name == NginxDeploymentName) ||
+		!equal {
 		if err := k8s.CreateOrUpdateDeployment(p.client, deployment, ownerRef); err != nil {
 			return err
 		}
 	}
-	p.isOperatorCreated = true
+	if deployment.Name == NginxDeploymentName {
+		p.isProxyDeploymentCreated = true
+	}
+	if deployment.Name == PluginDeploymentName {
+		p.isPluginDeploymentCreated = true
+	}
 
 	return nil
 }
@@ -326,11 +332,13 @@ func updateDataIfNginxConfigMap(cm *v1.ConfigMap, storageNs string) {
 func isVersionSupported(v string) bool {
 	targetVersion, err := version.NewVersion(OpenshiftSupportedVersion)
 	if err != nil {
+		logrus.Errorf("Error during parsing version : %s ", err)
 		return false
 	}
 
 	currentVersion, err := version.NewVersion(v)
 	if err != nil {
+		logrus.Errorf("Error during parsing version : %s ", err)
 		return false
 	}
 

@@ -18,7 +18,7 @@ spec:
             name: px-plugin-proxy-conf
         - name: nginx-certs
           secret:
-            secretName: px-plugin-proxy-conf
+            secretName: px-plugin-proxy
       containers:
         - name: nginx
           image: nginxinc/nginx-unprivileged:1.23
