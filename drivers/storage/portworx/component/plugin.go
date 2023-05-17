@@ -46,6 +46,8 @@ const (
 	pluginConfigmapFileName   = "plugin-configmap.yaml"
 	pluginDeploymentFileName  = "plugin-deployment.yaml"
 	pluginServiceFileName     = "plugin-service.yaml"
+	TRUE                      = "true"
+	FALSE                     = "false"
 )
 
 type plugin struct {
@@ -53,7 +55,7 @@ type plugin struct {
 	scheme                    *runtime.Scheme
 	isPluginDeploymentCreated bool
 	isProxyDeploymentCreated  bool
-	isPluginSupported         bool
+	isPluginSupported         string
 }
 
 func (p *plugin) Initialize(
@@ -79,37 +81,38 @@ func (c *plugin) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
 }
 
 func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
-	if p.isPluginSupported {
+	if p.isPluginSupported == TRUE {
 		return true
-	}
-	gvk := schema.GroupVersionKind{
-		Kind:    ClusterOperatorKind,
-		Version: ClusterOperatorVersion,
-	}
-	exists, err := coreops.Instance().ResourceExists(gvk)
-	if err != nil {
-		logrus.Error(err)
-		return false
-	}
-
-	if exists {
-		operator := &ocpconfig.ClusterOperator{}
-		err := p.client.Get(
-			context.TODO(),
-			types.NamespacedName{
-				Name: OpenshiftAPIServer,
-			},
-			operator,
-		)
-
-		if errors.IsNotFound(err) {
+	} else if p.isPluginSupported == "" {
+		gvk := schema.GroupVersionKind{
+			Kind:    ClusterOperatorKind,
+			Version: ClusterOperatorVersion,
+		}
+		exists, err := coreops.Instance().ResourceExists(gvk)
+		if err != nil {
+			logrus.Error(err)
 			return false
 		}
 
-		for _, v := range operator.Status.Versions {
-			if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version) {
-				p.isPluginSupported = true
-				return true
+		if exists {
+			operator := &ocpconfig.ClusterOperator{}
+			err := p.client.Get(
+				context.TODO(),
+				types.NamespacedName{
+					Name: OpenshiftAPIServer,
+				},
+				operator,
+			)
+
+			if errors.IsNotFound(err) {
+				return false
+			}
+
+			for _, v := range operator.Status.Versions {
+				if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version) {
+					p.isPluginSupported = TRUE
+					return true
+				}
 			}
 		}
 	}
@@ -201,7 +204,7 @@ func (p *plugin) Delete(cluster *corev1.StorageCluster) error {
 func (p *plugin) MarkDeleted() {
 	p.isPluginDeploymentCreated = false
 	p.isProxyDeploymentCreated = false
-	p.isPluginSupported = false
+	p.isPluginSupported = FALSE
 }
 
 // RegisterPortworxPluginComponent registers the PortworxPlugin component
