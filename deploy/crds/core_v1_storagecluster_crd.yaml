@@ -3876,6 +3876,15 @@ spec:
                   logUploader:
                     type: string
                     description: Desired image for log uploader.
+                  kubeScheduler:
+                    type: string
+                    description: Desired image for kubernetes scheduler.
+                  kubeControllerManager:
+                    type: string
+                    description: Desired image for kubernetes controller manager.
+                  pause:
+                    type: string
+                    description: Desired image for pause image.
               conditions:
                 type: array
                 description: Contains details for the current condition of this cluster.
