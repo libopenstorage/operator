@@ -91,6 +91,7 @@ func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
 		exists, err := coreops.Instance().ResourceExists(gvk)
 		if err != nil {
 			logrus.Error(err)
+			p.isPluginSupported = FALSE
 			return false
 		}
 
@@ -105,6 +106,7 @@ func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
 			)
 
 			if errors.IsNotFound(err) {
+				p.isPluginSupported = FALSE
 				return false
 			}
 
