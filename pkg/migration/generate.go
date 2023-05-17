@@ -1270,6 +1270,9 @@ func (h *Handler) handleCustomImageRegistry(cluster *corev1.StorageCluster) erro
 		Telemetry:                  h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.Telemetry),
 		MetricsCollector:           h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.MetricsCollector),
 		MetricsCollectorProxy:      h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.MetricsCollectorProxy),
+		KubeScheduler:              h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.KubeScheduler),
+		KubeControllerManager:      h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.KubeControllerManager),
+		Pause:                      h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.Pause),
 	}
 	cluster.Status.Version = pxutil.GetImageTag(cluster.Spec.Image)
 	return nil
@@ -1324,6 +1327,9 @@ func (h *Handler) createManifestConfigMap(cluster *corev1.StorageCluster) error 
 			Telemetry:                  cluster.Status.DesiredImages.Telemetry,
 			MetricsCollector:           cluster.Status.DesiredImages.MetricsCollector,
 			MetricsCollectorProxy:      cluster.Status.DesiredImages.MetricsCollectorProxy,
+			KubeScheduler:              cluster.Status.DesiredImages.KubeScheduler,
+			KubeControllerManager:      cluster.Status.DesiredImages.KubeControllerManager,
+			Pause:                      cluster.Status.DesiredImages.Pause,
 		},
 	}
 
