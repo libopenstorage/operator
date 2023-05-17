@@ -480,6 +480,9 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{},
+		},
 	}
 
 	err = driver.PreInstall(cluster)
@@ -513,6 +516,13 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "registry.k8s.io/pause:3.1", ds.Spec.Template.Spec.Containers[0].Image)
+
+	cluster.Status.DesiredImages.Pause = "private.repo.org/foo/bar:1.2.3"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "private.repo.org/foo/bar:1.2.3", ds.Spec.Template.Spec.Containers[0].Image)
 
 	// Case: If the daemon set was marked as deleted, the it should be recreated,
 	// even if it is already present
