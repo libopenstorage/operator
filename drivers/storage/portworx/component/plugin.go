@@ -32,7 +32,7 @@ const (
 	PluginConfigMapName       = "px-plugin"
 	PluginServiceName         = "px-plugin"
 	NginxDeploymentName       = "px-plugin-proxy"
-	NginxConfigMapName        = "nginx-conf"
+	NginxConfigMapName        = "px-plugin-proxy-conf"
 	NginxServiceName          = "px-plugin-proxy"
 	ClusterOperatorVersion    = "config.openshift.io/v1"
 	ClusterOperatorKind       = "ClusterOperator"
