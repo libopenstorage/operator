@@ -1671,7 +1671,7 @@ func DeletePodDisruptionBudget(
 	return k8sClient.Update(context.TODO(), pdb)
 }
 
-// CreateOrUpdateConsolePlugin creates a Portworx ConsolePlougin instance of ConsolePlugin CRD if not present, else updates it
+// CreateOrUpdateConsolePlugin creates a ConsolePlougin instance of ConsolePlugin CRD if not present, else updates it
 func CreateOrUpdateConsolePlugin(
 	k8sClient client.Client,
 	cp *console.ConsolePlugin,
@@ -1711,7 +1711,7 @@ func CreateOrUpdateConsolePlugin(
 	return nil
 }
 
-// DeleteConsolePlugin deletes Portworx ConsolePlugin instance of ConsolePlugin CRD if present and owned
+// DeleteConsolePlugin deletes a ConsolePlugin instance of ConsolePlugin CRD if present and owned
 func DeleteConsolePlugin(
 	k8sClient client.Client,
 	name, namespace string,
@@ -1736,17 +1736,17 @@ func DeleteConsolePlugin(
 	// even if the object has no owner
 	if (len(consolePlugin.OwnerReferences) == 0 && len(owners) > 0) ||
 		(len(consolePlugin.OwnerReferences) > 0 && len(consolePlugin.OwnerReferences) == len(newOwners)) {
-		logrus.Infof("Cannot delete consolePlugin %s/%s as it is not owned",
+		logrus.Infof("Cannot delete ConsolePlugin %s/%s as it is not owned",
 			namespace, name)
 		return nil
 	}
 
 	if len(newOwners) == 0 {
-		logrus.Infof("Deleting %s/%s consolePlugin", namespace, name)
+		logrus.Infof("Deleting %s/%s ConsolePlugin", namespace, name)
 		return k8sClient.Delete(context.TODO(), consolePlugin)
 	}
 	consolePlugin.OwnerReferences = newOwners
-	logrus.Infof("Disowning %s/%s consolePlugin", namespace, name)
+	logrus.Infof("Disowning %s/%s ConsolePlugin", namespace, name)
 	return k8sClient.Update(context.TODO(), consolePlugin)
 }
 
