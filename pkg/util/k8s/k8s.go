@@ -3,7 +3,6 @@ package k8s
 import (
 	"context"
 	"fmt"
-	console "github.com/openshift/api/console/v1"
 	"os"
 	"path"
 	"reflect"
@@ -13,6 +12,7 @@ import (
 	"github.com/hashicorp/go-version"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	consolev1 "github.com/openshift/api/console/v1"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -1702,11 +1702,11 @@ func DeletePodDisruptionBudget(
 // CreateOrUpdateConsolePlugin creates a ConsolePlougin instance of ConsolePlugin CRD if not present, else updates it
 func CreateOrUpdateConsolePlugin(
 	k8sClient client.Client,
-	cp *console.ConsolePlugin,
+	cp *consolev1.ConsolePlugin,
 	ownerRef *metav1.OwnerReference,
 ) error {
 
-	existingPlugin := &console.ConsolePlugin{}
+	existingPlugin := &consolev1.ConsolePlugin{}
 	err := k8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
@@ -1750,7 +1750,7 @@ func DeleteConsolePlugin(
 		Namespace: namespace,
 	}
 
-	consolePlugin := &console.ConsolePlugin{}
+	consolePlugin := &consolev1.ConsolePlugin{}
 	err := k8sClient.Get(context.TODO(), resource, consolePlugin)
 	if errors.IsNotFound(err) {
 		return nil

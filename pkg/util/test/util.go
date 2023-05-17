@@ -20,6 +20,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	ocp_configv1 "github.com/openshift/api/config/v1"
+	consolev1 "github.com/openshift/api/console/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
