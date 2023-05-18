@@ -38,7 +38,6 @@ const (
 	ClusterOperatorKind       = "ClusterOperator"
 	OpenshiftAPIServer        = "openshift-apiserver"
 	OpenshiftSupportedVersion = "4.12"
-	BaseDir                   = "/configs/"
 	nginxConfigMapFileName    = "nginx-configmap.yaml"
 	nginxDeploymentFileName   = "nginx-deployment.yaml"
 	nginxServiceFileName      = "nginx-service.yaml"
@@ -46,8 +45,6 @@ const (
 	pluginConfigmapFileName   = "plugin-configmap.yaml"
 	pluginDeploymentFileName  = "plugin-deployment.yaml"
 	pluginServiceFileName     = "plugin-service.yaml"
-	TRUE                      = "true"
-	FALSE                     = "false"
 )
 
 type plugin struct {
@@ -55,7 +52,7 @@ type plugin struct {
 	scheme                    *runtime.Scheme
 	isPluginDeploymentCreated bool
 	isProxyDeploymentCreated  bool
-	isPluginSupported         string
+	isPluginSupported         *bool
 }
 
 func (p *plugin) Initialize(
@@ -81,9 +78,9 @@ func (c *plugin) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
 }
 
 func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
-	if p.isPluginSupported == TRUE {
-		return true
-	} else if p.isPluginSupported == "" {
+	if p.isPluginSupported != nil {
+		return *p.isPluginSupported
+	} else {
 		gvk := schema.GroupVersionKind{
 			Kind:    ClusterOperatorKind,
 			Version: ClusterOperatorVersion,
@@ -91,7 +88,6 @@ func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
 		exists, err := coreops.Instance().ResourceExists(gvk)
 		if err != nil {
 			logrus.Error(err)
-			p.isPluginSupported = FALSE
 			return false
 		}
 
@@ -105,17 +101,23 @@ func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
 				operator,
 			)
 
-			if errors.IsNotFound(err) {
-				p.isPluginSupported = FALSE
-				return false
+			if err != nil {
+				logrus.Error(err)
+				if errors.IsNotFound(err) {
+					p.isPluginSupported = boolPtr(false)
+					return false
+				}
 			}
 
 			for _, v := range operator.Status.Versions {
 				if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version) {
-					p.isPluginSupported = TRUE
+					p.isPluginSupported = boolPtr(true)
 					return true
 				}
 			}
+		} else {
+			p.isPluginSupported = boolPtr(false)
+			return false
 		}
 	}
 
@@ -206,7 +208,7 @@ func (p *plugin) Delete(cluster *corev1.StorageCluster) error {
 func (p *plugin) MarkDeleted() {
 	p.isPluginDeploymentCreated = false
 	p.isProxyDeploymentCreated = false
-	p.isPluginSupported = FALSE
+	p.isPluginSupported = boolPtr(false)
 }
 
 // RegisterPortworxPluginComponent registers the PortworxPlugin component
@@ -262,7 +264,8 @@ func (p *plugin) createDeployment(filename, deploymentName string, ownerRef *met
 
 func (p *plugin) createService(filename, storageNs string, ownerRef *metav1.OwnerReference) error {
 	service := &v1.Service{}
-	err := k8s.ParseObjectFromFile(BaseDir+filename, p.scheme, service)
+	file := pxutil.SpecsBaseDir() + "/" + filename
+	err := k8s.ParseObjectFromFile(file, p.scheme, service)
 	if err != nil {
 		return err
 	}
@@ -273,7 +276,8 @@ func (p *plugin) createService(filename, storageNs string, ownerRef *metav1.Owne
 
 func (p *plugin) createConfigmap(filename, storageNs string, ownerRef *metav1.OwnerReference) error {
 	cm := &v1.ConfigMap{}
-	err := k8s.ParseObjectFromFile(BaseDir+filename, p.scheme, cm)
+	file := pxutil.SpecsBaseDir() + "/" + filename
+	err := k8s.ParseObjectFromFile(file, p.scheme, cm)
 	if err != nil {
 		return err
 	}
@@ -288,7 +292,8 @@ func (p *plugin) createConfigmap(filename, storageNs string, ownerRef *metav1.Ow
 func (p *plugin) createConsolePlugin(filename, storageNs string, ownerRef *metav1.OwnerReference) error {
 
 	cp := &consolev1.ConsolePlugin{}
-	if err := k8s.ParseObjectFromFile(BaseDir+filename, p.scheme, cp); err != nil {
+	file := pxutil.SpecsBaseDir() + "/" + filename
+	if err := k8s.ParseObjectFromFile(file, p.scheme, cp); err != nil {
 		return err
 	}
 
