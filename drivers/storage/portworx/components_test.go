@@ -15688,10 +15688,10 @@ func TestIsVersionSupportedForSupportedVersionOpenshift(t *testing.T) {
 		},
 		Status: ocpconfig.ClusterOperatorStatus{
 			RelatedObjects: []ocpconfig.ObjectReference{
-				ocpconfig.ObjectReference{Name: component.OpenshiftAPIServer},
+				{Name: component.OpenshiftAPIServer},
 			},
 			Versions: []ocpconfig.OperandVersion{
-				ocpconfig.OperandVersion{
+				{
 					Name:    component.OpenshiftAPIServer,
 					Version: "4.13",
 				},
@@ -15736,10 +15736,10 @@ func TestIsVersionSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 		},
 		Status: ocpconfig.ClusterOperatorStatus{
 			RelatedObjects: []ocpconfig.ObjectReference{
-				ocpconfig.ObjectReference{Name: component.OpenshiftAPIServer},
+				{Name: component.OpenshiftAPIServer},
 			},
 			Versions: []ocpconfig.OperandVersion{
-				ocpconfig.OperandVersion{
+				{
 					Name:    component.OpenshiftAPIServer,
 					Version: "4.11",
 				},
@@ -15783,10 +15783,10 @@ func TestPluginInstallAndUninstall(t *testing.T) {
 		},
 		Status: ocpconfig.ClusterOperatorStatus{
 			RelatedObjects: []ocpconfig.ObjectReference{
-				ocpconfig.ObjectReference{Name: component.OpenshiftAPIServer},
+				{Name: component.OpenshiftAPIServer},
 			},
 			Versions: []ocpconfig.OperandVersion{
-				ocpconfig.OperandVersion{
+				{
 					Name:    component.OpenshiftAPIServer,
 					Version: "4.13",
 				},
