@@ -415,19 +415,29 @@ func BasicUpgradeOperator(tc *types.TestCase) func(*testing.T) {
 
 		var lastHopImage string
 		for _, hopImage := range ci_utils.OperatorUpgradeHopsImageList {
-			pxOperatorDeployment, err := ci_utils.GetPxOperatorDeployment()
+			pxOperatorDep := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "portworx-operator",
+					Namespace: cluster.Namespace,
+				},
+			}
+			pxOperatorDeployment, err := ci_utils.GetPxOperatorDeployment(pxOperatorDep)
 			require.NoError(t, err)
-			pxOperatorImage, err := ci_utils.GetPxOperatorImage()
+			pxOperatorImage, err := ci_utils.GetPxOperatorImage(pxOperatorDeployment)
 			require.NoError(t, err)
+			if len(lastHopImage) == 0 {
+				// This is initially deployed PX Operator version
+				lastHopImage = pxOperatorImage
+			}
 
 			if pxOperatorImage == hopImage {
-				logrus.Infof("Skipping upgrade of PX Operator from %s to %s", pxOperatorImage, hopImage)
+				logrus.Infof("Skipping upgrade of PX Operator from [%s] to [%s]", pxOperatorImage, hopImage)
 				lastHopImage = hopImage
 				continue
 			}
 
 			// Upgrade PX Operator image and validate deployment
-			logrus.Infof("Upgrading PX Operator from %s to %s", lastHopImage, hopImage)
+			logrus.Infof("Upgrading PX Operator from [%s] to [%s]", lastHopImage, hopImage)
 			updateParamFunc := func(pxOperator *appsv1.Deployment) *appsv1.Deployment {
 				for ind, container := range pxOperator.Spec.Template.Spec.Containers {
 					if container.Name == ci_utils.PortworxOperatorContainerName {
@@ -442,11 +452,11 @@ func BasicUpgradeOperator(tc *types.TestCase) func(*testing.T) {
 			// Update and validate PX Operator deployment
 			ci_utils.UpdateAndValidatePxOperator(pxOperatorDeployment, updateParamFunc, t)
 
-			logrus.Infof("Upgraded PX Operator from %s to %s, letting it sleep for 15 secs to stabilize and let make changes to StorageCluster and/or existing objects", lastHopImage, hopImage)
+			logrus.Infof("Upgraded PX Operator from [%s] to [%s], letting it sleep for 15 secs to stabilize and let make changes to StorageCluster and/or existing objects", lastHopImage, hopImage)
 			time.Sleep(15 * time.Second)
 
 			// Validate PX Operator image
-			pxOperatorImage, err = ci_utils.GetPxOperatorImage()
+			pxOperatorImage, err = ci_utils.GetPxOperatorImage(pxOperatorDeployment)
 			require.NoError(t, err)
 			require.Equal(t, pxOperatorImage, hopImage)
 
