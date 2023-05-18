@@ -12,6 +12,7 @@ metadata:
     createdAt: 2023-03-21T21:29:41Z
     support: Portworx, Inc
     certified: "true"
+    console.openshift.io/plugins: '["portworx"]'
     operatorframework.io/initialization-resource: |-
       {
         "apiVersion": "core.libopenstorage.org/v1",
