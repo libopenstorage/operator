@@ -105,8 +105,8 @@ func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
 				logrus.Error(err)
 				if errors.IsNotFound(err) {
 					p.isPluginSupported = boolPtr(false)
-					return false
 				}
+				return false
 			}
 
 			for _, v := range operator.Status.Versions {
