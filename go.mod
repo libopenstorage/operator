@@ -13,7 +13,7 @@ require (
 	github.com/hashicorp/go-version v1.6.0
 	github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1
 	github.com/libopenstorage/openstorage v9.4.46+incompatible
-	github.com/openshift/api v0.0.0-20210105115604-44119421ec6b
+	github.com/openshift/api v0.0.0-20230426193520-54a14470e5dc
 	github.com/operator-framework/api v0.17.1
 	github.com/pborman/uuid v1.2.1
 	github.com/portworx/kvdb v0.0.0-20200929023115-b312c7519467
@@ -261,7 +261,7 @@ require (
 	k8s.io/apiserver v0.25.1 // indirect
 	k8s.io/gengo v0.0.0-20211129171323-c02415ce4185 // indirect
 	k8s.io/klog/v2 v2.80.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20220803162953-67bda5d908f1 // indirect
+	k8s.io/kube-openapi v0.0.0-20221012153701-172d655c2280 // indirect
 	mvdan.cc/gofumpt v0.4.0 // indirect
 	mvdan.cc/interfacer v0.0.0-20180901003855-c20040233aed // indirect
 	mvdan.cc/lint v0.0.0-20170908181259-adc824a0674b // indirect

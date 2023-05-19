@@ -20,6 +20,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	ocp_configv1 "github.com/openshift/api/config/v1"
+	consolev1 "github.com/openshift/api/console/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -162,6 +163,9 @@ func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 		logrus.Error(err)
 	}
 	if err := ocp_configv1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
+	if err := consolev1.AddToScheme(s); err != nil {
 		logrus.Error(err)
 	}
 	return fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(initObjects...).Build()
@@ -2976,11 +2980,14 @@ func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageClu
 	return ValidateTelemetryV1Disabled(cluster, timeout, interval)
 }
 
-// updateTelemetryStatus NOTE: is a workaround to get Telemetry again
-// from StorageCluster after validating that PX is online and upgraded
-// because there are multiple condition for when it can be disabled/enabled after sometime
+// updateTelemetryStatus NOTE: This is a workaround to get Telemetry state again
+// from StorageCluster after validating that PX is online and upgraded, because
+// there are multiple condition for when it can be disabled/enabled after sometime
+// 1) PX Operator 23.3+ enables Telemetry by default, if it can reach Pure1 endpont succcessfully
+// 2) PX Operator 23.3+ will disable or not enabled Telemetry by default, if it cannot reach Pure1 endpoint, even if it was enabled by user
+// 3) PX Operator will enable Telemetry after you upgrade to PX Operator 23.3+, If it is not disabled3) PX Operator will enable Telemetry after you upgrade to PX Operator 23.3+, If it is not disabled3) PX Operator will enable Telemetry after you upgrade to PX Operator 23.3+, If it is not disabled
 func updateTelemetryStatus(pxImageList map[string]string, cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
-	// Makin sure cluster is online
+	// Making sure cluster is online
 	liveCluster, err := ValidateStorageClusterIsOnline(cluster, defaultValidateStorageClusterOnlineTimeout, defaultValidateStorageClusterOnlineInterval)
 	if err != nil {
 		return nil, err
@@ -2993,12 +3000,12 @@ func updateTelemetryStatus(pxImageList map[string]string, cluster *corev1.Storag
 
 	// Check Telemetry state before timeout
 	if liveCluster.Spec.Monitoring != nil && liveCluster.Spec.Monitoring.Telemetry != nil {
-		log.Infof("Telemetry state in the StorageCluster [%s] before sleep is [%v]", liveCluster.Name, liveCluster.Spec.Monitoring.Telemetry.Enabled)
+		logrus.Debugf("Telemetry state in the StorageCluster [%s] before sleep is [%v]", liveCluster.Name, liveCluster.Spec.Monitoring.Telemetry.Enabled)
 	} else {
-		log.Infof("Telemetry state in the StorageCluster [%s] sleep is [nil]", liveCluster.Name)
+		logrus.Debugf("Telemetry state in the StorageCluster [%s] before sleep is [nil]", liveCluster.Name)
 	}
 
-	log.Infof("Sleeping for 2 minutes to get new Telemetry state")
+	logrus.Debugf("Sleeping for 2 minutes to get new Telemetry state")
 	time.Sleep(2 * time.Minute)
 
 	// Get StorageCluster
@@ -3016,9 +3023,9 @@ func updateTelemetryStatus(pxImageList map[string]string, cluster *corev1.Storag
 
 	// Check Telemetry state before timeout
 	if liveCluster.Spec.Monitoring != nil && liveCluster.Spec.Monitoring.Telemetry != nil {
-		log.Infof("Telemetry state in the StorageCluster [%s] after sleep is [%v]", liveCluster.Name, liveCluster.Spec.Monitoring.Telemetry.Enabled)
+		logrus.Debugf("Telemetry state in the StorageCluster [%s] after sleep is [%v]", liveCluster.Name, liveCluster.Spec.Monitoring.Telemetry.Enabled)
 	} else {
-		log.Infof("Telemetry state in the StorageCluster [%s] after sleep is [nil]", liveCluster.Name)
+		logrus.Debugf("Telemetry state in the StorageCluster [%s] after sleep is [nil]", liveCluster.Name)
 	}
 
 	return cluster, nil
