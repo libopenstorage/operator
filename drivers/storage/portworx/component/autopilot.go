@@ -14,7 +14,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -45,6 +45,8 @@ const (
 	AutopilotDefaultProviderEndpoint = "http://px-prometheus:9090"
 
 	defaultAutopilotCPU = "0.1"
+
+	defaultAutopilotCPULimit = "0.25"
 )
 
 var (
@@ -347,6 +349,11 @@ func (c *autopilot) createDeployment(
 		return err
 	}
 
+	targetCPULimitQuantity, err := resource.ParseQuantity(defaultAutopilotCPULimit)
+	if err != nil {
+		return err
+	}
+
 	args := map[string]string{
 		"config":    "/etc/config/config.yaml",
 		"log-level": "debug",
@@ -409,7 +416,7 @@ func (c *autopilot) createDeployment(
 	sort.Sort(k8sutil.VolumeByName(existingVolumes))
 
 	targetDeployment := c.getAutopilotDeploymentSpec(cluster, ownerRef, imageName,
-		command, envVars, volumes, volumeMounts, targetCPUQuantity)
+		command, envVars, volumes, volumeMounts, targetCPUQuantity, targetCPULimitQuantity)
 	// Check if the deployment has changed
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
@@ -439,6 +446,7 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	volumes []v1.Volume,
 	volumeMounts []v1.VolumeMount,
 	cpuQuantity resource.Quantity,
+	cpuLimitQuantity resource.Quantity,
 ) *appsv1.Deployment {
 	deploymentLabels := map[string]string{
 		"tier": "control-plane",
@@ -493,6 +501,9 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 							Resources: v1.ResourceRequirements{
 								Requests: map[v1.ResourceName]resource.Quantity{
 									v1.ResourceCPU: cpuQuantity,
+								},
+								Limits: map[v1.ResourceName]resource.Quantity{
+									v1.ResourceCPU: cpuLimitQuantity,
 								},
 							},
 							VolumeMounts: volumeMounts,

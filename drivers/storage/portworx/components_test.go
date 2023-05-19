@@ -3469,11 +3469,14 @@ func TestAutopilotResources(t *testing.T) {
 
 	// Default Autopilot CPU
 	expectedCPUQuantity := resource.MustParse("0.1")
+	expectedCPULimitQuantity := resource.MustParse("0.25")
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Zero(t, expectedCPUQuantity.Cmp(
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+	require.Zero(t, expectedCPULimitQuantity.Cmp(
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceCPU]))
 
 	// Set custom resources.
 	cluster.Spec.Autopilot.Resources = &v1.ResourceRequirements{
