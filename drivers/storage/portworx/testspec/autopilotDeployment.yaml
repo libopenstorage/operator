@@ -42,8 +42,6 @@ spec:
         resources:
           requests:
             cpu: 100m
-          limits:
-            cpu: 250m
         securityContext:
           allowPrivilegeEscalation: false       
           privileged: false

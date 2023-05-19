@@ -14,7 +14,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -499,7 +499,6 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 							SecurityContext: &v1.SecurityContext{
 								AllowPrivilegeEscalation: boolPtr(false),
 								Privileged:               boolPtr(false),
-								RunAsNonRoot:             boolPtr(true),
 							},
 						},
 					},
