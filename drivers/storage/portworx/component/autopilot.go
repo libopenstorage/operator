@@ -452,7 +452,6 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromInt(1)
 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
-	runAsUser := int64(1000)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -501,8 +500,6 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 								AllowPrivilegeEscalation: boolPtr(false),
 								Privileged:               boolPtr(false),
 								RunAsNonRoot:             boolPtr(true),
-								RunAsUser:                &runAsUser,
-								RunAsGroup:               &runAsUser,
 							},
 						},
 					},

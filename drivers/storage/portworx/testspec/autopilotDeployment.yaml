@@ -47,9 +47,6 @@ spec:
         securityContext:
           allowPrivilegeEscalation: false       
           privileged: false
-          runAsNonRoot: true
-          runAsUser: 1000
-          runAsGroup: 1000
         name: autopilot
         volumeMounts:
         - name: config-volume
