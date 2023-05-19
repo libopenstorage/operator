@@ -1,0 +1,21 @@
+apiVersion: console.openshift.io/v1
+kind: ConsolePlugin
+metadata:
+  name: portworx
+spec:
+  backend:
+    service:
+      basePath: /
+      name: px-plugin
+      namespace: <placeholder>
+      port: 9443
+    type: Service
+  displayName: Portworx Plugin
+  proxy:
+    - alias: portworx-api
+      endpoint:
+        service:
+          name: px-plugin-proxy
+          namespace: <placeholder>
+          port: 443
+        type: Service
