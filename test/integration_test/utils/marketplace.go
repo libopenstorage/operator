@@ -27,7 +27,7 @@ const (
 	defaultPxVsphereSecretName = "px-vsphere-secret"
 
 	getInstallPlanListTimeout       = 10 * time.Minute
-	getInstallPlanListRetryInterval = 10 * time.Second
+	getInstallPlanListRetryInterval = 20 * time.Second
 
 	getPxVsphereSecretTimeout       = 10 * time.Minute
 	getPxVsphereSecretRetryInterval = 5 * time.Second
@@ -63,7 +63,7 @@ func DeployAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
 	}
 
 	// Validate PX Operator deployment and version
-	if err := ValidatePxOperatorDeploymentAndVersion(opRegistryTag, PxNamespace); err != nil {
+	if err := ValidatePxOperatorDeploymentAndVersion(operatorVersion, PxNamespace); err != nil {
 		return err
 	}
 
@@ -211,7 +211,7 @@ func DeploySubscription(name, namespace, opTag string, testCatalogSource *v1alph
 // ApproveInstallPlan finds correct install plan and approves it
 func ApproveInstallPlan(namespace, opTag string, subscription *v1alpha1.Subscription) error {
 	expectedClusterServiceVersion := fmt.Sprintf("portworx-operator.v%s", opTag)
-	logrus.Infof("Looking for InstallPlan with CSV [%s] and setting Approved to true", expectedClusterServiceVersion)
+	logrus.Infof("Looking for InstallPlan with CSV [%s] and setting Approved to [true]", expectedClusterServiceVersion)
 	t := func() (interface{}, bool, error) {
 		installPlanList, err := opmpops.Instance().ListInstallPlans(namespace)
 		if err != nil {
@@ -226,13 +226,16 @@ func ApproveInstallPlan(namespace, opTag string, subscription *v1alpha1.Subscrip
 					for _, clusterServiceVersions := range installPlan.Spec.ClusterServiceVersionNames {
 						if clusterServiceVersions == expectedClusterServiceVersion {
 							logrus.Infof("Found the correct InstallPlan [%s] with expected CSV [%s] in namespace [%s]", installPlan.Name, expectedClusterServiceVersion, installPlan.Namespace)
-							logrus.Infof("Update Approved value to true for InstallPlan [%s]", installPlan.Name)
+							logrus.Infof("Update Approved value to [true] for InstallPlan [%s]", installPlan.Name)
 							installPlan.Spec.Approved = true
-							_, err = opmpops.Instance().UpdateInstallPlan(&installPlan)
+							updatedInstallPlan, err := opmpops.Instance().UpdateInstallPlan(&installPlan)
 							if err != nil {
 								return nil, true, fmt.Errorf("failed to update InstallPlan [%s], Err: %v", installPlan.Name, err)
 							}
-							logrus.Infof("Successfully Approved InstallPlan [%s]", installPlan.Name)
+							if !updatedInstallPlan.Spec.Approved {
+								return nil, true, fmt.Errorf("failed to approve InstallPlan [%s], Approved is set to [%v]", updatedInstallPlan.Name, updatedInstallPlan.Spec.Approved)
+							}
+							logrus.Infof("Successfully set Approved to [%v] for InstallPlan [%s]", updatedInstallPlan.Spec.Approved, updatedInstallPlan.Name)
 							return nil, false, nil
 						}
 					}

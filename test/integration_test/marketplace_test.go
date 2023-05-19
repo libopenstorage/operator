@@ -131,14 +131,15 @@ func BasicUpgradeOperatorViaOcpMarketplace(tc *types.TestCase) func(*testing.T) 
 				// Deploy and validate StorageCluster
 				logrus.Infof("Deploying StorageCluster once [%s]", cluster.Name)
 				cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+				continue
 			}
 
 			// Validate PX Operator deployment
-			_, err := ci_utils.ValidatePxOperator(ci_utils.PxNamespace)
+			opDep, err := ci_utils.ValidatePxOperator(ci_utils.PxNamespace)
 			require.NoError(t, err)
 
 			// Get PX Operator version
-			pxOperatorCurrentVersion, err := ci_utils.GetPXOperatorVersion()
+			pxOperatorCurrentVersion, err := ci_utils.GetPXOperatorVersion(opDep)
 			require.NoError(t, err)
 			logrus.Infof("Current PX Operator version [%s]", pxOperatorCurrentVersion.String())
 
@@ -150,7 +151,7 @@ func BasicUpgradeOperatorViaOcpMarketplace(tc *types.TestCase) func(*testing.T) 
 
 			// Upgrade PX Operator to the next hop
 			logrus.Infof("Upgrading PX Operator from [%s] to [%s]", pxOperatorCurrentVersion.String(), operatorVersionHop.String())
-			ci_utils.UpdateAndValidatePxOperatorViaMarketplace(operatorVersionTagHop)
+			err = ci_utils.UpdateAndValidatePxOperatorViaMarketplace(operatorVersionTagHop)
 			require.NoError(t, err)
 
 			// Sleep for 15 secs to let cluster stabilize
