@@ -2,6 +2,7 @@ package portworx
 
 import (
 	"context"
+	stderr "errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -663,6 +665,11 @@ func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
 			}
 		} else {
 			if err := comp.Delete(cluster); err != nil {
+				noKindErr := &meta.NoKindMatchError{}
+				if stderr.As(err, &noKindErr) || strings.Contains(err.Error(), "no matches for kind ") {
+					logrus.WithError(err).Tracef("No component `%s` to delete", comp.Name())
+					continue
+				}
 				msg := fmt.Sprintf("Failed to cleanup %v. %v", comp.Name(), err)
 				p.warningEvent(cluster, util.FailedComponentReason, msg)
 			}
