@@ -651,6 +651,10 @@ func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
+	if err := p.validateFACDTopology(cluster); err != nil {
+		return err
+	}
+
 	for _, comp := range component.GetAll() {
 		if comp.IsPausedForMigration(cluster) {
 			continue
@@ -719,6 +723,41 @@ func (p *portworx) validateEssentials() error {
 		if len(secret.Data[pxutil.EssentialsOSBEndpointKey]) == 0 {
 			return fmt.Errorf("secret %s/%s does not have Portworx OSB endpoint (%s)",
 				api.NamespaceSystem, pxutil.EssentialsSecretName, pxutil.EssentialsOSBEndpointKey)
+		}
+	}
+
+	return nil
+}
+
+func (p *portworx) validateFACDTopology(cluster *corev1.StorageCluster) error {
+	facdTopologyEnv := ""
+	for _, env := range cluster.Spec.Env {
+		if env.Name == "FACD_TOPOLOGY_ENABLED" {
+			facdTopologyEnv = strings.ToLower(env.Value)
+		}
+	}
+
+	if facdTopologyEnv == "true" {
+		// FACD topology is enabled. See if we already have the annotation marking this as valid, or if not, check if this is a fresh install
+
+		// TODO: once we support upgrading to FACD topology, it will also be valid after whatever version supports that
+		isValid := false
+		if pxutil.IsFreshInstall(cluster) {
+			if cluster.Annotations == nil {
+				cluster.Annotations = make(map[string]string)
+			}
+			cluster.Annotations[pxutil.AnnotationFACDTopology] = "true"
+			isValid = true
+		}
+		if !isValid {
+			if a, ok := cluster.Annotations[pxutil.AnnotationFACDTopology]; ok && a != "" {
+				isValid = true
+			}
+		}
+
+		if !isValid {
+			// Fail the request!
+			return fmt.Errorf("FACD topology cannot be enabled on existing clusters")
 		}
 	}
 
