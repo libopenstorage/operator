@@ -13,7 +13,7 @@ require (
 	github.com/hashicorp/go-version v1.6.0
 	github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1
 	github.com/libopenstorage/openstorage v9.4.46+incompatible
-	github.com/openshift/api v0.0.0-20210105115604-44119421ec6b
+	github.com/openshift/api v0.0.0-20230426193520-54a14470e5dc
 	github.com/operator-framework/api v0.17.1
 	github.com/pborman/uuid v1.2.1
 	github.com/portworx/kvdb v0.0.0-20200929023115-b312c7519467
@@ -39,6 +39,7 @@ require (
 	k8s.io/utils v0.0.0-20221107191617-1a15be271d1d
 	sigs.k8s.io/cluster-api v0.2.11
 	sigs.k8s.io/controller-runtime v0.13.0
+	sigs.k8s.io/controller-tools v0.11.3
 	sigs.k8s.io/yaml v1.3.0
 )
 
@@ -80,7 +81,7 @@ require (
 	github.com/daixiang0/gci v0.8.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/denis-tingaikin/go-header v0.4.3 // indirect
-	github.com/docker/distribution v2.8.1+incompatible // indirect
+	github.com/docker/distribution v2.8.2+incompatible // indirect
 	github.com/emicklei/go-restful/v3 v3.8.0 // indirect
 	github.com/esimonov/ifshort v1.0.4 // indirect
 	github.com/ettle/strcase v0.1.1 // indirect
@@ -260,12 +261,11 @@ require (
 	k8s.io/apiserver v0.25.1 // indirect
 	k8s.io/gengo v0.0.0-20211129171323-c02415ce4185 // indirect
 	k8s.io/klog/v2 v2.80.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20220803162953-67bda5d908f1 // indirect
+	k8s.io/kube-openapi v0.0.0-20221012153701-172d655c2280 // indirect
 	mvdan.cc/gofumpt v0.4.0 // indirect
 	mvdan.cc/interfacer v0.0.0-20180901003855-c20040233aed // indirect
 	mvdan.cc/lint v0.0.0-20170908181259-adc824a0674b // indirect
 	mvdan.cc/unparam v0.0.0-20220706161116-678bad134442 // indirect
-	sigs.k8s.io/controller-tools v0.11.3 // indirect
 	sigs.k8s.io/json v0.0.0-20220713155537-f223a00ba0e2 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )

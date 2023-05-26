@@ -33,8 +33,8 @@ var (
 // TODO: Install portworx-operator in test automation
 
 // GetPXOperatorVersion returns the portworx operator version found
-func GetPXOperatorVersion() (*version.Version, error) {
-	imageTag, err := getPXOperatorImageTag()
+func GetPXOperatorVersion(pxOperator *appsv1.Deployment) (*version.Version, error) {
+	imageTag, err := getPxOperatorImageTag(pxOperator)
 	if err != nil {
 		return nil, err
 	}
@@ -55,8 +55,8 @@ func GetPXOperatorVersion() (*version.Version, error) {
 	return opVersion, nil
 }
 
-func getPXOperatorImageTag() (string, error) {
-	deployment, err := appops.Instance().GetDeployment(PortworxOperatorDeploymentName, PxNamespace)
+func getPxOperatorImageTag(pxOperator *appsv1.Deployment) (string, error) {
+	deployment, err := appops.Instance().GetDeployment(pxOperator.Name, pxOperator.Namespace)
 	if err != nil {
 		return "", err
 	}
@@ -97,8 +97,8 @@ func getPXOperatorImageTag() (string, error) {
 }
 
 // GetPxOperatorImage return PX Operator image
-func GetPxOperatorImage() (string, error) {
-	deployment, err := GetPxOperatorDeployment()
+func GetPxOperatorImage(pxOperator *appsv1.Deployment) (string, error) {
+	deployment, err := GetPxOperatorDeployment(pxOperator)
 	if err != nil {
 		return "", err
 	}
@@ -116,8 +116,8 @@ func GetPxOperatorImage() (string, error) {
 }
 
 // GetPxOperatorDeployment return PX Operator deployment
-func GetPxOperatorDeployment() (*appsv1.Deployment, error) {
-	return appops.Instance().GetDeployment(PortworxOperatorDeploymentName, PxNamespace)
+func GetPxOperatorDeployment(pxOperator *appsv1.Deployment) (*appsv1.Deployment, error) {
+	return appops.Instance().GetDeployment(pxOperator.Name, pxOperator.Namespace)
 }
 
 // UpdateAndValidatePxOperator update and validate PX Operator deployment
@@ -166,7 +166,7 @@ func ValidatePxOperatorDeploymentAndVersion(expectedOpVersion, namespace string)
 		}
 
 		// Get PX Operator image tag
-		opVersion, err := getPXOperatorImageTag()
+		opVersion, err := getPxOperatorImageTag(pxOperatorDeployment)
 		if err != nil {
 			return nil, true, err
 		}

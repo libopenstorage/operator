@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	ocpconfig "github.com/openshift/api/config/v1"
+
 	"github.com/dgrijalva/jwt-go"
 	"github.com/golang/mock/gomock"
 	osdapi "github.com/libopenstorage/openstorage/api"
@@ -72,7 +74,7 @@ func TestOrderOfComponents(t *testing.T) {
 	for i, comp := range components {
 		componentNames[i] = comp.Name()
 	}
-	require.Len(t, components, 19)
+	require.Len(t, components, 20)
 	// Higher priority components come first
 	require.ElementsMatch(t,
 		[]string{
@@ -100,6 +102,7 @@ func TestOrderOfComponents(t *testing.T) {
 			component.PrometheusComponentName,
 			component.PVCControllerComponentName,
 			component.AlertManagerComponentName,
+			component.PluginComponentName,
 		},
 		componentNames[4:],
 	)
@@ -644,6 +647,9 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{},
+		},
 	}
 
 	err = driver.PreInstall(cluster)
@@ -677,6 +683,13 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "registry.k8s.io/pause:3.1", ds.Spec.Template.Spec.Containers[0].Image)
+
+	cluster.Status.DesiredImages.Pause = "private.repo.org/foo/bar:1.2.3"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "private.repo.org/foo/bar:1.2.3", ds.Spec.Template.Spec.Containers[0].Image)
 
 	// Case: If the daemon set was marked as deleted, the it should be recreated,
 	// even if it is already present
@@ -15623,6 +15636,236 @@ func createTelemetrySecret(t *testing.T, k8sClient client.Client, namespace stri
 	require.NoError(t, err)
 }
 
+// test if install can be enabled on non-openshift servers for Plugin
+func TestInstallOnNonOpenshiftCluster(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: "non-openshift-version",
+			APIResources: []metav1.APIResource{
+				{
+					Kind: "non-openshift-kind",
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+
+	k8sClient := testutil.FakeK8sClient()
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{}
+	pluginComponent, _ := component.Get(component.PluginComponentName)
+
+	enabled := pluginComponent.IsEnabled(cluster)
+	require.Equal(t, false, enabled)
+}
+
+// test if install can be enabled on 4.13 version of openshift for Plugin
+func TestIsVersionSupportedForSupportedVersionOpenshift(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.13",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{}
+	pluginComponent, _ := component.Get(component.PluginComponentName)
+
+	enabled := pluginComponent.IsEnabled(cluster)
+	require.Equal(t, true, enabled)
+
+}
+
+// test if install can be enabled on 4.11 version of openshift for Plugin
+func TestIsVersionSupportedForUnsupportedVersionOpenshift(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.11",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{}
+	pluginComponent, _ := component.Get(component.PluginComponentName)
+
+	enabled := pluginComponent.IsEnabled(cluster)
+	require.Equal(t, false, enabled)
+
+}
+
+func TestPluginInstallAndUninstall(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.13",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// test creation of nginx-configmap
+	expectedNginxCm := testutil.GetExpectedConfigMap(t, "nginx-configmap.yaml")
+	actualNginxCm := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, actualNginxCm, component.NginxConfigMapName, "kube-test")
+	require.NoError(t, err)
+	require.Equal(t, expectedNginxCm.Name, actualNginxCm.Name)
+
+	// test creation of nginx-service
+	expectedNginxSvc := testutil.GetExpectedService(t, "nginx-service.yaml")
+	actualNginxSvc := &v1.Service{}
+	err = testutil.Get(k8sClient, actualNginxSvc, component.NginxServiceName, "kube-test")
+	require.NoError(t, err)
+	require.Equal(t, expectedNginxSvc.Name, actualNginxSvc.Name)
+	require.Equal(t, expectedNginxSvc.Spec, actualNginxSvc.Spec)
+
+	// test creation of nginx deployment
+	expectedNginxDeployment := testutil.GetExpectedDeployment(t, "nginx-deployment.yaml")
+	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &expectedNginxDeployment.Spec.Template.Spec)
+	actualNginxDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, actualNginxDeployment, component.NginxDeploymentName, "kube-test")
+	require.NoError(t, err)
+	require.Equal(t, expectedNginxDeployment.Name, actualNginxDeployment.Name)
+	require.Equal(t, expectedNginxDeployment.Spec, actualNginxDeployment.Spec)
+
+	// test creation of plugin-configmap
+	expectedPluginCm := testutil.GetExpectedConfigMap(t, "plugin-configmap.yaml")
+	actualPluginCm := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, actualPluginCm, component.PluginConfigMapName, "kube-test")
+	require.NoError(t, err)
+	require.Equal(t, expectedPluginCm.Name, actualPluginCm.Name)
+	require.Equal(t, expectedPluginCm.Data, actualPluginCm.Data)
+
+	// test creation of plugin-service
+	expectedPluginxSvc := testutil.GetExpectedService(t, "plugin-service.yaml")
+	actualPluginSvc := &v1.Service{}
+	err = testutil.Get(k8sClient, actualPluginSvc, component.PluginServiceName, "kube-test")
+	require.NoError(t, err)
+	require.Equal(t, expectedPluginxSvc.Name, actualPluginSvc.Name)
+	require.Equal(t, expectedPluginxSvc.Spec, actualPluginSvc.Spec)
+
+	// test creation of plugin-deployment
+	expectedPluginDeployment := testutil.GetExpectedDeployment(t, "plugin-deployment.yaml")
+	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &expectedPluginDeployment.Spec.Template.Spec)
+	actualPluginDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, actualPluginDeployment, component.PluginDeploymentName, "kube-test")
+	require.NoError(t, err)
+	require.Equal(t, expectedPluginDeployment.Name, actualPluginDeployment.Name)
+	require.Equal(t, expectedPluginDeployment.Spec, actualPluginDeployment.Spec)
+
+	pluginComponent, _ := component.Get(component.PluginComponentName)
+	err = pluginComponent.Delete(cluster)
+	pluginComponent.MarkDeleted()
+	require.NoError(t, err)
+
+}
+
 func reregisterComponents() {
 	// Skipping registering of some components to avoid blocking
 	// other tests. Skipped components: PortworxCRD, DisruptionBudget
@@ -15644,6 +15887,7 @@ func reregisterComponents() {
 	component.RegisterTelemetryComponent()
 	component.RegisterPxRepoComponent()
 	component.RegisterSCCComponent()
+	component.RegisterPortworxPluginComponent()
 	pxutil.SpecsBaseDir = func() string {
 		return "../../../bin/configs"
 	}
