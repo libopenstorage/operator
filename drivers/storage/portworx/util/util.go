@@ -139,6 +139,8 @@ const (
 	AnnotationSCCPriority = pxAnnotationPrefix + "/scc-priority"
 	// AnnotationPreflightCheck do preflight check before installing Portworx
 	AnnotationPreflightCheck = pxAnnotationPrefix + "/preflight-check"
+	// AnnotationFACDTopology is added when FACD topology was successfully installed on a *new* cluster (it's blocked for existing clusters)
+	AnnotationFACDTopology = pxAnnotationPrefix + "/facd-topology"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
