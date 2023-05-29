@@ -42,6 +42,11 @@ spec:
         resources:
           requests:
             cpu: 100m
+          limits:
+            cpu: 250m
+        securityContext:
+          allowPrivilegeEscalation: false       
+          privileged: false
         name: autopilot
         volumeMounts:
         - name: config-volume
@@ -66,12 +71,23 @@ spec:
                       - "false"
                   - key: node-role.kubernetes.io/master
                     operator: DoesNotExist
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
               - matchExpressions:
                   - key: px/enabled
                     operator: NotIn
                     values:
                       - "false"
                   - key: node-role.kubernetes.io/master
+                    operator: Exists
+                  - key: node-role.kubernetes.io/worker
+                    operator: Exists
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - "false"
+                  - key: node-role.kubernetes.io/control-plane
                     operator: Exists
                   - key: node-role.kubernetes.io/worker
                     operator: Exists

@@ -14,7 +14,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -45,6 +45,8 @@ const (
 	AutopilotDefaultProviderEndpoint = "http://px-prometheus:9090"
 
 	defaultAutopilotCPU = "0.1"
+
+	defaultAutopilotCPULimit = "0.25"
 )
 
 var (
@@ -73,8 +75,9 @@ var (
 )
 
 type autopilot struct {
-	isCreated bool
-	k8sClient client.Client
+	isCreated  bool
+	k8sClient  client.Client
+	k8sVersion version.Version
 }
 
 func (c *autopilot) Name() string {
@@ -87,11 +90,12 @@ func (c *autopilot) Priority() int32 {
 
 func (c *autopilot) Initialize(
 	k8sClient client.Client,
-	_ version.Version,
+	k8sVersion version.Version,
 	_ *runtime.Scheme,
 	_ record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
+	c.k8sVersion = k8sVersion
 }
 
 func (c *autopilot) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
@@ -212,25 +216,59 @@ func (c *autopilot) createServiceAccount(
 }
 
 func (c *autopilot) createClusterRole() error {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"events"},
+			Verbs:     []string{"create", "patch"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services", "secrets"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"namespaces", "pods"},
+			Verbs:     []string{"list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"persistentvolumeclaims", "persistentvolumes"},
+			Verbs:     []string{"get", "list", "update"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"get", "list", "patch", "update"},
+		},
+		{
+			APIGroups: []string{"autopilot.libopenstorage.org"},
+			Resources: []string{"actionapprovals", "autopilotrules", "autopilotruleobjects"},
+			Verbs:     []string{"*"},
+		},
+		{
+			APIGroups: []string{"apiextensions.k8s.io"},
+			Resources: []string{"customresourcedefinitions"},
+			Verbs:     []string{"create", "get", "update"},
+		},
+	}
+	if c.k8sVersion.LessThan(k8sutil.K8sVer1_25) {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			ResourceNames: []string{constants.RestrictedPSPName},
+			Verbs:         []string{"use"},
+		},
+		)
+	}
 	return k8sutil.CreateOrUpdateClusterRole(
 		c.k8sClient,
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: AutopilotClusterRoleName,
 			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups: []string{"*"},
-					Resources: []string{"*"},
-					Verbs:     []string{"*"},
-				},
-				{
-					APIGroups:     []string{"policy"},
-					Resources:     []string{"podsecuritypolicies"},
-					ResourceNames: []string{constants.RestrictedPSPName},
-					Verbs:         []string{"use"},
-				},
-			},
+			Rules: rules,
 		},
 	)
 }
@@ -311,6 +349,11 @@ func (c *autopilot) createDeployment(
 		return err
 	}
 
+	targetCPULimitQuantity, err := resource.ParseQuantity(defaultAutopilotCPULimit)
+	if err != nil {
+		return err
+	}
+
 	args := map[string]string{
 		"config":    "/etc/config/config.yaml",
 		"log-level": "debug",
@@ -373,7 +416,7 @@ func (c *autopilot) createDeployment(
 	sort.Sort(k8sutil.VolumeByName(existingVolumes))
 
 	targetDeployment := c.getAutopilotDeploymentSpec(cluster, ownerRef, imageName,
-		command, envVars, volumes, volumeMounts, targetCPUQuantity)
+		command, envVars, volumes, volumeMounts, targetCPUQuantity, targetCPULimitQuantity)
 	// Check if the deployment has changed
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
@@ -403,6 +446,7 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	volumes []v1.Volume,
 	volumeMounts []v1.VolumeMount,
 	cpuQuantity resource.Quantity,
+	cpuLimitQuantity resource.Quantity,
 ) *appsv1.Deployment {
 	deploymentLabels := map[string]string{
 		"tier": "control-plane",
@@ -458,8 +502,15 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 								Requests: map[v1.ResourceName]resource.Quantity{
 									v1.ResourceCPU: cpuQuantity,
 								},
+								Limits: map[v1.ResourceName]resource.Quantity{
+									v1.ResourceCPU: cpuLimitQuantity,
+								},
 							},
 							VolumeMounts: volumeMounts,
+							SecurityContext: &v1.SecurityContext{
+								AllowPrivilegeEscalation: boolPtr(false),
+								Privileged:               boolPtr(false),
+							},
 						},
 					},
 					Volumes: volumes,

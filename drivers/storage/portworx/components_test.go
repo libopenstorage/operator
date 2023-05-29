@@ -2930,14 +2930,21 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 }
 
 func TestAutopilotInstall(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	// Start test with newer version (1.25 beyond) of Kubernetes first, on which PodSecurityPolicy is no longer existing
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
-	cluster := &corev1.StorageCluster{
+	stcSpec := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -2984,6 +2991,8 @@ func TestAutopilotInstall(t *testing.T) {
 			},
 		},
 	}
+
+	cluster := stcSpec.DeepCopy()
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
@@ -3038,6 +3047,39 @@ func TestAutopilotInstall(t *testing.T) {
 
 	autopilotDeployment.ResourceVersion = ""
 	require.Equal(t, expectedDeployment, autopilotDeployment)
+	// Till here we finished the verification of all aspects of Autopilot
+
+	// Now test with older version (1.24 less) of Kubernetes, on which PodSecurityPolicy is used and
+	// injected into Autopilot's ClusterRole definition
+	versionClient = fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.24.0",
+	}
+	fakeExtClient = fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient = testutil.FakeK8sClient()
+	driver = portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster = stcSpec.DeepCopy()
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Load Autopilot ClusterRole with PSP rules and compare
+	expectedCR = testutil.GetExpectedClusterRole(t, "autopilotClusterRole_k8s_1.24.yaml")
+	actualCR = &rbacv1.ClusterRole{}
+	err = testutil.Get(k8sClient, actualCR, component.AutopilotClusterRoleName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCR.Name, actualCR.Name)
+	require.Empty(t, actualCR.OwnerReferences)
+	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 }
 
 func TestAutopilotWithoutImage(t *testing.T) {
@@ -3420,11 +3462,14 @@ func TestAutopilotResources(t *testing.T) {
 
 	// Default Autopilot CPU
 	expectedCPUQuantity := resource.MustParse("0.1")
+	expectedCPULimitQuantity := resource.MustParse("0.25")
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Zero(t, expectedCPUQuantity.Cmp(
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]))
+	require.Zero(t, expectedCPULimitQuantity.Cmp(
+		autopilotDeployment.Spec.Template.Spec.Containers[0].Resources.Limits[v1.ResourceCPU]))
 
 	// Set custom resources.
 	cluster.Spec.Autopilot.Resources = &v1.ResourceRequirements{
@@ -3545,6 +3590,38 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v Failed to setup Autopilot.", v1.EventTypeWarning, util.FailedComponentReason))
+}
+
+func TestAutopilotSecurityContext(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	recorder := record.NewFakeRecorder(10)
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:v1",
+			},
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.False(t, *autopilotDeployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation)
+	require.False(t, *autopilotDeployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged)
 }
 
 func TestAutopilotVolumesChange(t *testing.T) {
