@@ -2133,6 +2133,49 @@ func TestValidationsForEssentials(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestValidationsForFACDTopology(t *testing.T) {
+	component.DeregisterAllComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "FACD_TOPOLOGY_ENABLED",
+						Value: "true",
+					},
+				},
+			},
+		},
+	}
+
+	// TestCase: Should succeed for new cluster
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Reset cluster to clean "installed" state, then add var, should fail
+	cluster = &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "FACD_TOPOLOGY_ENABLED",
+						Value: "true",
+					},
+				},
+			},
+		},
+	}
+	cluster.Status.Phase = string(corev1.ClusterStateRunning)
+
+	// TestCase: Should fail for existing cluster
+	err = driver.PreInstall(cluster)
+	require.Error(t, err)
+}
+
 func TestUpdateClusterStatusFirstTime(t *testing.T) {
 	driver := portworx{}
 
