@@ -44,7 +44,7 @@ spec:
         name: collector
         resources:
           limits:
-            memory: 128Mi
+            memory: 256Mi
           requests:
             cpu: 200m
             memory: 64Mi
