@@ -56,7 +56,7 @@ const (
 	TelemetryCertName = pxutil.TelemetryCertName
 
 	defaultCollectorMemoryRequest = "64Mi"
-	defaultCollectorMemoryLimit   = "128Mi"
+	defaultCollectorMemoryLimit   = "256Mi"
 	defaultCollectorCPU           = "0.2"
 )
 
