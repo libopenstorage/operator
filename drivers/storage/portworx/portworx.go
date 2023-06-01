@@ -108,6 +108,14 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		logrus.Debugf("pre-flight: container already running...")
 	}
 
+	defer func() {
+		// Clean up the pre-flight pods
+		logrus.Infof("pre-flight: cleaning pre-flight ds...")
+		if derr := preFlighter.DeletePreFlight(); derr != nil {
+			logrus.Errorf("pre-flight: error deleting pre-flight: %v", derr)
+		}
+	}()
+
 	cnt := 0
 	//  Wait for all the pre-flight pods to finish
 	for {
@@ -132,14 +140,6 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 			return err
 		}
 	}
-
-	defer func() {
-		// Clean up the pre-flight pods
-		logrus.Infof("pre-flight: cleaning pre-flight ds...")
-		if derr := preFlighter.DeletePreFlight(); derr != nil {
-			logrus.Errorf("pre-flight: error deleting pre-flight: %v", derr)
-		}
-	}()
 
 	// Process all the StorageNode.Status.Checks
 	var storageNodes []*corev1.StorageNode
