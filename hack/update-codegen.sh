@@ -26,5 +26,5 @@ bash "${CODEGEN_PKG}/generate-groups.sh" \
 	all \
   github.com/libopenstorage/operator/pkg/client \
 	github.com/libopenstorage/operator/pkg/apis \
-  "core:v1" \
+  "core:v1 portworx:v1" \
   --go-header-file ${SCRIPT_ROOT}/hack/custom-boilerplate.go.txt

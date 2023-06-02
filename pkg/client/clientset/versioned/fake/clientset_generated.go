@@ -22,6 +22,8 @@ import (
 	clientset "github.com/libopenstorage/operator/pkg/client/clientset/versioned"
 	corev1 "github.com/libopenstorage/operator/pkg/client/clientset/versioned/typed/core/v1"
 	fakecorev1 "github.com/libopenstorage/operator/pkg/client/clientset/versioned/typed/core/v1/fake"
+	portworxv1 "github.com/libopenstorage/operator/pkg/client/clientset/versioned/typed/portworx/v1"
+	fakeportworxv1 "github.com/libopenstorage/operator/pkg/client/clientset/versioned/typed/portworx/v1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -82,4 +84,9 @@ var (
 // CoreV1 retrieves the CoreV1Client
 func (c *Clientset) CoreV1() corev1.CoreV1Interface {
 	return &fakecorev1.FakeCoreV1{Fake: &c.Fake}
+}
+
+// PortworxV1 retrieves the PortworxV1Client
+func (c *Clientset) PortworxV1() portworxv1.PortworxV1Interface {
+	return &fakeportworxv1.FakePortworxV1{Fake: &c.Fake}
 }
