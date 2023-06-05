@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	portworxDaemonSetName          = "portworx"
+	//	portworxDaemonSetName          = "portworx"
 	portworxContainerName          = "portworx"
 	defaultSecretsNamespace        = "portworx"
 	migrationRetryInterval         = 30 * time.Second
