@@ -5211,9 +5211,9 @@ func TestGuestAccessSecurity(t *testing.T) {
 	// Disable GuestAccess. Should expect an update to be called.
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleDisabled)
 	cluster.Status.Phase = string(corev1.ClusterStateRunning)
-	inspectedRole := component.GuestRoleEnabled
+	inspectedRole := &component.GuestRoleEnabled
 	inspectedRoleResp := &osdapi.SdkRoleInspectResponse{
-		Role: &inspectedRole,
+		Role: inspectedRole,
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
@@ -5232,9 +5232,9 @@ func TestGuestAccessSecurity(t *testing.T) {
 
 	// Enable guest access, should be updated again
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleEnabled)
-	inspectedRole = component.GuestRoleDisabled
+	inspectedRole = &component.GuestRoleDisabled
 	inspectedRoleResp = &osdapi.SdkRoleInspectResponse{
-		Role: &inspectedRole,
+		Role: inspectedRole,
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
@@ -5252,9 +5252,9 @@ func TestGuestAccessSecurity(t *testing.T) {
 	require.NoError(t, err)
 
 	// run without any change should result in only an inspect call
-	inspectedRole = component.GuestRoleEnabled
+	inspectedRole = &component.GuestRoleEnabled
 	inspectedRoleResp = &osdapi.SdkRoleInspectResponse{
-		Role: &inspectedRole,
+		Role: inspectedRole,
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
@@ -5266,9 +5266,9 @@ func TestGuestAccessSecurity(t *testing.T) {
 	require.NoError(t, err)
 
 	// GuestRole type changed, but PX is below 2.6, so no calls are needed.
-	inspectedRole = component.GuestRoleDisabled
+	inspectedRole = &component.GuestRoleDisabled
 	inspectedRoleResp = &osdapi.SdkRoleInspectResponse{
-		Role: &inspectedRole,
+		Role: inspectedRole,
 	}
 	mockRoleServer.EXPECT().
 		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
