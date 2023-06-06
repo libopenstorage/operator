@@ -7517,7 +7517,7 @@ func TestPrometheusInstall(t *testing.T) {
 	// Modify resources and security context.
 	cluster.Spec.Monitoring.Prometheus.Resources = v1.ResourceRequirements{
 		Requests: map[v1.ResourceName]resource.Quantity{
-			v1.ResourceMemory: resource.MustParse("8Gi"),
+			v1.ResourceMemory: resource.MustParse("4Gi"),
 			v1.ResourceCPU:    resource.MustParse("4"),
 		},
 	}

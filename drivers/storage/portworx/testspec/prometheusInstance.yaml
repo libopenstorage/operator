@@ -21,7 +21,6 @@ spec:
     limits:
       cpu: 1
       ephemeral-storage: 5Gi
-      memory: 4Gi
   securityContext:
     runAsNonRoot: true
     runAsUser: 65534
