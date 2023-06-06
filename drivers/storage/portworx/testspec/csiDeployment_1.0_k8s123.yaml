@@ -50,6 +50,8 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
+          securityContext:
+            privileged: true
         - name: csi-snapshotter
           imagePullPolicy: Always
           image: quay.io/k8scsi/csi-snapshotter:v1.2.3
@@ -63,6 +65,8 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
+          securityContext:
+            privileged: true
         - name: csi-resizer
           image: quay.io/k8scsi/csi-resizer:v1.2.3
           imagePullPolicy: Always
@@ -76,12 +80,16 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
+          securityContext:
+            privileged: true
         - name: csi-snapshot-controller
           image: quay.io/k8scsi/snapshot-controller:v1.2.3
           imagePullPolicy: Always
           args:
             - --v=3
             - --leader-election=true
+          securityContext:
+            privileged: true
         - name: csi-health-monitor-controller
           image: quay.io/k8scsi/csi-health-monitor-controller:v1.2.3
           imagePullPolicy: Always
@@ -100,6 +108,8 @@ spec:
             - name: http-endpoint
               containerPort: 8080
               protocol: TCP
+          securityContext:
+            privileged: true
       schedulerName: stork
       volumes:
         - name: socket-dir
