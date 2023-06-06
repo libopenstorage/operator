@@ -635,7 +635,7 @@ func (c *prometheus) createPrometheusInstance(
 		prometheusInst.Spec.Resources.Limits = cluster.Spec.Monitoring.Prometheus.Resources.Limits
 	} else {
 		prometheusInst.Spec.Resources.Limits = map[v1.ResourceName]resource.Quantity{
-			v1.ResourceMemory:           resource.MustParse("800Mi"),
+			v1.ResourceMemory:           resource.MustParse("4Gi"),
 			v1.ResourceCPU:              resource.MustParse("1"),
 			v1.ResourceEphemeralStorage: resource.MustParse("5Gi"),
 		}
