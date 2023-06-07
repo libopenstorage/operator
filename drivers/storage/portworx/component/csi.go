@@ -613,6 +613,10 @@ func getCSIDeploymentSpec(
 		args = append(args, "--feature-gates=Topology=true")
 	}
 
+	sc := &v1.SecurityContext{
+		Privileged: boolPtr(true),
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            CSIApplicationName,
@@ -648,6 +652,7 @@ func getCSIDeploymentSpec(
 									MountPath: "/csi",
 								},
 							},
+							SecurityContext: sc,
 						},
 					},
 					Volumes: []v1.Volume{
@@ -695,6 +700,7 @@ func getCSIDeploymentSpec(
 						MountPath: "/csi",
 					},
 				},
+				SecurityContext: sc,
 			},
 		)
 	}
@@ -721,6 +727,7 @@ func getCSIDeploymentSpec(
 					MountPath: "/csi",
 				},
 			},
+			SecurityContext: sc,
 		}
 		if csiConfig.IncludeEndpointsAndConfigMapsForLeases {
 			snapshotterContainer.Args = append(
@@ -758,6 +765,7 @@ func getCSIDeploymentSpec(
 						MountPath: "/csi",
 					},
 				},
+				SecurityContext: sc,
 			},
 		)
 	}
@@ -773,6 +781,7 @@ func getCSIDeploymentSpec(
 					"--v=3",
 					"--leader-election=true",
 				},
+				SecurityContext: sc,
 			},
 		)
 	}
@@ -809,6 +818,7 @@ func getCSIDeploymentSpec(
 						Protocol:      v1.ProtocolTCP,
 					},
 				},
+				SecurityContext: sc,
 			},
 		)
 	}
@@ -909,6 +919,10 @@ func getCSIStatefulSetSpec(
 	}
 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
 
+	sc := &v1.SecurityContext{
+		Privileged: boolPtr(true),
+	}
+
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            CSIApplicationName,
@@ -949,6 +963,7 @@ func getCSIStatefulSetSpec(
 									MountPath: "/csi",
 								},
 							},
+							SecurityContext: sc,
 						},
 						{
 							Name:            csiAttacherContainerName,
@@ -970,6 +985,7 @@ func getCSIStatefulSetSpec(
 									MountPath: "/csi",
 								},
 							},
+							SecurityContext: sc,
 						},
 					},
 					Volumes: []v1.Volume{
