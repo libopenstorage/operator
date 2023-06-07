@@ -27,6 +27,7 @@ cloud:
   auth:
     version: "1.0"
 productName: "portworx"
+certStoreType: "k8s"
 k8s:
   certSecretName: "pure-telemetry-certs"
   certSecretNamespace: CERT_SECRET_NAMESPACE
