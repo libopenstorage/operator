@@ -582,10 +582,10 @@ func getCSIDeploymentSpec(
 	topologySpreadConstraints []v1.TopologySpreadConstraint,
 ) *appsv1.Deployment {
 	replicas := int32(3)
-	leaderElectionType := "leases"
+	// leaderElectionType := "leases"
 	provisionerLeaderElectionType := "leases"
 	if csiConfig.IncludeEndpointsAndConfigMapsForLeases {
-		leaderElectionType = "configmaps"
+		// leaderElectionType = "configmaps"
 		provisionerLeaderElectionType = "endpoints"
 	}
 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
@@ -678,15 +678,24 @@ func getCSIDeploymentSpec(
 				Image:           attacherImage,
 				ImagePullPolicy: imagePullPolicy,
 				Args: []string{
-					"--v=3",
+					"--v=5",
 					"--csi-address=$(ADDRESS)",
 					"--leader-election=true",
-					"--leader-election-type=" + leaderElectionType,
+					"--http-endpoint=:8080",
 				},
 				Env: []v1.EnvVar{
 					{
 						Name:  "ADDRESS",
 						Value: "/csi/csi.sock",
+					},
+					{
+						Name: "MY_NAME",
+						ValueFrom: &v1.EnvVarSource{
+							FieldRef: &v1.ObjectFieldSelector{
+								APIVersion: "v1",
+								FieldPath:  "metadata.name",
+							},
+						},
 					},
 				},
 				VolumeMounts: []v1.VolumeMount{

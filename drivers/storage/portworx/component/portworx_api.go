@@ -242,6 +242,9 @@ func getPortworxAPIDaemonSetSpec(
 					ServiceAccountName: pxutil.PortworxServiceAccountName(cluster),
 					RestartPolicy:      v1.RestartPolicyAlways,
 					HostNetwork:        true,
+					NodeSelector: map[string]string{
+						"kubernetes.io/os": "linux",
+					},
 					Containers: []v1.Container{
 						{
 							Name:            "portworx-api",
