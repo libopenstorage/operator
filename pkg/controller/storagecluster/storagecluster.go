@@ -1400,10 +1400,8 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		// revision got from live cluster can become stale, so ignoring the error in syncStorageCluster
 		cluster.Status = *toUpdate.Status.DeepCopy()
 		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
-			logrus.Infof("*** Failed to updating Cluster status: %v ***", err)
 			return err
 		}
-		logrus.Infof("*** Updating Cluster status... ***")
 	}
 	return nil
 }

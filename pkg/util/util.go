@@ -3,10 +3,8 @@ package util
 import (
 	"context"
 	"fmt"
-	"net"
 	"path"
 	"reflect"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -99,9 +97,6 @@ var (
 		"topology.kubernetes.io/region",
 		"topology.kubernetes.io/zone",
 	}
-
-	// hostnameWithDomainRe regex matches hostname with a DNS domain
-	hostnameWithDomainRe = regexp.MustCompile(`^(?i)[a-z0-9-]+(\.[a-z0-9-]+)+\.?$`)
 )
 
 // AddDefaultRegistryToImage adds default registry to image.
@@ -110,36 +105,10 @@ func AddDefaultRegistryToImage(image string) string {
 		return ""
 	}
 
-	// check if image has version-tag included, add ":latest" if missing
-	if strings.Count(image, ":") < 1 {
-		image = image + ":latest"
-	}
-
-	parts := strings.Split(image, "/")
-
-	hn := parts[0]
-
-	// if host:port and not IPv6, reset to host
-	if hn[len(hn)-1] != ']' && strings.Count(hn, ":") > 0 {
-		var err error
-		hn, _, err = net.SplitHostPort(parts[0])
-		if err != nil || hn == "" {
-			logrus.WithError(err).Errorf("got error splitting %s in image-url %s", parts[0], image)
+	for k := range commonDockerRegistries {
+		if strings.HasPrefix(image, k) || strings.HasPrefix(image, "gcr.io") || strings.HasPrefix(image, "k8s.gcr.io") {
 			return image
 		}
-	}
-
-	// check if 1st part is IP address
-	ip := net.ParseIP(strings.Trim(hn, "[]"))
-	if ip != nil {
-		logrus.Tracef("image-url starts w/ IP: %s", image)
-		return image
-	}
-
-	// check if 1st part is a hostname+domain
-	if hostnameWithDomainRe.MatchString(hn) {
-		logrus.Tracef("image-url starts w/ host+domain: %s", image)
-		return image
 	}
 
 	return DefaultImageRegistry + "/" + image
@@ -182,7 +151,7 @@ func GetImageURN(cluster *corev1.StorageCluster, image string) string {
 
 	registryAndRepo = strings.TrimRight(registryAndRepo, "/")
 	if registryAndRepo == "" {
-		// no registry/repository specified, return image
+		// no registry/repository specifed, return image
 		return AddDefaultRegistryToImage(image)
 	}
 
@@ -599,9 +568,7 @@ func UpdateLiveStorageClusterLifecycle(
 	}
 
 	toUpdate.Status.Phase = string(clusterState)
-	err := k8sClient.Status().Update(context.TODO(), toUpdate)
-	logrus.Infof("*** <UpdateLiveStorageClusterLifecycle>: %v ***", err)
-	return err
+	return k8sClient.Status().Update(context.TODO(), toUpdate)
 }
 
 // GetStorageClusterCondition returns the condition based on source and type
