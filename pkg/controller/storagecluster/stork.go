@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -483,6 +484,12 @@ func (c *Controller) createStorkSchedClusterRole() error {
 					ResourceNames: []string{constants.RestrictedPSPName},
 					Verbs:         []string{"use"},
 				},
+				{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					ResourceNames: []string{component.PxSCCName},
+					Verbs:         []string{"use"},
+				},
 			},
 		},
 	)
@@ -872,10 +879,11 @@ func (c *Controller) createStorkSchedDeployment(
 	} else {
 		kubeSchedImage = kubeSchedImage + ":v" + c.kubernetesVersion.String()
 	}
-	imageName := util.GetImageURN(
-		cluster,
-		kubeSchedImage,
-	)
+	imageName := kubeSchedImage
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.KubeScheduler != "" {
+		imageName = cluster.Status.DesiredImages.KubeScheduler
+	}
+	imageName = util.GetImageURN(cluster, imageName)
 
 	var command []string
 	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {

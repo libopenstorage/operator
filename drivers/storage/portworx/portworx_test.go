@@ -14,6 +14,7 @@ import (
 	version "github.com/hashicorp/go-version"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -2506,6 +2507,49 @@ func TestValidationsForEssentials(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestValidationsForFACDTopology(t *testing.T) {
+	component.DeregisterAllComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "FACD_TOPOLOGY_ENABLED",
+						Value: "true",
+					},
+				},
+			},
+		},
+	}
+
+	// TestCase: Should succeed for new cluster
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Reset cluster to clean "installed" state, then add var, should fail
+	cluster = &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  "FACD_TOPOLOGY_ENABLED",
+						Value: "true",
+					},
+				},
+			},
+		},
+	}
+	cluster.Status.Phase = string(corev1.ClusterStateRunning)
+
+	// TestCase: Should fail for existing cluster
+	err = driver.PreInstall(cluster)
+	require.Error(t, err)
+}
+
 func TestUpdateClusterStatusFirstTime(t *testing.T) {
 	driver := portworx{}
 
@@ -3700,12 +3744,14 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, cluster.Name, nodeStatus.OwnerReferences[0].Name)
 	require.Equal(t, driver.GetSelectorLabels(), nodeStatus.Labels)
 	require.Equal(t, "node-1", nodeStatus.Status.NodeUID)
+	require.NotNil(t, nodeStatus.Status.Network)
 	require.Equal(t, "10.0.1.1", nodeStatus.Status.Network.DataIP)
 	require.Equal(t, "10.0.1.2", nodeStatus.Status.Network.MgmtIP)
 	require.Len(t, nodeStatus.Status.Conditions, 1)
 	require.Equal(t, "Offline", nodeStatus.Status.Phase)
 	require.Equal(t, corev1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
 	require.Equal(t, corev1.NodeOfflineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.NotNil(t, nodeStatus.Status.Storage)
 	require.Equal(t, int64(0), nodeStatus.Status.Storage.TotalSize.Value())
 	require.Equal(t, int64(0), nodeStatus.Status.Storage.UsedSize.Value())
 
@@ -3716,12 +3762,14 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.Equal(t, cluster.Name, nodeStatus.OwnerReferences[0].Name)
 	require.Equal(t, driver.GetSelectorLabels(), nodeStatus.Labels)
 	require.Equal(t, "node-2", nodeStatus.Status.NodeUID)
+	require.NotNil(t, nodeStatus.Status.Network)
 	require.Equal(t, "10.0.2.1", nodeStatus.Status.Network.DataIP)
 	require.Equal(t, "10.0.2.2", nodeStatus.Status.Network.MgmtIP)
 	require.Len(t, nodeStatus.Status.Conditions, 1)
 	require.Equal(t, "Online", nodeStatus.Status.Phase)
 	require.Equal(t, corev1.NodeStateCondition, nodeStatus.Status.Conditions[0].Type)
 	require.Equal(t, corev1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.NotNil(t, nodeStatus.Status.Storage)
 	require.Equal(t, int64(42949672960), nodeStatus.Status.Storage.TotalSize.Value())
 	require.Equal(t, int64(12884901888), nodeStatus.Status.Storage.UsedSize.Value())
 
@@ -4747,6 +4795,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-1", nodeStatusList.Items[0].Status.NodeUID)
 	require.Equal(t, corev1.NodeMaintenanceStatus, nodeStatusList.Items[0].Status.Conditions[0].Status)
+	require.NotNil(t, nodeStatusList.Items[0].Status.Network)
 	require.Equal(t, "1.1.1.1", nodeStatusList.Items[0].Status.Network.DataIP)
 
 	// Update status based on the latest object
@@ -4775,6 +4824,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.Len(t, nodeStatusList.Items, 1)
 	require.Equal(t, "node-1", nodeStatusList.Items[0].Status.NodeUID)
 	require.Equal(t, corev1.NodeOnlineStatus, nodeStatusList.Items[0].Status.Conditions[0].Status)
+	require.NotNil(t, nodeStatusList.Items[0].Status.Network)
 	require.Equal(t, "2.2.2.2", nodeStatusList.Items[0].Status.Network.DataIP)
 }
 
@@ -9444,6 +9494,38 @@ func TestStorageClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 	testClusterDefaultsMaxStorageNodesPerZone(t, 25, 103, 4)
 	testClusterDefaultsMaxStorageNodesPerZone(t, 26, 104, 4)
 	testClusterDefaultsMaxStorageNodesPerZoneValueSpecified(t)
+}
+
+func TestHasKubernetesVersionChanged(t *testing.T) {
+	dummyVer, err := version.NewVersion("1.2.3")
+	require.NoError(t, err)
+
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{},
+		},
+	}
+	assert.False(t, driver.hasKubernetesVersionChanged(cluster))
+
+	driver.k8sVersion = dummyVer
+	assert.False(t, driver.hasKubernetesVersionChanged(cluster))
+
+	cluster.Status.DesiredImages.KubeControllerManager = "foo:1.2.3"
+	cluster.Status.DesiredImages.KubeScheduler = "bar:1.2.3"
+	assert.False(t, driver.hasKubernetesVersionChanged(cluster))
+
+	cluster.Status.DesiredImages.KubeControllerManager = "foo:9.9.9"
+	cluster.Status.DesiredImages.KubeScheduler = "bar:1.2.3"
+	assert.True(t, driver.hasKubernetesVersionChanged(cluster))
+
+	cluster.Status.DesiredImages.KubeControllerManager = "foo:1.2.3"
+	cluster.Status.DesiredImages.KubeScheduler = "bar:9.9.9"
+	assert.True(t, driver.hasKubernetesVersionChanged(cluster))
+
+	cluster.Status.DesiredImages.KubeControllerManager = "foo:9.9.9"
+	cluster.Status.DesiredImages.KubeScheduler = "bar:9.9.9"
+	assert.True(t, driver.hasKubernetesVersionChanged(cluster))
 }
 
 func testClusterDefaultsMaxStorageNodesPerZoneCase1(t *testing.T) {

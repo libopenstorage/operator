@@ -12,6 +12,7 @@ metadata:
     createdAt: 2022-01-01T08:00:00Z
     support: Portworx, Inc
     certified: "true"
+    console.openshift.io/plugins: '["portworx"]'
     operatorframework.io/initialization-resource: |-
       {
         "apiVersion": "core.libopenstorage.org/v1",
@@ -52,7 +53,7 @@ spec:
   version: 99.9.9
   minKubeVersion: "1.21.0"
   maturity: stable
-  replaces: portworx-operator.v1.10.4
+  replaces: portworx-operator.v23.4.0
   maintainers:
   - name: Portworx
     email: support@portworx.com

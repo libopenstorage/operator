@@ -163,10 +163,7 @@ func (c *alertManager) createAlertManagerInstance(
 	ownerRef *metav1.OwnerReference,
 ) error {
 	replicas := int32(3)
-	alertManagerImageName := util.GetImageURN(
-		cluster,
-		cluster.Status.DesiredImages.AlertManager,
-	)
+	imageName := util.GetImageURN(cluster, cluster.Status.DesiredImages.AlertManager)
 
 	alertManagerInst := &monitoringv1.Alertmanager{
 		ObjectMeta: metav1.ObjectMeta{
@@ -176,7 +173,7 @@ func (c *alertManager) createAlertManagerInstance(
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: monitoringv1.AlertmanagerSpec{
-			Image:    &alertManagerImageName,
+			Image:    &imageName,
 			Replicas: &replicas,
 		},
 	}

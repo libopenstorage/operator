@@ -28,7 +28,7 @@ ifndef DOCKER_HUB_REGISTRY_IMG
     $(warning DOCKER_HUB_REGISTRY_IMG not defined, using '$(DOCKER_HUB_REGISTRY_IMG)' instead)
 endif
 ifndef BASE_REGISTRY_IMG
-    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:23.3.1
+    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:23.4.0
     $(warning BASE_REGISTRY_IMG not defined, using '$(BASE_REGISTRY_IMG)' instead)
 endif
 
@@ -256,7 +256,10 @@ getccmconfigs:
 	mkdir -p bin/configs
 	cp deploy/ccm/* bin/configs/
 
-getconfigs: cleanconfigs getccmconfigs
+getpluginconfigs:
+	cp deploy/plugin/* bin/configs/
+
+getconfigs: cleanconfigs getccmconfigs getpluginconfigs
 	wget -q '$(PX_DOC_HOST)/samples/k8s/pxc/portworx-prometheus-rule.yaml' -P bin/configs --no-check-certificate
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagerconfigs.yaml' -O bin/configs/prometheus-crd-alertmanagerconfigs.yaml
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagers.yaml' -O bin/configs/prometheus-crd-alertmanagers.yaml

@@ -15,6 +15,8 @@ import (
 	test_util "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestMain(m *testing.M) {
@@ -138,13 +140,23 @@ func setup() error {
 		ci_utils.OperatorUpgradeHopsImageList = strings.Split(operatorUpgradeHopsImages, ",")
 	}
 
-	ci_utils.PxOperatorVersion, err = ci_utils.GetPXOperatorVersion()
+	// TODO: Right now we do not pass any namespaces parameters
+	// and we currently do not support initial operator deployment to be outside of kube-system
+	// will add this functionality in PTX-17953
+	pxOperatorDep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx-operator",
+			Namespace: "kube-system",
+		},
+	}
+
+	ci_utils.PxOperatorVersion, err = ci_utils.GetPXOperatorVersion(pxOperatorDep)
 	if err != nil {
-		logrus.Warnf("failed to discover installed portworx operator version: %v", err)
+		logrus.Warnf("failed to discover installed [%s] in [%s] namespace and get its version, Err: %v", pxOperatorDep.Name, pxOperatorDep.Namespace, err)
 		if len(ci_utils.PxOperatorTag) != 0 && ci_utils.IsOcp {
-			logrus.Infof("operator tag was passed in --operator-image-tag [%s], this tag will be used to deploy PX Operator via Openshift Marketplace", ci_utils.PxOperatorTag)
+			logrus.Infof("PX Operator tag was passed in --operator-image-tag [%s], this tag will be used to deploy PX Operator via Openshift Marketplace", ci_utils.PxOperatorTag)
 		} else {
-			return fmt.Errorf("operator is not deployed in this environment, cannot proceed")
+			return fmt.Errorf("operator [%s] is not deployed in [%s] namespace, cannot proceed", pxOperatorDep.Name, pxOperatorDep.Namespace)
 		}
 	}
 

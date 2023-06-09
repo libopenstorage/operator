@@ -191,7 +191,7 @@ func testBackup(t *testing.T, backupExits, collectionExists bool) {
 		if err == nil {
 			// Precreated configmap is empty.
 			if backupExits {
-				require.Nil(t, cm.Data)
+				require.Len(t, cm.Data, 0)
 			} else {
 				require.NotNil(t, cm.Data)
 				require.NotContains(t, cm.Data["backup"], "uid")

@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	v1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	portworxv1 "github.com/libopenstorage/operator/pkg/apis/portworx/v1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )
@@ -57,6 +58,10 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().StorageClusters().Informer()}, nil
 	case v1.SchemeGroupVersion.WithResource("storagenodes"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().StorageNodes().Informer()}, nil
+
+		// Group=portworx.io, Version=v1
+	case portworxv1.SchemeGroupVersion.WithResource("portworxdiags"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Portworx().V1().PortworxDiags().Informer()}, nil
 
 	}
 

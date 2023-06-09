@@ -2,6 +2,7 @@ package portworx
 
 import (
 	"context"
+	stderr "errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -139,14 +141,6 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		util.UpdateStorageClusterCondition(cluster, condition)
 		return nil
 	}
-
-	defer func() {
-		// Clean up the pre-flight pods
-		logrus.Infof("pre-flight: cleaning pre-flight ds...")
-		if derr := preFlighter.DeletePreFlight(); derr != nil {
-			logrus.Errorf("pre-flight: error deleting pre-flight: %v", derr)
-		}
-	}()
 
 	// Process all the StorageNode.Status.Checks
 	var storageNodes []*corev1.StorageNode
@@ -565,6 +559,21 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			}
 		}
 
+		// set misc image defaults
+		imagesData := []struct {
+			desiredImage *string
+			releaseImage string
+		}{
+			{&toUpdate.Status.DesiredImages.KubeControllerManager, release.Components.KubeControllerManager},
+			{&toUpdate.Status.DesiredImages.KubeScheduler, release.Components.KubeScheduler},
+			{&toUpdate.Status.DesiredImages.Pause, release.Components.Pause},
+		}
+		for _, v := range imagesData {
+			if *v.desiredImage == "" {
+				*v.desiredImage = v.releaseImage
+			}
+		}
+
 		// Reset the component update strategy if it is 'Once', so that we don't
 		// upgrade components again during next reconcile loop
 		if toUpdate.Spec.AutoUpdateComponents != nil &&
@@ -649,6 +658,10 @@ func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
+	if err := p.validateFACDTopology(cluster); err != nil {
+		return err
+	}
+
 	for _, comp := range component.GetAll() {
 		if comp.IsPausedForMigration(cluster) {
 			continue
@@ -663,6 +676,11 @@ func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
 			}
 		} else {
 			if err := comp.Delete(cluster); err != nil {
+				noKindErr := &meta.NoKindMatchError{}
+				if stderr.As(err, &noKindErr) || strings.Contains(err.Error(), "no matches for kind ") {
+					logrus.WithError(err).Tracef("No component `%s` to delete", comp.Name())
+					continue
+				}
 				msg := fmt.Sprintf("Failed to cleanup %v. %v", comp.Name(), err)
 				p.warningEvent(cluster, util.FailedComponentReason, msg)
 			}
@@ -712,6 +730,41 @@ func (p *portworx) validateEssentials() error {
 		if len(secret.Data[pxutil.EssentialsOSBEndpointKey]) == 0 {
 			return fmt.Errorf("secret %s/%s does not have Portworx OSB endpoint (%s)",
 				api.NamespaceSystem, pxutil.EssentialsSecretName, pxutil.EssentialsOSBEndpointKey)
+		}
+	}
+
+	return nil
+}
+
+func (p *portworx) validateFACDTopology(cluster *corev1.StorageCluster) error {
+	facdTopologyEnv := ""
+	for _, env := range cluster.Spec.Env {
+		if env.Name == "FACD_TOPOLOGY_ENABLED" {
+			facdTopologyEnv = strings.ToLower(env.Value)
+		}
+	}
+
+	if facdTopologyEnv == "true" {
+		// FACD topology is enabled. See if we already have the annotation marking this as valid, or if not, check if this is a fresh install
+
+		// TODO: once we support upgrading to FACD topology, it will also be valid after whatever version supports that
+		isValid := false
+		if pxutil.IsFreshInstall(cluster) {
+			if cluster.Annotations == nil {
+				cluster.Annotations = make(map[string]string)
+			}
+			cluster.Annotations[pxutil.AnnotationFACDTopology] = "true"
+			isValid = true
+		}
+		if !isValid {
+			if a, ok := cluster.Annotations[pxutil.AnnotationFACDTopology]; ok && a != "" {
+				isValid = true
+			}
+		}
+
+		if !isValid {
+			// Fail the request!
+			return fmt.Errorf("FACD topology cannot be enabled on existing clusters")
 		}
 	}
 
@@ -1518,7 +1571,8 @@ func (p *portworx) hasComponentChanged(cluster *corev1.StorageCluster) bool {
 		hasPrometheusChanged(cluster) ||
 		hasAlertManagerChanged(cluster) ||
 		p.hasPrometheusVersionChanged(cluster) ||
-		hasPxRepoChanged(cluster)
+		hasPxRepoChanged(cluster) ||
+		p.hasKubernetesVersionChanged(cluster)
 }
 
 func hasStorkChanged(cluster *corev1.StorageCluster) bool {
@@ -1580,6 +1634,27 @@ func hasPrometheusChanged(cluster *corev1.StorageCluster) bool {
 		cluster.Spec.Monitoring.Prometheus != nil &&
 		cluster.Spec.Monitoring.Prometheus.Enabled &&
 		cluster.Status.DesiredImages.PrometheusOperator == ""
+}
+
+func (p *portworx) hasKubernetesVersionChanged(cluster *corev1.StorageCluster) bool {
+	if p.k8sVersion == nil {
+		return false
+	} else if cluster.Status.DesiredImages.KubeControllerManager == "" &&
+		cluster.Status.DesiredImages.KubeScheduler == "" {
+		return false
+	}
+
+	list := []string{cluster.Status.DesiredImages.KubeControllerManager, cluster.Status.DesiredImages.KubeScheduler}
+	for _, img := range list {
+		parts := strings.Split(img, ":")
+		if len(parts) > 1 {
+			v, err := version.NewVersion(parts[1])
+			if err == nil && !v.Equal(p.k8sVersion) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (p *portworx) hasPrometheusVersionChanged(cluster *corev1.StorageCluster) bool {

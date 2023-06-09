@@ -6,6 +6,7 @@ import (
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,7 +28,7 @@ func TestImageURN(t *testing.T) {
 
 	// TestCase: Empty repo and registry
 	out = getImageURN("", "", "test/image")
-	require.Equal(t, "docker.io/test/image", out)
+	require.Equal(t, "docker.io/test/image:latest", out)
 
 	// TestCase: Registry without repo but image with repo
 	out = getImageURN("", "registry.io", "test/image")
@@ -122,7 +123,7 @@ func TestImageURNPreserved(t *testing.T) {
 
 	// Ensure original behaviour remains
 	out = getImageURNPreserved("", "", "test/image")
-	require.Equal(t, "docker.io/test/image", out)
+	require.Equal(t, "docker.io/test/image:latest", out)
 
 	// Ensure original behaviour remains
 	out = getImageURNPreserved("", "registry.io", "test/image")
@@ -548,4 +549,37 @@ func fakeK8sClient(initObjects ...runtime.Object) client.Client {
 		logrus.Error(err)
 	}
 	return fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(initObjects...).Build()
+}
+
+func TestAddDefaultRegistryToImage(t *testing.T) {
+	data := []struct {
+		in       string
+		expected string
+	}{
+		{"foo", "docker.io/foo:latest"},
+		{"foo:bar", "docker.io/foo:bar"},
+		{"foo/bar", "docker.io/foo/bar:latest"},
+		{"docker.io/foo/bar:1", "docker.io/foo/bar:1"},
+		{"gcr.io/foo/bar:1", "gcr.io/foo/bar:1"},
+		{"k8s.gcr.io/foo/bar:1", "k8s.gcr.io/foo/bar:1"},
+		{"portworx/oci-monitor:1.2.3", "docker.io/portworx/oci-monitor:1.2.3"},
+		{"docker.io/portworx/oci-monitor:1.2.3", "docker.io/portworx/oci-monitor:1.2.3"},
+		{"regserv.acme.org/portworx/oci-monitor:1.2.3", "regserv.acme.org/portworx/oci-monitor:1.2.3"},
+		{"regserv.acme.org:5443/portworx/oci-monitor:1.2.3", "regserv.acme.org:5443/portworx/oci-monitor:1.2.3"},
+		{"192.168.1.2/foo/bar:1.2.3", "192.168.1.2/foo/bar:1.2.3"},
+		{"192.168.1.2:5433/foo/bar:1.2.3", "192.168.1.2:5433/foo/bar:1.2.3"},
+		{"[2001:db8:3333:4444:5555:6666:7777:8888]/foo/bar:1.2.3", "[2001:db8:3333:4444:5555:6666:7777:8888]/foo/bar:1.2.3"},
+		{"[2001:db8:3333:4444:CCCC:DDDD:EEEE:FFFF]:5443/foo/bar:1.2.3", "[2001:db8:3333:4444:CCCC:DDDD:EEEE:FFFF]:5443/foo/bar:1.2.3"},
+		{"[::1]/foo/bar:1.2.3", "[::1]/foo/bar:1.2.3"},
+		// few invalid URLs..
+		{"", ""},
+		{":123", ":123"},
+		{":foo", ":foo"},
+		{"::1/foo/bar:1.2.3", "::1/foo/bar:1.2.3"},
+	}
+
+	for i, td := range data {
+		res := AddDefaultRegistryToImage(td.in)
+		assert.Equal(t, td.expected, res, "Unexpected #%d / %v", i+1, td)
+	}
 }

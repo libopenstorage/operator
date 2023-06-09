@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: px-plugin
+  labels:
+    app: px-plugin
+    app.kubernetes.io/name: px-plugin
+    app.kubernetes.io/instance: px-plugin
+    app.kubernetes.io/part-of: px-plugin
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: px-plugin
+      app.kubernetes.io/name: px-plugin
+      app.kubernetes.io/instance: px-plugin
+      app.kubernetes.io/part-of: px-plugin
+  template:
+    metadata:
+      labels:
+        app: px-plugin
+        app.kubernetes.io/name: px-plugin
+        app.kubernetes.io/instance: px-plugin
+        app.kubernetes.io/part-of: px-plugin
+    spec:
+      containers:
+        - name: px-plugin
+          image: portworx/portworx-dynamic-plugin:1.0.0
+          ports:
+            - containerPort: 9443
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+          securityContext: 
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 50Mi
+          volumeMounts:
+            - name: px-plugin-cert
+              readOnly: true
+              mountPath: /var/cert
+            - name: nginx-conf
+              readOnly: true
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+      volumes:
+        - name: px-plugin-cert
+          secret:
+            secretName: px-plugin-cert
+            defaultMode: 420
+        - name: nginx-conf
+          configMap:
+            name: px-plugin
+            defaultMode: 420
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+      securityContext: 
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
