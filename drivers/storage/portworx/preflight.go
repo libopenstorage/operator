@@ -73,7 +73,7 @@ func NewPreFlighter(
 	}
 }
 
-func getPreFlightPodsFromNamespace(k8sClient client.Client, namespace string) (*appsv1.DaemonSet, []*v1.Pod, error) {
+func GetPreFlightPodsFromNamespace(k8sClient client.Client, namespace string) (*appsv1.DaemonSet, []*v1.Pod, error) {
 	ds := &appsv1.DaemonSet{}
 	err := k8sClient.Get(
 		context.TODO(),
@@ -94,12 +94,12 @@ func getPreFlightPodsFromNamespace(k8sClient client.Client, namespace string) (*
 
 // GetPreFlightPods returns the pods of the pre-flight daemonset
 func (u *preFlightPortworx) GetPreFlightPods() ([]*v1.Pod, error) {
-	_, pods, err := getPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
+	_, pods, err := GetPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
 	return pods, err
 }
 
 func (u *preFlightPortworx) GetPreFlightStatus() (int32, int32, int32, time.Duration, error) {
-	ds, pods, err := getPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
+	ds, pods, err := GetPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
 	if err != nil {
 		return -1, -1, -1, 0, err
 	}

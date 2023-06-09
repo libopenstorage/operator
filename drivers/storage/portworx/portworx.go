@@ -99,6 +99,24 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 
 	preFlighter := NewPreFlighter(cluster, p.k8sClient, podSpec)
 
+	deletePreflight := func() {
+		_, _, err := GetPreFlightPodsFromNamespace(p.k8sClient, cluster.Namespace)
+		if err == nil {
+			// Clean up the pre-flight pods
+			logrus.Infof("pre-flight: cleaning pre-flight ds...")
+			if derr := preFlighter.DeletePreFlight(); derr != nil {
+				logrus.Errorf("pre-flight: error deleting pre-flight: %v", derr)
+			}
+		}
+	}
+
+	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	check = strings.TrimSpace(strings.ToLower(check))
+	if !ok || check == "skip" {
+		deletePreflight()
+		return nil
+	}
+
 	// Start the pre-flight container. The pre-flight checks at this time are specific to enabling DMthin
 	err = preFlighter.RunPreFlight()
 	if err != nil {
@@ -132,14 +150,17 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	} else {
 		if age >= 15*time.Minute {
 			err = fmt.Errorf("pre-flight: pre-flight check timed out")
+			condition.Status = corev1.ClusterConditionStatusTimeout
+			condition.Message = err.Error()
 			logrus.Errorf("%v", err)
-			return err
+			deletePreflight()
+		} else {
+			condition.Status = corev1.ClusterConditionStatusInProgress
+			condition.Message = "pre-flight: in progress..."
 		}
-		condition.Status = corev1.ClusterConditionStatusInProgress
-		condition.Message = "pre-flight: in progress..."
 		logrus.Infof(condition.Message)
 		util.UpdateStorageClusterCondition(cluster, condition)
-		return nil
+		return err
 	}
 
 	// Process all the StorageNode.Status.Checks
@@ -157,6 +178,7 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		condition.Status = corev1.ClusterConditionStatusCompleted
 		condition.Message = "pre-flight: done..."
 		util.UpdateStorageClusterCondition(cluster, condition)
+		deletePreflight()
 	} else {
 		logrus.Errorf("pre-flight: Error processing results: %v", err)
 	}

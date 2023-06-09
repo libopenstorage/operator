@@ -599,7 +599,9 @@ func UpdateLiveStorageClusterLifecycle(
 	}
 
 	toUpdate.Status.Phase = string(clusterState)
-	return k8sClient.Status().Update(context.TODO(), toUpdate)
+	err := k8sClient.Status().Update(context.TODO(), toUpdate)
+	logrus.Infof("*** <UpdateLiveStorageClusterLifecycle>: %v ***", err)
+	return err
 }
 
 // GetStorageClusterCondition returns the condition based on source and type
