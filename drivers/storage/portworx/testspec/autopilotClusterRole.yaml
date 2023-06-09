@@ -3,9 +3,9 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
    name: autopilot
 rules:
-  - apiGroups: [""]
+  - apiGroups: ["", "events.k8s.io"]
     resources: ["events"]
-    verbs: ["create", "patch"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
   - apiGroups: [""]
     resources: ["services", "secrets"]
     verbs: ["get"]
@@ -17,10 +17,10 @@ rules:
     verbs: ["get", "list", "update"]
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "list", "patch", "update"] 
+    verbs: ["get", "list", "patch", "update"]
   - apiGroups: ["autopilot.libopenstorage.org"]
     resources: ["actionapprovals", "autopilotrules", "autopilotruleobjects"]
-    verbs: ["*"] 
+    verbs: ["*"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
-    verbs: ["create", "get", "update"] 
+    verbs: ["create", "get", "update"]
