@@ -421,9 +421,6 @@ func bringUpStorageCluster(cluster *corev1.StorageCluster) (bool, error) {
 	} else if check == "false" {
 		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
 		if condition != nil {
-			// XXX - test
-			logrus.Infof("*** Preflight in bringUpStorageCluster with condition status[%v] ***", condition.Status)
-
 			if condition.Status == corev1.ClusterConditionStatusCompleted {
 				return true, nil
 			}
@@ -456,13 +453,6 @@ func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) error {
 	err := c.Driver.Validate(toUpdate)
 	if err == nil {
 		condition := util.GetStorageClusterCondition(toUpdate, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
-		// XXX - test
-		if condition != nil {
-			logrus.Infof("*** Preflight after c.Driver.Validate  with condition status[%v] ***", condition.Status)
-		} else {
-			logrus.Infof("*** Preflight after c.Driver.Validate  with nil condition  ***")
-		}
-
 		if condition != nil && condition.Status == corev1.ClusterConditionStatusCompleted {
 			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 		}
@@ -508,14 +498,6 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		return nil
 	}
 
-	// XXX - test
-	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
-	if condition != nil {
-		logrus.Infof("*** Preflight check[%v] with condition status[%v] ***", check, condition.Status)
-	} else {
-		logrus.Infof("*** Preflight check[%v] with no condition set ***", check)
-	}
-
 	// Only do the preflight check on demand once a time
 
 	var err error
@@ -542,15 +524,7 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 	}
 
-	// XXX - test
-	cond := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
-	if cond != nil {
-		logrus.Infof("*** Preflight after driverValidation check[%v] with condition status[%v] ***", toUpdate.Annotations[pxutil.AnnotationPreflightCheck], cond.Status)
-	} else {
-		logrus.Infof("*** Preflight after driverValidation with check[%v] no condition set ***", toUpdate.Annotations[pxutil.AnnotationPreflightCheck])
-	}
-
-	condition = &corev1.ClusterCondition{
+	condition := &corev1.ClusterCondition{
 		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypePreflight,
 	}
@@ -568,23 +542,19 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 			condition.Status = corev1.ClusterConditionStatusCompleted
 		}
 	}
-	// XXX - test
-	logrus.Infof("*** Preflight before util.UpdateStorageClusterCondition with condition status[%v] ***", condition.Status)
+
 	util.UpdateStorageClusterCondition(toUpdate, condition)
 
 	// Update the cluster only if anything has changed
 	if !reflect.DeepEqual(cluster, toUpdate) {
 		toUpdate.DeepCopyInto(cluster)
 		if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
-			// XXX - test
-			logrus.Errorf("*** Preflight k8s.UpdateStorageCluster failed ***")
 			return err
 		}
 
 		cluster.Status = *toUpdate.Status.DeepCopy()
 		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
-			// XXX - test
-			logrus.Errorf("*** Preflight k8s.UpdateStorageClusterStatus failed trying again ***")
+			logrus.Errorf("preflight updateStorageClusterStatus failed trying again...")
 			if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
 				k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
 					"preflight check failed to update storage cluster status. Need to rerun preflight or skip it")
