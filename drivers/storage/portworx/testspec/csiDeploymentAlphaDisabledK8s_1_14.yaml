@@ -41,6 +41,8 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
+          securityContext:
+            privileged: true
       schedulerName: stork
       volumes:
         - name: socket-dir

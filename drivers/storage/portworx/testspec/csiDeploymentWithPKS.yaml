@@ -41,6 +41,8 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
+          securityContext:
+            privileged: true
         - name: csi-snapshotter
           imagePullPolicy: Always
           image: quay.io/k8scsi/csi-snapshotter:v1.2.3
@@ -51,10 +53,11 @@ spec:
           env:
             - name: ADDRESS
               value: /csi/csi.sock
-
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
+          securityContext:
+            privileged: true
         - name: csi-resizer
           imagePullPolicy: Always
           image: quay.io/k8scsi/csi-resizer:v1.2.3
@@ -68,6 +71,8 @@ spec:
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
+          securityContext:
+            privileged: true
       schedulerName: stork
       volumes:
         - name: socket-dir
