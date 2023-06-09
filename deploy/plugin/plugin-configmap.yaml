@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/part-of: px-plugin
 data:
   nginx.conf: |
+    pid       /tmp/nginx.pid;
     error_log /dev/stdout info;
     events {}
     http {
