@@ -91,6 +91,9 @@ func TestValidate(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPreflightCheck: "true",
+			},
 		},
 	}
 
