@@ -510,7 +510,7 @@ func TestUpdateStorageNodePhase(t *testing.T) {
 		Cluster: &api.StorageCluster{},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 
@@ -526,7 +526,7 @@ func TestUpdateStorageNodePhase(t *testing.T) {
 				Nodes: []*api.StorageNode{tc.pxNode},
 			}
 			mockNodeServer.EXPECT().
-				EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+				EnumerateWithFilters(gomock.Any(), gomock.Any()).
 				Return(expectedNodeEnumerateResp, nil).
 				Times(1)
 
