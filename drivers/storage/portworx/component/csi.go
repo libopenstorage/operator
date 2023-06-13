@@ -282,7 +282,7 @@ func (c *csi) createClusterRole(
 				Verbs:     []string{"get"},
 			},
 			{
-				APIGroups: []string{""},
+				APIGroups: []string{"", "events.k8s.io"},
 				Resources: []string{"events"},
 				Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 			},

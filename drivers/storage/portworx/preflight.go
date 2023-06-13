@@ -411,9 +411,9 @@ func (u *preFlightPortworx) createClusterRole() error {
 					Verbs:     []string{"get", "list"},
 				},
 				{
-					APIGroups: []string{""},
+					APIGroups: []string{"", "events.k8s.io"},
 					Resources: []string{"events"},
-					Verbs:     []string{"create", "patch", "update"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 				},
 				{
 					APIGroups: []string{"core.libopenstorage.org"},

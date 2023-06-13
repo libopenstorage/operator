@@ -415,7 +415,7 @@ func (c *Controller) createStorkSchedClusterRole() error {
 				{
 					APIGroups: []string{"", "events.k8s.io"},
 					Resources: []string{"events"},
-					Verbs:     []string{"create", "update", "patch"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 				},
 				{
 					APIGroups:     []string{""},
