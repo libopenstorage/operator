@@ -223,9 +223,9 @@ func (c *pvcController) createClusterRole(cluster *corev1.StorageCluster) error 
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
-				APIGroups: []string{""},
+				APIGroups: []string{"", "events.k8s.io"},
 				Resources: []string{"events"},
-				Verbs:     []string{"watch", "create", "update", "patch"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 			},
 			{
 				APIGroups: []string{""},
