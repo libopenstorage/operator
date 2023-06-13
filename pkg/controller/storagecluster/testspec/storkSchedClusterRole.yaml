@@ -11,7 +11,7 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: ["", "events.k8s.io"]
     resources: ["events"]
-    verbs: ["create", "update", "patch"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
   - apiGroups: [""]
     resourceNames: ["kube-scheduler"]
     resources: ["endpoints"]
