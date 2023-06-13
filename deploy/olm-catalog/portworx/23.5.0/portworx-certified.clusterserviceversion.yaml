@@ -7,9 +7,9 @@ metadata:
     capabilities: Auto Pilot
     categories: "Storage"
     description: Cloud native storage solution for production workloads
-    containerImage: portworx/px-operator:23.5.0-dev
+    containerImage: registry.connect.redhat.com/portworx/openstorage-operator@sha256:744cccea5851eec50efab35c6eb00813388c58c7e5365a3da2463bd53d0ff2d8
     repository: https://github.com/libopenstorage/operator
-    createdAt: 2023-03-21T21:29:41Z
+    createdAt: 2023-06-13T18:58:10Z
     support: Portworx, Inc
     certified: "true"
     console.openshift.io/plugins: '["portworx"]'
@@ -219,7 +219,7 @@ spec:
                     topologyKey: kubernetes.io/hostname
               containers:
               - name: portworx-operator
-                image: portworx/px-operator:23.5.0-dev
+                image: registry.connect.redhat.com/portworx/openstorage-operator@sha256:744cccea5851eec50efab35c6eb00813388c58c7e5365a3da2463bd53d0ff2d8
                 imagePullPolicy: Always
                 command:
                 - /operator
