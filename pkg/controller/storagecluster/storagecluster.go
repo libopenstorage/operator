@@ -635,7 +635,7 @@ func (c *Controller) syncStorageCluster(
 		// If preflight failed, or previous check failed, reconcile would stop here until issues got resolved
 		if err := c.runPreflightCheck(cluster); err != nil {
 			if updateErr := c.updateStorageClusterState(cluster, corev1.ClusterStateDegraded); updateErr != nil {
-				logrus.Errorf("Failed to update StorageCluster status. %v", updateErr)
+				logrus.Errorf("failed to update StorageCluster status. %v", updateErr)
 			}
 			return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
 		}
