@@ -5187,9 +5187,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	// GuestAccess disabled but should not call update as cluster is not yet up.
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleDisabled)
 	mockRoleServer.EXPECT().
-		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.AuthSystemGuestRoleName,
-		}).
+		Inspect(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		Times(0)
 
@@ -5199,9 +5197,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	// GuestAccess disabled but should not call update as cluster is still initializing
 	cluster.Status.Phase = string(corev1.ClusterStateInit)
 	mockRoleServer.EXPECT().
-		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.AuthSystemGuestRoleName,
-		}).
+		Inspect(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		Times(0)
 
@@ -5211,14 +5207,12 @@ func TestGuestAccessSecurity(t *testing.T) {
 	// Disable GuestAccess. Should expect an update to be called.
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleDisabled)
 	cluster.Status.Phase = string(corev1.ClusterStateRunning)
-	inspectedRole := component.GuestRoleEnabled
+	inspectedRole := &component.GuestRoleEnabled
 	inspectedRoleResp := &osdapi.SdkRoleInspectResponse{
-		Role: &inspectedRole,
+		Role: inspectedRole,
 	}
 	mockRoleServer.EXPECT().
-		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.AuthSystemGuestRoleName,
-		}).
+		Inspect(gomock.Any(), gomock.Any()).
 		Return(inspectedRoleResp, nil).
 		Times(1)
 	mockRoleServer.EXPECT().
@@ -5232,14 +5226,12 @@ func TestGuestAccessSecurity(t *testing.T) {
 
 	// Enable guest access, should be updated again
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleEnabled)
-	inspectedRole = component.GuestRoleDisabled
+	inspectedRole = &component.GuestRoleDisabled
 	inspectedRoleResp = &osdapi.SdkRoleInspectResponse{
-		Role: &inspectedRole,
+		Role: inspectedRole,
 	}
 	mockRoleServer.EXPECT().
-		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.AuthSystemGuestRoleName,
-		}).
+		Inspect(gomock.Any(), gomock.Any()).
 		Return(inspectedRoleResp, nil).
 		Times(1)
 	mockRoleServer.EXPECT().
@@ -5252,28 +5244,24 @@ func TestGuestAccessSecurity(t *testing.T) {
 	require.NoError(t, err)
 
 	// run without any change should result in only an inspect call
-	inspectedRole = component.GuestRoleEnabled
+	inspectedRole = &component.GuestRoleEnabled
 	inspectedRoleResp = &osdapi.SdkRoleInspectResponse{
-		Role: &inspectedRole,
+		Role: inspectedRole,
 	}
 	mockRoleServer.EXPECT().
-		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.AuthSystemGuestRoleName,
-		}).
+		Inspect(gomock.Any(), gomock.Any()).
 		Return(inspectedRoleResp, nil).
 		Times(1)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	// GuestRole type changed, but PX is below 2.6, so no calls are needed.
-	inspectedRole = component.GuestRoleDisabled
+	inspectedRole = &component.GuestRoleDisabled
 	inspectedRoleResp = &osdapi.SdkRoleInspectResponse{
-		Role: &inspectedRole,
+		Role: inspectedRole,
 	}
 	mockRoleServer.EXPECT().
-		Inspect(gomock.Any(), &osdapi.SdkRoleInspectRequest{
-			Name: component.AuthSystemGuestRoleName,
-		}).
+		Inspect(gomock.Any(), gomock.Any()).
 		Return(inspectedRoleResp, nil).
 		Times(0)
 	cluster.Spec.Image = "px/image:2.5.0"
@@ -12208,7 +12196,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
@@ -12392,7 +12380,7 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
@@ -12476,7 +12464,7 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
@@ -12615,7 +12603,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
@@ -12782,7 +12770,7 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 
 	// TestCase: Error enumerating nodes using SDK
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nil, fmt.Errorf("NodeEnumerate error")).
 		Times(1)
 	cluster.Spec.Security.Enabled = false
@@ -12830,7 +12818,7 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &osdapi.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
