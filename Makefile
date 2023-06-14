@@ -28,7 +28,7 @@ ifndef DOCKER_HUB_REGISTRY_IMG
     $(warning DOCKER_HUB_REGISTRY_IMG not defined, using '$(DOCKER_HUB_REGISTRY_IMG)' instead)
 endif
 ifndef BASE_REGISTRY_IMG
-    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:23.4.0
+    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:23.5.0
     $(warning BASE_REGISTRY_IMG not defined, using '$(BASE_REGISTRY_IMG)' instead)
 endif
 
@@ -56,7 +56,7 @@ ifeq ($(BUILD_TYPE),debug)
 BUILDFLAGS += -gcflags "-N -l"
 endif
 
-RELEASE_VER := 23.5.0
+RELEASE_VER := 23.6.0
 BASE_DIR    := $(shell git rev-parse --show-toplevel)
 GIT_SHA     := $(shell git rev-parse --short HEAD)
 BIN         := $(BASE_DIR)/bin
