@@ -630,6 +630,9 @@ func getCSIDeploymentSpec(
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: CSIServiceAccountName,
+					NodeSelector: map[string]string{
+						"kubernetes.io/os": "linux",
+					},
 					Containers: []v1.Container{
 						{
 							Name:            csiProvisionerContainerName,
@@ -687,15 +690,6 @@ func getCSIDeploymentSpec(
 					{
 						Name:  "ADDRESS",
 						Value: "/csi/csi.sock",
-					},
-					{
-						Name: "MY_NAME",
-						ValueFrom: &v1.EnvVarSource{
-							FieldRef: &v1.ObjectFieldSelector{
-								APIVersion: "v1",
-								FieldPath:  "metadata.name",
-							},
-						},
 					},
 				},
 				VolumeMounts: []v1.VolumeMount{
