@@ -95,6 +95,9 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 		return err
 	}
 
+	daemonSet.Namespace = cluster.Namespace
+	daemonSet.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+
 	existingDaemonSet := &appsv1.DaemonSet{}
 	getErr := w.client.Get(
 		context.TODO(),

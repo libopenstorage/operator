@@ -99,15 +99,6 @@ spec:
               autoUpdateComponents:
                 type: string
                 description: A strategy to determine how component versions are to be updated automatically.
-              nodeSelector:
-                type: map
-                description: Node Selector for the pod
-              sharedv4:
-                type: string
-                description: sharedv4 description
-              winshare:
-                type: string
-                description: winshare description
               updateStrategy:
                 type: object
                 description: An update strategy to replace existing StorageCluster pods with new pods.

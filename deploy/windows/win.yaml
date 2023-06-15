@@ -1,27 +1,29 @@
 kind: DaemonSet
 metadata:
-  generation: 1
+  annotations:
+    deprecated.daemonset.template.generation: '1'
   name: csi-pwx-node-win
 spec:
   selector:
     matchLabels:
       app: csi-pwx-node-win
   template:
+    metadata:
       labels:
         app: csi-pwx-node-win
-  spec:
+    spec:
       containers:
         - args:
-            - --csi-address=$(CSI_ENDPOINT)
-            - --probe-timeout=3s
-            - --health-port=29643
-            - --v=2
+            - '--csi-address=$(CSI_ENDPOINT)'
+            - '--probe-timeout=3s'
+            - '--health-port=29643'
+            - '--v=2'
           command:
             - /livenessprobe.exe
           env:
             - name: CSI_ENDPOINT
-              value: unix://C:\\csi\\csi.sock
-          image: registry.k8s.io/sig-storage/livenessprobe:v2.7.0
+              value: 'unix://C:\\csi\\csi.sock'
+          image: 'registry.k8s.io/sig-storage/livenessprobe:v2.7.0'
           imagePullPolicy: IfNotPresent
           name: liveness-probe
           resources:
@@ -33,32 +35,32 @@ spec:
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
-            - mountPath: C:\csi
+            - mountPath: 'C:\csi'
               name: plugin-dir
         - args:
-            - --v=2
-            - --csi-address=$(CSI_ENDPOINT)
-            - --kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)
+            - '--v=2'
+            - '--csi-address=$(CSI_ENDPOINT)'
+            - '--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)'
           command:
             - /csi-node-driver-registrar.exe
           env:
             - name: CSI_ENDPOINT
-              value: unix://C:\\csi\\csi.sock
+              value: 'unix://C:\\csi\\csi.sock'
             - name: DRIVER_REG_SOCK_PATH
-              value: C:\\var\\lib\\kubelet\\plugins\\pxd.portworx.com\\csi.sock
+              value: 'C:\\var\\lib\\kubelet\\plugins\\pxd.portworx.com\\csi.sock'
             - name: KUBE_NODE_NAME
               valueFrom:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: spec.nodeName
-          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.5.1
+          image: 'registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.5.1'
           imagePullPolicy: IfNotPresent
           livenessProbe:
             exec:
               command:
                 - /csi-node-driver-registrar.exe
-                - --kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)
-                - --mode=kubelet-registration-probe
+                - '--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)'
+                - '--mode=kubelet-registration-probe'
             failureThreshold: 3
             initialDelaySeconds: 60
             periodSeconds: 10
@@ -74,11 +76,11 @@ spec:
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
-            - mountPath: C:\var\lib\kubelet
+            - mountPath: 'C:\var\lib\kubelet'
               name: kubelet-dir
-            - mountPath: C:\csi
+            - mountPath: 'C:\csi'
               name: plugin-dir
-            - mountPath: C:\registration
+            - mountPath: 'C:\registration'
               name: registration-dir
       dnsPolicy: ClusterFirst
       hostNetwork: true
@@ -90,36 +92,35 @@ spec:
       securityContext: {}
       terminationGracePeriodSeconds: 30
       tolerations:
-        - effect: NoSchedule
-          key: node.kubernetes.io/os
-          operator: Exists
+      - key: os
+        value: Windows
       volumes:
         - hostPath:
             path: \\.\pipe\csi-proxy-filesystem-v1
-            type: ""
+            type: ''
           name: csi-proxy-fs-pipe-v1
         - hostPath:
             path: \\.\pipe\csi-proxy-smb-v1
-            type: ""
+            type: ''
           name: csi-proxy-smb-pipe-v1
         - hostPath:
             path: \\.\pipe\csi-proxy-filesystem-v1beta1
-            type: ""
+            type: ''
           name: csi-proxy-fs-pipe-v1beta1
         - hostPath:
             path: \\.\pipe\csi-proxy-smb-v1beta1
-            type: ""
+            type: ''
           name: csi-proxy-smb-pipe-v1beta1
         - hostPath:
-            path: C:\var\lib\kubelet\plugins_registry\
+            path: 'C:\var\lib\kubelet\plugins_registry\'
             type: Directory
           name: registration-dir
         - hostPath:
-            path: C:\var\lib\kubelet\
+            path: 'C:\var\lib\kubelet\'
             type: Directory
           name: kubelet-dir
         - hostPath:
-            path: C:\var\lib\kubelet\plugins\pxd.portworx.com\
+            path: 'C:\var\lib\kubelet\plugins\pxd.portworx.com\'
             type: DirectoryOrCreate
           name: plugin-dir
   updateStrategy:

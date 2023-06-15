@@ -678,7 +678,7 @@ func getCSIDeploymentSpec(
 			deployment.Spec.Template.Spec.Containers,
 			v1.Container{
 				Name:            csiAttacherContainerName,
-				Image:           attacherImage,
+				Image:           "registry.k8s.io/sig-storage/csi-attacher:v4.3.0",
 				ImagePullPolicy: imagePullPolicy,
 				Args: []string{
 					"--v=5",
@@ -1038,7 +1038,7 @@ func (c *csi) createCSIDriver(
 				Name: csiConfig.DriverName,
 			},
 			Spec: storagev1.CSIDriverSpec{
-				AttachRequired:       boolPtr(false),
+				AttachRequired:       boolPtr(true),
 				PodInfoOnMount:       boolPtr(true),
 				VolumeLifecycleModes: volumeLifecycleModes,
 			},
