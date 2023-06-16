@@ -504,7 +504,7 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 
 	// Do the preflight check for eks only for now to check the cloud drive permission
 	if preflight.IsEKS() {
-		//  Only executed once in 1st pre-flight loop cycle.  If preflight condition is not set its 1st timr through  pre-flight loop
+		//  Only executed once in 1st pre-flight loop cycle.  If preflight condition is not set its 1st time through  pre-flight loop
 		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
 		if condition == nil {
 			if err = preflight.Instance().CheckCloudDrivePermission(cluster); err != nil {
