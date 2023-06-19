@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	commonerrors "errors"
 	version "github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -9,17 +10,21 @@ import (
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
 )
 
 const (
 	WindowsComponentName     = "Windows Node"
 	WindowsDaemonSetName     = "csi-pwx-node-win"
+	WindowsStorageClass      = "px-csi-win"
 	WindowsDaemonSetFileName = "win.yaml"
 )
 
@@ -58,11 +63,21 @@ func (w *windows) IsEnabled(cluster *corev1.StorageCluster) bool {
 func (w *windows) Reconcile(cluster *corev1.StorageCluster) error {
 	ownRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
+	var errList []string
+
 	if err := w.createDaemonSet(WindowsDaemonSetFileName, ownRef, cluster); err != nil {
 		logrus.Errorf("error during creating %s daemonset %s ", WindowsDaemonSetName, err)
-		return err
+		errList = append(errList, err.Error())
 	}
 
+	if err := w.createStorageClass(); err != nil {
+		logrus.Errorf("error during creating %s storageclass %s ", WindowsStorageClass, err)
+		errList = append(errList, err.Error())
+	}
+
+	if len(errList) > 0 {
+		return commonerrors.New(strings.Join(errList, " , "))
+	}
 	return nil
 }
 
@@ -121,4 +136,28 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 	}
 	w.isCreated = true
 	return nil
+}
+
+func (w *windows) createStorageClass() error {
+	allowVolumeExpansion := true
+	reclaimPolicy := core.PersistentVolumeReclaimDelete
+	bindingMode := storagev1.VolumeBindingImmediate
+
+	return k8s.CreateStorageClass(
+		w.client,
+		&storagev1.StorageClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: WindowsStorageClass,
+			},
+			Parameters: map[string]string{
+				"repl":     "2",
+				"sharedv4": "true",
+				"winshare": "true",
+			},
+			AllowVolumeExpansion: &allowVolumeExpansion,
+			Provisioner:          "pxd.portworx.com",
+			ReclaimPolicy:        &reclaimPolicy,
+			VolumeBindingMode:    &bindingMode,
+		},
+	)
 }
