@@ -1,6 +1,6 @@
 # set defaults
 ifndef DOCKER_HUB_REPO
-    DOCKER_HUB_REPO := nikitabhatia78
+    DOCKER_HUB_REPO := portworx
     $(warning DOCKER_HUB_REPO not defined, using '$(DOCKER_HUB_REPO)' instead)
 endif
 ifndef DOCKER_HUB_OPERATOR_IMG
@@ -57,17 +57,16 @@ BUILDFLAGS += -gcflags "-N -l"
 endif
 
 RELEASE_VER := 99.9.9
-TAG := win11
 BASE_DIR    := $(shell git rev-parse --show-toplevel)
 GIT_SHA     := $(shell git rev-parse --short HEAD)
 BIN         := $(BASE_DIR)/bin
 
 VERSION = $(RELEASE_VER)-$(GIT_SHA)
 
-OPERATOR_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_OPERATOR_IMG):$(TAG)
-OPERATOR_TEST_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_OPERATOR_TEST_IMG):$(TAG)
-BUNDLE_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_BUNDLE_IMG):$(TAG)
-REGISTRY_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_REGISTRY_IMG):$(TAG)
+OPERATOR_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_OPERATOR_IMG):$(DOCKER_HUB_OPERATOR_TAG)
+OPERATOR_TEST_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_OPERATOR_TEST_IMG):$(DOCKER_HUB_OPERATOR_TEST_TAG)
+BUNDLE_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_BUNDLE_IMG):$(RELEASE_VER)
+REGISTRY_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_REGISTRY_IMG):$(RELEASE_VER)
 PX_DOC_HOST ?= https://docs.portworx.com
 PX_INSTALLER_HOST ?= https://install.portworx.com
 PROMETHEUS_OPERATOR_HELM_CHARTS_TAG ?= kube-prometheus-stack-42.1.0
@@ -257,11 +256,11 @@ getccmconfigs:
 	mkdir -p bin/configs
 	cp deploy/ccm/* bin/configs/
 
-getpluginconfigs:
+getconfigs:
 	cp deploy/plugin/* bin/configs/
 	cp deploy/windows/* bin/configs/
 
-getconfigs: cleanconfigs getccmconfigs getpluginconfigs
+getconfigs: cleanconfigs getccmconfigs getconfigs
 	wget -q '$(PX_DOC_HOST)/samples/k8s/pxc/portworx-prometheus-rule.yaml' -P bin/configs --no-check-certificate
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagerconfigs.yaml' -O bin/configs/prometheus-crd-alertmanagerconfigs.yaml
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagers.yaml' -O bin/configs/prometheus-crd-alertmanagers.yaml
@@ -299,5 +298,3 @@ clean: clean-release-manifest clean-bundle
 	@go clean -i $(PKGS)
 	@echo "Deleting image "$(OPERATOR_IMG)
 	@docker rmi -f $(OPERATOR_IMG)
-
-push: getconfigs operator container deploy bundle catalog
