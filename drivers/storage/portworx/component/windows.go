@@ -111,7 +111,7 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 	}
 
 	daemonSet.Namespace = cluster.Namespace
-	daemonSet.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	// daemonSet.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 
 	existingDaemonSet := &appsv1.DaemonSet{}
 	getErr := w.client.Get(
@@ -126,11 +126,11 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 		return getErr
 	}
 
-	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &daemonSet.Spec.Template.Spec)
+	// pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &daemonSet.Spec.Template.Spec)
 
 	equal, _ := util.DeepEqualPodTemplate(&daemonSet.Spec.Template, &existingDaemonSet.Spec.Template)
 	if !equal && w.isWindowsNode {
-		if err := k8s.CreateOrUpdateDaemonSet(w.client, daemonSet, ownerRef); err != nil {
+		if err := k8s.CreateOrUpdateDaemonSet(w.client, daemonSet, nil); err != nil {
 			return err
 		}
 	}
