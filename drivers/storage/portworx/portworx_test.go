@@ -9474,6 +9474,80 @@ func TestDisaggregatedMissingLabels(t *testing.T) {
 	require.Equal(t, uint32(6), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 }
 
+func TestGetDefaultMaxStorageNodesPerZone(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.21.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			CloudStorage: &corev1.CloudStorageSpec{
+				MaxStorageNodesPerZone: nil,
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(cluster)
+	recorder := record.NewFakeRecorder(10)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	var nodeList v1.NodeList
+	storageNodes, err := driver.getDefaultMaxStorageNodesPerZone(cluster, &nodeList)
+	require.Equal(t, uint32(0), storageNodes)
+	require.NoError(t, err)
+
+	nodeList.Items = []v1.Node{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "node1",
+				Labels: map[string]string{
+					v1.LabelTopologyZone:   "bar-pxzone1",
+					v1.LabelTopologyRegion: "bar"},
+			},
+			Spec: v1.NodeSpec{
+				ProviderID: "azure://",
+			}},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "node2",
+				Labels: map[string]string{
+					v1.LabelTopologyZone:   "foo-pxzone2",
+					v1.LabelTopologyRegion: "foo"},
+			},
+			Spec: v1.NodeSpec{
+				ProviderID: "azure://",
+			}},
+	}
+
+	k8sClient = testutil.FakeK8sClient(cluster, &nodeList)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	storageNodes, err = driver.getDefaultMaxStorageNodesPerZone(cluster, &nodeList)
+	require.Equal(t, uint32(1), storageNodes)
+	require.NoError(t, err)
+
+	k8sClient = testutil.FakeK8sClient(cluster)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	storageNodes, err = driver.getDefaultMaxStorageNodesPerZone(cluster, &nodeList)
+	require.Equal(t, uint32(0), storageNodes)
+	require.Equal(t, ErrNodeListEmpty, err)
+}
+
 func TestStorageClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {
 	testClusterDefaultsMaxStorageNodesPerZoneCase1(t)
 	// 1 zone
