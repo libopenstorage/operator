@@ -256,11 +256,7 @@ getccmconfigs:
 	mkdir -p bin/configs
 	cp deploy/ccm/* bin/configs/
 
-getconfigs:
-	cp deploy/plugin/* bin/configs/
-	cp deploy/windows/* bin/configs/
-
-getconfigs: cleanconfigs getccmconfigs getconfigs
+getconfigs: cleanconfigs getccmconfigs
 	wget -q '$(PX_DOC_HOST)/samples/k8s/pxc/portworx-prometheus-rule.yaml' -P bin/configs --no-check-certificate
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagerconfigs.yaml' -O bin/configs/prometheus-crd-alertmanagerconfigs.yaml
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagers.yaml' -O bin/configs/prometheus-crd-alertmanagers.yaml
@@ -276,6 +272,8 @@ getconfigs: cleanconfigs getccmconfigs getconfigs
 	wget -q '$(CSI_SNAPSHOTTER_V4_CRD_URL_PREFIX)/snapshot.storage.k8s.io_volumesnapshots.yaml' -O bin/configs/csi-crd-v4-volumesnapshot.yaml
 	wget -q '$(CSI_SNAPSHOTTER_V4_CRD_URL_PREFIX)/snapshot.storage.k8s.io_volumesnapshotcontents.yaml' -O bin/configs/csi-crd-v4-volumesnapshotcontent.yaml
 	wget -q '$(CSI_SNAPSHOTTER_V4_CRD_URL_PREFIX)/snapshot.storage.k8s.io_volumesnapshotclasses.yaml' -O bin/configs/csi-crd-v4-volumesnapshotclass.yaml
+	cp deploy/plugin/* bin/configs/
+	cp deploy/windows/* bin/configs
 
 clean-release-manifest:
 	rm -rf manifests

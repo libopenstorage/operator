@@ -582,10 +582,8 @@ func getCSIDeploymentSpec(
 	topologySpreadConstraints []v1.TopologySpreadConstraint,
 ) *appsv1.Deployment {
 	replicas := int32(3)
-	// leaderElectionType := "leases"
 	provisionerLeaderElectionType := "leases"
 	if csiConfig.IncludeEndpointsAndConfigMapsForLeases {
-		// leaderElectionType = "configmaps"
 		provisionerLeaderElectionType = "endpoints"
 	}
 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
