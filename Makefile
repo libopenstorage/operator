@@ -57,7 +57,6 @@ BUILDFLAGS += -gcflags "-N -l"
 endif
 
 RELEASE_VER := 99.9.9
-TAG := windowsalpha
 BASE_DIR    := $(shell git rev-parse --show-toplevel)
 GIT_SHA     := $(shell git rev-parse --short HEAD)
 BIN         := $(BASE_DIR)/bin
