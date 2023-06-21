@@ -15,7 +15,7 @@ import "google/api/annotations.proto";
 
 package openstorage.api;
 
-option go_package = "api";
+option go_package = "./api;api";
 option java_multiple_files = true;
 option java_package = "com.openstorage.api";
 
@@ -230,6 +230,8 @@ message StorageResource {
   bool metadata = 13;
   // True if dedicated as cache
   bool cache = 14;
+  // True if the resource is used as thin pool metadata disk
+  bool pool_metadata_dev = 15;
 }
 
 // StoragePool groups different storage devices based on their CosType
@@ -254,6 +256,13 @@ message StoragePool {
   StoragePoolOperation last_operation = 11;
 }
 
+// SchedulerTopology defines the topology information of the storage node
+// in scheduler context
+message SchedulerTopology {
+    // Key-value pairs defining the topology of the node
+    map<string, string> labels = 1;
+}
+
 // StoragePoolOperation defines an operation being performed on a storage pool
 message StoragePoolOperation {
   // Type is the type of the operation
@@ -266,6 +275,11 @@ message StoragePoolOperation {
   SdkStoragePool.OperationStatus status = 4;
 }
 
+// TopologyRequirement defines the topology requirement for a volume
+message TopologyRequirement {
+    // Key-value pairs defining the required topology for a volume
+    map<string, string> labels = 1;
+}
 
 // VolumeLocator is a structure that is attached to a volume
 // and is used to carry opaque metadata.
@@ -330,13 +344,13 @@ message Xattr {
 enum ExportProtocol  {
   // Invalid uninitialized value
   INVALID = 0;
-  // PXD the volume is exported over Portworx block interace.
+  // PXD the volume is exported over Portworx block interface.
   PXD = 1;
   // ISCSI the volume is exported over ISCSI.
   ISCSI = 2;
   // NFS the volume is exported over NFS.
   NFS = 3;
-  // Custom the volume is exported over custom interace.
+  // Custom the volume is exported over custom interface.
   CUSTOM = 4;
 }
 
@@ -387,11 +401,14 @@ message PXDProxySpec {
 
 // PureBlockSpec is the spec for proxying a volume on pure_block backends
 message PureBlockSpec {
+  string serial_num = 1;
+  string full_vol_name = 2;
 }
 
 // PureFileSpec is the spec for proxying a volume on pure_file backends
 message PureFileSpec {
   string export_rules = 1;
+  string full_vol_name = 2;
 }
 
 // ProxySpec defines how this volume will reflect an external data source.
@@ -441,6 +458,8 @@ message Sharedv4ServiceSpec {
       // Applicable when running in cloud. In this mode the sharedv4 volume
       // can be accessed from outside the cluster.
       LOADBALANCER = 3;
+      // Do not use sharedv4 service feature. Use legacy sharedv4 volumes instead.
+      NONE = 4;
     }
 }
 
@@ -535,6 +554,8 @@ message FastpathConfig {
   bool dirty = 5;
   // fastpath coordinator node uuid to enhance reporting
   string coord_uuid = 6;
+  // fastpath force failover, disable auto promote to fastpath
+  bool force_failover = 7;
 }
 
 // ScanPolicy defines when a filesystem check is triggered and what action to take
@@ -574,6 +595,12 @@ message IoThrottle {
     uint32 write_iops = 2;
     uint32 read_bw_mbytes = 3;
     uint32 write_bw_mbytes = 4;
+}
+
+enum NearSyncReplicationStrategy {
+    NEAR_SYNC_STRATEGY_NONE = 0;
+    NEAR_SYNC_STRATEGY_AGGRESSIVE = 1;
+    NEAR_SYNC_STRATEGY_OPTIMIZED = 2;
 }
 
 // VolumeSpec has the properties needed to create a volume.
@@ -661,14 +688,26 @@ message VolumeSpec {
   ProxySpec proxy_spec = 41;
   // Sharedv4ServiceSpec specifies a spec for configuring a service for a sharedv4 volume
   Sharedv4ServiceSpec sharedv4_service_spec = 42;
+  // Sharedv4Spec specifies common properties of sharedv4 and sharedv4 service volumes
+  Sharedv4Spec sharedv4_spec = 43;
   // Autofstrim indicates that fstrim would be run on this volume automatically, without user intervention
-  bool auto_fstrim = 43;
-  // NumberOfChunks indicates how many chunks must be created, 0 and 1 both mean 1
-  uint32 number_of_chunks = 44;
+  bool auto_fstrim = 44;
   // IoThrottle specifies maximum io(iops/bandwidth) this volume is restricted to
   IoThrottle io_throttle = 45;
-  // Sharedv4Spec specifies common properties of sharedv4 and sharedv4 service volumes
-  Sharedv4Spec sharedv4_spec = 46;
+  // NumberOfChunks indicates how many chunks must be created, 0 and 1 both mean 1
+  uint32 number_of_chunks = 46;
+  // Enable readahead for the volume
+  bool readahead = 47;
+  // TopologyRequirement topology requirement for this volume
+  TopologyRequirement topology_requirement = 48;
+  // winshare is true if this volume can be accessed from windows pods.
+  bool winshare = 49;
+  // Filesystem create options to be honored.
+  string fa_create_options = 50;
+  // NearSync specifies the volume has a near-sync replica
+  bool near_sync = 51;
+  // NearSyncReplicationStrategy is replication strategy for near sync volumes
+  NearSyncReplicationStrategy near_sync_replication_strategy = 52;
 }
 
 // VolumeSpecUpdate provides a method to set any of the VolumeSpec of an existing volume
@@ -732,12 +771,18 @@ message VolumeSpecUpdate {
   oneof proxy_spec_opt { ProxySpec proxy_spec = 36;}
   // sharedv4_service_spec_opt provides the spec for sharedv4 volume service
   oneof sharedv4_service_spec_opt { Sharedv4ServiceSpec sharedv4_service_spec = 37;}
-  // Autofstrim is set to true, to enable automatic fstrim on this volume
-  oneof auto_fstrim_opt { bool auto_fstrim = 38; }
-  // io_throttle_opt defines the io throttle limits for the volume
-  oneof io_throttle_opt { IoThrottle io_throttle = 39;}
   // Sharedv4Spec specifies common properties of sharedv4 and sharedv4 service volumes
-  oneof sharedv4_spec_opt { Sharedv4Spec sharedv4_spec = 40; }
+  oneof sharedv4_spec_opt { Sharedv4Spec sharedv4_spec = 38; }
+  // Autofstrim is set to true, to enable automatic fstrim on this volume
+  oneof auto_fstrim_opt { bool auto_fstrim = 39; }
+  // io_throttle_opt defines the io throttle limits for the volume
+  oneof io_throttle_opt { IoThrottle io_throttle = 40;}
+  // Enable readahead for the volume
+  oneof readahead_opt { bool readahead  = 41; }
+  // winshare is true if this volume can be accessed from windows pods.
+  oneof winshare_opt { bool winshare = 42; }
+  // NearSyncReplicationStrategy is replication strategy for near sync volumes
+  oneof near_sync_replication_strategy_opt { NearSyncReplicationStrategy near_sync_replication_strategy = 43;}
 }
 
 // VolumeSpecPolicy provides a method to set volume storage policy
@@ -817,16 +862,20 @@ message VolumeSpecPolicy {
   oneof proxy_write_opt { bool proxy_write = 60; }
   // proxy_spec_opt provides the spec for a proxy volume.
   oneof proxy_spec_opt { ProxySpec proxy_spec = 61; }
-  // sharedv4_service_spec_opt provides the spec for sharedv4 volume service
-  oneof sharedv4_service_spec_opt { Sharedv4ServiceSpec sharedv4_service_spec = 62; }
   // fastpath preference
-  oneof fastpath_opt { bool fastpath = 63; }
-  // Autofstrim is set to true, to enable automatic fstrim on this volume
-  oneof auto_fstrim_opt { bool auto_fstrim = 64; }
-  // io_throttle_opt defines the io throttle limits for the volume
-  oneof io_throttle_opt { IoThrottle io_throttle = 65;}
+  oneof fastpath_opt { bool fastpath = 62; }
+  // sharedv4_service_spec_opt provides the spec for sharedv4 volume service
+  oneof sharedv4_service_spec_opt { Sharedv4ServiceSpec sharedv4_service_spec = 63; }
   // Sharedv4Spec specifies common properties of sharedv4 and sharedv4 service volumes
-  oneof sharedv4_spec_opt { Sharedv4Spec sharedv4_spec = 66; }
+  oneof sharedv4_spec_opt { Sharedv4Spec sharedv4_spec = 64; }
+  // Autofstrim is set to true, to enable automatic fstrim on this volume
+  oneof auto_fstrim_opt { bool auto_fstrim = 65; }
+  // io_throttle_opt defines the io throttle limits for the volume
+  oneof io_throttle_opt { IoThrottle io_throttle = 66;}
+  // Enable readahead for the volume
+  oneof readahead_opt { bool readahead  = 67; }
+  // winshare is true if this volume can be accessed from windows.
+  oneof winshare_opt { bool winshare = 68; }
 }
 
 // ReplicaSet set of machine IDs (nodes) to which part of this volume is erasure
@@ -969,10 +1018,10 @@ message Volume {
   // Sharedv4MountOptions are the runtime mount options that will be used while mounting a sharedv4 volume
   // from a node where the volume replica does not exist
   MountOptions sharedv4_mount_options = 30;
-  // InTrashcan if the volume is in trashcan
-  bool in_trashcan = 31;
   // DerivedIoProfile the IO profile determined from the pattern
-  IoProfile derived_io_profile = 32;
+  IoProfile derived_io_profile = 31;
+  // InTrashcan if the volume is in trashcan
+  bool in_trashcan = 32;
 }
 
 // Stats is a structure that represents last collected stats for a volume
@@ -1009,7 +1058,7 @@ message Stats {
 
 // Provides details on exclusive and shared storage used by
 // snapshot/volume specifically for copy-on-write(COW) snapshots. Deletion
-// of snapshots and overwirte of volume will affect the exclusive storage
+// of snapshots and overwrite of volume will affect the exclusive storage
 // used by the other dependent snaps and parent volume.
 message CapacityUsageInfo {
   // Storage consumed exclusively by this single snapshot. Deletion of this
@@ -1044,6 +1093,36 @@ message VolumeUsage {
 message VolumeUsageByNode {
   // VolumeUsage returns list of VolumeUsage for given node
   repeated VolumeUsage volume_usage= 1;
+}
+
+// VolumeBytesUsed defines volume utilization
+message VolumeBytesUsed {
+  // id for the volume/snapshot
+  string volume_id = 1;
+  //  size in bytes by the volume/snapshot
+  uint64 total_bytes = 2;
+}
+
+// VolumeBytesUsedByNode defines volume utilization for multiple volumes in a given node
+message VolumeBytesUsedByNode {
+  // machine uuid
+  string node_id = 1;
+  // VolumeBytesUsed for each requested volume on the given node
+  repeated VolumeBytesUsed vol_usage = 2;
+}
+
+// FstrimVolUsageInfo
+message FstrimVolumeUsageInfo {
+  // Volume name
+  string volume_name = 1;
+  // Volume size
+  uint64 volume_size = 2;
+  // Disk usage in bytes
+  uint64 du_usage = 3;
+  // Disk usage seen in Portworx in bytes
+  uint64 px_usage = 4;
+  // If auto fstrim is performed to the volume, if not, why
+  string perform_auto_fstrim = 5;
 }
 
 // Purges the RelaxedReclaim queue
@@ -1083,11 +1162,11 @@ message Alert {
   int64 alert_type = 3;
   // Message describing the Alert
   string message = 4;
-  //Timestamp when Alert occured
+  //Timestamp when Alert occurred
   google.protobuf.Timestamp timestamp = 5;
-  // ResourceId where Alert occured
+  // ResourceId where Alert occurred
   string resource_id = 6;
-  // Resource where Alert occured
+  // Resource where Alert occurred
   ResourceType resource = 7;
   // Cleared Flag
   bool cleared = 8;
@@ -1103,9 +1182,9 @@ message Alert {
 
 // SdkAlertsTimeSpan to store time window information.
 message SdkAlertsTimeSpan {
-    //Start timestamp when Alert occured
+    //Start timestamp when Alert occurred
     google.protobuf.Timestamp start_time = 1;
-    //End timestamp when Alert occured
+    //End timestamp when Alert occurred
     google.protobuf.Timestamp end_time = 2;
 }
 
@@ -1213,7 +1292,7 @@ service OpenStorageAlerts {
     //
     // #### Input
     // SdkAlertsEnumerateRequest takes a list of such queries and the returned
-    // output is a collective ouput from each of these queries. In that sense,
+    // output is a collective output from each of these queries. In that sense,
     // the filtering of these queries has a behavior of OR operation.
     // Each query also has a list of optional options. These options allow
     // narrowing down the scope of alerts search. These options have a
@@ -1496,7 +1575,7 @@ message StorageNode {
     SECURED = 2;
     // Node is secured, but in the process of removing security. This state allows
     // other unsecured nodes to join the cluster since the cluster is in the process
-    // of removing secuirty authenticaiton and authorization.
+    // of removing security authentication and authorization.
     SECURED_ALLOW_SECURITY_REMOVAL = 3;
   }
 
@@ -1533,6 +1612,8 @@ message StorageNode {
   HardwareType HWType = 18;
   // Determine if the node is secured
   SecurityStatus security_status = 19;
+  // Topology information of the node in scheduler context
+  SchedulerTopology scheduler_topology = 20;
 }
 
 // StorageCluster represents the state and information about the cluster
@@ -1658,56 +1739,86 @@ service OpenStorageFilesystemTrim {
       };
     }
 
-  // Stop a filesystem Trim background operation on a mounted volume, if any
-  rpc Stop(SdkFilesystemTrimStopRequest)
-    returns (SdkFilesystemTrimStopResponse){
+  // Usage of a filesystem Trim background operation on all locally mounted
+  // volume
+    rpc AutoFSTrimUsage(SdkAutoFSTrimUsageRequest)
+        returns (SdkAutoFSTrimUsageResponse) {
+      option (google.api.http) = {
+        get : "/v1/filesystem-trim/auto-fstrim-usage"
+      };
+    }
+
+    // Stop a filesystem Trim background operation on a mounted volume, if any
+    rpc Stop(SdkFilesystemTrimStopRequest)
+        returns (SdkFilesystemTrimStopResponse) {
       option(google.api.http) = {
         post: "/v1/filesystem-trim/stop"
         body: "*"
       };
     }
-  }
 
-// ## OpenStorageFilesystemCheckService
-// This service provides methods to manage filesystem check operation on a
-// volume.
-//
-// This operation is run in the background on an **unmounted volume**.
-// If the volume is mounted, then these APIs return error.
-//
-// Once the filesystem check operation is started, in one of the available
-// modes(check_health, fix_safe, fix_all),
-// the clients have to poll for the status of the background operation
-// using the `OpenStorageFilesystemcheck.Status()` rpc request.
-//
-// **Note:
-// 1. Different modes of filesystem check can execute in parallel for
-// the same volume.
-// 2. Filesystem Check and volume Mount are mutually exclusive, meaning both
-// cannot be run on a volume at the same time.
-//
-// A typical workflow involving filesystem check would be as follows
-// 1. Attach the volume
-//    `OpenStorageMountAttachClient.Attach()`
-// 2. Check the health of the filesystem by issuing a grpc call to
-//    `OpenStorageFilesystemCheckClient.Start(Mode='check_health')`
-// 3. Status of the Filesystem Check operation in check_health mode, can be
-//    retrieved by polling for the status using
-//    `OpenStorageFilesystemCheck.Status()`
-// 4. If the Filesystem Check Operation status reports filesystem is in unhealthy
-//    state, then to fix all the problems issue a grpc call to
-//    `OpenStorageFilesystemCheckClient.Start(Mode='fix_all')`
-// 5. Status of the Filesystem Check operation in fix_all mode, can be retrieved
-//    by polling for the status using
-//    `OpenStorageFilesystemCheck.Status()`
-// 6. Filesystem Check operation runs in the background, to stop the operation,
-//    issue a call to
-//    `OpenStorageFilesystemCheckClient.Stop()`
-// 7. To Check and Fix errors in the filesystem that are safe to fix, issue a
-//    grpc call to
-//    `OpenStorageFilesystemCheckClient.Start(Mode='fix_safe')`
-//    Status of this operation can be polled in the way mentioned in step 3
-//    This operation can be stopped a Stop request as mentioned in step 6
+    // Push a auto filesystem Trim job into the queue
+    rpc AutoFSTrimPush(SdkAutoFSTrimPushRequest)
+        returns (SdkAutoFSTrimPushResponse) {
+      option (google.api.http) = {
+        post : "/v1/filesystem-trim/auto-fstrim-push"
+        body : "*"
+      };
+    }
+
+    // Pop a auto filesystem Trim job from the queue
+    rpc AutoFSTrimPop(SdkAutoFSTrimPopRequest)
+        returns (SdkAutoFSTrimPopResponse) {
+      option (google.api.http) = {
+        post : "/v1/filesystem-trim/auto-fstrim-pop"
+        body : "*"
+      };
+    }
+}
+
+  // ## OpenStorageFilesystemCheckService
+  // This service provides methods to manage filesystem check operation on a
+  // volume.
+  //
+  // This operation is run in the background on an **unmounted volume**.
+  // If the volume is mounted, then these APIs return error.
+  //
+  // Once the filesystem check operation is started, in one of the available
+  // modes(check_health, fix_safe, fix_all),
+  // the clients have to poll for the status of the background operation
+  // using the `OpenStorageFilesystemcheck.Status()` rpc request.
+  //
+  // **Note:
+  // 1. Different modes of filesystem check can execute in parallel for
+  // the same volume.
+  // 2. Filesystem Check and volume Mount are mutually exclusive, meaning both
+  // cannot be run on a volume at the same time.
+  //
+  // A typical workflow involving filesystem check would be as follows
+  // 1. Attach the volume
+  //    `OpenStorageMountAttachClient.Attach()`
+  // 2. Check the health of the filesystem by issuing a grpc call to
+  //    `OpenStorageFilesystemCheckClient.Start(Mode='check_health')`
+  // 3. Status of the Filesystem Check operation in check_health mode, can be
+  //    retrieved by polling for the status using
+  //    `OpenStorageFilesystemCheck.Status()`
+  // 4. If the Filesystem Check Operation status reports filesystem is in
+  // unhealthy
+  //    state, then to fix all the problems issue a grpc call to
+  //    `OpenStorageFilesystemCheckClient.Start(Mode='fix_all')`
+  // 5. Status of the Filesystem Check operation in fix_all mode, can be
+  // retrieved
+  //    by polling for the status using
+  //    `OpenStorageFilesystemCheck.Status()`
+  // 6. Filesystem Check operation runs in the background, to stop the
+  // operation,
+  //    issue a call to
+  //    `OpenStorageFilesystemCheckClient.Stop()`
+  // 7. To Check and Fix errors in the filesystem that are safe to fix, issue a
+  //    grpc call to
+  //    `OpenStorageFilesystemCheckClient.Start(Mode='fix_safe')`
+  //    Status of this operation can be polled in the way mentioned in step 3
+  //    This operation can be stopped a Stop request as mentioned in step 6
 
 service OpenStorageFilesystemCheck {
 
@@ -2060,6 +2171,146 @@ service OpenStorageNode {
         body: "*"
       };
     }
+
+  // Returns bytes used of multiple volumes for a give node
+  rpc VolumeBytesUsedByNode(SdkVolumeBytesUsedRequest)
+    returns (SdkVolumeBytesUsedResponse) {
+      option(google.api.http) = {
+        post: "/v1/nodes/bytesused"
+        body: "*"
+      };
+    }
+}
+
+// BucketService to manage the bucket driver
+service OpenStorageBucket {
+  rpc Create(BucketCreateRequest)
+    returns (BucketCreateResponse) {
+      option(google.api.http) = {
+        post: "/v1/bucket"
+        body: "*"
+      };
+    }
+
+  rpc Delete(BucketDeleteRequest)
+  returns (BucketDeleteResponse) {
+    option(google.api.http) = {
+      delete: "/v1/bucket/{bucket_id}"
+    };
+  }
+
+  rpc GrantAccess(BucketGrantAccessRequest)
+  returns (BucketGrantAccessResponse) {
+    option(google.api.http) = {
+      post: "/v1/bucket/access/{bucket_id}"
+      body: "*"
+    };
+  }
+
+  rpc RevokeAccess(BucketRevokeAccessRequest)
+  returns (BucketRevokeAccessResponse) {
+    option(google.api.http) = {
+      post: "/v1/bucket/revoke/{bucket_id}"
+      body: "*"
+    };
+  }
+}
+
+// Defines a request to create a bucket.
+message BucketCreateRequest {
+  // Unique name of the bucket. This will be used for idempotency.
+  string name = 1;
+
+  // Region in which bucket will be created.
+  string region = 2;
+
+  // Endpoint to use when creating the bucket
+  string endpoint = 3;
+
+  //Anonymous access policy for the bucket.
+  AnonymousBucketAccessMode anonymousBucketAccessMode  = 4;
+}
+
+// Defines a response to the creation of a bucket
+message BucketCreateResponse {
+  // Id of new bucket
+  string bucket_id = 1;
+}
+
+// Defines the request to delete a bucket
+message BucketDeleteRequest {
+  // Id of bucket to delete
+  string bucket_id = 1;
+
+  // Region in which bucket will be created.
+  string region = 2;
+
+  // Endpoint to use when deleting the bucket
+  string endpoint = 3;
+
+  // Flag to allow non empty bucket deletion.
+  bool clear_bucket = 4;
+}
+
+// Empty response
+message BucketDeleteResponse {
+}
+
+// Defines a request to grant access to the bucket
+message BucketGrantAccessRequest {
+  // Id of the bucket
+  string bucket_id = 1;
+
+  // Name of the account to which access to be provided
+  string account_name = 2;
+
+  // Access policy to be applied for the account
+  string access_policy = 3;
+}
+
+
+// Defines a response to the creation of a bucket
+message BucketGrantAccessResponse {
+  // This is the account_id that is being provided access. This will
+  // This will be required later to revoke access.
+  string account_id = 1;
+
+  // Credentials supplied for accessing the bucket ex: aws access key id and secret, etc.
+  BucketAccessCredentials credentials = 2;
+}
+
+// Defines the request to revoke access to the bucket
+message BucketRevokeAccessRequest {
+  // Id of bucket to delete
+  string bucket_id = 1;
+
+  // AccountId that is having its access revoked.
+  string account_id = 2;
+}
+
+// Empty response
+message BucketRevokeAccessResponse {
+}
+
+// Defines the bucket access credential object
+message BucketAccessCredentials {
+  // Access key id
+  string access_key_id = 1;
+
+  // Secret access key
+  string secret_access_key = 2;
+}
+
+enum AnonymousBucketAccessMode {
+    UnknownBucketAccessMode = 0;
+    // Default, disallow uncredentialed access to the backend storage.
+    Private = 1;
+    // Read only, uncredentialed users can call ListBucket and GetObject.
+    ReadOnly = 2;
+    // Write only, uncredentialed users can only call PutObject.
+    WriteOnly = 3;
+    // Read/Write, uncredentialed users can read objects as well as PutObject.
+    ReadWrite = 4;
 }
 
 // OpenStorageVolume is a service used to manage the volumes of a storage system
@@ -2226,7 +2477,7 @@ service OpenStorageVolume {
 
   // SnapshotEnumerate returns a list of snapshots.
   // To filter all the snapshots for a specific volume which may no longer exist,
-  // specifiy a volume id.
+  // specify a volume id.
   // Labels can also be used to filter the snapshot list.
   // If neither are provided all snapshots will be returned.
   rpc SnapshotEnumerateWithFilters(SdkVolumeSnapshotEnumerateWithFiltersRequest)
@@ -2421,6 +2672,7 @@ service OpenStorageCredentials {
         body: "*"
       };
     }
+
   // input is very same as credential create
   rpc Update(SdkCredentialUpdateRequest)
     returns (SdkCredentialUpdateResponse) {
@@ -2991,6 +3243,8 @@ message SdkCredentialCreateRequest {
     SdkAzureCredentialRequest azure_credential = 201;
     // Credentials for Google
     SdkGoogleCredentialRequest google_credential = 202;
+    // Credentials for NFS
+    SdkNfsCredentialRequest nfs_credential = 203;
   }
 }
 
@@ -3042,6 +3296,18 @@ message SdkGoogleCredentialRequest {
   string json_key = 2;
 }
 
+// Defines credentials for NFS
+message SdkNfsCredentialRequest {
+  // NFS Server address
+  string server = 1;
+  // NFS export path
+  string sub_path = 2;
+  // mount options for nfs mount
+  string mount_opts = 3;
+  // timeout for nfs IO in seconds
+  uint32 timeout_seconds = 4;
+}
+
 // Defines the response for AWS/S3 credentials
 message SdkAwsCredentialResponse {
   // Access key
@@ -3068,6 +3334,18 @@ message SdkAzureCredentialResponse {
 message SdkGoogleCredentialResponse {
   // Project ID
   string project_id = 2;
+}
+
+// Defines the response for NFS credential
+message SdkNfsCredentialResponse {
+  // NFS Server Address
+  string server = 1;
+  // NFS export path
+  string sub_path = 2;
+  // mount options ( "," separated)
+  string mount_opts = 3;
+  // timeout in seconds
+  uint32 timeout_seconds = 4;
 }
 
 // Empty request
@@ -3111,6 +3389,8 @@ message SdkCredentialInspectResponse {
     SdkAzureCredentialResponse azure_credential = 201;
     // Google credentials
     SdkGoogleCredentialResponse google_credential = 202;
+    // NFS credentials
+    SdkNfsCredentialResponse nfs_credential = 203;
   }
 }
 
@@ -3274,6 +3554,10 @@ message SdkVolumeCloneRequest {
   string name = 1;
   // Parent volume id or snapshot id will create a new volume as a clone of the parent.
   string parent_id = 2;
+  // Additional labels to be appended after cloning the volume. Note that clone will
+  // issue a snapshot, which copies most labels except pvc and namespace. This map
+  // allows you to pass additional labels that are not part of the parent volume.
+  map<string, string> additional_labels = 3;
 }
 
 // Defines the response when creating a clone from a volume or a snapshot
@@ -3356,7 +3640,7 @@ message SdkVolumeUpdateRequest {
 message SdkVolumeUpdateResponse {
 }
 
-// Defines a request to retreive volume statistics
+// Defines a request to retrieve volume statistics
 message SdkVolumeStatsRequest {
   // Id of the volume to get statistics
   string volume_id = 1;
@@ -3732,6 +4016,8 @@ message SdkDiagsCollectRequest {
   int64 timeout_mins = 5;
   // Live is an optional flag if true will collect live cores from running processes of the driver
   bool live = 6;
+  // Filename is an optional flag only to be used for testing purposes.
+  string filename = 7;
 }
 
 // SdkDiagsCollectResponse defines a response for an SDK request to collect diags
@@ -3905,7 +4191,7 @@ message StorageRebalanceTriggerThreshold {
     // AbsolutePercent indicates absolute percent comparison.
     // Example, 75 % used of capacity, or 50 % provisioned of capacity.
     ABSOLUTE_PERCENT = 0;
-    // DeltaMeanPercent indicates mean percent comparision threshold.
+    // DeltaMeanPercent indicates mean percent comparison threshold.
     // Example, 10 % more than mean for cluster.
     DELTA_MEAN_PERCENT = 1;
   }
@@ -4207,7 +4493,7 @@ message SdkCloudBackupCreateRequest {
   // Labels are list of key value pairs to tag the cloud backup. These labels
   // are stored in the metadata associated with the backup.
   map<string, string> labels = 5;
-  // FullBackupFrequency indicates number of incremental backup after whcih
+  // FullBackupFrequency indicates number of incremental backup after which
   // a fullbackup must be created. This is to override the default value for
   // manual/user triggerred backups and not applicable for scheduled backups
   // Value of 0 retains the default behavior.
@@ -4215,6 +4501,8 @@ message SdkCloudBackupCreateRequest {
   // DeleteLocal indicates if local snap created for backup must be deleted after
   // the backup is complete
   bool delete_local = 7;
+  // Indicates if this is a near sync migrate
+  bool near_sync_migrate = 8;
 }
 
 // Empty response
@@ -4293,6 +4581,8 @@ message SdkCloudBackupDeleteRequest {
   // needed if the backup is an incremental backup and subsequent backups
   // depend on this backup specified by `backup_id`.
   bool force = 3;
+  // Bucket name to which cloud backup belongs to
+  string bucket = 4;
 }
 
 // Empty response
@@ -4399,11 +4689,17 @@ enum SdkCloudBackupOpType {
   SdkCloudBackupOpTypeBackupOp = 1;
   // Restore
   SdkCloudBackupOpTypeRestoreOp = 2;
+  // NearSync clone
+  SdkNearSyncOpTypeCloneOp = 3;
+  // NearSync replication add
+  SdkNearSyncOpTypeReplAddOp = 4;
+  // NearSync restore
+  SdkNearSyncOpTypeRestoreOp = 5;
 }
 
 // CloudBackup status types
 enum SdkCloudBackupStatusType {
-  // Unkonwn
+  // Unknown
   SdkCloudBackupStatusTypeUnknown = 0;
   // Not started
   SdkCloudBackupStatusTypeNotStarted = 1;
@@ -4423,7 +4719,22 @@ enum SdkCloudBackupStatusType {
   SdkCloudBackupStatusTypeQueued = 8;
   // Invalid, used by enumerate, includes failed,
   // stopped and aborted
- SdkCloudBackupStatusTypeInvalid = 9;
+  SdkCloudBackupStatusTypeInvalid = 9;
+  // Near sync
+  // Not started
+  SdkNearSyncStatusTypeNotStarted = 10;
+  // Done
+  SdkNearSyncStatusTypeDone = 11;
+  // Paused
+  SdkNearSyncStatusTypePaused = 12;
+  // Stopped
+  SdkNearSyncStatusTypeStopped = 13;
+  // Active
+  SdkNearSyncStatusTypeActive = 14;
+  // Failed
+  SdkNearSyncStatusTypeFailed = 15;
+  // Invalid
+  SdkNearSyncStatusTypeInvalid = 16;
 }
 
 // SdkCloudBackupStatus defines the status of a backup stored by a cloud provider
@@ -4457,7 +4768,7 @@ message SdkCloudBackupStatus {
   string group_id = 13;
 }
 
-// Defines a request to retreive the status of a backup or restore for a
+// Defines a request to retrieve the status of a backup or restore for a
 // specified volume
 message SdkCloudBackupStatusRequest {
   // (optional) VolumeId is a value which is used to get information on the
@@ -4470,6 +4781,8 @@ message SdkCloudBackupStatusRequest {
   // TaskId of the backup/restore task, if this is specified,
   // volume_id is ignored.
   string task_id = 3;
+  // Indicates if this is for nearsync migration
+  bool near_sync_migrate = 4;
 }
 
 // Defines a response containing the status of the backups for a specified volume
@@ -4504,7 +4817,7 @@ message SdkCloudBackupHistoryItem {
   SdkCloudBackupStatusType status = 3;
 }
 
-// Defines a request to retreive the history of the backups for
+// Defines a request to retrieve the history of the backups for
 // a specific volume to a cloud provider
 message SdkCloudBackupHistoryRequest {
   // This optional value defines which history of backups is being
@@ -4529,6 +4842,12 @@ enum SdkCloudBackupRequestedState {
   SdkCloudBackupRequestedStateResume = 2;
   // Stop a backup or restore
   SdkCloudBackupRequestedStateStop = 3;
+  // Pause the near sync migrate
+  SdkNearSyncRequestedStatePause = 4;
+  // Resume the near sync migrate
+  SdkNearSyncRequestedStateResume = 5;
+  // Stop a near sync migrate
+  SdkNearSyncRequestedStateStop = 6;
 }
 
 // Defines a request to change the state of a backup or restore to or
@@ -4628,8 +4947,14 @@ message SdkCloudBackupSizeRequest{
 
 // Defines a response containing the size of the volume
 message SdkCloudBackupSizeResponse{
-  // Size is the size of the volume in bytes
+  // Same value as total_download_bytes, will be deprecated
   uint64 size = 1;
+  // Total download size of all the backups (full & incremental) required for a restore
+  uint64 total_download_bytes = 2;
+  // Size of the compressed individual backup in object-store or NFS
+  uint64 compressed_object_bytes = 3;
+  // Used size of the volume to be restored (in bytes)
+  uint64 capacity_required_for_restore = 4;
 }
 
 //
@@ -4819,6 +5144,19 @@ message SdkAutoFSTrimStatusResponse {
   string message = 2;
 }
 
+// SdkAutoFSTrimUsageRequest defines a request to get status of autofs trim operation
+message SdkAutoFSTrimUsageRequest {
+}
+
+// SdkAutoFSTrimUsageResponse defines the response for a
+// SdkAutoFSTrimUsageRequest.
+message SdkAutoFSTrimUsageResponse {
+  // map of fstrim disk usage and volume name
+  map<string, FstrimVolumeUsageInfo> usage = 1;
+  // Text blob containing ASCII text providing details of the operation
+  string message = 2;
+}
+
 // SdkFilesystemTrimStopRequest defines a request to stop a background
 // filesystem trim operation
 message SdkFilesystemTrimStopRequest {
@@ -4828,8 +5166,51 @@ message SdkFilesystemTrimStopRequest {
   string mount_path = 2;
 }
 
+// SdkVolumeBytesUsedResponse defines a response to fetch multiple volume util from a given node
+message SdkVolumeBytesUsedResponse {
+  // Provides vol util of multiple requested volumes from a given node
+  VolumeBytesUsedByNode vol_util_info = 1;
+}
+
+// SdkVolumeBytesUsedRequest defines a request for fetching per volume utilization
+// from multiple volume in a given node
+message SdkVolumeBytesUsedRequest {
+  // machine uuid of targeted node
+  string node_id = 1;
+  // volume ids to be found in usage response, can be empty
+  repeated uint64 ids = 2;
+}
+
 // Empty response
 message SdkFilesystemTrimStopResponse{
+}
+
+// SdkAutoFSTrimPushRequest defines the request to push a volume to autofstrim
+// queue
+message SdkAutoFSTrimPushRequest {
+  // Id of the volume
+  string volume_id = 1;
+}
+
+// SdkAutoFSTrimPushResponse defines the response to push a volume to autofstrim
+// queue
+message SdkAutoFSTrimPushResponse {
+  // Text blob containing ASCII text providing details of the operation
+  string message = 1;
+}
+
+// SdkAutoFSTrimPopRequest defines the request to pop a volume to autofstrim
+// queue
+message SdkAutoFSTrimPopRequest {
+  // Id of the volume
+  string volume_id = 1;
+}
+
+// SdkAutoFSTrimPopResponse defines the response to pop a volume to autofstrim
+// queue
+message SdkAutoFSTrimPopResponse {
+  // Text blob containing ASCII text providing details of the operation
+  string message = 1;
 }
 
 message FilesystemCheck {
@@ -4907,9 +5288,9 @@ message SdkFilesystemCheckStopResponse{
 message SdkIdentityCapabilitiesRequest {
 }
 
-// Defines a response containing the capabilites of the cluster
+// Defines a response containing the capabilities of the cluster
 message SdkIdentityCapabilitiesResponse {
-  // Provides all the capabilites supported by the cluster
+  // Provides all the capabilities supported by the cluster
   repeated SdkServiceCapability capabilities = 1;
 }
 
@@ -4989,7 +5370,7 @@ message SdkVersion {
     // SDK version major value of this specification
     Major = 0;
     // SDK version minor value of this specification
-    Minor = 126;
+    Minor = 159;
     // SDK version patch value of this specification
     Patch = 0;
   }
@@ -5194,6 +5575,8 @@ message ClusterPairMode {
         Default = 0;
         // Paired for DisasterRecovery
         DisasterRecovery = 1;
+        // Paired for one-time migration
+        OneTimeMigration = 2;
     }
 }
 
@@ -5325,7 +5708,7 @@ message SdkClusterPairInspectRequest{
     string id = 1;
 }
 
-// Reponse to get a cluster pair
+// Response to get a cluster pair
 message ClusterPairGetResponse {
     // Info about the cluster pair
     ClusterPairInfo pair_info = 1;
@@ -5570,12 +5953,14 @@ message RestoreVolumeSpec {
   ProxySpec proxy_spec = 26;
   // Sharedv4ServiceSpec specifies a spec for configuring a service for a sharedv4 volume
   Sharedv4ServiceSpec sharedv4_service_spec = 27;
-  // Autofstrim is true if automatic fstrim is enabled for the volume
-  RestoreParamBoolType auto_fstrim = 28;
-  // IoThrottle specifies maximum io(iops/bandwidth) this volume is restricted to
-  IoThrottle io_throttle = 29;
   // Sharedv4Spec specifies common properties of sharedv4 and sharedv4 service volumes
-  Sharedv4Spec sharedv4_spec = 30;
+  Sharedv4Spec sharedv4_spec = 28;
+  // Autofstrim is true if automatic fstrim is enabled for the volume
+  RestoreParamBoolType auto_fstrim = 29;
+  // IoThrottle specifies maximum io(iops/bandwidth) this volume is restricted to
+  IoThrottle io_throttle = 30;
+  // Enable readahead for the volume
+  RestoreParamBoolType readahead = 31;
 }
 
 // Request message to get the volume catalog

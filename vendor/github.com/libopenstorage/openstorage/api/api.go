@@ -11,56 +11,61 @@ import (
 	"github.com/golang/protobuf/ptypes"
 	"github.com/libopenstorage/openstorage/pkg/auth"
 	"github.com/mohae/deepcopy"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 // Strings for VolumeSpec
 const (
-	Name                     = "name"
-	Token                    = "token"
-	TokenSecret              = "token_secret"
-	TokenSecretNamespace     = "token_secret_namespace"
-	SpecNodes                = "nodes"
-	SpecParent               = "parent"
-	SpecEphemeral            = "ephemeral"
-	SpecShared               = "shared"
-	SpecJournal              = "journal"
-	SpecSharedv4             = "sharedv4"
-	SpecCascaded             = "cascaded"
-	SpecSticky               = "sticky"
-	SpecSecure               = "secure"
-	SpecCompressed           = "compressed"
-	SpecSize                 = "size"
-	SpecScale                = "scale"
-	SpecFilesystem           = "fs"
-	SpecBlockSize            = "block_size"
-	SpecQueueDepth           = "queue_depth"
-	SpecHaLevel              = "repl"
-	SpecPriority             = "io_priority"
-	SpecSnapshotInterval     = "snap_interval"
-	SpecSnapshotSchedule     = "snap_schedule"
-	SpecAggregationLevel     = "aggregation_level"
-	SpecDedupe               = "dedupe"
-	SpecPassphrase           = "secret_key"
-	SpecAutoAggregationValue = "auto"
-	SpecGroup                = "group"
-	SpecGroupEnforce         = "fg"
-	SpecZones                = "zones"
-	SpecRacks                = "racks"
-	SpecRack                 = "rack"
-	SpecRegions              = "regions"
-	SpecLabels               = "labels"
-	SpecPriorityAlias        = "priority_io"
-	SpecIoProfile            = "io_profile"
-	SpecAsyncIo              = "async_io"
-	SpecEarlyAck             = "early_ack"
-	SpecExportProtocol       = "export"
-	SpecExportProtocolISCSI  = "iscsi"
-	SpecExportProtocolPXD    = "pxd"
-	SpecExportProtocolNFS    = "nfs"
-	SpecExportProtocolCustom = "custom"
-	SpecExportOptions        = "export_options"
-	SpecExportOptionsEmpty   = "empty_export_options"
-	SpecMountOptions         = "mount_options"
+	Name                            = "name"
+	Token                           = "token"
+	TokenSecret                     = "token_secret"
+	TokenSecretNamespace            = "token_secret_namespace"
+	SpecNodes                       = "nodes"
+	SpecParent                      = "parent"
+	SpecEphemeral                   = "ephemeral"
+	SpecShared                      = "shared"
+	SpecJournal                     = "journal"
+	SpecSharedv4                    = "sharedv4"
+	SpecCascaded                    = "cascaded"
+	SpecSticky                      = "sticky"
+	SpecSecure                      = "secure"
+	SpecCompressed                  = "compressed"
+	SpecSize                        = "size"
+	SpecScale                       = "scale"
+	SpecFilesystem                  = "fs"
+	SpecBlockSize                   = "block_size"
+	SpecQueueDepth                  = "queue_depth"
+	SpecHaLevel                     = "repl"
+	SpecPriority                    = "io_priority"
+	SpecSnapshotInterval            = "snap_interval"
+	SpecSnapshotSchedule            = "snap_schedule"
+	SpecAggregationLevel            = "aggregation_level"
+	SpecDedupe                      = "dedupe"
+	SpecPassphrase                  = "secret_key"
+	SpecAutoAggregationValue        = "auto"
+	SpecGroup                       = "group"
+	SpecGroupEnforce                = "fg"
+	SpecZones                       = "zones"
+	SpecRacks                       = "racks"
+	SpecRack                        = "rack"
+	SpecRegions                     = "regions"
+	SpecLabels                      = "labels"
+	SpecPriorityAlias               = "priority_io"
+	SpecIoProfile                   = "io_profile"
+	SpecNearSync                    = "nearsync"
+	SpecNearSyncReplicationStrategy = "nearsync_replication_strategy"
+	SpecAsyncIo                     = "async_io"
+	SpecEarlyAck                    = "early_ack"
+	SpecExportProtocol              = "export"
+	SpecExportProtocolISCSI         = "iscsi"
+	SpecExportProtocolPXD           = "pxd"
+	SpecExportProtocolNFS           = "nfs"
+	SpecExportProtocolCustom        = "custom"
+	SpecExportOptions               = "export_options"
+	SpecExportOptionsEmpty          = "empty_export_options"
+	SpecMountOptions                = "mount_options"
+	// spec key cannot change due to parity with existing PSO storageclasses
+	SpecFaCreateOptions      = "createoptions"
 	SpecCSIMountOptions      = "csi_mount_options"
 	SpecSharedv4MountOptions = "sharedv4_mount_options"
 	SpecProxyProtocolS3      = "s3"
@@ -97,6 +102,7 @@ const (
 	SpecSharedv4ExternalAccess              = "sharedv4_external_access"
 	SpecFastpath                            = "fastpath"
 	SpecAutoFstrim                          = "auto_fstrim"
+	SpecBackendVolName                      = "pure_vol_name"
 	SpecBackendType                         = "backend"
 	SpecBackendPureBlock                    = "pure_block"
 	SpecBackendPureFile                     = "pure_file"
@@ -105,6 +111,7 @@ const (
 	SpecIoThrottleWrIOPS                    = "io_throttle_wr_iops"
 	SpecIoThrottleRdBW                      = "io_throttle_rd_bw"
 	SpecIoThrottleWrBW                      = "io_throttle_wr_bw"
+	SpecReadahead                           = "readahead"
 )
 
 // OptionKey specifies a set of recognized query params.
@@ -164,8 +171,18 @@ const (
 	OptCredOwnership = "CredOwnership"
 	// OptCredProxy proxy key in params
 	OptCredProxy = "CredProxy"
+	// OptCredNFSServer is the server address for NFS access
+	OptCredNFSServer = "CredNFSServer"
+	// OptCredNFSSubPath is the sub-path for objects
+	OptCredNFSSubPath = "CredNFSSubPath"
+	// OptCredNFSMountOpts is the optional mount options
+	OptCredNFSMountOpts = "CredNFSMountOpts"
+	// OptCredNFSTimeout is the optional timeout value
+	OptCredNFSTimeoutSeconds = "CredNFSTimeout"
 	// OptCredIAMPolicy if "true", indicates IAM creds to be used
 	OptCredIAMPolicy = "CredIAMPolicy"
+	// OptRemoteCredUUID is the UUID of the remote cluster credential
+	OptRemoteCredUUID = "RemoteCredUUID"
 	// OptCloudBackupID is the backID in the cloud
 	OptCloudBackupID = "CloudBackID"
 	// OptCloudBackupIgnoreCreds ignores credentials for incr backups
@@ -257,6 +274,8 @@ type Node struct {
 	HWType HardwareType
 	// Determine if the node is secure with authentication and authorization
 	SecurityStatus StorageNode_SecurityStatus
+	// SchedulerTopology topology information of the node in scheduler context
+	SchedulerTopology *SchedulerTopology
 }
 
 // FluentDConfig describes ip and port of a fluentdhost.
@@ -339,7 +358,7 @@ type CloudBackupCreateRequest struct {
 	// Labels are list of key value pairs to tag the cloud backup. These labels
 	// are stored in the metadata associated with the backup.
 	Labels map[string]string
-	// FullBackupFrequency indicates number of incremental backup after whcih
+	// FullBackupFrequency indicates number of incremental backup after which
 	// a fullbackup must be created. This is to override the default value for
 	// manual/user triggerred backups and not applicable for scheduled backups.
 	// Value of 0 retains the default behavior.
@@ -347,6 +366,8 @@ type CloudBackupCreateRequest struct {
 	// DeleteLocal indicates if local snap must be deleted after the
 	// backup is complete
 	DeleteLocal bool
+	// Indicates if this is a nearsync migration
+	NearSyncMigrate bool
 }
 
 type CloudBackupCreateResponse struct {
@@ -494,6 +515,8 @@ type CloudBackupStatusRequest struct {
 	// ignored. This could be GroupCloudBackupId too, and in that case multiple
 	// statuses belonging to the groupCloudBackupID is returned.
 	ID string
+	// Indicates if this is for nearsync migration
+	NearSyncMigrate bool
 }
 
 type CloudBackupStatusRequestOld struct {
@@ -508,6 +531,10 @@ type CloudBackupOpType string
 const (
 	CloudBackupOp  = CloudBackupOpType("Backup")
 	CloudRestoreOp = CloudBackupOpType("Restore")
+
+	NearSyncCloneOp   = CloudBackupOpType("NsClone")
+	NearSyncReplAddOp = CloudBackupOpType("NsReplAdd")
+	NearSyncRestoreOp = CloudBackupOpType("NsRestore")
 )
 
 // Allowed storage classes s3
@@ -533,9 +560,22 @@ const (
 )
 
 const (
+	NearSyncStatusNotStarted = CloudBackupStatusType("NsNotStarted")
+	NearSyncStatusDone       = CloudBackupStatusType("NsDone")
+	NearSyncStatusPaused     = CloudBackupStatusType("NsPaused")
+	NearSyncStatusStopped    = CloudBackupStatusType("NsStopped")
+	NearSyncStatusActive     = CloudBackupStatusType("NsActive")
+	NearSyncStatusFailed     = CloudBackupStatusType("NsFailed")
+	NearSyncStatusInvalid    = CloudBackupStatusType("NsInvalid")
+)
+
+const (
 	CloudBackupRequestedStatePause  = "pause"
 	CloudBackupRequestedStateResume = "resume"
 	CloudBackupRequestedStateStop   = "stop"
+	NearSyncRequestedStatePause     = "ns_pause"
+	NearSyncRequestedStateResume    = "ns_resume"
+	NearSyncRequestedStateStop      = "ns_stop"
 )
 
 type CloudBackupStatus struct {
@@ -621,7 +661,7 @@ type CloudBackupScheduleInfo struct {
 	SrcVolumeID string
 	// CredentialUUID is the cloud credential used with this schedule
 	CredentialUUID string
-	// Schedule is the frequence of backup
+	// Schedule is the frequencies of backup
 	Schedule string
 	// MaxBackups are the maximum number of backups retained
 	// in cloud.Older backups are deleted
@@ -788,6 +828,12 @@ func (x VolumeStatus) SimpleString() string {
 func IoProfileSimpleValueOf(s string) (IoProfile, error) {
 	obj, err := simpleValueOf("io_profile", IoProfile_value, s)
 	return IoProfile(obj), err
+}
+
+// NearSyncReplicationStrategySimpleValueOf returns the string format of NearSyncReplicationStrategy
+func NearSyncReplicationStrategySimpleValueOf(s string) (NearSyncReplicationStrategy, error) {
+	obj, err := simpleValueOf("near_sync_strategy", NearSyncReplicationStrategy_value, s)
+	return NearSyncReplicationStrategy(obj), err
 }
 
 // SimpleString returns the string format of IoProfile
@@ -977,6 +1023,7 @@ func (s *Node) ToStorageNode() *StorageNode {
 		Hostname:          s.Hostname,
 		HWType:            s.HWType,
 		SecurityStatus:    s.SecurityStatus,
+		SchedulerTopology: s.SchedulerTopology,
 	}
 
 	node.Disks = make(map[string]*StorageResource)
@@ -1038,6 +1085,20 @@ func CloudBackupStatusTypeToSdkCloudBackupStatusType(
 		return SdkCloudBackupStatusType_SdkCloudBackupStatusTypeQueued
 	case CloudBackupStatusInvalid:
 		return SdkCloudBackupStatusType_SdkCloudBackupStatusTypeInvalid
+	case NearSyncStatusNotStarted:
+		return SdkCloudBackupStatusType_SdkNearSyncStatusTypeNotStarted
+	case NearSyncStatusDone:
+		return SdkCloudBackupStatusType_SdkNearSyncStatusTypeDone
+	case NearSyncStatusPaused:
+		return SdkCloudBackupStatusType_SdkNearSyncStatusTypePaused
+	case NearSyncStatusStopped:
+		return SdkCloudBackupStatusType_SdkNearSyncStatusTypeStopped
+	case NearSyncStatusActive:
+		return SdkCloudBackupStatusType_SdkNearSyncStatusTypeActive
+	case NearSyncStatusFailed:
+		return SdkCloudBackupStatusType_SdkNearSyncStatusTypeFailed
+	case NearSyncStatusInvalid:
+		return SdkCloudBackupStatusType_SdkNearSyncStatusTypeInvalid
 	default:
 		return SdkCloudBackupStatusType_SdkCloudBackupStatusTypeUnknown
 	}
@@ -1065,6 +1126,20 @@ func SdkCloudBackupStatusTypeToCloudBackupStatusString(
 		return string(CloudBackupStatusQueued)
 	case SdkCloudBackupStatusType_SdkCloudBackupStatusTypeInvalid:
 		return string(CloudBackupStatusInvalid)
+	case SdkCloudBackupStatusType_SdkNearSyncStatusTypeNotStarted:
+		return string(NearSyncStatusNotStarted)
+	case SdkCloudBackupStatusType_SdkNearSyncStatusTypeDone:
+		return string(NearSyncStatusDone)
+	case SdkCloudBackupStatusType_SdkNearSyncStatusTypePaused:
+		return string(NearSyncStatusPaused)
+	case SdkCloudBackupStatusType_SdkNearSyncStatusTypeStopped:
+		return string(NearSyncStatusStopped)
+	case SdkCloudBackupStatusType_SdkNearSyncStatusTypeActive:
+		return string(NearSyncStatusActive)
+	case SdkCloudBackupStatusType_SdkNearSyncStatusTypeFailed:
+		return string(NearSyncStatusFailed)
+	case SdkCloudBackupStatusType_SdkNearSyncStatusTypeInvalid:
+		return string(NearSyncStatusInvalid)
 	default:
 		return string(CloudBackupStatusFailed)
 	}
@@ -1108,6 +1183,12 @@ func CloudBackupOpTypeToSdkCloudBackupOpType(t CloudBackupOpType) SdkCloudBackup
 		return SdkCloudBackupOpType_SdkCloudBackupOpTypeBackupOp
 	case CloudRestoreOp:
 		return SdkCloudBackupOpType_SdkCloudBackupOpTypeRestoreOp
+	case NearSyncCloneOp: // for internal state transition
+		return SdkCloudBackupOpType_SdkNearSyncOpTypeCloneOp
+	case NearSyncReplAddOp: // for internal state transition
+		return SdkCloudBackupOpType_SdkNearSyncOpTypeReplAddOp
+	case NearSyncRestoreOp: // for internal state transition
+		return SdkCloudBackupOpType_SdkNearSyncOpTypeRestoreOp
 	default:
 		return SdkCloudBackupOpType_SdkCloudBackupOpTypeUnknown
 	}
@@ -1123,6 +1204,12 @@ func SdkCloudBackupOpTypeToCloudBackupOpType(t SdkCloudBackupOpType) CloudBackup
 		return CloudBackupOp
 	case SdkCloudBackupOpType_SdkCloudBackupOpTypeRestoreOp:
 		return CloudRestoreOp
+	case SdkCloudBackupOpType_SdkNearSyncOpTypeCloneOp: // for internal state transition
+		return NearSyncCloneOp
+	case SdkCloudBackupOpType_SdkNearSyncOpTypeReplAddOp: // for internal state transition
+		return NearSyncReplAddOp
+	case SdkCloudBackupOpType_SdkNearSyncOpTypeRestoreOp: // for internal state transition
+		return NearSyncRestoreOp
 	default:
 		return CloudBackupOpType("Unknown")
 	}
@@ -1284,6 +1371,12 @@ func CloudBackupRequestedStateToSdkCloudBackupRequestedState(
 		return SdkCloudBackupRequestedState_SdkCloudBackupRequestedStatePause
 	case CloudBackupRequestedStateResume:
 		return SdkCloudBackupRequestedState_SdkCloudBackupRequestedStateResume
+	case NearSyncRequestedStateStop:
+		return SdkCloudBackupRequestedState_SdkNearSyncRequestedStateStop
+	case NearSyncRequestedStatePause:
+		return SdkCloudBackupRequestedState_SdkNearSyncRequestedStatePause
+	case NearSyncRequestedStateResume:
+		return SdkCloudBackupRequestedState_SdkNearSyncRequestedStateResume
 	default:
 		return SdkCloudBackupRequestedState_SdkCloudBackupRequestedStateUnknown
 	}
@@ -1347,4 +1440,33 @@ func ParseProxyEndpoint(proxyEndpoint string) (ProxyProtocol, string) {
 func (s *ProxySpec) IsPureBackend() bool {
 	return s.ProxyProtocol == ProxyProtocol_PROXY_PROTOCOL_PURE_BLOCK ||
 		s.ProxyProtocol == ProxyProtocol_PROXY_PROTOCOL_PURE_FILE
+}
+
+func (s *ProxySpec) IsPureImport() bool {
+	if !s.IsPureBackend() {
+		return false
+	}
+
+	return (s.PureBlockSpec != nil && s.PureBlockSpec.FullVolName != "") || (s.PureFileSpec != nil && s.PureFileSpec.FullVolName != "")
+}
+
+func (s *ProxySpec) GetPureFullVolumeName() string {
+	if !s.IsPureImport() {
+		return ""
+	}
+
+	if s.PureBlockSpec != nil {
+		return s.PureBlockSpec.FullVolName
+	}
+
+	if s.PureFileSpec != nil {
+		return s.PureFileSpec.FullVolName
+	}
+
+	return ""
+}
+
+// GetAllEnumInfo returns an EnumInfo for every proto enum
+func GetAllEnumInfo() []protoimpl.EnumInfo {
+	return file_api_api_proto_enumTypes
 }

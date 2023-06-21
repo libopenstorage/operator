@@ -2281,7 +2281,7 @@ func TestUpdateDeprecatedClusterStatus(t *testing.T) {
 
 	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
@@ -2294,7 +2294,7 @@ func TestUpdateDeprecatedClusterStatus(t *testing.T) {
 		},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 	cluster.Status = corev1.StorageClusterStatus{
@@ -2311,7 +2311,7 @@ func TestUpdateDeprecatedClusterStatus(t *testing.T) {
 	// Offline status
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_OFFLINE
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 	cluster.Status = corev1.StorageClusterStatus{
@@ -2381,7 +2381,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
@@ -2393,7 +2393,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 		},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(2)
 	// Migration in progress
@@ -2432,7 +2432,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status Init
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_INIT
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2446,7 +2446,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status Offline
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_OFFLINE
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2460,7 +2460,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status Error
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_ERROR
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2474,7 +2474,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status Decommission
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_DECOMMISSION
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2488,7 +2488,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status Maintenance
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_MAINTENANCE
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2502,7 +2502,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status NeedsReboot
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_NEEDS_REBOOT
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2516,7 +2516,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status NotInQuorum
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_NOT_IN_QUORUM
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2530,7 +2530,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status NotInQuorumNoStorage
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2544,7 +2544,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status Ok
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_OK
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2558,7 +2558,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status StorageDown
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_STORAGE_DOWN
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2572,7 +2572,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status StorageDegraded
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_STORAGE_DEGRADED
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2586,7 +2586,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status StorageRebalance
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_STORAGE_REBALANCE
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2600,7 +2600,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status StorageDriveReplace
 	expectedClusterResp.Cluster.Status = api.Status_STATUS_STORAGE_DRIVE_REPLACE
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -2614,7 +2614,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	// Status Invalid
 	expectedClusterResp.Cluster.Status = api.Status(9999)
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(2)
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -2694,7 +2694,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Cluster: &api.StorageCluster{},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 
@@ -2729,7 +2729,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 		Nodes: []*api.StorageNode{expectedNodeOne, expectedNodeTwo},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2782,7 +2782,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status Init
 	expectedNodeOne.Status = api.Status_STATUS_INIT
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2798,7 +2798,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status Offline
 	expectedNodeOne.Status = api.Status_STATUS_OFFLINE
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2814,7 +2814,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status Error
 	expectedNodeOne.Status = api.Status_STATUS_ERROR
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2830,7 +2830,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status NotInQuorum
 	expectedNodeOne.Status = api.Status_STATUS_NOT_IN_QUORUM
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2846,7 +2846,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status NotInQuorumNoStorage
 	expectedNodeOne.Status = api.Status_STATUS_NOT_IN_QUORUM_NO_STORAGE
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2862,7 +2862,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status NeedsReboot
 	expectedNodeOne.Status = api.Status_STATUS_NEEDS_REBOOT
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2878,7 +2878,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status Decommission
 	expectedNodeOne.Status = api.Status_STATUS_DECOMMISSION
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2894,7 +2894,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status Maintenance
 	expectedNodeOne.Status = api.Status_STATUS_MAINTENANCE
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2910,7 +2910,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status Ok
 	expectedNodeOne.Status = api.Status_STATUS_OK
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2926,7 +2926,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status StorageDown
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DOWN
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2942,7 +2942,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status StorageDegraded
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DEGRADED
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2958,7 +2958,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status StorageRebalance
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_REBALANCE
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2974,7 +2974,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status StorageDriveReplace
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DRIVE_REPLACE
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -2990,7 +2990,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	// Status Invalid
 	expectedNodeOne.Status = api.Status(9999)
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -3064,7 +3064,7 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 		Cluster: &api.StorageCluster{},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 
@@ -3084,7 +3084,7 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 		Nodes: []*api.StorageNode{expectedNodeOne, expectedNodeTwo},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
@@ -3429,7 +3429,7 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 
 	// Error from InspectCurrent API
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(nil, fmt.Errorf("InspectCurrent error")).
 		Times(1)
 
@@ -3445,7 +3445,7 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 
 	// Nil response from InspectCurrent API
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		Times(1)
 
@@ -3470,7 +3470,7 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 		Cluster: nil,
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -3570,13 +3570,13 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		Cluster: &api.StorageCluster{},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 
 	// TestCase: Error from node Enumerate API
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nil, fmt.Errorf("node Enumerate error")).
 		Times(1)
 
@@ -3592,7 +3592,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 
 	// TestCase: Nil response from node Enumerate API
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		Times(1)
 
@@ -3617,7 +3617,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		Nodes: []*api.StorageNode{},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -3639,7 +3639,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	// TestCase: Nil list of nodes should create StorageNode objects only for matching pods
 	expectedNodeEnumerateResp.Nodes = nil
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -3663,7 +3663,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 		Nodes: []*api.StorageNode{},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -3681,7 +3681,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	// TestCase: Nil list of nodes should not create any StorageNode objects
 	expectedNodeEnumerateResp.Nodes = nil
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -3753,7 +3753,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 		},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 
@@ -3767,7 +3767,7 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 		Nodes: []*api.StorageNode{expectedNode},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -3791,11 +3791,11 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	expectedNode.Status = api.Status_STATUS_OK
 	expectedNode.DataIp = "2.2.2.2"
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(1)
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -3871,7 +3871,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 		Cluster: &api.StorageCluster{},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 
@@ -3888,7 +3888,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 		Nodes: []*api.StorageNode{expectedNode},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -3904,7 +3904,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	// TestCase: Node has another condition which is newer than when the node state
 	// was last transitioned
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -3932,7 +3932,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	// TestCase: NodeInit condition happened at the same time as NodeState, then
 	// phase should have use NodeState as that is the latest response from SDK
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -3958,7 +3958,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	// TestCase: Node state has transitioned
 	expectedNode.Status = api.Status_STATUS_DECOMMISSION
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -3978,7 +3978,7 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 		Nodes: []*api.StorageNode{},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
@@ -4150,7 +4150,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 		Cluster: &api.StorageCluster{},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 
@@ -4165,7 +4165,7 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
@@ -4361,7 +4361,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeForNonExistingNodes(t *testin
 		},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 
@@ -4378,7 +4378,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeForNonExistingNodes(t *testin
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -4400,7 +4400,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeForNonExistingNodes(t *testin
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -4473,7 +4473,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 		},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 
@@ -4491,7 +4491,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithAllNodes, nil).
 		Times(1)
 
@@ -4514,7 +4514,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithOneNode, nil).
 		Times(1)
 
@@ -4545,7 +4545,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	// TestCase: Node is not present in portworx sdk response, corresponding pod exists,
 	// but portworx is in Initializing state; should remain in Initializing state.
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithOneNode, nil).
 		Times(1)
 
@@ -4566,7 +4566,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	// TestCase: Node is not present in portworx sdk response, corresponding pod exists,
 	// but portworx is in Failed state; should remain in Failed state.
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithOneNode, nil).
 		Times(1)
 
@@ -4592,7 +4592,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	// TestCase: Node is not present in portworx sdk response, but pod labels do not match
 	// that of portworx pods
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithOneNode, nil).
 		Times(1)
 
@@ -4611,7 +4611,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	// TestCase: Node is not present in portworx sdk response, and pod does not
 	// have correct owner references
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithAllNodes, nil).
 		Times(1)
 	nodeOnePod.Labels = driver.GetSelectorLabels()
@@ -4627,7 +4627,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	require.Len(t, storageNodeList.Items, 2)
 
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithOneNode, nil).
 		Times(1)
 	nodeOnePod.OwnerReferences[0].UID = types.UID("dummy")
@@ -4645,7 +4645,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	// TestCase: Node is not present in portworx sdk response, and pod does not
 	// have correct node name
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithAllNodes, nil).
 		Times(1)
 	nodeOnePod.OwnerReferences = []metav1.OwnerReference{*ownerRef}
@@ -4661,7 +4661,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	require.Len(t, storageNodeList.Items, 2)
 
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithOneNode, nil).
 		Times(1)
 	nodeOnePod.Spec.NodeName = "dummy"
@@ -4681,7 +4681,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	err = k8sClient.Delete(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithAllNodes, nil).
 		Times(1)
 
@@ -4694,7 +4694,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	require.Len(t, storageNodeList.Items, 2)
 
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithOneNode, nil).
 		Times(1)
 	nodeOnePod.Namespace = "dummy"
@@ -4773,7 +4773,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 		},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 
@@ -4790,7 +4790,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -4815,7 +4815,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -4838,7 +4838,7 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 
@@ -4914,7 +4914,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 		},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 
@@ -4932,7 +4932,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithAllNodes, nil).
 		Times(1)
 
@@ -4958,7 +4958,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithNoSchedName, nil).
 		Times(1)
 
@@ -4989,7 +4989,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	// TestCase: Node is not present in portworx sdk response, corresponding pod exists,
 	// but portworx is in Initializing state; should remain in Initializing state.
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithNoSchedName, nil).
 		Times(1)
 
@@ -5010,7 +5010,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	// TestCase: Node is not present in portworx sdk response, corresponding pod exists,
 	// but portworx is in Failed state; should remain in Failed state.
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithNoSchedName, nil).
 		Times(1)
 
@@ -5036,7 +5036,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	// TestCase: Node is not present in portworx sdk response, but pod labels do not match
 	// that of portworx pods
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithNoSchedName, nil).
 		Times(1)
 
@@ -5055,7 +5055,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	// TestCase: Node is not present in portworx sdk response, and pod does not
 	// have correct owner references
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithAllNodes, nil).
 		Times(1)
 	nodeOnePod.Labels = driver.GetSelectorLabels()
@@ -5071,7 +5071,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	require.Len(t, storageNodeList.Items, 2)
 
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithNoSchedName, nil).
 		Times(1)
 	nodeOnePod.OwnerReferences[0].UID = types.UID("dummy")
@@ -5089,7 +5089,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	// TestCase: Node is not present in portworx sdk response, and pod does not
 	// have correct node name
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithAllNodes, nil).
 		Times(1)
 	nodeOnePod.OwnerReferences = []metav1.OwnerReference{*ownerRef}
@@ -5105,7 +5105,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	require.Len(t, storageNodeList.Items, 2)
 
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithNoSchedName, nil).
 		Times(1)
 	nodeOnePod.Spec.NodeName = "dummy"
@@ -5125,7 +5125,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	err = k8sClient.Delete(context.TODO(), nodeOnePod)
 	require.NoError(t, err)
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithAllNodes, nil).
 		Times(1)
 
@@ -5138,7 +5138,7 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	require.Len(t, storageNodeList.Items, 2)
 
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nodeEnumerateRespWithNoSchedName, nil).
 		Times(1)
 	nodeOnePod.Namespace = "dummy"
@@ -5428,7 +5428,7 @@ func TestDeleteClusterShouldResetSDKConnection(t *testing.T) {
 	}
 
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(&api.SdkNodeEnumerateWithFiltersResponse{}, nil).
 		AnyTimes()
 
@@ -7381,7 +7381,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 		Cluster: &api.StorageCluster{},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 	// Mock node enumerate response
@@ -7416,7 +7416,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	err = driver.k8sClient.Create(context.TODO(), cm)
 	require.NoError(t, err)
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(3)
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -7507,7 +7507,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 
 	for _, kvdbNodeStateTest := range kvdbNodeStateTests {
 		mockNodeServer.EXPECT().
-			EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+			EnumerateWithFilters(gomock.Any(), gomock.Any()).
 			Return(expectedNodeEnumerateResp, nil).
 			Times(1)
 
@@ -7621,7 +7621,7 @@ func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
 		Cluster: &api.StorageCluster{},
 	}
 	mockClusterServer.EXPECT().
-		InspectCurrent(gomock.Any(), &api.SdkClusterInspectCurrentRequest{}).
+		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		AnyTimes()
 	// Mock node enumerate response
@@ -7656,7 +7656,7 @@ func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
 	err = driver.k8sClient.Create(context.TODO(), cm)
 	require.NoError(t, err)
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		Times(1)
 	err = driver.UpdateStorageClusterStatus(cluster)
@@ -8068,7 +8068,7 @@ func TestGetStorageNodes(t *testing.T) {
 	// TestCase: SDK response returns zero nodes
 	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil)
 
 	nodes, err := driver.GetStorageNodes(cluster)
@@ -8085,7 +8085,7 @@ func TestGetStorageNodes(t *testing.T) {
 		},
 	}
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil)
 
 	nodes, err = driver.GetStorageNodes(cluster)
@@ -8094,7 +8094,7 @@ func TestGetStorageNodes(t *testing.T) {
 
 	// TestCase: SDK returns error
 	mockNodeServer.EXPECT().
-		EnumerateWithFilters(gomock.Any(), &api.SdkNodeEnumerateWithFiltersRequest{}).
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nil, fmt.Errorf("SDK error"))
 
 	nodes, err = driver.GetStorageNodes(cluster)

@@ -537,11 +537,11 @@ func (c *security) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
 	}
 
 	// Only updated when required
-	var desiredRole api.SdkRole
+	var desiredRole *api.SdkRole
 	if *cluster.Spec.Security.Auth.GuestAccess == corev1.GuestRoleEnabled {
-		desiredRole = GuestRoleEnabled
+		desiredRole = &GuestRoleEnabled
 	} else {
-		desiredRole = GuestRoleDisabled
+		desiredRole = &GuestRoleDisabled
 	}
 	currentRoleResp, err := roleClient.Inspect(ctx, &api.SdkRoleInspectRequest{
 		Name: SecuritySystemGuestRoleName,
@@ -553,7 +553,7 @@ func (c *security) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
 	currentRole := *currentRoleResp.GetRole()
 	if currentRole.String() != desiredRole.String() {
 		_, err = roleClient.Update(ctx, &api.SdkRoleUpdateRequest{
-			Role: &desiredRole,
+			Role: desiredRole,
 		})
 		if err != nil {
 			c.closeSdkConn()
