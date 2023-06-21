@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/auth"
@@ -285,12 +285,16 @@ func (c *security) createPrivateKeysSecret(
 	return nil
 }
 
+//lint:ignore SA1019 need backward compatibility
+//nolint:all
 func getTokenClaims(token string) (*jwt.StandardClaims, error) {
+	//lint:ignore SA1019 need backward compatibility
 	t, _, err := new(jwt.Parser).ParseUnverified(token, &jwt.StandardClaims{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse authorization token: %s", err.Error())
 	}
 
+	//lint:ignore SA1019 need backward compatibility
 	claims, ok := t.Claims.(*jwt.StandardClaims)
 	if !ok {
 		return nil, fmt.Errorf("failed to get token claims")
