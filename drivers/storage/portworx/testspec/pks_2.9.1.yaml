@@ -38,7 +38,7 @@ spec:
             - name: "PX_TEMPLATE_VERSION"
               value: "v4"
             - name: "PRE-EXEC"
-              value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
+              value: "rm -fr /var/lib/osd/driver"
           livenessProbe:
             periodSeconds: 30
             initialDelaySeconds: 840 # allow image pull in slow networks
@@ -75,8 +75,6 @@ spec:
             - name: varlibosd
               mountPath: /var/lib/osd
               mountPropagation: Bidirectional
-            - name: pxlogs
-              mountPath: /var/lib/osd/log
             - name: procmount
               mountPath: /host_proc
             - name: sysdmount
@@ -121,10 +119,7 @@ spec:
             path: /var/vcap/store/opt/pwx
         - name: varlibosd
           hostPath:
-            path: /var/lib/osd
-        - name: pxlogs
-          hostPath:
-            path: /var/vcap/store/lib/osd/log
+            path: /var/vcap/store/lib/osd
         - name: procmount
           hostPath:
             path: /proc
