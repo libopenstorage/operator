@@ -643,7 +643,12 @@ func (c *Controller) syncStorageCluster(
 		if cluster.Annotations == nil {
 			cluster.Annotations = make(map[string]string)
 		}
-		cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+		// Only set to false if its not set or empty
+		if _, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
+			cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+		} else if cluster.Annotations[pxutil.AnnotationPreflightCheck] == "" {
+			cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+		}
 	}
 
 	// Ensure Stork is deployed with right configuration
