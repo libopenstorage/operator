@@ -16,7 +16,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/libopenstorage/cloudops"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -51,11 +50,10 @@ type PreFlightPortworx interface {
 }
 
 type preFlightPortworx struct {
-	cluster     *corev1.StorageCluster
-	k8sClient   client.Client
-	podSpec     v1.PodSpec
-	hardFail    bool
-	addProvider string
+	cluster   *corev1.StorageCluster
+	k8sClient client.Client
+	podSpec   v1.PodSpec
+	hardFail  bool
 }
 
 // Existing dmThin strings
@@ -189,15 +187,12 @@ func (u *preFlightPortworx) RunPreFlight() error {
 	   	u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(miscArgs)
 	*/
 
-	provider := ""
 	checkArgs := func(args []string) {
 		for i, arg := range args {
 			if arg == "-T" {
 				if dmthinRegex.Match([]byte(args[i+1])) {
 					u.hardFail = true
 				}
-			} else if arg == "-cloud_provider" {
-				provider = args[i+1]
 			}
 		}
 	}
@@ -211,22 +206,6 @@ func (u *preFlightPortworx) RunPreFlight() error {
 			preflightDS.Spec.Template.Spec.Containers[0].Args...)
 	} else {
 		logrus.Infof("runPreflight: running pre-flight with existing PX-StoreV2 param, hard fail check enabled")
-	}
-
-	if provider == "" {
-		// No cloud provider specified. Check for Vsphere envs and add -cloud_provider
-		for _, env := range u.podSpec.Containers[0].Env {
-			if env.Name == "VSPHERE_VCENTER" && env.Value != "" {
-				u.addProvider = cloudops.Vsphere
-
-				logrus.Infof("*** runPreflight: running pre-flight with -cloud_provider %s added ***", u.addProvider)
-
-				// cloud_provider param does not exist add it
-				preflightDS.Spec.Template.Spec.Containers[0].Args = append(
-					[]string{"-cloud_provider", u.addProvider},
-					preflightDS.Spec.Template.Spec.Containers[0].Args...)
-			}
-		}
 	}
 
 	// Add pre-flight param
@@ -300,12 +279,6 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling PX-StoreV2")
 		} else {
 			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "PX-StoreV2 currently enabled")
-		}
-
-		if u.addProvider != "" {
-			// cloud_provider param does not exist add it
-			u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(
-				u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -cloud_provider " + u.addProvider)
 		}
 
 		// Add 64G metadata drive.

@@ -88,6 +88,8 @@ const (
 	AnnotationIsEKS = pxAnnotationPrefix + "/is-eks"
 	// AnnotationIsIKS annotation indicating whether it is an IKS cluster
 	AnnotationIsIKS = pxAnnotationPrefix + "/is-iks"
+	// AnnotationIsVSPHERE annotation indicating whether it is a VSPHERE cluster
+	AnnotationIsVSPHERE = pxAnnotationPrefix + "/is-vsphere"
 	// AnnotationIsOpenshift annotation indicating whether it is an OpenShift cluster
 	AnnotationIsOpenshift = pxAnnotationPrefix + "/is-openshift"
 	// AnnotationPVCController annotation indicating whether to deploy a PVC controller
@@ -337,6 +339,22 @@ func IsEKS(cluster *corev1.StorageCluster) bool {
 func IsIKS(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsIKS])
 	return err == nil && enabled
+}
+
+// IsVSPHERE returns true if the annotation has an VSPHERE annotation and is true value or
+// if provider is not set and the VSPHERE_VCENTER value is set
+func IsVSPHERE(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsVSPHERE])
+	if err == nil && enabled {
+		return true
+	}
+
+	for _, env := range cluster.Spec.Env {
+		if env.Name == "VSPHERE_VCENTER" && env.Value != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // IsOpenshift returns true if the annotation has an OpenShift annotation and is true value
