@@ -268,8 +268,11 @@ func (c *csi) createClusterRole(
 			},
 			{
 				APIGroups: []string{"storage.k8s.io"},
-				Resources: []string{"volumeattachments"},
-				Verbs:     []string{"get", "list", "watch", "update", "patch"},
+				Resources: []string{
+					"volumeattachments",
+					"volumeattachments/status",
+				},
+				Verbs: []string{"get", "list", "watch", "update", "patch"},
 			},
 			{
 				APIGroups: []string{"storage.k8s.io"},
