@@ -191,7 +191,6 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 	}
 
 	cv.IncludeAttacher = true
-	cv.IncludeCsiDriverInfo = true
 
 	if g.pxVersion.GreaterThanOrEqual(pxVer2_5) && g.kubeVersion.GreaterThanOrEqual(k8sVer1_16) {
 		cv.IncludeEphemeralSupport = true
