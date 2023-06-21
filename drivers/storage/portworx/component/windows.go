@@ -3,6 +3,9 @@ package component
 import (
 	"context"
 	commonerrors "errors"
+	"fmt"
+	"strings"
+
 	version "github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -10,7 +13,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
-	core "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,12 +21,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 )
 
 const (
 	WindowsComponentName     = "Windows Node"
-	WindowsDaemonSetName     = "csi-pwx-node-win"
+	WindowsDaemonSetName     = "px-csi-node-win"
 	WindowsStorageClass      = "px-csi-win"
 	WindowsDaemonSetFileName = "win.yaml"
 )
@@ -56,7 +58,13 @@ func (w *windows) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
 }
 
 func (w *windows) IsEnabled(cluster *corev1.StorageCluster) bool {
-	w.isWindowsNode = true
+	nodeList := &v1.NodeList{}
+	err := w.client.List(context.TODO(), nodeList, &client.ListOptions{})
+	if err != nil {
+		return false
+	}
+
+	w.isWindowsNode = isWindowsNode(nodeList)
 	return w.isWindowsNode
 }
 
@@ -140,7 +148,7 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 
 func (w *windows) createStorageClass() error {
 	allowVolumeExpansion := true
-	reclaimPolicy := core.PersistentVolumeReclaimDelete
+	reclaimPolicy := v1.PersistentVolumeReclaimDelete
 	bindingMode := storagev1.VolumeBindingImmediate
 
 	return k8s.CreateStorageClass(
@@ -160,4 +168,19 @@ func (w *windows) createStorageClass() error {
 			VolumeBindingMode:    &bindingMode,
 		},
 	)
+}
+
+func isWindowsNode(nodeList *v1.NodeList) bool {
+	// Check if the node has the label indicating it is running Windows
+	for _, node := range nodeList.Items {
+		nodeName := node.Name
+		_, exists := node.Labels["kubernetes.io/os"]
+		if exists && node.Labels["kubernetes.io/os"] == "windows" {
+			fmt.Printf("Node %s is running Windows\n", nodeName)
+			return true
+		} else {
+			fmt.Printf("Node %s is not running Windows\n", nodeName)
+		}
+	}
+	return false
 }
