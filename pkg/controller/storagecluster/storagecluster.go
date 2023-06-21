@@ -631,7 +631,7 @@ func (c *Controller) syncStorageCluster(
 	}
 
 	pxVer30, _ := version.NewVersion("3.0")
-	if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer30) { // Preflight should only run on PX version 3.0.0 and above
+	if pxutil.IsFreshInstall(cluster) && pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer30) { // Preflight should only run on PX version 3.0.0 and above
 		// If preflight failed, or previous check failed, reconcile would stop here until issues got resolved
 		if err := c.runPreflightCheck(cluster); err != nil {
 			if updateErr := c.updateStorageClusterState(cluster, corev1.ClusterStateDegraded); updateErr != nil {
@@ -639,6 +639,8 @@ func (c *Controller) syncStorageCluster(
 			}
 			return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
 		}
+	} else {
+		cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 	}
 
 	// Ensure Stork is deployed with right configuration
