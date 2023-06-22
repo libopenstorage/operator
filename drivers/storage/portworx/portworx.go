@@ -49,6 +49,10 @@ const (
 	defaultEksCloudStorageDeviceSize  = "150"
 )
 
+var (
+	ErrNodeListEmpty = stderr.New("no nodes were available for px installation")
+)
+
 type portworx struct {
 	k8sClient          client.Client
 	k8sVersion         *version.Version
@@ -344,6 +348,9 @@ func (p *portworx) getDefaultMaxStorageNodesPerZone(
 		return 0, err
 	}
 	numZones := len(zoneMap)
+	if numZones <= 0 {
+		return 0, ErrNodeListEmpty
+	}
 	storageNodes = uint64(len(nodeList.Items) / numZones)
 	return uint32(storageNodes), nil
 }
