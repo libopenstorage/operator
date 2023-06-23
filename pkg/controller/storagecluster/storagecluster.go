@@ -641,10 +641,18 @@ func (c *Controller) syncStorageCluster(
 	}
 
 	pxVer30, _ := version.NewVersion("3.0")
-	if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer30) { // Preflight should only run on PX version 3.0.0 and above
+	// Preflight should only run freshInstall and if the PX version is 3.0.0 and above
+	if pxutil.IsFreshInstall(cluster) && pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer30) {
 		// If preflight failed, or previous check failed, reconcile would stop here until issues got resolved
 		if err := c.runPreflightCheck(cluster); err != nil {
 			return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
+		}
+	} else {
+		if _, exists := cluster.Annotations[pxutil.AnnotationPreflightCheck]; !exists {
+			if cluster.Annotations == nil {
+				cluster.Annotations = make(map[string]string)
+			}
+			cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 		}
 	}
 
