@@ -383,6 +383,16 @@ func TestGetKVDBPodSpec(t *testing.T) {
 	actual, err = driver.GetKVDBPodSpec(cluster, nodeName)
 	require.NoError(t, err)
 	assertPodSpecEqual(t, expected, &actual)
+
+	// retry w/ a custom image
+	overridden := "foobar.acme.org/some-repo/pauzaner:1.2.3"
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		Pause: overridden,
+	}
+	expected.Containers[0].Image = overridden
+	actual, err = driver.GetKVDBPodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	assertPodSpecEqual(t, expected, &actual)
 }
 
 func TestPodSpecWithCustomServiceAccount(t *testing.T) {

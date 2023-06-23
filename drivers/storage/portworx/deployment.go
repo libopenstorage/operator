@@ -506,7 +506,11 @@ func (t *template) portworxContainer(cluster *corev1.StorageCluster) v1.Containe
 }
 
 func (t *template) kvdbContainer() v1.Container {
-	kvdbProxyImage := util.GetImageURN(t.cluster, pxutil.ImageNamePause)
+	imageName := pxutil.ImageNamePause
+	if t.cluster.Status.DesiredImages != nil && t.cluster.Status.DesiredImages.Pause != "" {
+		imageName = t.cluster.Status.DesiredImages.Pause
+	}
+	kvdbProxyImage := util.GetImageURN(t.cluster, imageName)
 	kvdbTargetPort := 9019
 	if t.startPort != pxutil.DefaultStartPort {
 		kvdbTargetPort = t.startPort + 15
