@@ -27,6 +27,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	opVersion "github.com/libopenstorage/operator/pkg/version"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 )
 
@@ -1265,6 +1266,11 @@ func (t *template) getEnvList() []v1.EnvVar {
 				},
 			}
 		}
+	}
+
+	envMap[pxutil.EnvKeyOperatorVersion] = &v1.EnvVar{
+		Name:  pxutil.EnvKeyOperatorVersion,
+		Value: opVersion.Version,
 	}
 
 	envList := make([]v1.EnvVar, 0)

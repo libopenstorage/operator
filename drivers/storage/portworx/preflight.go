@@ -252,24 +252,43 @@ func (u *preFlightPortworx) RunPreFlight() error {
 func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorder, storageNodes []*corev1.StorageNode) error {
 	logrus.Infof("pre-flight: process pre-flight results...")
 
-	passed := true
-	for _, node := range storageNodes {
-		logrus.Infof("storageNode[%s]: %#v ", node.Name, node.Status.Checks)
-		if len(node.Status.Checks) > 1 {
-			for _, check := range node.Status.Checks {
-				if check.Type != "status" {
-					msg := fmt.Sprintf("%s pre-flight check ", check.Type)
-					if check.Success {
-						msg = msg + "passed: " + check.Reason
-						k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, msg)
+	passed := false
+	if len(storageNodes) > 0 {
+		passed = true
+		for _, node := range storageNodes {
+			// Process storageNode checks list for failures. Also make sure the "status" check entry
+			// exists, this indicates all the checks were submitted from the pre-flight pod.
+			logrus.Infof("storageNode[%s]: %#v ", node.Name, node.Status.Checks)
+			if len(node.Status.Checks) > 0 {
+				statusExists := false
+				for _, check := range node.Status.Checks {
+					if check.Type != "status" {
+						msg := fmt.Sprintf("%s pre-flight check ", check.Type)
+						if check.Success {
+							msg = msg + "passed: " + check.Reason
+							k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, msg)
+						} else {
+							msg = msg + "failed: " + check.Reason
+							k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, msg)
+							passed = false // pre-flight status check failed, keep going for logging
+						}
 					} else {
-						msg = msg + "failed: " + check.Reason
-						k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, msg)
+						statusExists = true
 					}
 				}
+
+				if !statusExists {
+					logrus.Errorf("storageNodes checks list status entry not found, pre-flight did not complete")
+					passed = false
+				}
+
+			} else {
+				logrus.Errorf("storageNodes checks list empty, pre-flight results not returned")
+				passed = false
 			}
-			passed = false
 		}
+	} else {
+		logrus.Errorf("pre-flight: storageNodes list empty, unable to process pre-flight results")
 	}
 
 	if passed {
