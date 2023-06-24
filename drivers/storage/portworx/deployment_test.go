@@ -778,6 +778,39 @@ func TestPodSpecWithKvdbSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
 
+func TestPodSpecForVsphere(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image:        "portworx/oci-monitor:3.0.0",
+			CloudStorage: &corev1.CloudStorageSpec{},
+		},
+	}
+	env := make([]v1.EnvVar, 1)
+	env[0].Name = "VSPHERE_VCENTER"
+	env[0].Value = "some.vcenter.server.com"
+	cluster.Spec.Env = env
+
+	driver := portworx{}
+
+	expectedArgs := []string{
+		"-cloud_provider", "vsphere",
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+	}
+
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+}
+
 func TestPodSpecWithNetworkSpec(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"
