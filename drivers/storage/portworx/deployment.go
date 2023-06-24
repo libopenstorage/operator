@@ -839,6 +839,13 @@ func (t *template) getCloudProvider() string {
 		return cloudops.Vsphere
 	}
 
+	// VSPHERE_VCENTER env variable's existence is an indication that it's vSphere provider
+	for _, envVar := range t.cluster.Spec.Env {
+		if envVar.Name == "VSPHERE_VCENTER" {
+			return cloudops.Vsphere
+		}
+	}
+
 	return ""
 }
 
