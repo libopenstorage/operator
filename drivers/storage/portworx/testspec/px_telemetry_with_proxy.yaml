@@ -52,6 +52,8 @@ spec:
              "-secret_type", "k8s",
              "-x", "kubernetes"]
           env:
+            - name: "OPERATOR_VERSION"
+              value: ""
             - name: "PX_TEMPLATE_VERSION"
               value: "v4"
             - name: "PX_HTTP_PROXY"

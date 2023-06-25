@@ -27,6 +27,8 @@ spec:
              "-r", "10001",
              "-x", "kubernetes"]
           env:
+            - name: "OPERATOR_VERSION"
+              value: ""
             - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"
               value: "1500"
             - name: "PX_TEMPLATE_VERSION"

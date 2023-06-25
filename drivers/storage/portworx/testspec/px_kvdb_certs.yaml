@@ -30,6 +30,8 @@ spec:
             "-userpwd", "kvdb-username:kvdb-password",
             "-x", "kubernetes"]
           env:
+            - name: "OPERATOR_VERSION"
+              value: ""
             - name: "PX_NAMESPACE"
               value: "kube-test"
             - name: "PX_SECRETS_NAMESPACE"

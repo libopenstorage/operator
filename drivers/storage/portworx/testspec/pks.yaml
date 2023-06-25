@@ -37,6 +37,8 @@ spec:
             ["-c", "px-cluster", "-a", "-secret_type", "k8s", "-b",
              "-x", "kubernetes"]
           env:
+            - name: "OPERATOR_VERSION"
+              value: ""
             - name: "PX_NAMESPACE"
               value: "kube-system"
             - name: "PX_SECRETS_NAMESPACE"

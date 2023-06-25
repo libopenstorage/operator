@@ -646,6 +646,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 	setAutopilotDefaults(toUpdate)
 	setTLSDefaults(toUpdate)
+	pxutil.SetOperatorVersionEnv(toUpdate)
 	return nil
 }
 

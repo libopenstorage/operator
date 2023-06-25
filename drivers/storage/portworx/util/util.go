@@ -28,6 +28,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	opVersion "github.com/libopenstorage/operator/pkg/version"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -255,6 +256,9 @@ const (
 
 	// TelemetryCertName is name of the telemetry cert.
 	TelemetryCertName = "pure-telemetry-certs"
+
+	// EnvKeyOperatorVersion is name operator env variable
+	EnvKeyOperatorVersion = "OPERATOR_VERSION"
 )
 
 var (
@@ -1319,4 +1323,22 @@ func SetTelemetryCertOwnerRef(
 	secret.OwnerReferences = references
 
 	return k8sClient.Update(context.TODO(), secret)
+}
+
+func SetOperatorVersionEnv(cluster *corev1.StorageCluster) {
+	// Add Operator version if does not exist
+	versionExist := false
+	for _, env := range cluster.Spec.Env {
+		if env.Name == EnvKeyOperatorVersion && len(env.Value) > 0 {
+			versionExist = true
+		}
+	}
+
+	if !versionExist {
+		cluster.Spec.Env = append(cluster.Spec.Env, v1.EnvVar{
+			Name:  EnvKeyOperatorVersion,
+			Value: opVersion.Version,
+		})
+	}
+
 }

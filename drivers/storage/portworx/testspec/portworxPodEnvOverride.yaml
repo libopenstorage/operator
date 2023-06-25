@@ -24,6 +24,8 @@ spec:
             ["-c", "px-cluster",
              "-x", "kubernetes"]
           env:
+            - name: "OPERATOR_VERSION"
+              value: ""
             - name: "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"
               value: "300"
             - name: "PX_TEMPLATE_VERSION"

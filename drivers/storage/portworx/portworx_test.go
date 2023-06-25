@@ -737,7 +737,9 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 	// No defaults should be set
 	err := driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Equal(t, corev1.StorageClusterSpec{}, cluster.Spec)
+	startingCluster := &corev1.StorageCluster{}
+	pxutil.SetOperatorVersionEnv(startingCluster)
+	require.Equal(t, startingCluster.Spec, cluster.Spec)
 
 	// Use default component versions if components are enabled
 	cluster.Spec.Stork = &corev1.StorkSpec{
