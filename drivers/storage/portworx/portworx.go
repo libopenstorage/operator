@@ -32,7 +32,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	opVersion "github.com/libopenstorage/operator/pkg/version"
 )
 
 const (
@@ -396,23 +395,6 @@ func (p *portworx) getCurrentMaxStorageNodesPerZone(
 	return 0, fmt.Errorf("storage disabled")
 }
 
-func setOperatorVersionEnv(toUpdate *corev1.StorageCluster) {
-	// Add Operator version if does not exist
-	versionExist := false
-	for _, env := range toUpdate.Spec.Env {
-		if env.Name == pxutil.EnvKeyOperatorVersion && len(env.Value) > 0 {
-			versionExist = true
-		}
-	}
-
-	if !versionExist {
-		toUpdate.Spec.Env = append(toUpdate.Spec.Env, v1.EnvVar{
-			Name:  pxutil.EnvKeyOperatorVersion,
-			Value: opVersion.Version,
-		})
-	}
-
-}
 func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) error {
 	if toUpdate.Annotations == nil {
 		toUpdate.Annotations = make(map[string]string)
@@ -664,7 +646,6 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 	setAutopilotDefaults(toUpdate)
 	setTLSDefaults(toUpdate)
-	setOperatorVersionEnv(toUpdate)
 
 	return nil
 }

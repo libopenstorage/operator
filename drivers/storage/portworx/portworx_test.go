@@ -94,13 +94,6 @@ func TestValidate(t *testing.T) {
 		},
 	}
 
-	storageNode := &corev1.StorageNode{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "node-1",
-			Namespace: cluster.Namespace,
-		},
-	}
-
 	labels := map[string]string{
 		"name": pxPreFlightDaemonSetName,
 	}
@@ -121,7 +114,26 @@ func TestValidate(t *testing.T) {
 		},
 	}
 
-	k8sClient := testutil.FakeK8sClient(preflightDS)
+	checks := []corev1.CheckResult{
+		corev1.CheckResult{
+			Type:    "status",
+			Reason:  "oci-mon: pre-flight completed",
+			Success: true,
+		},
+	}
+
+	status := corev1.NodeStatus{
+		Checks: checks,
+	}
+
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: status,
+	}
 
 	preFlightPod1 := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -138,6 +150,9 @@ func TestValidate(t *testing.T) {
 			},
 		},
 	}
+
+	k8sClient := testutil.FakeK8sClient(preflightDS)
+
 	err := k8sClient.Create(context.TODO(), preFlightPod1)
 	require.NoError(t, err)
 
@@ -163,6 +178,198 @@ func TestValidate(t *testing.T) {
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling PX-StoreV2"))
 	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaData)
+}
+
+func TestValidateCheckFailure(t *testing.T) {
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	labels := map[string]string{
+		"name": pxPreFlightDaemonSetName,
+	}
+
+	clusterRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	preflightDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pxPreFlightDaemonSetName,
+			Namespace:       cluster.Namespace,
+			Labels:          labels,
+			UID:             types.UID("preflight-ds-uid"),
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
+	}
+
+	checks := []corev1.CheckResult{
+		corev1.CheckResult{
+			Type:    "usage",
+			Reason:  "px-runc: PX-StoreV2 unsupported storage disk spec: 'consume unused' (-A/-a) options not valid with PX-StoreV2",
+			Success: false,
+		},
+		corev1.CheckResult{
+			Type:    "status",
+			Reason:  "oci-mon: pre-flight completed",
+			Success: true,
+		},
+	}
+
+	status := corev1.NodeStatus{
+		Checks: checks,
+	}
+
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: status,
+	}
+
+	preFlightPod1 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "preflight-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: preflightDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{
+				{
+					Name:  "portworx",
+					Ready: true,
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(preflightDS)
+
+	err := k8sClient.Create(context.TODO(), preFlightPod1)
+	require.NoError(t, err)
+
+	preflightDS.Status.DesiredNumberScheduled = int32(1)
+	err = k8sClient.Status().Update(context.TODO(), preflightDS)
+	require.NoError(t, err)
+
+	recorder := record.NewFakeRecorder(100)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = k8sClient.Create(context.TODO(), storageNode)
+	require.NoError(t, err)
+
+	err = driver.Validate(cluster)
+	require.NoError(t, err)
+	require.NotEmpty(t, recorder.Events)
+	require.Len(t, recorder.Events, 3)
+	<-recorder.Events // Pop first event which is Default telemetry enabled event
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedPreFlight, "usage pre-flight check failed"))
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Not enabling PX-StoreV2"))
+}
+
+func TestValidateMissingRequiredCheck(t *testing.T) {
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	labels := map[string]string{
+		"name": pxPreFlightDaemonSetName,
+	}
+
+	clusterRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	preflightDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pxPreFlightDaemonSetName,
+			Namespace:       cluster.Namespace,
+			Labels:          labels,
+			UID:             types.UID("preflight-ds-uid"),
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
+	}
+
+	checks := []corev1.CheckResult{
+		corev1.CheckResult{},
+	}
+
+	status := corev1.NodeStatus{
+		Checks: checks,
+	}
+
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: status,
+	}
+
+	preFlightPod1 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "preflight-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: preflightDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{
+				{
+					Name:  "portworx",
+					Ready: true,
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(preflightDS)
+
+	err := k8sClient.Create(context.TODO(), preFlightPod1)
+	require.NoError(t, err)
+
+	preflightDS.Status.DesiredNumberScheduled = int32(1)
+	err = k8sClient.Status().Update(context.TODO(), preflightDS)
+	require.NoError(t, err)
+
+	recorder := record.NewFakeRecorder(100)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = k8sClient.Create(context.TODO(), storageNode)
+	require.NoError(t, err)
+
+	err = driver.Validate(cluster)
+	require.NoError(t, err)
+	require.NotEmpty(t, recorder.Events)
+	for i := 0; i < len(recorder.Events); i++ { // Get last record
+		<-recorder.Events
+	}
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Not enabling PX-StoreV2"))
 }
 
 func TestGetSelectorLabels(t *testing.T) {

@@ -255,9 +255,6 @@ const (
 
 	// TelemetryCertName is name of the telemetry cert.
 	TelemetryCertName = "pure-telemetry-certs"
-
-	// EnvKeyOperatorVersion is name operator env variable
-	EnvKeyOperatorVersion = "OPERATOR_VERSION"
 )
 
 var (
