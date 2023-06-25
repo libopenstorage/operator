@@ -115,7 +115,7 @@ func TestValidate(t *testing.T) {
 	}
 
 	checks := []corev1.CheckResult{
-		corev1.CheckResult{
+		{
 			Type:    "status",
 			Reason:  "oci-mon: pre-flight completed",
 			Success: true,
@@ -210,12 +210,12 @@ func TestValidateCheckFailure(t *testing.T) {
 	}
 
 	checks := []corev1.CheckResult{
-		corev1.CheckResult{
+		{
 			Type:    "usage",
 			Reason:  "px-runc: PX-StoreV2 unsupported storage disk spec: 'consume unused' (-A/-a) options not valid with PX-StoreV2",
 			Success: false,
 		},
-		corev1.CheckResult{
+		{
 			Type:    "status",
 			Reason:  "oci-mon: pre-flight completed",
 			Success: true,
@@ -311,7 +311,7 @@ func TestValidateMissingRequiredCheck(t *testing.T) {
 	}
 
 	checks := []corev1.CheckResult{
-		corev1.CheckResult{},
+		{},
 	}
 
 	status := corev1.NodeStatus{
