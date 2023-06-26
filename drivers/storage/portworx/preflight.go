@@ -57,7 +57,7 @@ type preFlightPortworx struct {
 }
 
 // Existing dmThin strings
-var dmthinRegex = regexp.MustCompile("(?i)(dmthin|PX-StoreV2|px-store-v2)")
+var dmthinRegex = regexp.MustCompile("(?i)(PX-StoreV2|px-store-v2)")
 
 // NewPreFlighter returns an implementation of PreFlightPortworx interface
 func NewPreFlighter(
@@ -180,9 +180,9 @@ func (u *preFlightPortworx) RunPreFlight() error {
 	If Checks in any of the nodes
 		fail: Operator sets backend to btrfs
 			// Log, raise event and do nothing. Default already at btrfs
-		all success: Operator sets backend to dmthin
-			// Append dmthin backend use MiscArgs()
-			toUpdate.Annotations[pxutil.AnnotationMiscArgs] = " -T dmthin"
+		all success: Operator sets backend to PX-storeV2
+			// Append PX-storeV2 backend use MiscArgs()
+			toUpdate.Annotations[pxutil.AnnotationMiscArgs] = " -T PX-storeV2"
 
 	   	u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(miscArgs)
 	*/
@@ -201,8 +201,8 @@ func (u *preFlightPortworx) RunPreFlight() error {
 	checkArgs(u.podSpec.Containers[0].Args)
 
 	if !u.hardFail {
-		// If Dmthin param does not exist add it
-		preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"-T", "dmthin"},
+		// If PX-StoreV2 param does not exist add it
+		preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"-T", "PX-storeV2"},
 			preflightDS.Spec.Template.Spec.Containers[0].Args...)
 	} else {
 		logrus.Infof("runPreflight: running pre-flight with existing PX-StoreV2 param, hard fail check enabled")
@@ -274,7 +274,9 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 
 	if passed {
 		if !u.hardFail { // Enable DMthin via misc args if not enabled already
-			u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T dmthin")
+			u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T px-storev2")
+			// Remove depricate '-T dmthin'
+			u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.ReplaceAll(u.cluster.Annotations[pxutil.AnnotationMiscArgs], "-T dmthin", "")
 			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling PX-StoreV2")
 		} else {
 			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "PX-StoreV2 currently enabled")
