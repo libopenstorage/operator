@@ -4,7 +4,6 @@ import (
 	"context"
 	stderr "errors"
 	"fmt"
-	"github.com/libopenstorage/cloudops"
 	"math"
 	"strconv"
 	"strings"
@@ -396,45 +395,10 @@ func (p *portworx) getCurrentMaxStorageNodesPerZone(
 	return 0, fmt.Errorf("storage disabled")
 }
 
-func isVsphere(cluster *corev1.StorageCluster) bool {
-	for _, env := range cluster.Spec.Env {
-		if env.Name == "VSPHERE_VCENTER" && len(env.Value) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func getCloudProvider(cluster *corev1.StorageCluster) string {
-	if isVsphere(cluster) {
-		return cloudops.Vsphere
-	}
-	// TODO: implement conditions for other providers
-	return ""
-}
-
 func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) error {
 	if toUpdate.Annotations == nil {
 		toUpdate.Annotations = make(map[string]string)
 	}
-	if toUpdate.Spec.CloudStorage != nil {
-		providerName := toUpdate.Spec.CloudStorage.Provider
-
-		// if provider is not set, let's check if it's vSphere
-		if providerName == nil || len(*providerName) == 0 {
-			provider := getCloudProvider(toUpdate)
-			if len(provider) > 0 {
-				providerName = &provider
-			}
-		}
-
-		if providerName != nil &&
-			preflight.Instance().ProviderName() != *providerName {
-			preflight.Instance().SetProvider(*providerName)
-		}
-		toUpdate.Spec.CloudStorage.Provider = providerName
-	}
-
 	// Initialize the preflight check annotation
 	if preflight.RequiresCheck() {
 		if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {

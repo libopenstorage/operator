@@ -1327,6 +1327,24 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		logrus.Debugf("Failed to update driver: %v", err)
 	}
 
+	if toUpdate.Spec.CloudStorage != nil {
+		providerName := toUpdate.Spec.CloudStorage.Provider
+
+		// if provider is not set, let's check if it's vSphere
+		if providerName == nil || len(*providerName) == 0 {
+			provider := pxutil.GetCloudProvider(toUpdate)
+			if len(provider) > 0 {
+				providerName = &provider
+			}
+		}
+
+		if providerName != nil &&
+			preflight.Instance().ProviderName() != *providerName {
+			preflight.Instance().SetProvider(*providerName)
+		}
+		toUpdate.Spec.CloudStorage.Provider = providerName
+	}
+
 	if err := c.Driver.SetDefaultsOnStorageCluster(toUpdate); err != nil {
 		return err
 	}
