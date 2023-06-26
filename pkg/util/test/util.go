@@ -1091,9 +1091,9 @@ func validateStorageClusterPods(
 // and makes sure its there, if dmthin misc-args annotation is found
 func validateDmthinOnPxNodes(cluster *corev1.StorageCluster) error {
 	listOptions := map[string]string{"name": "portworx"}
-	cmd := "cat /etc/pwx/config.json | grep PX-StoreV2"
+	cmd := "cat /etc/pwx/config.json | grep px-storev2"
 
-	if !strings.Contains(cluster.Annotations["portworx.io/misc-args"], "-T PX-StoreV2") {
+	if !strings.Contains(cluster.Annotations["portworx.io/misc-args"], "-T px-storev2") {
 		logrus.Debugf("PX-StoreV2 is not enabled on PX cluster [%s]", cluster.Name)
 		return nil
 	}
