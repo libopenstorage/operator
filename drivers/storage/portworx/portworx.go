@@ -417,22 +417,23 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	if toUpdate.Annotations == nil {
 		toUpdate.Annotations = make(map[string]string)
 	}
-	providerName := toUpdate.Spec.CloudStorage.Provider
+	if toUpdate.Spec.CloudStorage != nil {
+		providerName := toUpdate.Spec.CloudStorage.Provider
 
-	// if provider is not set, let's check if it's vSphere
-	if providerName == nil || len(*providerName) == 0 {
-		provider := getCloudProvider(toUpdate)
-		if len(provider) > 0 {
-			providerName = &provider
+		// if provider is not set, let's check if it's vSphere
+		if providerName == nil || len(*providerName) == 0 {
+			provider := getCloudProvider(toUpdate)
+			if len(provider) > 0 {
+				providerName = &provider
+			}
 		}
-	}
 
-	if providerName != nil &&
-		preflight.Instance().ProviderName() != *providerName {
-		preflight.Instance().SetProvider(*providerName)
+		if providerName != nil &&
+			preflight.Instance().ProviderName() != *providerName {
+			preflight.Instance().SetProvider(*providerName)
+		}
+		toUpdate.Spec.CloudStorage.Provider = providerName
 	}
-
-	toUpdate.Spec.CloudStorage.Provider = providerName
 
 	// Initialize the preflight check annotation
 	if preflight.RequiresCheck() {
