@@ -64,7 +64,6 @@ var (
 		"optpwx":           true,
 		"osddriver":        true,
 		"procmount":        true,
-		"pxlogs":           true,
 		"src":              true,
 		"sysdmount":        true,
 	}
