@@ -399,16 +399,6 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	if toUpdate.Annotations == nil {
 		toUpdate.Annotations = make(map[string]string)
 	}
-	// Initialize the preflight check annotation
-	if preflight.RequiresCheck() {
-		if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
-			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "true"
-		}
-	}
-
-	if preflight.IsEKS() {
-		toUpdate.Annotations[pxutil.AnnotationIsEKS] = "true"
-	}
 
 	if toUpdate.Status.DesiredImages == nil {
 		toUpdate.Status.DesiredImages = &corev1.ComponentImages{}
@@ -429,6 +419,17 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		if err := p.setTelemetryDefaults(toUpdate); err != nil {
 			return err
 		}
+	}
+
+	// Initialize the preflight check annotation
+	if preflight.RequiresCheck() {
+		if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
+			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "true"
+		}
+	}
+
+	if preflight.IsEKS() {
+		toUpdate.Annotations[pxutil.AnnotationIsEKS] = "true"
 	}
 
 	removeDeprecatedFields(toUpdate)
@@ -1136,6 +1137,7 @@ func setPortworxStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
 			toUpdate.Spec.Storage = &corev1.StorageSpec{}
 		}
 	}
+
 	if toUpdate.Spec.Storage != nil {
 		if toUpdate.Spec.Storage.Devices == nil &&
 			(toUpdate.Spec.Storage.UseAllWithPartitions == nil || !*toUpdate.Spec.Storage.UseAllWithPartitions) &&
@@ -1143,6 +1145,25 @@ func setPortworxStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
 			toUpdate.Spec.Storage.UseAll = boolPtr(true)
 		}
 	}
+
+	if toUpdate.Spec.CloudStorage != nil {
+		providerName := toUpdate.Spec.CloudStorage.Provider
+
+		// if provider is not set, let's check if it's vSphere
+		if providerName == nil || len(*providerName) == 0 {
+			provider := pxutil.GetCloudProvider(toUpdate)
+			if len(provider) > 0 {
+				providerName = &provider
+			}
+		}
+
+		if providerName != nil &&
+			preflight.Instance().ProviderName() != *providerName {
+			preflight.Instance().SetProvider(*providerName)
+		}
+		toUpdate.Spec.CloudStorage.Provider = providerName
+	}
+
 	if toUpdate.Spec.CloudStorage != nil && preflight.IsEKS() {
 		// Set default drive type to gp3 if not specified
 		for i := 0; i < len(toUpdate.Spec.CloudStorage.CapacitySpecs); i++ {
