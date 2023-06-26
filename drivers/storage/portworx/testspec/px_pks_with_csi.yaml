@@ -38,7 +38,7 @@ spec:
             - name: "PX_TEMPLATE_VERSION"
               value: "v4"
             - name: "PRE-EXEC"
-              value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
+              value: "rm -fr /var/lib/osd/driver"
             - name: CSI_ENDPOINT
               value: unix:///var/vcap/data/kubelet/csi-plugins/pxd.portworx.com/csi.sock
           livenessProbe:
@@ -74,8 +74,6 @@ spec:
               mountPath: /etc/pwx
             - name: optpwx
               mountPath: /opt/pwx
-            - name: pxlogs
-              mountPath: /var/lib/osd/log
             - name: procmount
               mountPath: /host_proc
             - name: sysdmount
@@ -137,9 +135,6 @@ spec:
         - name: optpwx
           hostPath:
             path: /var/vcap/store/opt/pwx
-        - name: pxlogs
-          hostPath:
-            path: /var/vcap/store/lib/osd/log
         - name: registration-dir
           hostPath:
             path: /var/vcap/data/kubelet/plugins_registry
