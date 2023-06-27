@@ -1130,7 +1130,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 	if t.isPKS {
 		envMap["PRE-EXEC"] = &v1.EnvVar{
 			Name:  "PRE-EXEC",
-			Value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi",
+			Value: "rm -fr /var/lib/osd/driver",
 		}
 	}
 
@@ -1771,9 +1771,12 @@ func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
 	pxVer2_9_1, _ := version.NewVersion("2.9.1")
 	if pxVersion.GreaterThanOrEqual(pxVer2_9_1) {
 		list = append(list, volumeInfo{
-			name:             "varlibosd",
-			hostPath:         "/var/lib/osd",
-			mountPath:        "/var/lib/osd",
+			name:      "varlibosd",
+			hostPath:  "/var/lib/osd",
+			mountPath: "/var/lib/osd",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/lib/osd",
+			},
 			mountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
 		})
 	}
@@ -1793,13 +1796,6 @@ func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
 			mountPath: "/etc/pwx",
 			pks: &pksVolumeInfo{
 				hostPath: "/var/vcap/store/etc/pwx",
-			},
-		},
-		{
-			name: "pxlogs",
-			pks: &pksVolumeInfo{
-				mountPath: "/var/lib/osd/log",
-				hostPath:  "/var/vcap/store/lib/osd/log",
 			},
 		},
 		{
