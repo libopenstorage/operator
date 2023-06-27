@@ -202,7 +202,7 @@ func (u *preFlightPortworx) RunPreFlight() error {
 
 	if !u.hardFail {
 		// If PX-StoreV2 param does not exist add it
-		preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"-T", "PX-storeV2"},
+		preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"-T", "px-storev2"},
 			preflightDS.Spec.Template.Spec.Containers[0].Args...)
 	} else {
 		logrus.Infof("runPreflight: running pre-flight with existing PX-StoreV2 param, hard fail check enabled")
