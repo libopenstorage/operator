@@ -778,6 +778,95 @@ func TestPodSpecWithKvdbSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 }
 
+func TestPodSpecForVsphere(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+	k8sClient := testutil.FakeK8sClient()
+
+	originalSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image:        "portworx/oci-monitor:3.0.0",
+			CloudStorage: &corev1.CloudStorageSpec{},
+		},
+	}
+	// TestCase 1: Detect VSPHERE_VCENTER and set provider
+	cluster := originalSpec.DeepCopy()
+
+	env := make([]v1.EnvVar, 1)
+	env[0].Name = "VSPHERE_VCENTER"
+	env[0].Value = "some.vcenter.server.com"
+	cluster.Spec.Env = env
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	expectedArgs := []string{
+		"-cloud_provider", "vsphere",
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-b",
+		"-secret_type", "k8s",
+	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	_, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase 2: VSPHERE_VCENTER  not found, don't expect -cloud_provider
+	cluster = originalSpec.DeepCopy()
+	driver = portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	expectedArgs = []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-b",
+		"-secret_type", "k8s",
+	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// TestCase 3: provider set explicitly
+	cluster = originalSpec.DeepCopy()
+	provider := string(cloudops.AWS)
+	cluster.Spec.CloudStorage.Provider = &provider
+	driver = portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	expectedArgs = []string{
+		"-cloud_provider", string(cloudops.AWS),
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-b",
+		"-secret_type", "k8s",
+	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+}
+
 func TestPodSpecWithNetworkSpec(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"

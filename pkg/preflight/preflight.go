@@ -32,10 +32,17 @@ type CheckerOps interface {
 
 	// CheckCloudDrivePermission checks if permissions for drive operation is granted
 	CheckCloudDrivePermission(cluster *corev1.StorageCluster) error
+
+	// SetProvider helps set the provider when that information is not available to Init
+	SetProvider(string)
 }
 
 func (c *checker) ProviderName() string {
 	return c.providerName
+}
+
+func (c *checker) SetProvider(providerName string) {
+	c.providerName = providerName
 }
 
 func (c *checker) K8sDistributionName() string {
