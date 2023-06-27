@@ -21,12 +21,12 @@ var (
 	k8sVer1_16, _ = version.NewVersion("1.16")
 	k8sVer1_17, _ = version.NewVersion("1.17")
 	k8sVer1_20, _ = version.NewVersion("1.20")
-	k8sVer1_21, _ = version.NewVersion("1.21")
-	pxVer2_1, _   = version.NewVersion("2.1")
-	pxVer2_2, _   = version.NewVersion("2.2")
-	pxVer2_5, _   = version.NewVersion("2.5")
-	pxVer2_10, _  = version.NewVersion("2.10")
-	pxVer2_13, _  = version.NewVersion("2.13")
+	// k8sVer1_21, _ = version.NewVersion("1.21")
+	pxVer2_1, _  = version.NewVersion("2.1")
+	pxVer2_2, _  = version.NewVersion("2.2")
+	pxVer2_5, _  = version.NewVersion("2.5")
+	pxVer2_10, _ = version.NewVersion("2.10")
+	pxVer2_13, _ = version.NewVersion("2.13")
 )
 
 // CSIConfiguration holds the versions of the all the CSI sidecar containers,
