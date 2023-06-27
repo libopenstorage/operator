@@ -203,9 +203,12 @@ func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 	}
 
 	// IncludeExternalHealthMonitor only with PX 2.10.0+ and k8s 1.21+
-	if g.kubeVersion.GreaterThanOrEqual(k8sVer1_21) && g.pxVersion.GreaterThanOrEqual(pxVer2_10) {
+	// Disabling the csi-health-monitor-controller
+	// csi-health-monitor-controller container should never start by default
+	// TODO : add this back with condition on when to start csi-health-monitor-controller container
+	/*if g.kubeVersion.GreaterThanOrEqual(k8sVer1_21) && g.pxVersion.GreaterThanOrEqual(pxVer2_10) {
 		cv.IncludeHealthMonitorController = true
-	}
+	}*/
 
 	return cv
 }
