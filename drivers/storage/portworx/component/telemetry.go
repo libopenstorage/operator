@@ -106,10 +106,11 @@ const (
 	stagingArcusRegisterProxyURL    = "register.staging-cloud-support.purestorage.com"
 
 	// Ports for telemetry components
-	defaultCCMListeningPort = 9024
-	defaultCollectorPort    = 10000
-	defaultRegisterPort     = 12001
-	defaultPhonehomePort    = 12002
+	defaultCCMListeningPort          = 9024
+	defaultCCMListeningPortForPXge30 = 9029
+	defaultCollectorPort             = 10000
+	defaultRegisterPort              = 12001
+	defaultPhonehomePort             = 12002
 
 	arcusPingInterval = 6 * time.Second
 	arcusPingRetry    = 5
@@ -1180,9 +1181,16 @@ func readConfigMapDataFromFile(
 }
 
 func getCCMListeningPort(cluster *corev1.StorageCluster) int {
+	defCCMPort := defaultCCMListeningPort
+
+	pxVer30, _ := version.NewVersion("3.0")
+	if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer30) {
+		defCCMPort = defaultCCMListeningPortForPXge30
+	}
+
 	startPort := pxutil.StartPort(cluster)
 	if startPort == pxutil.DefaultStartPort {
-		return defaultCCMListeningPort
+		return defCCMPort
 	}
 	return startPort + 20
 }
