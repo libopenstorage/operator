@@ -647,6 +647,22 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 	setAutopilotDefaults(toUpdate)
 	setTLSDefaults(toUpdate)
+
+	if pxutil.IsFreshInstall(toUpdate) {
+		// Check for FACD variable on a new install: if so, add an annotation saying
+		// it's okay to continue.
+		facdTopologyEnv := ""
+		for _, env := range toUpdate.Spec.Env {
+			if env.Name == "FACD_TOPOLOGY_ENABLED" {
+				facdTopologyEnv = strings.ToLower(env.Value)
+				break
+			}
+		}
+
+		if facdTopologyEnv == "true" {
+			toUpdate.Annotations[pxutil.AnnotationFACDTopology] = "true"
+		}
+	}
 	return nil
 }
 
@@ -745,31 +761,18 @@ func (p *portworx) validateFACDTopology(cluster *corev1.StorageCluster) error {
 		}
 	}
 
-	if facdTopologyEnv == "true" {
-		// FACD topology is enabled. See if we already have the annotation marking this as valid, or if not, check if this is a fresh install
-
-		// TODO: once we support upgrading to FACD topology, it will also be valid after whatever version supports that
-		isValid := false
-		if pxutil.IsFreshInstall(cluster) {
-			if cluster.Annotations == nil {
-				cluster.Annotations = make(map[string]string)
-			}
-			cluster.Annotations[pxutil.AnnotationFACDTopology] = "true"
-			isValid = true
-		}
-		if !isValid {
-			if a, ok := cluster.Annotations[pxutil.AnnotationFACDTopology]; ok && a != "" {
-				isValid = true
-			}
-		}
-
-		if !isValid {
-			// Fail the request!
-			return fmt.Errorf("FACD topology cannot be enabled on existing clusters")
-		}
+	if facdTopologyEnv != "true" {
+		return nil
 	}
 
-	return nil
+	// FACD topology is enabled. See if we already have the annotation marking this as valid.
+	// TODO: once we support upgrading to FACD topology, it will also be valid after whatever version supports that
+	if v, ok := cluster.Annotations[pxutil.AnnotationFACDTopology]; ok && v == "true" {
+		return nil
+	}
+
+	// Fail the request as we don't have the annotation allowing it
+	return fmt.Errorf("FACD topology cannot be enabled on existing clusters")
 }
 
 func (p *portworx) IsPodUpdated(
