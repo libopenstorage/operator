@@ -210,8 +210,10 @@ func (t *telemetry) reconcileCCMGo(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	// Attempt to create the phonehome configmap early for reference
-	if _, err := t.createCCMGoConfigMapTelemetryPhonehome(cluster, ownerRef); err != nil {
+	// Reconcile config maps for log uploader
+	// Attempt to create the cm for phonehome early for reference
+	restart, err := t.createCCMGoConfigMapTelemetryPhonehome(cluster, ownerRef)
+	if err != nil {
 		logrus.WithError(err).Warnf("failed to create cm %s from %s", ConfigMapNameTelemetryPhonehome, configFileNameTelemetryPhonehome)
 	}
 	if cluster.Status.ClusterUID == "" {
@@ -235,7 +237,7 @@ func (t *telemetry) reconcileCCMGo(
 		logrus.WithError(err).Errorf("failed to create cm %s from %s", ConfigMapNameTelemetryTLSCertificate, configFileNameTelemetryTLSCertificate)
 		return err
 	}
-	if err := t.reconcileCCMGoTelemetryPhonehome(cluster, ownerRef); err != nil {
+	if err := t.reconcileCCMGoTelemetryPhonehome(cluster, ownerRef, restart); err != nil {
 		return err
 	}
 	if err := t.reconcileCCMGoTelemetryCollectorV2(cluster, ownerRef); err != nil {
@@ -377,6 +379,7 @@ func (t *telemetry) deleteCCMGoRegistrationService(
 func (t *telemetry) reconcileCCMGoTelemetryPhonehome(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
+	restart bool,
 ) error {
 	// Delete unused old components from ccm java
 	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryConfigMapName, cluster.Namespace, *ownerRef); err != nil {
@@ -385,19 +388,12 @@ func (t *telemetry) reconcileCCMGoTelemetryPhonehome(
 	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryCCMProxyConfigMapName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	// Reconcile config maps for log uploader
-	// Create cm for phonehome
-	restart, err := t.createCCMGoConfigMapTelemetryPhonehome(cluster, ownerRef)
-	if err != nil {
-		logrus.WithError(err).Errorf("failed to create cm %s from %s", ConfigMapNameTelemetryPhonehome, configFileNameTelemetryPhonehome)
-		return err
-	}
-	// Creat cm for phonehome proxy
+	// Create cm for phonehome proxy
 	if err := t.createCCMGoConfigMapTelemetryPhonehomeProxy(cluster, ownerRef); err != nil {
 		logrus.WithError(err).Errorf("failed to create cm %s from %s", ConfigMapNameTelemetryPhonehomeProxy, configFileNameTelemetryPhonehomeProxy)
 		return err
 	}
-	// create daemonset for phonehome
+	// Create daemonset for phonehome
 	if err := t.createDaemonSetTelemetryPhonehome(cluster, ownerRef, restart); err != nil {
 		logrus.WithError(err).Errorf("failed to create daemonset %s/%s", cluster.Namespace, DaemonSetNameTelemetryPhonehome)
 		return err
