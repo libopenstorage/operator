@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
-	"github.com/libopenstorage/cloudops"
 	"math"
 	"net"
 	"os"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/cloudops"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
