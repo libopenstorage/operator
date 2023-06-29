@@ -2514,6 +2514,11 @@ func TestValidationsForFACDTopology(t *testing.T) {
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				pxutil.AnnotationFACDTopology: "true",
+			},
+		},
 		Spec: corev1.StorageClusterSpec{
 			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
