@@ -210,6 +210,10 @@ func (t *telemetry) reconcileCCMGo(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	// Attempt to create the phonehome configmap early for reference
+	if _, err := t.createCCMGoConfigMapTelemetryPhonehome(cluster, ownerRef); err != nil {
+		logrus.WithError(err).Warnf("failed to create cm %s from %s", ConfigMapNameTelemetryPhonehome, configFileNameTelemetryPhonehome)
+	}
 	if cluster.Status.ClusterUID == "" {
 		logrus.Warn("clusterUID is empty, wait for it to reconcile telemetry components")
 		return nil
