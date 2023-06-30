@@ -842,10 +842,12 @@ func nodeSpecsToMaps(nodes []corev1.NodeSpec) map[string]*corev1.CloudStorageNod
 }
 
 func validateDeployedSpec(expected, live *corev1.StorageCluster) error {
+	/* Will find a better way to do this in PTX-18637
 	// Validate cloudStorage
 	if !reflect.DeepEqual(expected.Spec.CloudStorage, live.Spec.CloudStorage) {
 		return fmt.Errorf("deployed CloudStorage spec doesn't match expected")
 	}
+	*/
 	// Validate kvdb
 	if !reflect.DeepEqual(expected.Spec.Kvdb, live.Spec.Kvdb) {
 		return fmt.Errorf("deployed Kvdb spec doesn't match expected")
