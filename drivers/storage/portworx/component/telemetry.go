@@ -106,10 +106,11 @@ const (
 	stagingArcusRegisterProxyURL    = "register.staging-cloud-support.purestorage.com"
 
 	// Ports for telemetry components
-	defaultCCMListeningPort = 9024
-	defaultCollectorPort    = 10000
-	defaultRegisterPort     = 12001
-	defaultPhonehomePort    = 12002
+	defaultCCMListeningPort          = 9024
+	defaultCCMListeningPortForPXge30 = 9029
+	defaultCollectorPort             = 10000
+	defaultRegisterPort              = 12001
+	defaultPhonehomePort             = 12002
 
 	arcusPingInterval = 6 * time.Second
 	arcusPingRetry    = 5
@@ -209,6 +210,12 @@ func (t *telemetry) reconcileCCMGo(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	// Reconcile config maps for log uploader
+	// Attempt to create the cm for phonehome early for reference
+	restart, err := t.createCCMGoConfigMapTelemetryPhonehome(cluster, ownerRef)
+	if err != nil {
+		logrus.WithError(err).Warnf("failed to create cm %s from %s", ConfigMapNameTelemetryPhonehome, configFileNameTelemetryPhonehome)
+	}
 	if cluster.Status.ClusterUID == "" {
 		logrus.Warn("clusterUID is empty, wait for it to reconcile telemetry components")
 		return nil
@@ -230,7 +237,7 @@ func (t *telemetry) reconcileCCMGo(
 		logrus.WithError(err).Errorf("failed to create cm %s from %s", ConfigMapNameTelemetryTLSCertificate, configFileNameTelemetryTLSCertificate)
 		return err
 	}
-	if err := t.reconcileCCMGoTelemetryPhonehome(cluster, ownerRef); err != nil {
+	if err := t.reconcileCCMGoTelemetryPhonehome(cluster, ownerRef, restart); err != nil {
 		return err
 	}
 	if err := t.reconcileCCMGoTelemetryCollectorV2(cluster, ownerRef); err != nil {
@@ -372,6 +379,7 @@ func (t *telemetry) deleteCCMGoRegistrationService(
 func (t *telemetry) reconcileCCMGoTelemetryPhonehome(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
+	restart bool,
 ) error {
 	// Delete unused old components from ccm java
 	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryConfigMapName, cluster.Namespace, *ownerRef); err != nil {
@@ -380,19 +388,12 @@ func (t *telemetry) reconcileCCMGoTelemetryPhonehome(
 	if err := k8sutil.DeleteConfigMap(t.k8sClient, TelemetryCCMProxyConfigMapName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	// Reconcile config maps for log uploader
-	// Create cm for phonehome
-	restart, err := t.createCCMGoConfigMapTelemetryPhonehome(cluster, ownerRef)
-	if err != nil {
-		logrus.WithError(err).Errorf("failed to create cm %s from %s", ConfigMapNameTelemetryPhonehome, configFileNameTelemetryPhonehome)
-		return err
-	}
-	// Creat cm for phonehome proxy
+	// Create cm for phonehome proxy
 	if err := t.createCCMGoConfigMapTelemetryPhonehomeProxy(cluster, ownerRef); err != nil {
 		logrus.WithError(err).Errorf("failed to create cm %s from %s", ConfigMapNameTelemetryPhonehomeProxy, configFileNameTelemetryPhonehomeProxy)
 		return err
 	}
-	// create daemonset for phonehome
+	// Create daemonset for phonehome
 	if err := t.createDaemonSetTelemetryPhonehome(cluster, ownerRef, restart); err != nil {
 		logrus.WithError(err).Errorf("failed to create daemonset %s/%s", cluster.Namespace, DaemonSetNameTelemetryPhonehome)
 		return err
@@ -1180,9 +1181,16 @@ func readConfigMapDataFromFile(
 }
 
 func getCCMListeningPort(cluster *corev1.StorageCluster) int {
+	defCCMPort := defaultCCMListeningPort
+
+	pxVer30, _ := version.NewVersion("3.0")
+	if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer30) {
+		defCCMPort = defaultCCMListeningPortForPXge30
+	}
+
 	startPort := pxutil.StartPort(cluster)
 	if startPort == pxutil.DefaultStartPort {
-		return defaultCCMListeningPort
+		return defCCMPort
 	}
 	return startPort + 20
 }

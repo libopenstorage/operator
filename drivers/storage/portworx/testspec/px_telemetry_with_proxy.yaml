@@ -110,6 +110,8 @@ spec:
               readOnly: true
             - name: dbusmount
               mountPath: /var/run/dbus
+            - mountPath: /etc/ccm
+              name: ccm-phonehome-config
         - env:
             - name: configFile
               value: /etc/ccm/ccm.properties
@@ -229,3 +231,9 @@ spec:
                 path: http_proxy
             name: px-ccm-service-proxy-config
           name: ccm-proxy-config
+        - configMap:
+            items:
+              - key: ccm.properties
+                path: ccm.properties
+            name: px-telemetry-phonehome
+          name: ccm-phonehome-config
