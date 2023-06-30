@@ -1189,6 +1189,7 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 		t.getIKSVolumeInfoList,
 		t.getPKSVolumeInfoList,
 		t.getBottleRocketVolumeInfoList,
+		t.getTelemetryPhoneHomeVolumeInfoList,
 	}
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
@@ -1249,6 +1250,7 @@ func (t *template) getVolumes() []v1.Volume {
 		t.getIKSVolumeInfoList,
 		t.getPKSVolumeInfoList,
 		t.getBottleRocketVolumeInfoList,
+		t.getTelemetryPhoneHomeVolumeInfoList,
 	}
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
@@ -1364,6 +1366,29 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 		},
 	)
 	return volumeInfoList
+}
+
+func (t *template) getTelemetryPhoneHomeVolumeInfoList() []volumeInfo {
+	if pxutil.IsTelemetryEnabled(t.cluster.Spec) {
+		return []volumeInfo{
+			{
+				name:      "ccm-phonehome-config",
+				mountPath: "/etc/ccm",
+				configMapType: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: component.ConfigMapNameTelemetryPhonehome,
+					},
+					Items: []v1.KeyToPath{
+						{
+							Key:  component.TelemetryPropertiesFilename,
+							Path: component.TelemetryPropertiesFilename,
+						},
+					},
+				},
+			},
+		}
+	}
+	return []volumeInfo{}
 }
 
 func (t *template) getTelemetryVolumeInfoList() []volumeInfo {
