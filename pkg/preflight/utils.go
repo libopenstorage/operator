@@ -11,7 +11,7 @@ func IsEKS() bool {
 
 // RequiresCheck returns whether a preflight check is needed based on the platform
 func RequiresCheck() bool {
-	return Instance().ProviderName() == string(cloudops.AWS)
+	return IsEKS()
 }
 
 // RunningOnCloud checks whether portworx is running on cloud
