@@ -208,6 +208,14 @@ func (u *preFlightPortworx) RunPreFlight() error {
 		logrus.Infof("runPreflight: running pre-flight with existing PX-StoreV2 param, hard fail check enabled")
 	}
 
+	// Remove phone-home cm volume mount, does not exist yet
+	for i, volumeMount := range preflightDS.Spec.Template.Spec.Containers[0].VolumeMounts {
+		if volumeMount.Name == "ccm-phonehome-config" {
+			preflightDS.Spec.Template.Spec.Containers[0].VolumeMounts = append(preflightDS.Spec.Template.Spec.Containers[0].VolumeMounts[:i],
+				preflightDS.Spec.Template.Spec.Containers[0].VolumeMounts[i+1:]...)
+			break
+		}
+	}
 	// Add pre-flight param
 	preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"--pre-flight"},
 		preflightDS.Spec.Template.Spec.Containers[0].Args...)
