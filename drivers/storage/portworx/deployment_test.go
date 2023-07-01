@@ -2504,6 +2504,88 @@ func TestPodWithTelemetryUpgrade(t *testing.T) {
 	require.Equal(t, len(expected.Containers), len(actual.Containers))
 }
 
+func TestPodWithTelemetryCCMVolume(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.18.4",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	k8sClient := testutil.FakeK8sClient()
+	nodeName := "testNode"
+
+	// Start with older version of portworx
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.8.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+					Image:   "portworx/px-telemetry:2.1.2",
+				},
+			},
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+		},
+	}
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	podSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+
+	hasCCMVol := false
+	hasCCMVolMount := false
+
+	for _, vol := range podSpec.Volumes {
+		if vol.Name == "ccm-phonehome-config" {
+			hasCCMVol = true
+		}
+	}
+	for _, ctn := range podSpec.Containers {
+		for _, volMnt := range ctn.VolumeMounts {
+			if volMnt.Name == "ccm-phonehome-config" {
+				hasCCMVolMount = true
+			}
+		}
+	}
+	// The pod spec should neither contain ccm volume nor volume mount
+	assert.False(t, hasCCMVol || hasCCMVolMount)
+
+	// Then upgrade the cluster to 3.0 and obtain the new pod spec
+	cluster.Spec.Image = "portworx/oci-monitor:3.0.0"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	podSpec, err = driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+
+	for _, vol := range podSpec.Volumes {
+		if vol.Name == "ccm-phonehome-config" {
+			hasCCMVol = true
+		}
+	}
+	for _, ctn := range podSpec.Containers {
+		for _, volMnt := range ctn.VolumeMounts {
+			if volMnt.Name == "ccm-phonehome-config" {
+				hasCCMVolMount = true
+			}
+		}
+	}
+	// Now the pod spec should contain both ccm volume and volume mount
+	assert.True(t, hasCCMVol && hasCCMVolMount)
+}
+
 func TestPodSpecWhenRunningOnMasterEnabled(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
