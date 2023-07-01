@@ -47,6 +47,8 @@ type PreFlightPortworx interface {
 	ProcessPreFlightResults(recorder record.EventRecorder, storageNodes []*corev1.StorageNode) error
 	// DeletePreFlight deletes the pre-flight daemonset
 	DeletePreFlight() error
+	// CreatePreFlightDaemonsetSpec is used to create the pre-fligh daemonset pod spec
+	CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerReference) *appsv1.DaemonSet
 }
 
 type preFlightPortworx struct {
@@ -90,62 +92,7 @@ func getPreFlightPodsFromNamespace(k8sClient client.Client, namespace string) (*
 	return ds, pods, err
 }
 
-// GetPreFlightPods returns the pods of the pre-flight daemonset
-func (u *preFlightPortworx) GetPreFlightPods() ([]*v1.Pod, error) {
-	_, pods, err := getPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
-	return pods, err
-}
-
-func (u *preFlightPortworx) GetPreFlightStatus() (int32, int32, int32, error) {
-	ds, pods, err := getPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
-	if err != nil {
-		return -1, -1, -1, err
-	}
-	totalPods := ds.Status.DesiredNumberScheduled
-	completedPods := 0
-	for _, pod := range pods {
-		if len(pod.Status.ContainerStatuses) > 0 {
-			for _, containerStatus := range pod.Status.ContainerStatuses {
-				if containerStatus.Name == "portworx" && containerStatus.Ready {
-					completedPods++
-				}
-			}
-		}
-	}
-	logrus.Infof("Pre-flight Status: Completed [%v] InProgress [%v] Total Pods [%v]", completedPods, totalPods-int32(completedPods), totalPods)
-	return int32(completedPods), totalPods - int32(completedPods), totalPods, nil
-}
-
-func (u *preFlightPortworx) RunPreFlight() error {
-	ownerRef := metav1.NewControllerRef(u.cluster, pxutil.StorageClusterKind())
-
-	err := u.createServiceAccount(ownerRef)
-	if err != nil {
-		if errors.IsAlreadyExists(err) {
-			logrus.Infof("runPreFlight: ServiceAccount already exists, skipping...")
-		} else {
-			return err
-		}
-	}
-
-	err = u.createClusterRole()
-	if err != nil {
-		if errors.IsAlreadyExists(err) {
-			logrus.Infof("runPreFlight: ClusterRole already exists, skipping...")
-		} else {
-			return err
-		}
-	}
-
-	err = u.createClusterRoleBinding()
-	if err != nil {
-		if errors.IsAlreadyExists(err) {
-			logrus.Infof("runPreFlight: ClusterRoleBinding already exists, skipping...")
-		} else {
-			return err
-		}
-	}
-
+func (u *preFlightPortworx) CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerReference) *appsv1.DaemonSet {
 	// Create daemonset from podSpec
 	labels := map[string]string{
 		"name": pxPreFlightDaemonSetName,
@@ -248,6 +195,67 @@ func (u *preFlightPortworx) RunPreFlight() error {
 			}
 		}
 	}
+
+	return preflightDS
+}
+
+// GetPreFlightPods returns the pods of the pre-flight daemonset
+func (u *preFlightPortworx) GetPreFlightPods() ([]*v1.Pod, error) {
+	_, pods, err := getPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
+	return pods, err
+}
+
+func (u *preFlightPortworx) GetPreFlightStatus() (int32, int32, int32, error) {
+	ds, pods, err := getPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
+	if err != nil {
+		return -1, -1, -1, err
+	}
+	totalPods := ds.Status.DesiredNumberScheduled
+	completedPods := 0
+	for _, pod := range pods {
+		if len(pod.Status.ContainerStatuses) > 0 {
+			for _, containerStatus := range pod.Status.ContainerStatuses {
+				if containerStatus.Name == "portworx" && containerStatus.Ready {
+					completedPods++
+				}
+			}
+		}
+	}
+	logrus.Infof("Pre-flight Status: Completed [%v] InProgress [%v] Total Pods [%v]", completedPods, totalPods-int32(completedPods), totalPods)
+	return int32(completedPods), totalPods - int32(completedPods), totalPods, nil
+}
+
+func (u *preFlightPortworx) RunPreFlight() error {
+	ownerRef := metav1.NewControllerRef(u.cluster, pxutil.StorageClusterKind())
+
+	err := u.createServiceAccount(ownerRef)
+	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			logrus.Infof("runPreFlight: ServiceAccount already exists, skipping...")
+		} else {
+			return err
+		}
+	}
+
+	err = u.createClusterRole()
+	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			logrus.Infof("runPreFlight: ClusterRole already exists, skipping...")
+		} else {
+			return err
+		}
+	}
+
+	err = u.createClusterRoleBinding()
+	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			logrus.Infof("runPreFlight: ClusterRoleBinding already exists, skipping...")
+		} else {
+			return err
+		}
+	}
+
+	preflightDS := u.CreatePreFlightDaemonsetSpec(ownerRef)
 
 	err = u.k8sClient.Create(context.TODO(), preflightDS)
 	if err != nil {
