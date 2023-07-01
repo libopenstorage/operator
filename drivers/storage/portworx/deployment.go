@@ -1282,7 +1282,11 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 		t.getPKSVolumeInfoList,
 		t.getBottleRocketVolumeInfoList,
 		t.GetVolumeInfoForTLSCerts,
-		t.getTelemetryPhoneHomeVolumeInfoList,
+	}
+	// Only add telemetry phonehome volume mount if PX is at least 3.0
+	pxVer30, _ := version.NewVersion("3.0")
+	if t.pxVersion.GreaterThanOrEqual(pxVer30) {
+		extensions = append(extensions, t.getTelemetryPhoneHomeVolumeInfoList)
 	}
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
@@ -1344,7 +1348,11 @@ func (t *template) getVolumes() []v1.Volume {
 		t.getPKSVolumeInfoList,
 		t.getBottleRocketVolumeInfoList,
 		t.GetVolumeInfoForTLSCerts,
-		t.getTelemetryPhoneHomeVolumeInfoList,
+	}
+	// Only add telemetry phonehome volume if PX is at least 3.0
+	pxVer30, _ := version.NewVersion("3.0")
+	if t.pxVersion.GreaterThanOrEqual(pxVer30) {
+		extensions = append(extensions, t.getTelemetryPhoneHomeVolumeInfoList)
 	}
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
