@@ -2912,6 +2912,7 @@ func TestPodWithTelemetryCCMVolume(t *testing.T) {
 	require.NoError(t, err)
 
 	podSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
 
 	hasCCMVol := false
 	hasCCMVolMount := false
@@ -2937,6 +2938,7 @@ func TestPodWithTelemetryCCMVolume(t *testing.T) {
 	require.NoError(t, err)
 
 	podSpec, err = driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
 
 	for _, vol := range podSpec.Volumes {
 		if vol.Name == "ccm-phonehome-config" {
