@@ -164,17 +164,21 @@ func TestValidate(t *testing.T) {
 	// Validate Pre-flight Daemonset Pod Spec
 	//
 	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationPreflightCheck: "true",
+	}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
 	podSpec, err := driver.GetStoragePodSpec(cluster, "")
 	require.NoError(t, err)
 
-	// phone-home cm volume mount, should exist
-	errChk := fmt.Errorf("ccm-phonehome-config volume mount does not exist when it should")
+	// phone-home cm volume mount, should not exists since pre-flight is enabled
+	var errChk error
 	for _, volumeMount := range podSpec.Containers[0].VolumeMounts {
 		if volumeMount.Name == "ccm-phonehome-config" {
-			errChk = nil // If found clear the error cause it exists
+			// Set err mount exists
+			errChk = fmt.Errorf("ccm-phonehome-config volume mount exists when it should not")
 		}
 	}
 	require.NoError(t, errChk)
@@ -182,9 +186,10 @@ func TestValidate(t *testing.T) {
 	preFlighter := NewPreFlighter(cluster, k8sClient, podSpec)
 	require.NotNil(t, preFlighter)
 
+	/// Create preflighter podSpec
 	preflightDSCheck := preFlighter.CreatePreFlightDaemonsetSpec(clusterRef)
 
-	// phone-home cm volume mount, should not exist yet
+	// Make sure the phone-home cm volume mount, still does not exists
 	errChk = nil
 	for _, volumeMount := range preflightDSCheck.Spec.Template.Spec.Containers[0].VolumeMounts {
 		if volumeMount.Name == "ccm-phonehome-config" {
