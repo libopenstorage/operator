@@ -418,9 +418,7 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		return nil
 	}
 
-	// Only do the preflight check on demand once a time
 	toUpdate := cluster.DeepCopy()
-	toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 	var err error
 
 	// Do the preflight check for eks only for now to check the cloud drive permission
@@ -467,6 +465,9 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 			logrus.WithError(serr).Errorf("Failed to get StorageNodes used for validate.")
 		}
 	}
+
+	// Only do the preflight check once
+	toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 
 	condition := &corev1.ClusterCondition{
 		Source: pxutil.PortworxComponentName,
