@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -188,6 +189,40 @@ func (u *preFlightPortworx) RunPreFlight() error {
 	   	u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(miscArgs)
 	*/
 
+	// Object preflightDS.Spec.Template.Spec is created above using 'u.podSpec' however
+	// check to make sure the necessary spec objects exist.
+	if len(u.podSpec.Containers) <= 0 {
+		return fmt.Errorf("podSpec.Containers object not created")
+	}
+
+	if u.podSpec.Containers[0].Name != "portworx" {
+		return fmt.Errorf("podSpec.Containers object not created correctly, 'portworx' container not first")
+	}
+
+	// Add pre-flight param
+	preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"--pre-flight"},
+		preflightDS.Spec.Template.Spec.Containers[0].Args...)
+
+	pxVer31, _ := version.NewVersion("3.1")
+	if pxutil.GetPortworxVersion(u.cluster).GreaterThanOrEqual(pxVer31) {
+		// Requires OCI-Mon changes so only supported in 3.1
+		if preflightDS.Spec.Template.Spec.Containers[0].ReadinessProbe == nil {
+			return fmt.Errorf("readinessProbe object not created")
+		}
+
+		if preflightDS.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet == nil {
+			return fmt.Errorf("probeHandler.HTTPGet object not created")
+		}
+
+		preFltEndPtPort := component.GetCCMListeningPort(u.cluster) + 1 // preflight endpoint port  +1 CCM uploader port
+		logrus.Infof("runPreflight: Setting port: %d", preFltEndPtPort)
+		preflightDS.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Port = intstr.FromInt(preFltEndPtPort)
+		// Add pre-flight param w/--pre-flight-port
+		preflightDS.Spec.Template.Spec.Containers[0].Args = append(
+			[]string{"--pre-flight-port", fmt.Sprintf("%d", preFltEndPtPort)},
+			preflightDS.Spec.Template.Spec.Containers[0].Args...)
+	}
+
 	checkArgs := func(args []string) {
 		for i, arg := range args {
 			if arg == "-T" {
@@ -208,14 +243,6 @@ func (u *preFlightPortworx) RunPreFlight() error {
 	} else {
 		logrus.Infof("runPreflight: running pre-flight with existing PX-StoreV2 param, hard fail check enabled")
 	}
-
-	preFltEndPtPort := component.GetCCMListeningPort(u.cluster) + 1 // preflight endpoint port  +1 CCM uploader port
-	logrus.Infof("runPreflight: Setting port: %d", preFltEndPtPort)
-	preflightDS.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Port = intstr.FromInt(preFltEndPtPort)
-	// Add pre-flight param
-	preflightDS.Spec.Template.Spec.Containers[0].Args = append(
-		[]string{"--pre-flight", "--pre-flight-port", fmt.Sprintf("%d", preFltEndPtPort)},
-		preflightDS.Spec.Template.Spec.Containers[0].Args...)
 
 	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {
 		preflightDS.Spec.Template.Spec.ImagePullSecrets = append(
