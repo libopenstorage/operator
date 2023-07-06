@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/cloudops"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -343,6 +344,25 @@ func IsIKS(cluster *corev1.StorageCluster) bool {
 func IsOpenshift(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsOpenshift])
 	return err == nil && enabled
+}
+
+// IsVsphere returns true if VSPHERE_VCENTER is present in the spec
+func IsVsphere(cluster *corev1.StorageCluster) bool {
+	for _, env := range cluster.Spec.Env {
+		if env.Name == "VSPHERE_VCENTER" && len(env.Value) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// GetCloudProvider returns the cloud provider string
+func GetCloudProvider(cluster *corev1.StorageCluster) string {
+	if IsVsphere(cluster) {
+		return cloudops.Vsphere
+	}
+	// TODO: implement conditions for other providers
+	return ""
 }
 
 // IsHostPidEnabled returns if hostPid should be set to true for portworx pod.

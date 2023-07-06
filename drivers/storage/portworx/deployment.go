@@ -1283,6 +1283,11 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 		t.getBottleRocketVolumeInfoList,
 		t.GetVolumeInfoForTLSCerts,
 	}
+	// Only add telemetry phonehome volume mount if PX is at least 3.0
+	pxVer30, _ := version.NewVersion("3.0")
+	if t.pxVersion.GreaterThanOrEqual(pxVer30) {
+		extensions = append(extensions, t.getTelemetryPhoneHomeVolumeInfoList)
+	}
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
 	}
@@ -1343,6 +1348,11 @@ func (t *template) getVolumes() []v1.Volume {
 		t.getPKSVolumeInfoList,
 		t.getBottleRocketVolumeInfoList,
 		t.GetVolumeInfoForTLSCerts,
+	}
+	// Only add telemetry phonehome volume if PX is at least 3.0
+	pxVer30, _ := version.NewVersion("3.0")
+	if t.pxVersion.GreaterThanOrEqual(pxVer30) {
+		extensions = append(extensions, t.getTelemetryPhoneHomeVolumeInfoList)
 	}
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
@@ -1472,6 +1482,29 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 		},
 	)
 	return volumeInfoList
+}
+
+func (t *template) getTelemetryPhoneHomeVolumeInfoList() []volumeInfo {
+	if pxutil.IsTelemetryEnabled(t.cluster.Spec) {
+		return []volumeInfo{
+			{
+				name:      "ccm-phonehome-config",
+				mountPath: "/etc/ccm",
+				configMapType: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: component.ConfigMapNameTelemetryPhonehome,
+					},
+					Items: []v1.KeyToPath{
+						{
+							Key:  component.TelemetryPropertiesFilename,
+							Path: component.TelemetryPropertiesFilename,
+						},
+					},
+				},
+			},
+		}
+	}
+	return []volumeInfo{}
 }
 
 func (t *template) getTelemetryVolumeInfoList() []volumeInfo {
