@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -208,8 +209,12 @@ func (u *preFlightPortworx) RunPreFlight() error {
 		logrus.Infof("runPreflight: running pre-flight with existing PX-StoreV2 param, hard fail check enabled")
 	}
 
+	preFltEndPtPort := component.GetCCMListeningPort(u.cluster) + 1 // preflight endpoint port  +1 CCM uploader port
+	logrus.Infof("runPreflight: Setting port: %d", preFltEndPtPort)
+	preflightDS.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Port = intstr.FromInt(preFltEndPtPort)
 	// Add pre-flight param
-	preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"--pre-flight"},
+	preflightDS.Spec.Template.Spec.Containers[0].Args = append(
+		[]string{"--pre-flight", "--pre-flight-port", fmt.Sprintf("%d", preFltEndPtPort)},
 		preflightDS.Spec.Template.Spec.Containers[0].Args...)
 
 	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {
