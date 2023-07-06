@@ -90,26 +90,6 @@ spec:
             - --leader-election=true
           securityContext:
             privileged: true
-        - name: csi-health-monitor-controller
-          image: quay.io/k8scsi/csi-health-monitor-controller:v1.2.3
-          imagePullPolicy: Always
-          args:
-            - "--v=3"
-            - "--csi-address=$(ADDRESS)"
-            - "--leader-election"
-            - "--http-endpoint=:8080"
-          env:
-            - name: ADDRESS
-              value: /csi/csi.sock
-          volumeMounts:
-            - name: socket-dir
-              mountPath: /csi
-          ports:
-            - name: http-endpoint
-              containerPort: 8080
-              protocol: TCP
-          securityContext:
-            privileged: true
       schedulerName: stork
       volumes:
         - name: socket-dir
