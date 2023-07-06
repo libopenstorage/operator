@@ -163,6 +163,40 @@ func TestValidate(t *testing.T) {
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling PX-StoreV2"))
 	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaData)
+
+	//
+	// Validate Pre-flight Daemonset Pod Spec
+	//
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationPreflightCheck: "true",
+	}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	podSpec, err := driver.GetStoragePodSpec(cluster, "")
+	require.NoError(t, err)
+	require.Equal(t, 2, len(podSpec.Containers))
+
+	// phone-home cm volume mount, should not exists since pre-flight is enabled
+	for _, cnt := range podSpec.Containers {
+		for _, volumeMount := range cnt.VolumeMounts {
+			require.True(t, volumeMount.Name != "ccm-phonehome-config")
+		}
+	}
+
+	preFlighter := NewPreFlighter(cluster, k8sClient, podSpec)
+	require.NotNil(t, preFlighter)
+
+	/// Create preflighter podSpec
+	preflightDSCheck := preFlighter.CreatePreFlightDaemonsetSpec(clusterRef)
+
+	// Make sure the phone-home cm volume mount, still does not exists
+	for _, cnt := range preflightDSCheck.Spec.Template.Spec.Containers {
+		for _, volumeMount := range cnt.VolumeMounts {
+			require.True(t, volumeMount.Name != "ccm-phonehome-config")
+		}
+	}
 }
 
 func TestGetSelectorLabels(t *testing.T) {
