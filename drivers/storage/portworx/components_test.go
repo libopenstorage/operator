@@ -5924,7 +5924,6 @@ func TestCSIInstallWithk8s1_21_px210(t *testing.T) {
 	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
 	require.Equal(t, len(expectedDeployment.Spec.Template.Spec.Containers), len(deployment.Spec.Template.Spec.Containers))
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
-	require.Equal(t, expectedDeployment.Spec.Template.Spec.Containers[4].Name, "csi-health-monitor-controller")
 }
 
 func TestCSIInstallWithPKS(t *testing.T) {
