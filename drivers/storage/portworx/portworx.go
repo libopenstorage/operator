@@ -558,6 +558,11 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				(toUpdate.Status.DesiredImages.AlertManager == "" || pxVersionChanged || prometheusVersionChanged) {
 				toUpdate.Status.DesiredImages.AlertManager = release.Components.AlertManager
 			}
+			if toUpdate.Spec.Monitoring.Grafana != nil &&
+				toUpdate.Spec.Monitoring.Grafana.Enabled &&
+				toUpdate.Status.DesiredImages.Grafana == "" || pxVersionChanged {
+				toUpdate.Status.DesiredImages.Grafana = release.Components.Grafana
+			}
 		}
 
 		// set misc image defaults

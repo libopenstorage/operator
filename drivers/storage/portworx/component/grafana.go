@@ -14,7 +14,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metaerrors "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -121,7 +120,9 @@ func (c *grafana) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
 func (c *grafana) IsEnabled(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Grafana != nil &&
-		cluster.Spec.Monitoring.Grafana.Enabled
+		cluster.Spec.Monitoring.Grafana.Enabled &&
+		cluster.Spec.Monitoring.Prometheus != nil &&
+		cluster.Spec.Monitoring.Prometheus.Enabled
 }
 
 func (c *grafana) Reconcile(cluster *corev1.StorageCluster) error {
@@ -150,7 +151,7 @@ func (c *grafana) Reconcile(cluster *corev1.StorageCluster) error {
 func (c *grafana) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	err := k8sutil.DeleteDeployment(c.k8sClient, GrafanaDeploymentName, cluster.Namespace, *ownerRef)
-	if err != nil && !metaerrors.IsNoMatchError(err) {
+	if err != nil {
 		return err
 	}
 	return nil
@@ -343,12 +344,6 @@ func (c *grafana) getGrafanaDeploymentSpec(
 				)
 			}
 		}
-	}
-
-	// If resources is specified in the spec, the resources specified by annotation (such as portworx.io/autopilot-cpu)
-	// will be overwritten.
-	if cluster.Spec.Autopilot.Resources != nil {
-		deployment.Spec.Template.Spec.Containers[0].Resources = *cluster.Spec.Autopilot.Resources
 	}
 
 	return deployment

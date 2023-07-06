@@ -36,6 +36,7 @@ const (
 	defaultLogUploaderImage    = "purestorage/log-upload:1.0.0"
 	defaultCCMGoProxyImage     = "purestorage/telemetry-envoy:1.0.1"
 	defaultPxRepoImage         = "portworx/px-repo:1.1.0"
+	defaultGrafanaImage        = "grafana/grafana:10.0.1"
 
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
 	DefaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
@@ -74,6 +75,7 @@ type Release struct {
 	CSISnapshotController      string `yaml:"csiSnapshotController,omitempty"`
 	CSIHealthMonitorController string `yaml:"csiHealthMonitorController,omitempty"`
 	Prometheus                 string `yaml:"prometheus,omitempty"`
+	Grafana                    string `yaml:"grafana,omitempty"`
 	AlertManager               string `yaml:"alertManager,omitempty"`
 	PrometheusOperator         string `yaml:"prometheusOperator,omitempty"`
 	PrometheusConfigMapReload  string `yaml:"prometheusConfigMapReload,omitempty"`
@@ -248,6 +250,7 @@ func fillDefaults(
 	}
 	fillCSIDefaults(rel, k8sVersion)
 	fillPrometheusDefaults(rel, k8sVersion)
+	fillGrafanaDefaults(rel, k8sVersion)
 	fillTelemetryDefaults(rel)
 }
 
@@ -308,6 +311,15 @@ func fillPrometheusDefaults(
 	}
 	if rel.Components.AlertManager == "" {
 		rel.Components.AlertManager = defaultAlertManagerImage
+	}
+}
+
+func fillGrafanaDefaults(
+	rel *Version,
+	k8sVersion *version.Version,
+) {
+	if rel.Components.Grafana == "" {
+		rel.Components.Grafana = defaultGrafanaImage
 	}
 }
 
