@@ -50,7 +50,7 @@ type PreFlightPortworx interface {
 	// DeletePreFlight deletes the pre-flight daemonset
 	DeletePreFlight() error
 	// CreatePreFlightDaemonsetSpec is used to create the pre-fligh daemonset pod spec
-	CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerReference) *appsv1.DaemonSet
+	CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerReference) (*appsv1.DaemonSet, error)
 }
 
 type preFlightPortworx struct {
@@ -94,7 +94,7 @@ func getPreFlightPodsFromNamespace(k8sClient client.Client, namespace string) (*
 	return ds, pods, err
 }
 
-func (u *preFlightPortworx) CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerReference) *appsv1.DaemonSet {
+func (u *preFlightPortworx) CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerReference) (*appsv1.DaemonSet, error) {
 	// Create daemonset from podSpec
 	labels := map[string]string{
 		"name": pxPreFlightDaemonSetName,
@@ -139,11 +139,11 @@ func (u *preFlightPortworx) CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerR
 	// Object preflightDS.Spec.Template.Spec is created above using 'u.podSpec' however
 	// check to make sure the necessary spec objects exist.
 	if len(u.podSpec.Containers) <= 0 {
-		return fmt.Errorf("podSpec.Containers object not created")
+		return nil, fmt.Errorf("podSpec.Containers object not created")
 	}
 
 	if u.podSpec.Containers[0].Name != "portworx" {
-		return fmt.Errorf("podSpec.Containers object not created correctly, 'portworx' container not first")
+		return nil, fmt.Errorf("podSpec.Containers object not created correctly, 'portworx' container not first")
 	}
 
 	// Add pre-flight param
@@ -154,11 +154,11 @@ func (u *preFlightPortworx) CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerR
 	if pxutil.GetPortworxVersion(u.cluster).GreaterThanOrEqual(pxVer31) {
 		// Requires OCI-Mon changes so only supported in 3.1
 		if preflightDS.Spec.Template.Spec.Containers[0].ReadinessProbe == nil {
-			return fmt.Errorf("readinessProbe object not created")
+			return nil, fmt.Errorf("readinessProbe object not created")
 		}
 
 		if preflightDS.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet == nil {
-			return fmt.Errorf("probeHandler.HTTPGet object not created")
+			return nil, fmt.Errorf("probeHandler.HTTPGet object not created")
 		}
 
 		preFltEndPtPort := component.GetCCMListeningPort(u.cluster) + 1 // preflight endpoint port  +1 CCM uploader port
@@ -220,7 +220,7 @@ func (u *preFlightPortworx) CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerR
 		}
 	}
 
-	return preflightDS
+	return preflightDS, nil
 }
 
 // GetPreFlightPods returns the pods of the pre-flight daemonset
@@ -279,11 +279,14 @@ func (u *preFlightPortworx) RunPreFlight() error {
 		}
 	}
 
-	preflightDS := u.CreatePreFlightDaemonsetSpec(ownerRef)
+	preflightDS, specErr := u.CreatePreFlightDaemonsetSpec(ownerRef)
+	if specErr != nil {
+		logrus.Errorf("runPreFlight: failed to create preflight daemonset spec: %v", specErr)
+	}
 
 	err = u.k8sClient.Create(context.TODO(), preflightDS)
 	if err != nil {
-		logrus.Errorf("RunPreFlight: error creating: %v", err)
+		logrus.Errorf("runPreFlight: error creating: %v", err)
 	}
 
 	return err
