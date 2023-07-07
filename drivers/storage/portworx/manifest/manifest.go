@@ -36,10 +36,11 @@ const (
 	defaultLogUploaderImage    = "purestorage/log-upload:1.0.0"
 	defaultCCMGoProxyImage     = "purestorage/telemetry-envoy:1.0.1"
 	defaultPxRepoImage         = "portworx/px-repo:1.1.0"
-	defaultGrafanaImage        = "grafana/grafana:10.0.1"
 
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
-	DefaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
+	DefaultPrometheusOperatorImage = "quay.io/coreos/prometheus-operator:v0.34.0"
+	// DefaultPrometheusOperatorImage is the default grafana image to use
+	DefaultGrafanaImage                   = "grafana/grafana:10.0.1"
 	defaultPrometheusImage                = "quay.io/prometheus/prometheus:v2.7.1"
 	defaultPrometheusConfigMapReloadImage = "quay.io/coreos/configmap-reload:v0.0.1"
 	defaultPrometheusConfigReloaderImage  = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
@@ -319,7 +320,7 @@ func fillGrafanaDefaults(
 	k8sVersion *version.Version,
 ) {
 	if rel.Components.Grafana == "" {
-		rel.Components.Grafana = defaultGrafanaImage
+		rel.Components.Grafana = DefaultGrafanaImage
 	}
 }
 

@@ -497,6 +497,26 @@ func TestManifestFillPrometheusDefaults(t *testing.T) {
 	require.Equal(t, "quay.io/prometheus/alertmanager:v0.24.0", rel.Components.AlertManager)
 }
 
+func TestManifestFillGrafanaDefaults(t *testing.T) {
+	expected := &Version{
+		PortworxVersion: "3.0.0",
+	}
+
+	k8sVersion, _ := version.NewSemver("1.16.8")
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:" + expected.PortworxVersion,
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient()
+	m := Instance()
+	m.Init(k8sClient, nil, k8sVersion)
+	rel := m.GetVersions(cluster, true)
+	fillDefaults(expected, k8sVersion)
+	require.Equal(t, expected, rel)
+	require.Equal(t, DefaultGrafanaImage, rel.Components.Grafana)
+}
 func TestManifestWithForceFlagAndNewerManifest(t *testing.T) {
 	k8sVersion, _ := version.NewSemver("1.15.0")
 	expected := &Version{
