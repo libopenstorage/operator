@@ -49,6 +49,10 @@ const (
 	defaultEksCloudStorageDeviceSize  = "150"
 )
 
+var (
+	ErrNodeListEmpty = stderr.New("no nodes were available for px installation")
+)
+
 type portworx struct {
 	k8sClient          client.Client
 	k8sVersion         *version.Version
@@ -373,6 +377,9 @@ func (p *portworx) getDefaultMaxStorageNodesPerZone(
 		return 0, err
 	}
 	numZones := len(zoneMap)
+	if numZones <= 0 {
+		return 0, ErrNodeListEmpty
+	}
 	storageNodes = uint64(len(nodeList.Items) / numZones)
 	return uint32(storageNodes), nil
 }
@@ -421,16 +428,6 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	if toUpdate.Annotations == nil {
 		toUpdate.Annotations = make(map[string]string)
 	}
-	// Initialize the preflight check annotation
-	if preflight.RequiresCheck() {
-		if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
-			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "true"
-		}
-	}
-
-	if preflight.IsEKS() {
-		toUpdate.Annotations[pxutil.AnnotationIsEKS] = "true"
-	}
 
 	if toUpdate.Status.DesiredImages == nil {
 		toUpdate.Status.DesiredImages = &corev1.ComponentImages{}
@@ -451,6 +448,17 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		if err := p.setTelemetryDefaults(toUpdate); err != nil {
 			return err
 		}
+	}
+
+	// Initialize the preflight check annotation
+	if preflight.RequiresCheck() {
+		if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
+			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "true"
+		}
+	}
+
+	if preflight.IsEKS() {
+		toUpdate.Annotations[pxutil.AnnotationIsEKS] = "true"
 	}
 
 	removeDeprecatedFields(toUpdate)
@@ -668,6 +676,22 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 	setAutopilotDefaults(toUpdate)
 	setTLSDefaults(toUpdate)
+
+	if pxutil.IsFreshInstall(toUpdate) {
+		// Check for FACD variable on a new install: if so, add an annotation saying
+		// it's okay to continue.
+		facdTopologyEnv := ""
+		for _, env := range toUpdate.Spec.Env {
+			if env.Name == "FACD_TOPOLOGY_ENABLED" {
+				facdTopologyEnv = strings.ToLower(env.Value)
+				break
+			}
+		}
+
+		if facdTopologyEnv == "true" {
+			toUpdate.Annotations[pxutil.AnnotationFACDTopology] = "true"
+		}
+	}
 	return nil
 }
 
@@ -766,31 +790,18 @@ func (p *portworx) validateFACDTopology(cluster *corev1.StorageCluster) error {
 		}
 	}
 
-	if facdTopologyEnv == "true" {
-		// FACD topology is enabled. See if we already have the annotation marking this as valid, or if not, check if this is a fresh install
-
-		// TODO: once we support upgrading to FACD topology, it will also be valid after whatever version supports that
-		isValid := false
-		if pxutil.IsFreshInstall(cluster) {
-			if cluster.Annotations == nil {
-				cluster.Annotations = make(map[string]string)
-			}
-			cluster.Annotations[pxutil.AnnotationFACDTopology] = "true"
-			isValid = true
-		}
-		if !isValid {
-			if a, ok := cluster.Annotations[pxutil.AnnotationFACDTopology]; ok && a != "" {
-				isValid = true
-			}
-		}
-
-		if !isValid {
-			// Fail the request!
-			return fmt.Errorf("FACD topology cannot be enabled on existing clusters")
-		}
+	if facdTopologyEnv != "true" {
+		return nil
 	}
 
-	return nil
+	// FACD topology is enabled. See if we already have the annotation marking this as valid.
+	// TODO: once we support upgrading to FACD topology, it will also be valid after whatever version supports that
+	if v, ok := cluster.Annotations[pxutil.AnnotationFACDTopology]; ok && v == "true" {
+		return nil
+	}
+
+	// Fail the request as we don't have the annotation allowing it
+	return fmt.Errorf("FACD topology cannot be enabled on existing clusters")
 }
 
 func (p *portworx) IsPodUpdated(
@@ -1158,6 +1169,7 @@ func setPortworxStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
 			toUpdate.Spec.Storage = &corev1.StorageSpec{}
 		}
 	}
+
 	if toUpdate.Spec.Storage != nil {
 		if toUpdate.Spec.Storage.Devices == nil &&
 			(toUpdate.Spec.Storage.UseAllWithPartitions == nil || !*toUpdate.Spec.Storage.UseAllWithPartitions) &&
@@ -1165,6 +1177,25 @@ func setPortworxStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
 			toUpdate.Spec.Storage.UseAll = boolPtr(true)
 		}
 	}
+
+	if toUpdate.Spec.CloudStorage != nil {
+		providerName := toUpdate.Spec.CloudStorage.Provider
+
+		// if provider is not set, let's check if it's vSphere
+		if providerName == nil || len(*providerName) == 0 {
+			provider := pxutil.GetCloudProvider(toUpdate)
+			if len(provider) > 0 {
+				providerName = &provider
+			}
+		}
+
+		if providerName != nil &&
+			preflight.Instance().ProviderName() != *providerName {
+			preflight.Instance().SetProvider(*providerName)
+		}
+		toUpdate.Spec.CloudStorage.Provider = providerName
+	}
+
 	if toUpdate.Spec.CloudStorage != nil && preflight.IsEKS() {
 		// Set default drive type to gp3 if not specified
 		for i := 0; i < len(toUpdate.Spec.CloudStorage.CapacitySpecs); i++ {

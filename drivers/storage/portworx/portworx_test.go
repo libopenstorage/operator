@@ -160,12 +160,46 @@ func TestValidate(t *testing.T) {
 
 	err = driver.Validate(cluster)
 	require.NoError(t, err)
-	require.Contains(t, cluster.Annotations[pxutil.AnnotationMiscArgs], "-T dmthin")
+	require.Contains(t, cluster.Annotations[pxutil.AnnotationMiscArgs], "-T px-storev2")
 	require.NotEmpty(t, recorder.Events)
 	<-recorder.Events // Pop first event which is Default telemetry enabled event
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling PX-StoreV2"))
 	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaData)
+
+	//
+	// Validate Pre-flight Daemonset Pod Spec
+	//
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationPreflightCheck: "true",
+	}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	podSpec, err := driver.GetStoragePodSpec(cluster, "")
+	require.NoError(t, err)
+	require.Equal(t, 2, len(podSpec.Containers))
+
+	// phone-home cm volume mount, should not exists since pre-flight is enabled
+	for _, cnt := range podSpec.Containers {
+		for _, volumeMount := range cnt.VolumeMounts {
+			require.True(t, volumeMount.Name != "ccm-phonehome-config")
+		}
+	}
+
+	preFlighter := NewPreFlighter(cluster, k8sClient, podSpec)
+	require.NotNil(t, preFlighter)
+
+	/// Create preflighter podSpec
+	preflightDSCheck := preFlighter.CreatePreFlightDaemonsetSpec(clusterRef)
+
+	// Make sure the phone-home cm volume mount, still does not exists
+	for _, cnt := range preflightDSCheck.Spec.Template.Spec.Containers {
+		for _, volumeMount := range cnt.VolumeMounts {
+			require.True(t, volumeMount.Name != "ccm-phonehome-config")
+		}
+	}
 }
 
 func TestGetSelectorLabels(t *testing.T) {
@@ -2517,6 +2551,11 @@ func TestValidationsForFACDTopology(t *testing.T) {
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				pxutil.AnnotationFACDTopology: "true",
+			},
+		},
 		Spec: corev1.StorageClusterSpec{
 			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
@@ -9475,6 +9514,80 @@ func TestDisaggregatedMissingLabels(t *testing.T) {
 	require.NotNil(t, cluster.Spec.CloudStorage)
 	require.NotNil(t, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 	require.Equal(t, uint32(6), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+}
+
+func TestGetDefaultMaxStorageNodesPerZone(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.21.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			CloudStorage: &corev1.CloudStorageSpec{
+				MaxStorageNodesPerZone: nil,
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(cluster)
+	recorder := record.NewFakeRecorder(10)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	var nodeList v1.NodeList
+	storageNodes, err := driver.getDefaultMaxStorageNodesPerZone(cluster, &nodeList)
+	require.Equal(t, uint32(0), storageNodes)
+	require.NoError(t, err)
+
+	nodeList.Items = []v1.Node{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "node1",
+				Labels: map[string]string{
+					v1.LabelTopologyZone:   "bar-pxzone1",
+					v1.LabelTopologyRegion: "bar"},
+			},
+			Spec: v1.NodeSpec{
+				ProviderID: "azure://",
+			}},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "node2",
+				Labels: map[string]string{
+					v1.LabelTopologyZone:   "foo-pxzone2",
+					v1.LabelTopologyRegion: "foo"},
+			},
+			Spec: v1.NodeSpec{
+				ProviderID: "azure://",
+			}},
+	}
+
+	k8sClient = testutil.FakeK8sClient(cluster, &nodeList)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	storageNodes, err = driver.getDefaultMaxStorageNodesPerZone(cluster, &nodeList)
+	require.Equal(t, uint32(1), storageNodes)
+	require.NoError(t, err)
+
+	k8sClient = testutil.FakeK8sClient(cluster)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	storageNodes, err = driver.getDefaultMaxStorageNodesPerZone(cluster, &nodeList)
+	require.Equal(t, uint32(0), storageNodes)
+	require.Equal(t, ErrNodeListEmpty, err)
 }
 
 func TestStorageClusterDefaultsMaxStorageNodesPerZone(t *testing.T) {

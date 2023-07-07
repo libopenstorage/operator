@@ -689,6 +689,131 @@ func TestReconcileKVDB(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestReconcileKVDBOddSatusPodCleanup(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	testNS := "test-ns"
+	clusterName := "test-cluster"
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: testNS,
+		},
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
+				Internal: true,
+			},
+		},
+	}
+
+	clusterRef := metav1.NewControllerRef(cluster, corev1.SchemeGroupVersion.WithKind("StorageCluster"))
+
+	// node2 will have kvdb pods but node is no longer kvdb. So test will check for deleted pods
+	testKVDBNode2 := "node2"
+	kvdbNode2 := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            testKVDBNode2,
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: corev1.NodeStatus{
+			Phase: string(corev1.NodeInitStatus),
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:   corev1.NodeKVDBCondition,
+					Status: corev1.NodeOnlineStatus,
+				},
+			},
+			Storage: &corev1.StorageStatus{
+				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
+				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
+			},
+		},
+	}
+	k8sNode2 := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: testKVDBNode2,
+		},
+		Status: v1.NodeStatus{
+			Phase: v1.NodeRunning,
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(kvdbNode2, k8sNode2, cluster)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	recorder := record.NewFakeRecorder(10)
+	driver := testutil.MockDriver(mockCtrl)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("ut-driver").AnyTimes()
+
+	controller := Controller{
+		client:      k8sClient,
+		recorder:    recorder,
+		Driver:      driver,
+		nodeInfoMap: make(map[string]*k8s.NodeInfo),
+	}
+
+	kvdbPodLabs := controller.kvdbPodLabels(cluster)
+
+	// add 3 KVDB pods to the same node, all in weird non-running states
+	testPodsData := []struct {
+		name   string
+		reason string
+		msg    string
+	}{
+		{"kvdb-term1", "Terminated", "Pod was terminated in response to imminent node shutdown."},
+		{"kvdb-evict2", "Evicted", "..."},
+		{"kvdb-out3", "OutOfPods", "..."},
+	}
+	for i, td := range testPodsData {
+		_, err := coreops.Instance().CreatePod(&v1.Pod{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Pod",
+				APIVersion: "v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      td.name,
+				Namespace: cluster.Namespace,
+				Labels:    kvdbPodLabs,
+			},
+			Spec: v1.PodSpec{
+				NodeName: testKVDBNode2,
+			},
+			Status: v1.PodStatus{
+				Reason:  td.reason,
+				Message: td.msg,
+			},
+		})
+		require.NoError(t, err, "Unexpected error for test #d / %v", i+i, td)
+	}
+	// verify we got 3 quirky kvdb-pods
+	podList, err := coreops.Instance().GetPods(cluster.Namespace, kvdbPodLabs)
+	require.NoError(t, err)
+	require.Len(t, podList.Items, 3)
+
+	podNode2 := v1.PodSpec{
+		NodeName: testKVDBNode2,
+	}
+	driver.EXPECT().GetKVDBPodSpec(gomock.Any(), "node2").Return(podNode2, nil).AnyTimes()
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      testKVDBNode2,
+			Namespace: testNS,
+		},
+	}
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	// after reconcile, we expect odd-status kvdb pods gone, and new pod set up
+	podList, err = coreops.Instance().GetPods(cluster.Namespace, kvdbPodLabs)
+	require.NoError(t, err)
+	require.Len(t, podList.Items, 1)
+	require.Empty(t, podList.Items[0].Name)
+	require.Empty(t, podList.Items[0].Status.Reason)
+}
+
 func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()

@@ -49,6 +49,8 @@ type PreFlightPortworx interface {
 	ProcessPreFlightResults(recorder record.EventRecorder, storageNodes []*corev1.StorageNode) error
 	// DeletePreFlight deletes the pre-flight daemonset
 	DeletePreFlight() error
+	// CreatePreFlightDaemonsetSpec is used to create the pre-fligh daemonset pod spec
+	CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerReference) *appsv1.DaemonSet
 }
 
 type preFlightPortworx struct {
@@ -59,7 +61,7 @@ type preFlightPortworx struct {
 }
 
 // Existing dmThin strings
-var dmthinRegex = regexp.MustCompile("(?i)(dmthin|PX-StoreV2|px-store-v2)")
+var dmthinRegex = regexp.MustCompile("(?i)(PX-StoreV2|px-store-v2)")
 
 // NewPreFlighter returns an implementation of PreFlightPortworx interface
 func NewPreFlighter(
@@ -90,6 +92,105 @@ func GetPreFlightPodsFromNamespace(k8sClient client.Client, namespace string) (*
 	pods, err := k8sutil.GetDaemonSetPods(k8sClient, ds)
 
 	return ds, pods, err
+}
+
+func (u *preFlightPortworx) CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerReference) *appsv1.DaemonSet {
+	// Create daemonset from podSpec
+	labels := map[string]string{
+		"name": pxPreFlightDaemonSetName,
+	}
+
+	preflightDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pxPreFlightDaemonSetName,
+			Namespace:       u.cluster.Namespace,
+			Labels:          labels,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: u.podSpec,
+			},
+		},
+	}
+	/* TODO  PWX-28826 Run DMThin pre-flight checks
+
+	Operator starts a daemonset with oci-monitor pods in pre-flight mode (--preflight)
+	Operator waits for all daemonset pods to be 1/1 (for this the oci-monitor in preflight mode must not exit).
+		oci-monitor pod has to declare it’s done
+	Operator deletes the preflight daemonset
+	Operator reads Checks in the StorageNode for each node
+	If Checks in any of the nodes
+		fail: Operator sets backend to btrfs
+			// Log, raise event and do nothing. Default already at btrfs
+		all success: Operator sets backend to PX-storeV2
+			// Append PX-storeV2 backend use MiscArgs()
+			toUpdate.Annotations[pxutil.AnnotationMiscArgs] = " -T PX-storeV2"
+
+	   	u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(miscArgs)
+	*/
+
+	checkArgs := func(args []string) {
+		for i, arg := range args {
+			if arg == "-T" {
+				if dmthinRegex.Match([]byte(args[i+1])) {
+					u.hardFail = true
+				}
+			}
+		}
+	}
+
+	// Check for pre-existing DMthin in container args
+	checkArgs(u.podSpec.Containers[0].Args)
+
+	if !u.hardFail {
+		// If PX-StoreV2 param does not exist add it
+		preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"-T", "px-storev2"},
+			preflightDS.Spec.Template.Spec.Containers[0].Args...)
+	} else {
+		logrus.Infof("runPreflight: running pre-flight with existing PX-StoreV2 param, hard fail check enabled")
+	}
+
+	// Add pre-flight param
+	preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"--pre-flight"},
+		preflightDS.Spec.Template.Spec.Containers[0].Args...)
+
+	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {
+		preflightDS.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *u.cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	preflightDS.Spec.Template.Spec.ServiceAccountName = PxPreFlightServiceAccountName
+
+	if u.cluster.Spec.Placement != nil {
+		if u.cluster.Spec.Placement.NodeAffinity != nil {
+			preflightDS.Spec.Template.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: u.cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+
+		if len(u.cluster.Spec.Placement.Tolerations) > 0 {
+			preflightDS.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+			for _, toleration := range u.cluster.Spec.Placement.Tolerations {
+				preflightDS.Spec.Template.Spec.Tolerations = append(
+					preflightDS.Spec.Template.Spec.Tolerations,
+					*(toleration.DeepCopy()),
+				)
+			}
+		}
+	}
+
+	return preflightDS
 }
 
 // GetPreFlightPods returns the pods of the pre-flight daemonset
@@ -151,100 +252,7 @@ func (u *preFlightPortworx) RunPreFlight() error {
 		}
 	}
 
-	// Create daemonset from podSpec
-	labels := map[string]string{
-		"name": pxPreFlightDaemonSetName,
-	}
-
-	preflightDS := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            pxPreFlightDaemonSetName,
-			Namespace:       u.cluster.Namespace,
-			Labels:          labels,
-			OwnerReferences: []metav1.OwnerReference{*ownerRef},
-		},
-		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
-			},
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: u.podSpec,
-			},
-		},
-	}
-	/* TODO  PWX-28826 Run DMThin pre-flight checks
-
-	Operator starts a daemonset with oci-monitor pods in pre-flight mode (--preflight)
-	Operator waits for all daemonset pods to be 1/1 (for this the oci-monitor in preflight mode must not exit).
-		oci-monitor pod has to declare it’s done
-	Operator deletes the preflight daemonset
-	Operator reads Checks in the StorageNode for each node
-	If Checks in any of the nodes
-		fail: Operator sets backend to btrfs
-			// Log, raise event and do nothing. Default already at btrfs
-		all success: Operator sets backend to dmthin
-			// Append dmthin backend use MiscArgs()
-			toUpdate.Annotations[pxutil.AnnotationMiscArgs] = " -T dmthin"
-
-	   	u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(miscArgs)
-	*/
-
-	checkArgs := func(args []string) {
-		for i, arg := range args {
-			if arg == "-T" {
-				if dmthinRegex.Match([]byte(args[i+1])) {
-					u.hardFail = true
-				}
-			}
-		}
-	}
-
-	// Check for pre-existing DMthin in container args
-	checkArgs(u.podSpec.Containers[0].Args)
-
-	if !u.hardFail {
-		// If Dmthin param does not exist add it
-		preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"-T", "dmthin"},
-			preflightDS.Spec.Template.Spec.Containers[0].Args...)
-	} else {
-		logrus.Infof("runPreflight: running pre-flight with existing PX-StoreV2 param, hard fail check enabled")
-	}
-
-	// Add pre-flight param
-	preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"--pre-flight"},
-		preflightDS.Spec.Template.Spec.Containers[0].Args...)
-
-	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {
-		preflightDS.Spec.Template.Spec.ImagePullSecrets = append(
-			[]v1.LocalObjectReference{},
-			v1.LocalObjectReference{
-				Name: *u.cluster.Spec.ImagePullSecret,
-			},
-		)
-	}
-
-	preflightDS.Spec.Template.Spec.ServiceAccountName = PxPreFlightServiceAccountName
-
-	if u.cluster.Spec.Placement != nil {
-		if u.cluster.Spec.Placement.NodeAffinity != nil {
-			preflightDS.Spec.Template.Spec.Affinity = &v1.Affinity{
-				NodeAffinity: u.cluster.Spec.Placement.NodeAffinity.DeepCopy(),
-			}
-		}
-
-		if len(u.cluster.Spec.Placement.Tolerations) > 0 {
-			preflightDS.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
-			for _, toleration := range u.cluster.Spec.Placement.Tolerations {
-				preflightDS.Spec.Template.Spec.Tolerations = append(
-					preflightDS.Spec.Template.Spec.Tolerations,
-					*(toleration.DeepCopy()),
-				)
-			}
-		}
-	}
+	preflightDS := u.CreatePreFlightDaemonsetSpec(ownerRef)
 
 	err = u.k8sClient.Create(context.TODO(), preflightDS)
 	if err != nil {
@@ -281,7 +289,9 @@ func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorde
 
 	if passed {
 		if !u.hardFail { // Enable DMthin via misc args if not enabled already
-			u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T dmthin")
+			u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T px-storev2")
+			// Remove depricate '-T dmthin'
+			u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.ReplaceAll(u.cluster.Annotations[pxutil.AnnotationMiscArgs], "-T dmthin", "")
 			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling PX-StoreV2")
 		} else {
 			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "PX-StoreV2 currently enabled")

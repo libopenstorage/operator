@@ -531,7 +531,11 @@ func (t *template) portworxContainer(cluster *corev1.StorageCluster) v1.Containe
 }
 
 func (t *template) kvdbContainer() v1.Container {
-	kvdbProxyImage := util.GetImageURN(t.cluster, pxutil.ImageNamePause)
+	imageName := pxutil.ImageNamePause
+	if t.cluster.Status.DesiredImages != nil && t.cluster.Status.DesiredImages.Pause != "" {
+		imageName = t.cluster.Status.DesiredImages.Pause
+	}
+	kvdbProxyImage := util.GetImageURN(t.cluster, imageName)
 	kvdbTargetPort := 9019
 	if t.startPort != pxutil.DefaultStartPort {
 		kvdbTargetPort = t.startPort + 15
@@ -1126,7 +1130,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 	if t.isPKS {
 		envMap["PRE-EXEC"] = &v1.EnvVar{
 			Name:  "PRE-EXEC",
-			Value: "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi",
+			Value: "rm -fr /var/lib/osd/driver",
 		}
 	}
 
@@ -1279,6 +1283,15 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 		t.getBottleRocketVolumeInfoList,
 		t.GetVolumeInfoForTLSCerts,
 	}
+	// Only add telemetry phonehome volume mount if PX is at least 3.0
+	preFltCheck := ""
+	if t.cluster.Annotations != nil {
+		preFltCheck = strings.TrimSpace(strings.ToLower(t.cluster.Annotations[pxutil.AnnotationPreflightCheck]))
+	}
+	pxVer30, _ := version.NewVersion("3.0")
+	if t.pxVersion.GreaterThanOrEqual(pxVer30) && preFltCheck != "true" {
+		extensions = append(extensions, t.getTelemetryPhoneHomeVolumeInfoList)
+	}
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
 	}
@@ -1340,6 +1353,16 @@ func (t *template) getVolumes() []v1.Volume {
 		t.getBottleRocketVolumeInfoList,
 		t.GetVolumeInfoForTLSCerts,
 	}
+	// Only add telemetry phonehome volume if PX is at least 3.0
+	preFltCheck := ""
+	if t.cluster.Annotations != nil {
+		preFltCheck = strings.TrimSpace(strings.ToLower(t.cluster.Annotations[pxutil.AnnotationPreflightCheck]))
+	}
+	pxVer30, _ := version.NewVersion("3.0")
+	if t.pxVersion.GreaterThanOrEqual(pxVer30) && preFltCheck != "true" {
+		extensions = append(extensions, t.getTelemetryPhoneHomeVolumeInfoList)
+	}
+
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
 	}
@@ -1468,6 +1491,29 @@ func (t *template) getCSIVolumeInfoList() []volumeInfo {
 		},
 	)
 	return volumeInfoList
+}
+
+func (t *template) getTelemetryPhoneHomeVolumeInfoList() []volumeInfo {
+	if pxutil.IsTelemetryEnabled(t.cluster.Spec) {
+		return []volumeInfo{
+			{
+				name:      "ccm-phonehome-config",
+				mountPath: "/etc/ccm",
+				configMapType: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: component.ConfigMapNameTelemetryPhonehome,
+					},
+					Items: []v1.KeyToPath{
+						{
+							Key:  component.TelemetryPropertiesFilename,
+							Path: component.TelemetryPropertiesFilename,
+						},
+					},
+				},
+			},
+		}
+	}
+	return []volumeInfo{}
 }
 
 func (t *template) getTelemetryVolumeInfoList() []volumeInfo {
@@ -1767,9 +1813,12 @@ func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
 	pxVer2_9_1, _ := version.NewVersion("2.9.1")
 	if pxVersion.GreaterThanOrEqual(pxVer2_9_1) {
 		list = append(list, volumeInfo{
-			name:             "varlibosd",
-			hostPath:         "/var/lib/osd",
-			mountPath:        "/var/lib/osd",
+			name:      "varlibosd",
+			hostPath:  "/var/lib/osd",
+			mountPath: "/var/lib/osd",
+			pks: &pksVolumeInfo{
+				hostPath: "/var/vcap/store/lib/osd",
+			},
 			mountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
 		})
 	}
@@ -1789,13 +1838,6 @@ func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
 			mountPath: "/etc/pwx",
 			pks: &pksVolumeInfo{
 				hostPath: "/var/vcap/store/etc/pwx",
-			},
-		},
-		{
-			name: "pxlogs",
-			pks: &pksVolumeInfo{
-				mountPath: "/var/lib/osd/log",
-				hostPath:  "/var/vcap/store/lib/osd/log",
 			},
 		},
 		{
