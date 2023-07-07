@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"reflect"
 	"sort"
@@ -24,7 +25,7 @@ import (
 )
 
 const (
-	grafanaServiceName       = "px-grafana"
+	GrafanaServiceName       = "px-grafana"
 	grafanaDefaultCPU        = "0.1"
 	grafanaDefaultMemory     = "0.1"
 	grafanaPort              = 3000
@@ -118,11 +119,13 @@ func (c *grafana) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
 }
 
 func (c *grafana) IsEnabled(cluster *corev1.StorageCluster) bool {
-	return cluster.Spec.Monitoring != nil &&
+	ie := cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Grafana != nil &&
 		cluster.Spec.Monitoring.Grafana.Enabled &&
 		cluster.Spec.Monitoring.Prometheus != nil &&
 		cluster.Spec.Monitoring.Prometheus.Enabled
+	fmt.Println("**GG is en", ie)
+	return ie
 }
 
 func (c *grafana) Reconcile(cluster *corev1.StorageCluster) error {
@@ -360,7 +363,7 @@ func (c *grafana) createGrafanaService(
 		c.k8sClient,
 		&v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            grafanaServiceName,
+				Name:            GrafanaServiceName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 				Labels:          grafanaAppLabel,

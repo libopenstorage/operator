@@ -7569,6 +7569,66 @@ func TestPrometheusInstall(t *testing.T) {
 	require.Equal(t, prometheus.Spec.Volumes, cluster.Spec.Monitoring.Prometheus.Volumes)
 }
 
+func TestGrafanaInstall(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: true,
+				},
+				Grafana: &corev1.GrafanaSpec{
+					Enabled: true,
+				},
+				Telemetry: &corev1.TelemetrySpec{},
+			},
+		},
+	}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Grafana Deployment
+	expectedDeployment := testutil.GetExpectedDeployment(t, "grafanaDeployment.yaml")
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.GrafanaDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Labels, deployment.Labels)
+	require.Equal(t, expectedDeployment.Annotations, deployment.Annotations)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
+
+	// Grafana Service
+	expectedService := testutil.GetExpectedService(t, "grafanaService.yaml")
+	actualService := &v1.Service{}
+	err = testutil.Get(k8sClient, actualService, component.GrafanaServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedService.Name, actualService.Name)
+	require.Equal(t, expectedService.Namespace, actualService.Namespace)
+	require.Len(t, actualService.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualService.OwnerReferences[0].Name)
+	require.Equal(t, expectedService.Labels, actualService.Labels)
+	require.Equal(t, expectedService.Spec, actualService.Spec)
+
+	// Disable Grafana, deployment and service should be deleted
+	cluster.Spec.Monitoring.Grafana.Enabled = false
+}
+
 func TestCompleteInstallDuringMigration(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
@@ -15867,6 +15927,7 @@ func reregisterComponents() {
 	component.RegisterPVCControllerComponent()
 	component.RegisterMonitoringComponent()
 	component.RegisterPrometheusComponent()
+	component.RegisterGrafanaComponent()
 	component.RegisterAlertManagerComponent()
 	component.RegisterAuthComponent()
 	component.RegisterTLSComponent()
