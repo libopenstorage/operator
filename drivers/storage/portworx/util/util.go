@@ -687,34 +687,35 @@ func GetPxProxyEnvVarValue(cluster *corev1.StorageCluster) (string, string) {
 	return "", ""
 }
 
+var (
+	authHeader string
+)
+
 // ParsePxProxy trims protocol prefix then splits the proxy address of the form "host:port" with possible basic authentication credential
 func ParsePxProxyURL(proxy string) (string, string, string, error) {
-	var (
-		host       string
-		port       string
-		authHeader string
-	)
-	if strings.HasPrefix(proxy, HttpsProtocolPrefix) {
-		proxyURL := strings.TrimPrefix(proxy, HttpsProtocolPrefix)
-		auth := strings.Split(proxyURL, "@")[0]
+	if strings.HasPrefix(proxy, HttpsProtocolPrefix) && strings.Contains(proxy, "@") {
+		proxy := strings.TrimPrefix(proxy, HttpsProtocolPrefix)
+		auth := strings.Split(proxy, "@")[0]
 		encodedAuth := base64.StdEncoding.EncodeToString([]byte(auth))
 		authHeader = fmt.Sprintf("Basic %s", encodedAuth)
-		address, port, err := net.SplitHostPort(strings.Split(proxyURL, "@")[1])
+		host, port, err := net.SplitHostPort(strings.Split(proxy, "@")[1])
 		if err != nil {
 			return "", "", "", err
-		} else if address == "" || port == "" || encodedAuth == "" {
+		} else if host == "" || port == "" || encodedAuth == "" {
 			return "", "", "", fmt.Errorf("failed to parse px proxy url %s", proxy)
 		}
+		return host, port, authHeader, nil
 	} else {
 		proxy = strings.TrimPrefix(proxy, HttpProtocolPrefix)
-		address, port, err := net.SplitHostPort(proxy)
+		proxy = strings.TrimPrefix(proxy, HttpsProtocolPrefix) // treat https proxy as http proxy if no credential provided
+		host, port, err := net.SplitHostPort(proxy)
 		if err != nil {
 			return "", "", "", err
-		} else if address == "" || port == "" {
+		} else if host == "" || port == "" {
 			return "", "", "", fmt.Errorf("failed to parse px proxy url %s", proxy)
 		}
+		return host, port, authHeader, nil
 	}
-	return host, port, authHeader, nil
 }
 
 // GetValueFromEnvVar returns the value of v1.EnvVar Value or ValueFrom
