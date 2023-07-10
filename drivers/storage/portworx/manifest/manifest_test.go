@@ -36,6 +36,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
+			Grafana:                   "grafana/grafana:7.5.17",
 			Telemetry:                 "image/ccm-service:3.2.11",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
@@ -74,6 +75,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
+			Grafana:                   "grafana/grafana:7.5.17",
 			Telemetry:                 "image/ccm-service:3.2.11",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
@@ -164,6 +166,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.5.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.5.0",
 			AlertManager:              "image/alertmanager:2.6.0",
+			Grafana:                   "grafana/grafana:7.5.17",
 			Telemetry:                 "image/ccm-service:3.2.11",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
@@ -253,6 +256,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
+			Grafana:                   "grafana/grafana:7.5.17",
 			Telemetry:                 "image/ccm-go:1.0.0",
 			TelemetryProxy:            "purestorage/telemetry-envoy:1.0.0",
 			LogUploader:               "purestorage/log-upload:1.0.0",
@@ -334,6 +338,7 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			PrometheusConfigMapReload: "image/configmap-reload:2.6.0",
 			PrometheusConfigReloader:  "image/prometheus-config-reloader:2.6.0",
 			AlertManager:              "image/alertmanager:2.6.0",
+			Grafana:                   "grafana/grafana:7.5.17",
 			Telemetry:                 "image/ccm-service:3.2.11",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
@@ -509,7 +514,23 @@ func TestManifestFillGrafanaDefaults(t *testing.T) {
 		},
 	}
 
-	k8sClient := testutil.FakeK8sClient()
+	body, _ := yaml.Marshal(expected)
+	versionsConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DefaultConfigMapName,
+			Namespace: cluster.Namespace,
+		},
+		Data: map[string]string{
+			VersionConfigMapKey: string(body),
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(versionsConfigMap)
+
+	body, _ = yaml.Marshal(expected)
+	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
+	err := k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
+
 	m := Instance()
 	m.Init(k8sClient, nil, k8sVersion)
 	rel := m.GetVersions(cluster, true)

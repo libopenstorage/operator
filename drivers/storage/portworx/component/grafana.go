@@ -2,7 +2,6 @@ package component
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"reflect"
 	"sort"
@@ -38,9 +37,9 @@ const (
 	pxPerformanceDashboard   = "portworx-performance-dashboard.json"
 	pxVolumeDashboard        = "portworx-volume-dashboard.json"
 
-	pxGrafanaDatasourceConfigConfigMap = "px-grafana-datasource-config"
-	pxGrafanaDashboardConfigConfigMap  = "px-grafana-dashboard-config"
-	pxGrafanaDashboardsJsonConfigMap   = "px-grafana-dashboards-json"
+	PXGrafanaDatasourceConfigConfigMap = "px-grafana-datasource-config"
+	PXGrafanaDashboardConfigConfigMap  = "px-grafana-dashboard-config"
+	PXGrafanaDashboardsJsonConfigMap   = "px-grafana-dashboards-json"
 
 	// GrafanaDeploymentName is the name for the operator managed grafana
 	GrafanaDeploymentName = "px-grafana"
@@ -58,7 +57,7 @@ var (
 			VolumeSource: v1.VolumeSource{
 				ConfigMap: &v1.ConfigMapVolumeSource{
 					LocalObjectReference: v1.LocalObjectReference{
-						Name: pxGrafanaDatasourceConfigConfigMap,
+						Name: PXGrafanaDatasourceConfigConfigMap,
 					},
 				},
 			},
@@ -69,7 +68,7 @@ var (
 			VolumeSource: v1.VolumeSource{
 				ConfigMap: &v1.ConfigMapVolumeSource{
 					LocalObjectReference: v1.LocalObjectReference{
-						Name: pxGrafanaDashboardConfigConfigMap,
+						Name: PXGrafanaDashboardConfigConfigMap,
 					},
 				},
 			},
@@ -80,7 +79,7 @@ var (
 			VolumeSource: v1.VolumeSource{
 				ConfigMap: &v1.ConfigMapVolumeSource{
 					LocalObjectReference: v1.LocalObjectReference{
-						Name: pxGrafanaDashboardsJsonConfigMap,
+						Name: PXGrafanaDashboardsJsonConfigMap,
 					},
 				},
 			},
@@ -119,26 +118,24 @@ func (c *grafana) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
 }
 
 func (c *grafana) IsEnabled(cluster *corev1.StorageCluster) bool {
-	ie := cluster.Spec.Monitoring != nil &&
+	return cluster.Spec.Monitoring != nil &&
 		cluster.Spec.Monitoring.Grafana != nil &&
 		cluster.Spec.Monitoring.Grafana.Enabled &&
 		cluster.Spec.Monitoring.Prometheus != nil &&
 		cluster.Spec.Monitoring.Prometheus.Enabled
-	fmt.Println("**GG is en", ie)
-	return ie
 }
 
 func (c *grafana) Reconcile(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
-	if err := c.createConfigmapFromFiles([]string{pxGrafanaDashboardConfig}, pxGrafanaDashboardConfigConfigMap, cluster.Namespace, ownerRef); err != nil {
+	if err := c.createConfigmapFromFiles([]string{pxGrafanaDashboardConfig}, PXGrafanaDashboardConfigConfigMap, cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createConfigmapFromFiles([]string{pxGrafanaDatasource}, pxGrafanaDatasourceConfigConfigMap, cluster.Namespace, ownerRef); err != nil {
+	if err := c.createConfigmapFromFiles([]string{pxGrafanaDatasource}, PXGrafanaDatasourceConfigConfigMap, cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
 	if err := c.createConfigmapFromFiles([]string{pxClusterDashboard, pxEtcdDashboard, pxNodeDashboard, pxPerformanceDashboard, pxVolumeDashboard},
-		pxGrafanaDashboardsJsonConfigMap, cluster.Namespace, ownerRef); err != nil {
+		PXGrafanaDashboardsJsonConfigMap, cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
 	if err := c.createGrafanaDeployment(cluster, ownerRef); err != nil {
@@ -153,10 +150,27 @@ func (c *grafana) Reconcile(cluster *corev1.StorageCluster) error {
 
 func (c *grafana) Delete(cluster *corev1.StorageCluster) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	err := k8sutil.DeleteDeployment(c.k8sClient, GrafanaDeploymentName, cluster.Namespace, *ownerRef)
+	err := k8sutil.DeleteService(c.k8sClient, GrafanaServiceName, cluster.Namespace, *ownerRef)
 	if err != nil {
 		return err
 	}
+	err = k8sutil.DeleteDeployment(c.k8sClient, GrafanaDeploymentName, cluster.Namespace, *ownerRef)
+	if err != nil {
+		return err
+	}
+	err = k8sutil.DeleteConfigMap(c.k8sClient, PXGrafanaDashboardConfigConfigMap, cluster.Namespace, *ownerRef)
+	if err != nil {
+		return err
+	}
+	err = k8sutil.DeleteConfigMap(c.k8sClient, PXGrafanaDashboardsJsonConfigMap, cluster.Namespace, *ownerRef)
+	if err != nil {
+		return err
+	}
+	err = k8sutil.DeleteConfigMap(c.k8sClient, PXGrafanaDatasourceConfigConfigMap, cluster.Namespace, *ownerRef)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -167,10 +181,6 @@ func (c *grafana) createGrafanaDeployment(
 	ownerRef *metav1.OwnerReference,
 ) error {
 	imageName := c.getDesiredGrafanaImage(cluster)
-	if imageName == "" {
-		imageName = "grafana/grafana:10.0.1"
-	}
-
 	existingDeployment := &appsv1.Deployment{}
 	err := c.k8sClient.Get(
 		context.TODO(),
