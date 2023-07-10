@@ -86,6 +86,7 @@ const (
 	configParameterCertSecretNamespace                   = "CERT_SECRET_NAMESPACE"
 	configParameterCustomProxyAddress                    = "CUSTOM_PROXY_ADDRESS"
 	configParameterCustomProxyPort                       = "CUSTOM_PROXY_PORT"
+	configParameterCustomProxyBasicAuth                  = "BASIC_AUTH"
 	configParameterPortworxPort                          = "PORTWORX_PORT"
 	configParameterRegisterCloudSupportPort              = "REGISTER_CLOUD_SUPPORT_PORT"
 	configParameterRestCloudSupportPort                  = "REST_CLOUD_SUPPORT_PORT"
@@ -607,7 +608,7 @@ func (t *telemetry) createCCMGoConfigMapRegisterProxy(
 
 	_, proxy := pxutil.GetPxProxyEnvVarValue(cluster)
 	if proxy != "" && t.usePxProxy {
-		address, port, err := pxutil.SplitPxProxyHostPort(proxy)
+		host, port, authHeader, err := pxutil.ParsePxProxyURL(proxy)
 		if err != nil {
 			logrus.Errorf("failed to get custom proxy address and port from proxy %s: %v", proxy, err)
 			return k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameTelemetryRegisterProxy, cluster.Namespace, *ownerRef)
@@ -615,8 +616,9 @@ func (t *telemetry) createCCMGoConfigMapRegisterProxy(
 		configFileName = configFileNameTelemetryRegisterCustomProxy
 		replaceMap[configParameterCloudSupportTCPProxyPort] = fmt.Sprint(tcpProxyPort)
 		replaceMap[configParameterCloudSupportEnvoyInternalRedirectPort] = fmt.Sprint(envoyRedirectPort)
-		replaceMap[configParameterCustomProxyAddress] = address
+		replaceMap[configParameterCustomProxyAddress] = host
 		replaceMap[configParameterCustomProxyPort] = port
+		replaceMap[configParameterCustomProxyBasicAuth] = authHeader
 	}
 
 	config, err := readConfigMapDataFromFile(configFileName, replaceMap)
@@ -656,7 +658,7 @@ func (t *telemetry) createCCMGoConfigMapTelemetryPhonehomeProxy(
 
 	_, proxy := pxutil.GetPxProxyEnvVarValue(cluster)
 	if proxy != "" && t.usePxProxy {
-		address, port, err := pxutil.SplitPxProxyHostPort(proxy)
+		host, port, authHeader, err := pxutil.ParsePxProxyURL(proxy)
 		if err != nil {
 			logrus.Errorf("failed to get custom proxy address and port from %s: %v", proxy, err)
 			return k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace, *ownerRef)
@@ -664,8 +666,9 @@ func (t *telemetry) createCCMGoConfigMapTelemetryPhonehomeProxy(
 		configFileName = configFileNameTelemetryRestCustomProxy
 		replaceMap[configParameterCloudSupportTCPProxyPort] = fmt.Sprint(tcpProxyPort)
 		replaceMap[configParameterCloudSupportEnvoyInternalRedirectPort] = fmt.Sprint(envoyRedirectPort)
-		replaceMap[configParameterCustomProxyAddress] = address
+		replaceMap[configParameterCustomProxyAddress] = host
 		replaceMap[configParameterCustomProxyPort] = port
+		replaceMap[configParameterCustomProxyBasicAuth] = authHeader
 	}
 
 	config, err := readConfigMapDataFromFile(configFileName, replaceMap)
@@ -707,7 +710,7 @@ func (t *telemetry) createCCMGoConfigMapCollectorProxyV2(
 
 	_, proxy := pxutil.GetPxProxyEnvVarValue(cluster)
 	if proxy != "" && t.usePxProxy {
-		address, port, err := pxutil.SplitPxProxyHostPort(proxy)
+		host, port, authHeader, err := pxutil.ParsePxProxyURL(proxy)
 		if err != nil {
 			logrus.Errorf("failed to get custom proxy address and port from %s: %v", proxy, err)
 			return k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace, *ownerRef)
@@ -715,8 +718,9 @@ func (t *telemetry) createCCMGoConfigMapCollectorProxyV2(
 		configFileName = configFileNameTelemetryCollectorCustomProxy
 		replaceMap[configParameterCloudSupportTCPProxyPort] = fmt.Sprint(tcpProxyPort)
 		replaceMap[configParameterCloudSupportEnvoyInternalRedirectPort] = fmt.Sprint(envoyRedirectPort)
-		replaceMap[configParameterCustomProxyAddress] = address
+		replaceMap[configParameterCustomProxyAddress] = host
 		replaceMap[configParameterCustomProxyPort] = port
+		replaceMap[configParameterCustomProxyBasicAuth] = authHeader
 	}
 
 	config, err := readConfigMapDataFromFile(configFileName, replaceMap)

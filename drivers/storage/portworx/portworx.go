@@ -1473,7 +1473,7 @@ func (p *portworx) setTelemetryDefaults(
 		return nil
 	} else if proxyType == pxutil.EnvKeyPortworxHTTPProxy {
 		// CCM Go is supported, but HTTP proxy cannot be split into host and port
-		if _, _, proxyFormatErr := pxutil.SplitPxProxyHostPort(proxy); proxyFormatErr != nil {
+		if _, _, _, proxyFormatErr := pxutil.ParsePxProxyURL(proxy); proxyFormatErr != nil {
 			err = fmt.Errorf("telemetry is not supported with proxy in a format of: %s", proxy)
 		}
 	} else if proxyType == pxutil.EnvKeyPortworxHTTPSProxy {

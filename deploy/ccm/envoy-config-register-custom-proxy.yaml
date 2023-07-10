@@ -48,6 +48,9 @@ static_resources:
                 - header:
                     key: "product-version"
                     value: PRODUCT_VERSION
+                - header:
+                    key: "Proxy-Authorization"
+                    value: BASIC_AUTH
                 route:
                   host_rewrite_literal: REGISTER_PROXY_URL
                   cluster: cluster_register_cloud_support
@@ -100,6 +103,9 @@ static_resources:
             - header:
                 key: "product-version"
                 value: PRODUCT_VERSION
+            - header:
+                key: "Proxy-Authorization"
+                value: BASIC_AUTH
   clusters:
   - name: cluster_register_cloud_support
     type: STRICT_DNS

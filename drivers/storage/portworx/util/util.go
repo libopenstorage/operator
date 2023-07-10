@@ -256,6 +256,10 @@ const (
 
 	// TelemetryCertName is name of the telemetry cert.
 	TelemetryCertName = "pure-telemetry-certs"
+	// HttpProtocolPrefix is the prefix for HTTP protocol
+	HttpProtocolPrefix = "http://"
+	// HttpsProtocolPrefix is the prefix for HTTPS protocol
+	HttpsProtocolPrefix = "https://"
 )
 
 var (
@@ -683,17 +687,34 @@ func GetPxProxyEnvVarValue(cluster *corev1.StorageCluster) (string, string) {
 	return "", ""
 }
 
-// SplitPxProxyHostPort trims protocol prefix then splits the proxy address of the form "host:port"
-func SplitPxProxyHostPort(proxy string) (string, string, error) {
-	proxy = strings.TrimPrefix(proxy, "http://")
-	proxy = strings.TrimPrefix(proxy, "https://")
-	address, port, err := net.SplitHostPort(proxy)
-	if err != nil {
-		return "", "", err
-	} else if address == "" || port == "" {
-		return "", "", fmt.Errorf("failed to split px proxy address %s", proxy)
+// ParsePxProxy trims protocol prefix then splits the proxy address of the form "host:port" with possible basic authentication credential
+func ParsePxProxyURL(proxy string) (string, string, string, error) {
+	var (
+		host       string
+		port       string
+		authHeader string
+	)
+	if strings.HasPrefix(proxy, HttpsProtocolPrefix) {
+		proxyURL := strings.TrimPrefix(proxy, HttpsProtocolPrefix)
+		auth := strings.Split(proxyURL, "@")[0]
+		encodedAuth := base64.StdEncoding.EncodeToString([]byte(auth))
+		authHeader = fmt.Sprintf("Basic %s", encodedAuth)
+		address, port, err := net.SplitHostPort(strings.Split(proxyURL, "@")[1])
+		if err != nil {
+			return "", "", "", err
+		} else if address == "" || port == "" || encodedAuth == "" {
+			return "", "", "", fmt.Errorf("failed to parse px proxy url %s", proxy)
+		}
+	} else {
+		proxy = strings.TrimPrefix(proxy, HttpProtocolPrefix)
+		address, port, err := net.SplitHostPort(proxy)
+		if err != nil {
+			return "", "", "", err
+		} else if address == "" || port == "" {
+			return "", "", "", fmt.Errorf("failed to parse px proxy url %s", proxy)
+		}
 	}
-	return address, port, nil
+	return host, port, authHeader, nil
 }
 
 // GetValueFromEnvVar returns the value of v1.EnvVar Value or ValueFrom

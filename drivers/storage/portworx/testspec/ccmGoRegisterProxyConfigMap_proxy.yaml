@@ -60,6 +60,9 @@ data:
                     - header:
                         key: "product-version"
                         value: 2.12.0
+                    - header:
+                        key: "proxy-authorization"
+                        value: "Basic dXNlcjpwYXNzd29yZA=="
                     route:
                       host_rewrite_literal: register.cloud-support.purestorage.com
                       cluster: cluster_register_cloud_support
@@ -112,6 +115,9 @@ data:
                 - header:
                     key: "product-version"
                     value: 2.12.0
+                - header:
+                    key: "proxy-authorization"
+                    value: "Basic dXNlcjpwYXNzd29yZA=="
       clusters:
       - name: cluster_register_cloud_support
         type: STRICT_DNS
