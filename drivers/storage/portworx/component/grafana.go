@@ -174,6 +174,7 @@ func (c *grafana) Delete(cluster *corev1.StorageCluster) error {
 	return nil
 }
 
+// MarkDeleted marks the component as deleted in situations like StorageCluster deletion
 func (c *grafana) MarkDeleted() {}
 
 func (c *grafana) createGrafanaDeployment(
