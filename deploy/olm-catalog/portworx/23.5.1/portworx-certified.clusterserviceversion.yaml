@@ -63,7 +63,7 @@ spec:
   keywords: ["portworx", "persistent storage", "storage", "cloud native", "open source"]
   relatedImages:
     - name: portworx-operator
-                image: registry.connect.redhat.com/portworx/openstorage-operator@sha256:7e2f45ec7d10dd8b9c7e122b0d3dfd4db617e01db9e010e49a39f84acc1615cf
+      image: registry.connect.redhat.com/portworx/openstorage-operator@sha256:7e2f45ec7d10dd8b9c7e122b0d3dfd4db617e01db9e010e49a39f84acc1615cf
   labels:
     operated-by: portworx-operator
   selector:
