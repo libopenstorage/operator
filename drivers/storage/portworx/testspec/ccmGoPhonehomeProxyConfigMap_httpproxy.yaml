@@ -59,7 +59,7 @@ data:
                         value: 2.12.0
                     - header:
                         key: "proxy-authorization"
-                        value: "Basic dXNlcjpwYXNzd29yZA=="
+                        value: ""
                     route:
                       host_rewrite_literal: rest.cloud-support.purestorage.com
                       cluster: cluster_cloud_support
@@ -111,7 +111,7 @@ data:
                     value: 2.12.0
                 - header:
                     key: "proxy-authorization"
-                    value: "Basic dXNlcjpwYXNzd29yZA=="
+                    value: ""
       clusters:
       - name: cluster_cloud_support
         type: STRICT_DNS

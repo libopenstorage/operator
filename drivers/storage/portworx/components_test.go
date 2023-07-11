@@ -14410,7 +14410,7 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoRegisterProxyConfigMap_proxy.yaml")
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoRegisterProxyConfigMap_httpproxy.yaml")
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
 	require.NoError(t, err)
@@ -14420,7 +14420,7 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
 	require.Equal(t, expectedConfigMap.Data, configMap.Data)
 
-	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoPhonehomeProxyConfigMap_proxy.yaml")
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoPhonehomeProxyConfigMap_httpproxy.yaml")
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
 	require.NoError(t, err)
@@ -14430,7 +14430,7 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
 	require.Equal(t, expectedConfigMap.Data, configMap.Data)
 
-	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoCollectorProxyConfigMap_proxy.yaml")
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoCollectorProxyConfigMap_httpproxy.yaml")
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
 	require.NoError(t, err)
