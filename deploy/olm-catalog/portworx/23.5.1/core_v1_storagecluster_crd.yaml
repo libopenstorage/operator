@@ -77,16 +77,6 @@ spec:
                       cpu:
                         type: string
                         description: Requested cpu for the storage pod.
-                  limits:
-                    type: object
-                    description: Resource limit for the storage pod.
-                    properties:
-                      memory:
-                        type: string
-                        description: Memory limit for the storage pod.
-                      cpu:
-                        type: string
-                        description: CPU limit for the storage pod.
               image:
                 type: string
                 description: Docker image of the storage driver.
@@ -322,16 +312,6 @@ spec:
                             the taint. By default, it is not set, which means tolerate the taint forever
                             (do not evict). Zero and negative values will be treated as 0 (evict
                             immediately) by the system.
-              pxRepo:
-                type: object
-                description: Details of PX repo service for installing dependency modules.
-                properties:
-                  enabled:
-                    type: boolean
-                    description: Flag indicating whether PX repo needs to be enabled.
-                  image:
-                    type: string
-                    description: Docker image of the PX repo container.
               kvdb:
                 type: object
                 description: Details of KVDB that the storage driver will use.
@@ -915,19 +895,6 @@ spec:
                     type: array
                     description: List of input data providers to autopilot.
                     items:
-                      type: object
-                      properties:
-                        name:
-                          type: string
-                          description: Unique name of the data provider.
-                        type:
-                          type: string
-                          description: Type of the data provider. For instance - prometheus
-                        params:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                          description: Map of key-value params for the provider.
-                  gitops:
                       type: object
                       properties:
                         name:
@@ -3412,14 +3379,6 @@ spec:
                             - name
                           type: object
                         type: array
-                  grafana:
-                    type: object
-                    description: Contains configuration of Grafana to monitor the storage cluster.
-                    properties:
-                      enabled:
-                        type: boolean
-                        description: Flag indicating whether Grafana stack needs to be enabled and deployed
-                          by the Storage operator.
                   telemetry:
                     type: object
                     description: Contains telemetry configuration for the storage cluster.
@@ -3444,10 +3403,6 @@ spec:
                     type: object
                     description: Authorization configurations for a RBAC enabled storage cluster
                     properties:
-                      enabled:
-                        type: boolean
-                        description: Flag indicating whether Auth (RBAC) features need to be enabled for the storage
-                          cluster. If omited take the value of the parent flag (security.enabled)
                       guestAccess:
                         type: string
                         description: Defines the access mode of a guest user
@@ -3465,68 +3420,6 @@ spec:
                             type: string
                             description: Shared secret is the name of the Kubernetes secret containing the shared key
                               used for signing RBAC tokens. The secret has to be present in the StorageCluster namespace.
-                  tls:
-                    type: object
-                    description: Security configurations for a TLS enabled storage cluster
-                    properties:
-                      enabled:
-                        type: boolean
-                        description: Flag indicating whether TLS features need to be enabled for the storage
-                          cluster. Must be supplied and enabled (true) for TLS to be enabled.
-                      rootCA:
-                        type: object
-                        description: The source of the CA certificate.
-                        properties:
-                          filename:
-                            type: string
-                            description: If provided, Portworx will expect a certificate file installed in the same location
-                              on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/ca.crt
-                          secretRef:
-                            type: object
-                            description: The k8s secret supplying the certificate
-                            properties:
-                              secretName:
-                                type: string
-                                description: The name of the secret holding the certificate
-                              secretKey:
-                                type: string
-                                description: The key that contains the certificate
-                      serverCert:
-                        type: object
-                        description: The source of the public key certificate used by the portworx service for TLS.
-                        properties:
-                          filename:
-                            type: string
-                            description: If provided, Portworx will expect a certificate file installed in the same location
-                              on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/server.crt
-                          secretRef:
-                            type: object
-                            description: The k8s secret supplying the certificate
-                            properties:
-                              secretName:
-                                type: string
-                                description: The name of the secret holding the certificate
-                              secretKey:
-                                type: string
-                                description: The secret key that contains the certificate
-                      serverKey:
-                        type: object
-                        description: Overrides the source of the private key certificate used by the portworx service for TLS.
-                        properties:
-                          filename:
-                            type: string
-                            description: If provided, Portworx will expect a private key file installed in the same location
-                              on each node. All files must be installed on a subfolder under /etc/pwx. eg /etc/pwx/server.key
-                          secretRef:
-                            type: object
-                            description: The k8s secret supplying the private key
-                            properties:
-                              secretName:
-                                type: string
-                                description: The name of the secret holding the private key
-                              secretKey:
-                                type: string
-                                description: The secret key that contains the private key
               csi:
                 type: object
                 description: Contains CSI configuration for the storage cluster.
@@ -3983,9 +3876,6 @@ spec:
                   logUploader:
                     type: string
                     description: Desired image for log uploader.
-                  pxRepo:
-                    type: string
-                    description: Desired image for pxRepo.
                   kubeScheduler:
                     type: string
                     description: Desired image for kubernetes scheduler.
