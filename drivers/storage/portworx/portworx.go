@@ -405,6 +405,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 		if toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Prometheus != nil {
 			prometheusVersionChanged := p.hasPrometheusVersionChanged(toUpdate)
+			grafanaVersionChanged := p.hasGrafanaVersionChanged(toUpdate)
 			if toUpdate.Spec.Monitoring.Prometheus.Enabled &&
 				(toUpdate.Status.DesiredImages.PrometheusOperator == "" || pxVersionChanged || prometheusVersionChanged) {
 				toUpdate.Status.DesiredImages.Prometheus = release.Components.Prometheus
@@ -417,6 +418,12 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				(toUpdate.Status.DesiredImages.AlertManager == "" || pxVersionChanged || prometheusVersionChanged) {
 				toUpdate.Status.DesiredImages.AlertManager = release.Components.AlertManager
 			}
+			if toUpdate.Spec.Monitoring.Grafana != nil &&
+				toUpdate.Spec.Monitoring.Grafana.Enabled &&
+				toUpdate.Status.DesiredImages.Grafana == "" || pxVersionChanged || grafanaVersionChanged {
+				toUpdate.Status.DesiredImages.Grafana = release.Components.Grafana
+			}
+
 		}
 
 		if toUpdate.Status.DesiredImages.DynamicPlugin == "" || pxVersionChanged {
@@ -506,6 +513,12 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Spec.Monitoring.Prometheus.AlertManager == nil ||
 		!toUpdate.Spec.Monitoring.Prometheus.AlertManager.Enabled {
 		toUpdate.Status.DesiredImages.AlertManager = ""
+	}
+
+	if toUpdate.Spec.Monitoring == nil ||
+		toUpdate.Spec.Monitoring.Grafana == nil ||
+		!toUpdate.Spec.Monitoring.Grafana.Enabled {
+		toUpdate.Status.DesiredImages.Grafana = ""
 	}
 
 	setDefaultAutopilotProviders(toUpdate)
@@ -1321,8 +1334,11 @@ func (p *portworx) hasComponentChanged(cluster *corev1.StorageCluster) bool {
 		hasMetricsCollectorChanged(cluster) ||
 		hasLogUploaderChanged(cluster) ||
 		hasPrometheusChanged(cluster) ||
+		hasGrafanaChanged(cluster) ||
 		hasAlertManagerChanged(cluster) ||
 		p.hasPrometheusVersionChanged(cluster) ||
+		p.hasGrafanaVersionChanged(cluster) ||
+		hasPxRepoChanged(cluster) ||
 		p.hasKubernetesVersionChanged(cluster)
 }
 
@@ -1383,6 +1399,13 @@ func hasPrometheusChanged(cluster *corev1.StorageCluster) bool {
 		cluster.Status.DesiredImages.PrometheusOperator == ""
 }
 
+func hasGrafanaChanged(cluster *corev1.StorageCluster) bool {
+	return cluster.Spec.Monitoring != nil &&
+		cluster.Spec.Monitoring.Grafana != nil &&
+		cluster.Spec.Monitoring.Grafana.Enabled &&
+		cluster.Status.DesiredImages.Grafana == ""
+}
+
 func (p *portworx) hasKubernetesVersionChanged(cluster *corev1.StorageCluster) bool {
 	if p.k8sVersion == nil {
 		return false
@@ -1408,6 +1431,12 @@ func (p *portworx) hasPrometheusVersionChanged(cluster *corev1.StorageCluster) b
 	return p.k8sVersion != nil &&
 		p.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) &&
 		cluster.Status.DesiredImages.PrometheusOperator == manifest.DefaultPrometheusOperatorImage
+}
+
+func (p *portworx) hasGrafanaVersionChanged(cluster *corev1.StorageCluster) bool {
+	return p.k8sVersion != nil &&
+		p.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) &&
+		cluster.Status.DesiredImages.Grafana == manifest.DefaultGrafanaImage
 }
 
 func hasAlertManagerChanged(cluster *corev1.StorageCluster) bool {
