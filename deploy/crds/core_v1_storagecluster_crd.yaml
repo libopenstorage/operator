@@ -3412,6 +3412,14 @@ spec:
                             - name
                           type: object
                         type: array
+                  grafana:
+                    type: object
+                    description: Contains configuration of Grafana to monitor the storage cluster.
+                    properties:
+                      enabled:
+                        type: boolean
+                        description: Flag indicating whether Grafana stack needs to be enabled and deployed
+                          by the Storage operator.
                   telemetry:
                     type: object
                     description: Contains telemetry configuration for the storage cluster.

@@ -1320,6 +1320,7 @@ func (h *Handler) createManifestConfigMap(cluster *corev1.StorageCluster) error 
 			CSISnapshotController:      cluster.Status.DesiredImages.CSISnapshotController,
 			CSIHealthMonitorController: cluster.Status.DesiredImages.CSIHealthMonitorController,
 			Prometheus:                 cluster.Status.DesiredImages.Prometheus,
+			Grafana:                    cluster.Status.DesiredImages.Grafana,
 			AlertManager:               cluster.Status.DesiredImages.AlertManager,
 			PrometheusOperator:         cluster.Status.DesiredImages.PrometheusOperator,
 			PrometheusConfigMapReload:  cluster.Status.DesiredImages.PrometheusConfigMapReload,

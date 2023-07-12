@@ -259,7 +259,10 @@ getccmconfigs:
 getpluginconfigs:
 	cp deploy/plugin/* bin/configs/
 
-getconfigs: cleanconfigs getccmconfigs getpluginconfigs
+getgrafanaconfigs:
+	cp deploy/grafana/* bin/configs/
+
+getconfigs: cleanconfigs getccmconfigs getpluginconfigs getgrafanaconfigs
 	wget -q '$(PX_DOC_HOST)/samples/k8s/pxc/portworx-prometheus-rule.yaml' -P bin/configs --no-check-certificate
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagerconfigs.yaml' -O bin/configs/prometheus-crd-alertmanagerconfigs.yaml
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagers.yaml' -O bin/configs/prometheus-crd-alertmanagers.yaml
