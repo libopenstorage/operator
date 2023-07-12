@@ -374,7 +374,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.NoError(t, err)
 
 	// Use default image from release manifest when spec.image is not set
-	require.Equal(t, defaultPortworxImage+":2.10.0", cluster.Spec.Image)
+	require.Equal(t, DefaultPortworxImage+":2.10.0", cluster.Spec.Image)
 	require.Equal(t, "2.10.0", cluster.Spec.Version)
 	require.Equal(t, "2.10.0", cluster.Status.Version)
 	require.True(t, cluster.Spec.Kvdb.Internal)
@@ -388,7 +388,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Version = "  "
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Equal(t, defaultPortworxImage+":2.10.0", cluster.Spec.Image)
+	require.Equal(t, DefaultPortworxImage+":2.10.0", cluster.Spec.Image)
 	require.Equal(t, "2.10.0", cluster.Spec.Version)
 	require.Equal(t, "2.10.0", cluster.Status.Version)
 

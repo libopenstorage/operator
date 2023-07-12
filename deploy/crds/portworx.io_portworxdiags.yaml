@@ -120,6 +120,9 @@ spec:
               phase:
                 description: One word status of the entire diags collection job.
                 type: string
+              message:
+                description: Optional message used to give the reason for any failure.
+                type: string
             type: object
         type: object
     served: true
