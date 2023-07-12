@@ -92,7 +92,7 @@ func (w *windows) Reconcile(cluster *corev1.StorageCluster) error {
 func (w *windows) Delete(cluster *corev1.StorageCluster) error {
 
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	if err := k8s.DeleteDaemonSet(w.client, WindowsDaemonSetName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8s.DeleteDaemonSet(w.client, WindowsDaemonSetName, "kube-system", *ownerRef); err != nil {
 		return err
 	}
 	w.MarkDeleted()
@@ -118,7 +118,7 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 		return err
 	}
 
-	daemonSet.Namespace = cluster.Namespace
+	daemonSet.Namespace = "kube-system"
 	daemonSet.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 
 	existingDaemonSet := &appsv1.DaemonSet{}
@@ -126,7 +126,7 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 		context.TODO(),
 		types.NamespacedName{
 			Name:      WindowsDaemonSetName,
-			Namespace: cluster.Namespace,
+			Namespace: "kube-system",
 		},
 		existingDaemonSet,
 	)
