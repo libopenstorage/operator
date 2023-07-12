@@ -94,35 +94,6 @@ spec:
       tolerations:
       - key: os
         value: Windows
-      volumes:
-        - hostPath:
-            path: \\.\pipe\csi-proxy-filesystem-v1
-            type: ''
-          name: csi-proxy-fs-pipe-v1
-        - hostPath:
-            path: \\.\pipe\csi-proxy-smb-v1
-            type: ''
-          name: csi-proxy-smb-pipe-v1
-        - hostPath:
-            path: \\.\pipe\csi-proxy-filesystem-v1beta1
-            type: ''
-          name: csi-proxy-fs-pipe-v1beta1
-        - hostPath:
-            path: \\.\pipe\csi-proxy-smb-v1beta1
-            type: ''
-          name: csi-proxy-smb-pipe-v1beta1
-        - hostPath:
-            path: 'C:\var\lib\kubelet\plugins_registry\'
-            type: Directory
-          name: registration-dir
-        - hostPath:
-            path: 'C:\var\lib\kubelet\'
-            type: Directory
-          name: kubelet-dir
-        - hostPath:
-            path: 'C:\var\lib\kubelet\plugins\pxd.portworx.com\'
-            type: DirectoryOrCreate
-          name: plugin-dir
   updateStrategy:
     rollingUpdate:
       maxSurge: 0
