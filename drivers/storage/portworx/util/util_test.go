@@ -386,6 +386,12 @@ func TestParsePxProxyURL(t *testing.T) {
 
 	_, _, _, err = ParsePxProxyURL("user:password@http.proxy.address:1234")
 	require.Error(t, err)
+
+	_, _, _, err = ParsePxProxyURL("https://user:password@address")
+	require.Error(t, err)
+
+	_, _, _, err = ParsePxProxyURL("https://user:password@:1234")
+	require.Error(t, err)
 }
 
 func createClusterWithAuth() *corev1.StorageCluster {
