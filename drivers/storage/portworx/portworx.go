@@ -36,7 +36,7 @@ import (
 
 const (
 	storkDriverName                   = "pxd"
-	defaultPortworxImage              = "portworx/oci-monitor"
+	DefaultPortworxImage              = "portworx/oci-monitor"
 	defaultSecretsProvider            = "k8s"
 	defaultTokenLifetime              = "24h"
 	defaultSelfSignedIssuer           = "operator.portworx.io"
@@ -451,7 +451,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 		if toUpdate.Spec.Version == "" && pxEnabled {
 			if toUpdate.Spec.Image == "" {
-				toUpdate.Spec.Image = defaultPortworxImage
+				toUpdate.Spec.Image = DefaultPortworxImage
 			}
 			toUpdate.Spec.Image = toUpdate.Spec.Image + ":" + release.PortworxVersion
 			toUpdate.Spec.Version = release.PortworxVersion
