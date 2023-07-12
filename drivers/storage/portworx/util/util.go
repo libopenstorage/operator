@@ -1291,6 +1291,93 @@ func CountStorageNodes(
 	return storageNodesCount, nil
 }
 
+func getStorageNodeMappingFromRPC(
+	cluster *corev1.StorageCluster,
+	sdkConn *grpc.ClientConn,
+	k8sClient client.Client,
+) (map[string]string, map[string]string, error) {
+	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
+	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
+		ctx,
+		&api.SdkNodeEnumerateWithFiltersRequest{},
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to enumerate nodes: %v", err)
+	}
+
+	nodeNameToNodeID := map[string]string{}
+	nodeIDToNodeName := map[string]string{}
+
+	// Loop through all storage nodes
+	for _, n := range nodeEnumerateResponse.Nodes {
+		if n.SchedulerNodeName == "" {
+			continue
+		}
+
+		nodeNameToNodeID[n.SchedulerNodeName] = n.Id
+		nodeIDToNodeName[n.Id] = n.SchedulerNodeName
+	}
+
+	return nodeNameToNodeID, nodeIDToNodeName, nil
+}
+
+func getStorageNodeMappingFromK8s(
+	cluster *corev1.StorageCluster,
+	k8sClient client.Client,
+) (map[string]string, map[string]string, error) {
+	nodes := &corev1.StorageNodeList{}
+	err := k8sClient.List(context.TODO(), nodes, &client.ListOptions{Namespace: cluster.Namespace})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list StorageNodes: %v", err)
+	}
+
+	nodeNameToNodeID := map[string]string{}
+	nodeIDToNodeName := map[string]string{}
+
+	// Loop through all storage nodes
+	for _, n := range nodes.Items {
+		if n.Status.NodeUID == "" {
+			continue
+		}
+
+		nodeNameToNodeID[n.Name] = n.Status.NodeUID
+		nodeIDToNodeName[n.Status.NodeUID] = n.Name
+	}
+
+	return nodeNameToNodeID, nodeIDToNodeName, nil
+}
+
+// GetStorageNodeMapping returns a mapping of node name to node ID, as well as the inverse mapping.
+// If sdkConn is nil, it will fall back to k8s API which may not be up to date.
+// If both fail then the error will be returned.
+func GetStorageNodeMapping(
+	cluster *corev1.StorageCluster,
+	sdkConn *grpc.ClientConn,
+	k8sClient client.Client,
+) (map[string]string, map[string]string, error) {
+	var nodeNameToNodeID, nodeIDToNodeName map[string]string
+	var rpcErr, k8sErr error
+
+	if sdkConn != nil {
+		nodeNameToNodeID, nodeIDToNodeName, rpcErr = getStorageNodeMappingFromRPC(cluster, sdkConn, k8sClient)
+		if rpcErr == nil {
+			return nodeNameToNodeID, nodeIDToNodeName, nil
+		}
+		logrus.WithError(rpcErr).Warn("Failed to get storage node mapping from RPC, falling back to k8s API which may not be up to date")
+	}
+
+	nodeNameToNodeID, nodeIDToNodeName, k8sErr = getStorageNodeMappingFromK8s(cluster, k8sClient)
+	if k8sErr != nil {
+		return nil, nil, fmt.Errorf("failed to get storage node mapping from both RPC and k8s. RPC err: %v. k8s err: %v", rpcErr, k8sErr)
+	}
+	return nodeNameToNodeID, nodeIDToNodeName, nil
+}
+
 func CleanupObject(obj client.Object) {
 	obj.SetGenerateName("")
 	obj.SetUID("")
