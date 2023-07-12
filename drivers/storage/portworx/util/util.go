@@ -553,18 +553,32 @@ func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 		pxVersionStr := parts[len(parts)-1]
 		pxVersion, err = version.NewSemver(pxVersionStr)
 		if err != nil {
+			checkManifest := false
+
 			logrus.Warnf("Invalid PX version %s extracted from image name: %v", pxVersionStr, err)
 			if pxVersionStr, exists := cluster.Annotations[AnnotationPXVersion]; exists {
 				pxVersion, err = version.NewSemver(pxVersionStr)
 				if err != nil {
 					logrus.Warnf("Invalid PX version %s extracted from annotation: %v", pxVersionStr, err)
-					pxVersionStr = getPortworxVersionFromManifestURL(manifestURL)
-					pxVersion, err = version.NewSemver(pxVersionStr)
-					if err != nil {
-						logrus.Warnf("Invalid PX version %s extracted from release manifest url: %v", pxVersionStr, err)
-					}
+					checkManifest = true
+				} else {
+					logrus.Infof("Using version extracted from annotation: %s", pxVersionStr)
+				}
+			} else {
+				checkManifest = true
+			}
+
+			if checkManifest {
+				pxVersionStr = getPortworxVersionFromManifestURL(manifestURL)
+				pxVersion, err = version.NewSemver(pxVersionStr)
+				if err != nil {
+					logrus.Warnf("Invalid PX version %s extracted from release manifest url: %v", pxVersionStr, err)
+				} else {
+					logrus.Infof("Using version extracted from manifest url: %s", pxVersionStr)
 				}
 			}
+		} else {
+			logrus.Infof("Using version extracted from inage name: %s", pxVersionStr)
 		}
 	}
 
