@@ -504,6 +504,9 @@ type MonitoringSpec struct {
 	// Prometheus contains the details of the Prometheus stack deployed to monitor
 	// metrics from the storage cluster.
 	Prometheus *PrometheusSpec `json:"prometheus,omitempty"`
+	// Grafana contains the details of the Grafana stack deployed to monitor
+	// metrics from the storage cluster.
+	Grafana *GrafanaSpec `json:"grafana,omitempty"`
 	// Telemetry contains custom configuration for storage driver telemetry. This is optional.
 	Telemetry *TelemetrySpec `json:"telemetry,omitempty"`
 }
@@ -558,6 +561,12 @@ type AlertManagerSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 }
 
+// GrafanaSpec contains configuration of Grafana stack
+type GrafanaSpec struct {
+	// Enabled decides whether grafana stack needs to be deployed
+	Enabled bool `json:"enabled,omitempty"`
+}
+
 // StorageClusterStatus is the status of a storage cluster
 type StorageClusterStatus struct {
 	// ClusterName name of the storage cluster
@@ -601,6 +610,7 @@ type ComponentImages struct {
 	PrometheusConfigMapReload  string `json:"prometheusConfigMapReload,omitempty"`
 	PrometheusConfigReloader   string `json:"prometheusConfigReloader,omitempty"`
 	Prometheus                 string `json:"prometheus,omitempty"`
+	Grafana                    string `json:"grafana,omitempty"`
 	AlertManager               string `json:"alertManager,omitempty"`
 	Telemetry                  string `json:"telemetry,omitempty"`
 	MetricsCollector           string `json:"metricsCollector,omitempty"`
