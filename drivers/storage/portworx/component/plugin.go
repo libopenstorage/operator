@@ -227,6 +227,12 @@ func (p *plugin) createDeployment(filename, deploymentName string, ownerRef *met
 	}
 	deployment.Namespace = cluster.Namespace
 	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	if deployment.Name == PluginDeploymentName {
+		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPluginImage(cluster)
+	}
+	if deployment.Name == NginxDeploymentName {
+		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredNginxcImage(cluster)
+	}
 
 	existingDeployment := &appsv1.Deployment{}
 	getErr := p.client.Get(
@@ -353,4 +359,24 @@ func isVersionSupported(v string) bool {
 	}
 
 	return currentVersion.GreaterThanOrEqual(targetVersion)
+}
+
+func getDesiredPluginImage(cluster *corev1.StorageCluster) string {
+	imageName := "portworx/portworx-dynamic-plugin:1.0.0"
+
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.DynamicPlugin != "" {
+		imageName = cluster.Status.DesiredImages.DynamicPlugin
+	}
+	imageName = util.GetImageURN(cluster, imageName)
+	return imageName
+}
+
+func getDesiredNginxcImage(cluster *corev1.StorageCluster) string {
+	imageName := "nginxinc/nginx-unprivileged:1.23"
+
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.Nginxc != "" {
+		imageName = cluster.Status.DesiredImages.Nginxc
+	}
+	imageName = util.GetImageURN(cluster, imageName)
+	return imageName
 }

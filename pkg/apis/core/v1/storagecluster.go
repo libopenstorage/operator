@@ -672,6 +672,8 @@ type ComponentImages struct {
 	KubeScheduler              string `json:"kubeScheduler,omitempty"`
 	KubeControllerManager      string `json:"kubeControllerManager,omitempty"`
 	Pause                      string `json:"pause,omitempty"`
+	DynamicPlugin              string `json:"dynamicPlugin,omitempty"`
+	Nginxc                     string `json:"nginxc,omitempty"`
 }
 
 // Storage represents cluster storage details

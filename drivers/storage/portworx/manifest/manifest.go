@@ -90,6 +90,8 @@ type Release struct {
 	KubeScheduler              string `yaml:"kubeScheduler,omitempty"`
 	KubeControllerManager      string `yaml:"kubeControllerManager,omitempty"`
 	Pause                      string `yaml:"pause,omitempty"`
+	DynamicPlugin              string `yaml:"dynamicPlugin,omitempty"`
+	Nginxc                     string `yaml:"nginxc,omitempty"`
 }
 
 // Version is the response structure from a versions source
