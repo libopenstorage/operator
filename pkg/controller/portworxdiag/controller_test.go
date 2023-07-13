@@ -20,6 +20,7 @@ import (
 	kversion "k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -43,6 +44,10 @@ func TestInit(t *testing.T) {
 	mgr.EXPECT().SetFields(gomock.Any()).Return(nil).AnyTimes()
 	mgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 	mgr.EXPECT().GetLogger().Return(log.Log.WithName("test")).AnyTimes()
+	mgr.EXPECT().GetConfig().Return(&rest.Config{
+		Host:    "127.0.0.1",
+		APIPath: "fake",
+	}).AnyTimes()
 
 	controller := Controller{
 		client:   k8sClient,
