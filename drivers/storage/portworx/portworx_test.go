@@ -1787,6 +1787,107 @@ func TestStorageClusterDefaultsForAlertManager(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
 }
 
+func TestStorageClusterDefaultsForGrafana(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.8.0",
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+
+	// Don't enable grafana by default
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Monitoring)
+	require.Empty(t, cluster.Status.DesiredImages.Grafana)
+
+	// Don't enable grafana if prometheus spec is nil
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Monitoring.Prometheus)
+	require.Empty(t, cluster.Status.DesiredImages.Grafana)
+
+	// Don't enable grafana if grafana spec is nil
+	cluster.Spec.Monitoring.Prometheus = &corev1.PrometheusSpec{}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Monitoring.Grafana)
+	require.Empty(t, cluster.Status.DesiredImages.Grafana)
+
+	// Don't enable grafana if nothing specified in grafana spec
+	cluster.Spec.Monitoring.Grafana = &corev1.GrafanaSpec{}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Monitoring.Grafana)
+	require.Empty(t, cluster.Status.DesiredImages.Grafana)
+
+	// Use images from release manifest if enabled
+	cluster.Spec.Monitoring.Prometheus.Enabled = true
+	cluster.Spec.Monitoring.Grafana.Enabled = true
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "grafana/grafana:v1.2.3",
+		cluster.Status.DesiredImages.Grafana)
+
+	// Use images from release manifest if desired was reset
+	cluster.Status.DesiredImages.Grafana = ""
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "grafana/grafana:v1.2.3",
+		cluster.Status.DesiredImages.Grafana)
+
+	// Do not overwrite desired images if nothing has changed
+	cluster.Status.DesiredImages.Grafana = "grafana/grafana:old"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "grafana/grafana:old",
+		cluster.Status.DesiredImages.Grafana)
+
+	// Do not overwrite desired images even if
+	// some other component has changed
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
+		Enabled: true,
+	}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "grafana/grafana:old",
+		cluster.Status.DesiredImages.Grafana)
+	require.Equal(t, "portworx/px-lighthouse:2.3.4",
+		cluster.Status.DesiredImages.UserInterface)
+
+	// Change desired images if px image is not set (new cluster)
+	cluster.Spec.Image = ""
+	cluster.Status.DesiredImages.Grafana = "grafana/grafana:old"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "grafana/grafana:v1.2.3",
+		cluster.Status.DesiredImages.Grafana)
+
+	// Change desired images if px image has changed
+	cluster.Spec.Image = "px/image:4.0.0"
+	cluster.Status.DesiredImages.Grafana = "grafana/grafana:old"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "grafana/grafana:v1.2.3",
+		cluster.Status.DesiredImages.Grafana)
+
+	// Reset desired images if grafana has been disabled
+	cluster.Spec.Monitoring.Grafana.Enabled = false
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Status.DesiredImages.Grafana)
+}
+
 func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := portworx{}
@@ -9904,6 +10005,7 @@ func (m *fakeManifest) GetVersions(
 			PrometheusConfigReloader:   "quay.io/coreos/prometheus-config-reloader:v1.2.3",
 			PrometheusConfigMapReload:  "quay.io/coreos/configmap-reload:v1.2.3",
 			AlertManager:               "quay.io/prometheus/alertmanager:v1.2.3",
+			Grafana:                    "grafana/grafana:v1.2.3",
 			MetricsCollector:           "purestorage/realtime-metrics:latest",
 			MetricsCollectorProxy:      "envoyproxy/envoy:v1.19.1",
 			LogUploader:                "purestorage/log-upload:1.2.3",

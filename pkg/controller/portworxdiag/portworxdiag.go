@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -111,16 +112,49 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	})
 	log.Infof("Reconciling PortworxDiag")
 
-	// Fetch the PortworxDiag instance
-	diag := &diagv1.PortworxDiag{}
-	err := c.client.Get(context.TODO(), req.NamespacedName, diag)
+	// List all PortworxDiag instances, pick out ours, and set it to "Pending" if other diags are running
+	diags := &diagv1.PortworxDiagList{}
+	err := c.client.List(context.TODO(), diags, &client.ListOptions{Namespace: req.Namespace})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
+			// Request objects not found, could have been deleted after reconcile request.
 			return reconcile.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
+		// Error reading the objects - requeue the request.
 		return reconcile.Result{}, err
+	}
+
+	// Sort all diags by creation timestamp
+	sort.Slice(diags.Items, func(i, j int) bool {
+		return diags.Items[i].CreationTimestamp.Before(&diags.Items[j].CreationTimestamp)
+	})
+
+	var diag *diagv1.PortworxDiag
+	otherDiagRunning := false
+	for _, d := range diags.Items { // Run diags in order of creation: if another is running before us, it was created earlier so let it go
+		if d.Name == req.Name {
+			diag = d.DeepCopy()
+			break
+		}
+		if d.Status.Phase == diagv1.DiagStatusInProgress {
+			otherDiagRunning = true
+		}
+	}
+
+	if diag == nil {
+		// Request objects not found, could have been deleted after reconcile request.
+		return reconcile.Result{}, nil
+	}
+
+	if otherDiagRunning {
+		logrus.Infof("Other diag is running, waiting for it to complete before starting a new one")
+		err = c.patchPhase(diag, diagv1.DiagStatusPending, "Waiting for other PortworxDiag objects to complete before starting this one")
+		if err != nil {
+			k8s.WarningEvent(c.recorder, diag, util.FailedSyncReason, err.Error())
+			return reconcile.Result{}, err
+		}
+
+		return reconcile.Result{}, nil
 	}
 
 	if err := c.syncPortworxDiag(diag); err != nil {
@@ -439,9 +473,10 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 	stc, err := c.fetchSTC()
 	if err != nil {
 		logrus.WithError(err).Error("Failed to find StorageCluster object")
-		c.recorder.Eventf(diag, "Warning", "PreflightFailed", "Failed to find StorageCluster object %s in namespace %s: %v", stc.Name, stc.Namespace, err)
+		k8s.WarningEvent(c.recorder, diag, util.FailedSyncReason, fmt.Sprintf("Failed to find StorageCluster object %s in namespace %s: %v", stc.Name, stc.Namespace, err))
 		err = c.patchPhase(diag, diagv1.DiagStatusFailed, fmt.Sprintf("Failed to find StorageCluster object %s in namespace %s: %v", stc.Name, stc.Namespace, err))
 		if err != nil {
+			k8s.WarningEvent(c.recorder, diag, util.FailedSyncReason, fmt.Sprintf("failed to patch PortworxDiag with %s status: %v", diagv1.DiagStatusFailed, err))
 			return fmt.Errorf("failed to patch PortworxDiag with %s status: %v", diagv1.DiagStatusFailed, err)
 		}
 
@@ -450,9 +485,10 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 
 	if stc.Namespace != diag.Namespace {
 		logrus.Errorf("Diag %s in namespace %s is not in the same namespace as target cluster (namespace %s). Ensure the PortworxDiag object is created in the same namespace as the StorageCluster object", diag.Name, diag.Namespace, stc.Namespace)
-		c.recorder.Eventf(diag, "Warning", "PreflightFailed", "Diag %s in namespace %s is not in the same namespace as target cluster (namespace %s). Ensure the PortworxDiag object is created in the same namespace as the StorageCluster object", diag.Name, diag.Namespace, stc.Namespace)
+		k8s.WarningEvent(c.recorder, diag, util.FailedSyncReason, fmt.Sprintf("Diag %s in namespace %s is not in the same namespace as target cluster (namespace %s). Ensure the PortworxDiag object is created in the same namespace as the StorageCluster object", diag.Name, diag.Namespace, stc.Namespace))
 		err = c.patchPhase(diag, diagv1.DiagStatusFailed, fmt.Sprintf("Diag %s in namespace %s is not in the same namespace as target cluster (namespace %s). Ensure the PortworxDiag object is created in the same namespace as the StorageCluster object", diag.Name, diag.Namespace, stc.Namespace))
 		if err != nil {
+			k8s.WarningEvent(c.recorder, diag, util.FailedSyncReason, fmt.Sprintf("failed to patch PortworxDiag with %s status: %v", diagv1.DiagStatusFailed, err))
 			return fmt.Errorf("failed to patch PortworxDiag with %s status: %v", diagv1.DiagStatusFailed, err)
 		}
 
@@ -499,14 +535,14 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 			podTemplate, err := makeDiagPodTemplate(stc, diag, stc.Namespace, nodeName, nodeID)
 			if err != nil {
 				logrus.WithError(err).Errorf("Failed to create diags collection pod template")
-				c.recorder.Eventf(diag, "Warning", "PodCreateFailed", "Failed to create diags collection pod template: %v", err)
+				k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod template: %v", err))
 				continue
 				// Don't exit entirely, keep trying to create the rest
 			}
 			err = c.podControl.CreatePods(context.TODO(), diag.Namespace, podTemplate, diag, metav1.NewControllerRef(diag, controllerKind))
 			if err != nil {
 				logrus.WithError(err).Warnf("Failed to create diags collection pod")
-				c.recorder.Eventf(diag, "Warning", "PodCreateFailed", "Failed to create diags collection pod: %v", err)
+				k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod: %v", err))
 				// Don't exit entirely, keep trying to create the rest
 			}
 		}
@@ -519,7 +555,7 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 			err = c.podControl.DeletePod(context.TODO(), p.Namespace, p.Name, diag)
 			if err != nil && !errors.IsNotFound(err) {
 				logrus.WithError(err).Warnf("Failed to delete completed diags collection pod, it may still hang around")
-				c.recorder.Eventf(diag, "Warning", "PodDeleteFailed", "Failed to delete completed diags collection pod: %v", err)
+				k8s.WarningEvent(c.recorder, diag, "PodDeleteFailed", fmt.Sprintf("Failed to delete completed diags collection pod: %v", err))
 				// Don't exit, keep trying to clean up the rest
 			}
 		}
