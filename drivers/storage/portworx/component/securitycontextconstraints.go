@@ -236,7 +236,7 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 			AllowHostNetwork:         true,
 			AllowHostPID:             false,
 			AllowHostPorts:           false,
-			AllowPrivilegeEscalation: boolPtr(true),
+			AllowPrivilegeEscalation: boolPtr(false),
 			AllowPrivilegedContainer: false,
 			FSGroup: ocp_secv1.FSGroupStrategyOptions{
 				Type: ocp_secv1.FSGroupStrategyMustRunAs,
