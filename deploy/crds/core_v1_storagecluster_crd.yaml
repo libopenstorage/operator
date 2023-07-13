@@ -3885,6 +3885,12 @@ spec:
                   pause:
                     type: string
                     description: Desired image for pause image.
+                  dynamicPlugin:
+                    type: string
+                    description: Desired image for dynamic plugin image.
+                  nginxinc:
+                    type: string
+                    description: Desired image for nginx-unprivileged image.
               conditions:
                 type: array
                 description: Contains details for the current condition of this cluster.
