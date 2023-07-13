@@ -192,7 +192,9 @@ func TestValidate(t *testing.T) {
 	require.NotNil(t, preFlighter)
 
 	/// Create preflighter podSpec
-	preflightDSCheck := preFlighter.CreatePreFlightDaemonsetSpec(clusterRef)
+	preflightDSCheck, err := preFlighter.CreatePreFlightDaemonsetSpec(clusterRef)
+	require.NoError(t, err)
+	require.NotNil(t, preflightDSCheck)
 
 	// Make sure the phone-home cm volume mount, still does not exists
 	for _, cnt := range preflightDSCheck.Spec.Template.Spec.Containers {
