@@ -1476,10 +1476,6 @@ func (p *portworx) setTelemetryDefaults(
 		if _, _, _, proxyFormatErr := pxutil.ParsePxProxyURL(proxy); proxyFormatErr != nil {
 			err = fmt.Errorf("telemetry is not supported with proxy in a format of: %s", proxy)
 		}
-	} else if proxyType == pxutil.EnvKeyPortworxHTTPSProxy {
-		// CCM Go is not supported with https proxy
-		// TODO: remove when HTTPS proxy is supported
-		err = fmt.Errorf("telemetry is not supported with secure proxy: %s", proxy)
 	}
 	if toUpdate.Spec.Monitoring == nil {
 		toUpdate.Spec.Monitoring = &corev1.MonitoringSpec{}
