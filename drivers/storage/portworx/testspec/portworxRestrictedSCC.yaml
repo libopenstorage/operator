@@ -15,11 +15,6 @@ metadata:
   name: portworx-restricted
   resourceVersion: "1"
 readOnlyRootFilesystem: false
-requiredDropCapabilities:
-  - KILL
-  - MKNOD
-  - SETUID
-  - SETGID
 runAsUser:
   type: MustRunAsRange
 seLinuxContext:
