@@ -362,8 +362,7 @@ func isVersionSupported(v string) bool {
 }
 
 func getDesiredPluginImage(cluster *corev1.StorageCluster) string {
-	imageName := "portworx/portworx-dynamic-plugin:1.0.0"
-
+	var imageName string
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.DynamicPlugin != "" {
 		imageName = cluster.Status.DesiredImages.DynamicPlugin
 	}
@@ -372,7 +371,7 @@ func getDesiredPluginImage(cluster *corev1.StorageCluster) string {
 }
 
 func getDesiredPluginProxyImage(cluster *corev1.StorageCluster) string {
-	imageName := "nginxinc/nginx-unprivileged:1.23"
+	var imageName string
 
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.DynamicPluginProxy != "" {
 		imageName = cluster.Status.DesiredImages.DynamicPluginProxy
