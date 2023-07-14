@@ -218,10 +218,12 @@ func defaultRelease(
 	rel := &Version{
 		PortworxVersion: DefaultPortworxVersion,
 		Components: Release{
-			Stork:      defaultStorkImage,
-			Autopilot:  defaultAutopilotImage,
-			Lighthouse: defaultLighthouseImage,
-			NodeWiper:  defaultNodeWiperImage,
+			Stork:              defaultStorkImage,
+			Autopilot:          defaultAutopilotImage,
+			Lighthouse:         defaultLighthouseImage,
+			NodeWiper:          defaultNodeWiperImage,
+			DynamicPlugin:      defaultDynamicPluginImage,
+			DynamicPluginProxy: defaultDynamicPluginProxyImage,
 		},
 	}
 	fillCSIDefaults(rel, k8sVersion)
