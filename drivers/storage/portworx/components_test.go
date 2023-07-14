@@ -15027,6 +15027,9 @@ func TestPluginInstallAndUninstall(t *testing.T) {
 		},
 	}
 
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
