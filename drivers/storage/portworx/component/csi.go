@@ -320,7 +320,7 @@ func (c *csi) createClusterRole(
 			{
 				APIGroups:     []string{"security.openshift.io"},
 				Resources:     []string{"securitycontextconstraints"},
-				ResourceNames: []string{PxSCCName},
+				ResourceNames: []string{PxRestrictedSCCName},
 				Verbs:         []string{"use"},
 			},
 			{
