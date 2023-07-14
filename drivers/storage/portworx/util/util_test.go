@@ -3,6 +3,9 @@ package util
 import (
 	"testing"
 
+	version "github.com/hashicorp/go-version"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -114,4 +117,64 @@ func TestSplitPxProxyHostPort(t *testing.T) {
 
 	_, _, err = SplitPxProxyHostPort("user:password@host:1234")
 	require.Error(t, err)
+}
+
+func TestGetPortworxVersion(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "px-cluster",
+			Namespace:   "kube-system",
+			Annotations: map[string]string{},
+		},
+		Spec: corev1.StorageClusterSpec{},
+	}
+
+	pxVer30, _ := version.NewVersion("3.0")
+
+	// Check image version for 3.0
+	logrus.Infof("Oci-Monitor version check...")
+	cluster.Spec.Image = "portworx/oci-monitor:3.0.0"
+	assert.True(t, GetPortworxVersion(cluster).Equal(pxVer30))
+
+	// Check PX_IMAGE ENV
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  "PX_IMAGE",
+			Value: "portworx/px-base-enterprise:3.0.0",
+		},
+	}
+	logrus.Infof("PX_IMAGE env version check with oci-mon image specified...")
+	assert.True(t, GetPortworxVersion(cluster).Equal(pxVer30))
+
+	logrus.Infof("PX_IMAGE env version check without oci-mon image specified...")
+	cluster.Spec.Image = ""
+	assert.True(t, GetPortworxVersion(cluster).Equal(pxVer30))
+
+	// Check Annotation version
+	logrus.Infof("px-version annotation check with oci-mage with invalid tag...")
+	cluster.Spec.Image = "portworx/oci-monitor:31f6e43_038005f"
+	cluster.Spec.Env = []v1.EnvVar{}
+	cluster.Annotations[AnnotationPXVersion] = "3.0.0"
+	assert.True(t, GetPortworxVersion(cluster).Equal(pxVer30))
+
+	logrus.Infof("px-version annotation check without oci-mage...")
+	cluster.Spec.Image = ""
+	assert.True(t, GetPortworxVersion(cluster).Equal(pxVer30))
+
+	// Check Manifest URL
+	logrus.Infof("PX_RELEASE_MANIFEST_URL Env version check with oci-mage with invalid tag...")
+	cluster.Spec.Image = "portworx/oci-monitor:31f6e43_038005f"
+	cluster.Annotations = map[string]string{}
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  "PX_RELEASE_MANIFEST_URL",
+			Value: "https://edge-install.portworx.com/3.0.0/version",
+		},
+	}
+	assert.True(t, GetPortworxVersion(cluster).Equal(pxVer30))
+
+	logrus.Infof("PX_RELEASE_MANIFEST_URL Env version check without oci-mage...")
+	cluster.Spec.Image = ""
+	assert.True(t, GetPortworxVersion(cluster).Equal(pxVer30))
+
 }

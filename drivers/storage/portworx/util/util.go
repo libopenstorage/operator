@@ -473,19 +473,21 @@ func IncludeCSISnapshotController(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.CSI != nil && cluster.Spec.CSI.InstallSnapshotController != nil && *cluster.Spec.CSI.InstallSnapshotController
 }
 
-// GetPortworxVersion returns the Portworx version based on the image provided.
-// We first look at spec.Image, if not valid image tag found, we check the PX_IMAGE
-// env variable. If that is not present or invalid semvar, then we fallback to an
-// annotation portworx.io/px-version; then we try to extract the version from PX_RELEASE_MANIFEST_URL
-// env variable, else we return int max as the version.
+// GetPortworxVersion returns the Portworx version based on the Spec data provided.
+// We first try to extract the image from the PX_IMAGE env variable if specified,
+// If not specified then we use Spec.Image, if the version extraction fails for any
+// reason, we look for annotation portworx.io/px-version if that fails or does not exist.
+// Then we try to extract the version from PX_RELEASE_MANIFEST_URL env variable, else
+// we return int max as the version.
 func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 	var (
-		err       error
-		pxVersion *version.Version
+		err         error
+		pxVersion   *version.Version
+		manifestURL string
 	)
 
 	pxImage := strings.TrimSpace(cluster.Spec.Image)
-	var manifestURL string
+
 	for _, env := range cluster.Spec.Env {
 		if env.Name == EnvKeyPXImage {
 			pxImage = env.Value
@@ -498,24 +500,39 @@ func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 	if len(parts) >= 2 {
 		pxVersionStr := parts[len(parts)-1]
 		pxVersion, err = version.NewSemver(pxVersionStr)
-		if err != nil {
-			logrus.Warnf("Invalid PX version %s extracted from image name: %v", pxVersionStr, err)
-			if pxVersionStr, exists := cluster.Annotations[AnnotationPXVersion]; exists {
-				pxVersion, err = version.NewSemver(pxVersionStr)
-				if err != nil {
-					logrus.Warnf("Invalid PX version %s extracted from annotation: %v", pxVersionStr, err)
-					pxVersionStr = getPortworxVersionFromManifestURL(manifestURL)
-					pxVersion, err = version.NewSemver(pxVersionStr)
-					if err != nil {
-						logrus.Warnf("Invalid PX version %s extracted from release manifest url: %v", pxVersionStr, err)
-					}
-				}
-			}
+		if err == nil {
+			logrus.Infof("Using version extracted from image name: %s", pxVersionStr)
+			return pxVersion
 		}
+		logrus.Warnf("Invalid PX version %s extracted from image name: %v", pxVersionStr, err)
+		pxVersion = nil
+	}
+
+	if pxVersion == nil {
+		if pxVersionStr, exists := cluster.Annotations[AnnotationPXVersion]; exists {
+			pxVersion, err = version.NewSemver(pxVersionStr)
+			if err == nil {
+				logrus.Infof("Using version extracted from annotation: %s", pxVersionStr)
+				return pxVersion
+			}
+			logrus.Warnf("Invalid PX version %s extracted from annotation: %v", pxVersionStr, err)
+			pxVersion = nil
+		}
+	}
+
+	if len(manifestURL) > 0 && pxVersion == nil {
+		pxVersionStr := getPortworxVersionFromManifestURL(manifestURL)
+		pxVersion, err = version.NewSemver(pxVersionStr)
+		if err == nil {
+			logrus.Infof("Using version extracted from manifest url: %s", pxVersionStr)
+			return pxVersion
+		}
+		logrus.Warnf("Invalid PX version %s extracted from release manifest url: %v", pxVersionStr, err)
 	}
 
 	if pxVersion == nil {
 		pxVersion, _ = version.NewVersion(strconv.FormatInt(math.MaxInt64, 10))
+		logrus.Infof("Using default max version")
 	}
 	return pxVersion
 }
