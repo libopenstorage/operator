@@ -4001,9 +4001,9 @@ spec:
                   dynamicPlugin:
                     type: string
                     description: Desired image for dynamic plugin image.
-                  nginxinc:
+                  dynamicPluginProxy:
                     type: string
-                    description: Desired image for nginx-unprivileged image.
+                    description: Desired image for nginx proxy image.
               conditions:
                 type: array
                 description: Contains details for the current condition of this cluster.

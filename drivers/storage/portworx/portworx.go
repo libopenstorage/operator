@@ -572,8 +572,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Status.DesiredImages.DynamicPlugin = release.Components.DynamicPlugin
 		}
 
-		if toUpdate.Status.DesiredImages.Nginxc == "" || pxVersionChanged {
-			toUpdate.Status.DesiredImages.Nginxc = release.Components.Nginxc
+		if toUpdate.Status.DesiredImages.DynamicPluginProxy == "" || pxVersionChanged {
+			toUpdate.Status.DesiredImages.DynamicPluginProxy = release.Components.DynamicPluginProxy
 		}
 
 		// set misc image defaults
