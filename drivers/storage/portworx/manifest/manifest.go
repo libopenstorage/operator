@@ -228,6 +228,9 @@ func defaultRelease(
 			Lighthouse: defaultLighthouseImage,
 			NodeWiper:  defaultNodeWiperImage,
 			PxRepo:     defaultPxRepoImage,
+			DynamicPlugin:      defaultDynamicPluginImage,
+			DynamicPluginProxy: defaultDynamicPluginProxyImage,
+
 		},
 	}
 	fillCSIDefaults(rel, k8sVersion)
