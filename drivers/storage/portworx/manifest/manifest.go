@@ -49,6 +49,10 @@ const (
 	defaultNewPrometheusConfigReloaderImage = "quay.io/prometheus-operator/prometheus-config-reloader:v0.56.3"
 	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.24.0"
 
+	// default dynamic plugin images
+	defaultDynamicPluginImage      = "portworx/portworx-dynamic-plugin:1.0.0"
+	defaultDynamicPluginProxyImage = "nginxinc/nginx-unprivileged:1.23"
+
 	defaultManifestRefreshInterval = 3 * time.Hour
 )
 
@@ -86,7 +90,7 @@ type Release struct {
 	KubeControllerManager      string `yaml:"kubeControllerManager,omitempty"`
 	Pause                      string `yaml:"pause,omitempty"`
 	DynamicPlugin              string `yaml:"dynamicPlugin,omitempty"`
-	Nginxc                     string `yaml:"nginxc,omitempty"`
+	DynamicPluginProxy         string `yaml:"dynamicPluginProxy,omitempty"`
 }
 
 // Version is the response structure from a versions source
@@ -242,6 +246,14 @@ func fillDefaults(
 	if rel.Components.NodeWiper == "" {
 		rel.Components.NodeWiper = defaultNodeWiperImage
 	}
+	if rel.Components.DynamicPlugin == "" {
+		rel.Components.DynamicPlugin = defaultDynamicPluginImage
+	}
+
+	if rel.Components.DynamicPluginProxy == "" {
+		rel.Components.DynamicPluginProxy = defaultDynamicPluginProxyImage
+	}
+
 	fillCSIDefaults(rel, k8sVersion)
 	fillPrometheusDefaults(rel, k8sVersion)
 	fillTelemetryDefaults(rel)
