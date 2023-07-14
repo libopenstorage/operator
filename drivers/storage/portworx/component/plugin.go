@@ -231,7 +231,7 @@ func (p *plugin) createDeployment(filename, deploymentName string, ownerRef *met
 		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPluginImage(cluster)
 	}
 	if deployment.Name == NginxDeploymentName {
-		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPlugijnProxyImage(cluster)
+		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPluginProxyImage(cluster)
 	}
 
 	existingDeployment := &appsv1.Deployment{}
@@ -371,7 +371,7 @@ func getDesiredPluginImage(cluster *corev1.StorageCluster) string {
 	return imageName
 }
 
-func getDesiredPlugijnProxyImage(cluster *corev1.StorageCluster) string {
+func getDesiredPluginProxyImage(cluster *corev1.StorageCluster) string {
 	imageName := "nginxinc/nginx-unprivileged:1.23"
 
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.DynamicPluginProxy != "" {
