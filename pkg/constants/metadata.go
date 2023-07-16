@@ -37,6 +37,8 @@ const (
 	// the custom registry, there is a list of hardcoded common registries, however the list
 	// may not be complete, users can use this annotation to add more.
 	AnnotationCommonImageRegistries = OperatorPrefix + "/common-image-registries"
+	// AnnotationAppArmorPrefix controls which AppArmor profile will be used per container.
+	AnnotationAppArmorPrefix = "container.apparmor.security.beta.kubernetes.io/"
 )
 
 const (
