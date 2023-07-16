@@ -57,7 +57,14 @@ spec:
               port: 9015
           terminationMessagePath: "/tmp/px-termination-log"
           securityContext:
-            privileged: true
+            privileged: false
+            capabilities:
+              add:
+                - SYS_ADMIN
+                - SYS_PTRACE
+                - SYS_RAWIO
+                - SYS_MODULE
+                - LINUX_IMMUTABLE
           volumeMounts:
             - name: diagsdump
               mountPath: /var/cores

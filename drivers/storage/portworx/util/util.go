@@ -367,6 +367,14 @@ func IsVsphere(cluster *corev1.StorageCluster) bool {
 	return false
 }
 
+// IsPrivileged returns true if STC.security.privileged is TRUE
+func IsPrivileged(cluster *corev1.StorageCluster) bool {
+	if cluster == nil || cluster.Spec.Security == nil {
+		return false
+	}
+	return cluster.Spec.Security.Privileged
+}
+
 // GetCloudProvider returns the cloud provider string
 func GetCloudProvider(cluster *corev1.StorageCluster) string {
 	if IsVsphere(cluster) {

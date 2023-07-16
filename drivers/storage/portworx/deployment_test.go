@@ -533,7 +533,6 @@ func TestVarLibOsdMountForPxVersion2_9_1(t *testing.T) {
 	expected = getExpectedPodSpecFromDaemonset(t, "testspec/pks_2.9.1.yaml")
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assertPodSpecEqual(t, expected, &actual)
-
 }
 
 func TestExtraVolumeMountPathWithConflictShouldBeIgnored(t *testing.T) {
@@ -2721,9 +2720,18 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 
 	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
-	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
+
+	// Test securityContxt w/ privileged=true
+	cluster.Spec.Security = &corev1.SecuritySpec{
+		Privileged: true,
+	}
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	require.NotNil(t, actual.Containers[0].SecurityContext.Privileged)
+	assert.True(t, *actual.Containers[0].SecurityContext.Privileged)
 }
 
 func TestPodSpecForK3s(t *testing.T) {

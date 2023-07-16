@@ -86,6 +86,7 @@ func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
 			Kind:    ClusterOperatorKind,
 			Version: ClusterOperatorVersion,
 		}
+		// CHECKME: Move this check to pxutil.IsOpenshift()
 		exists, err := coreops.Instance().ResourceExists(gvk)
 		if err != nil {
 			logrus.Error(err)
