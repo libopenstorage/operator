@@ -1312,7 +1312,7 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 		}
 		if !runPrivileged && v.mountPropagation != nil && *v.mountPropagation == v1.MountPropagationBidirectional {
 			logrus.Warnf("Cannot use %s:%s:shared mount on non-privileged containers"+
-				" (downgrading to non-shared, set storageCluster.security.private=true to enable)",
+				" (downgrading to non-shared, set storageCluster.security.privileged=true to enable)",
 				v.hostPath, v.mountPath)
 			volMount.MountPropagation = nil
 		}
