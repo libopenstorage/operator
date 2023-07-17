@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	cryptoTls "crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -1017,7 +1018,7 @@ func getArcusRegisterProxyURL(cluster *corev1.StorageCluster) string {
 // return false after failing 5 times in a row
 func CanAccessArcusRegisterEndpoint(
 	cluster *corev1.StorageCluster,
-	httpProxy string,
+	proxy string,
 ) bool {
 	endpoint := getArcusRegisterProxyURL(cluster)
 	logrus.Debugf("checking whether telemetry registration endpoint %s is accessible on cluster %s",
@@ -1036,17 +1037,24 @@ func CanAccessArcusRegisterEndpoint(
 		},
 	}
 	client := &http.Client{}
-	if httpProxy != "" {
-		if !strings.HasPrefix(strings.ToLower(httpProxy), "http://") {
-			httpProxy = "http://" + httpProxy
+	if proxy != "" {
+		if strings.Contains(strings.ToLower(proxy), "@") {
+			if !strings.HasPrefix(strings.ToLower(proxy), "https://") {
+				proxy = "https://" + proxy
+			}
+		} else {
+			if !strings.HasPrefix(strings.ToLower(proxy), "http://") {
+				proxy = "http://" + proxy
+			}
 		}
-		proxyURL, err := url.Parse(httpProxy)
+		proxyURL, err := url.Parse(proxy)
 		if err != nil {
-			logrus.WithError(err).Errorf("failed to parse http proxy %s for checking Pure1 connectivity", httpProxy)
+			logrus.WithError(err).Errorf("failed to parse http proxy %s for checking Pure1 connectivity", proxy)
 			return false
 		}
 		client.Transport = &http.Transport{
-			Proxy: http.ProxyURL(proxyURL),
+			Proxy:           http.ProxyURL(proxyURL),
+			TLSClientConfig: &cryptoTls.Config{InsecureSkipVerify: true},
 		}
 	}
 	for i := 1; i <= arcusPingRetry; i++ {

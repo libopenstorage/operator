@@ -194,3 +194,8 @@ data:
                   socket_address:
                     address: hostname
                     port_value: 1234
+        transport_socket:
+          name: envoy.transport_sockets.tls
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            sni: hostname
