@@ -1369,7 +1369,7 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 	}
 
 	// Validate Stork components and images
-	if err := ValidateStork(pxImageList, cluster, k8sVersion, timeout, interval); err != nil {
+	if err := ValidateStork(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
@@ -1594,7 +1594,7 @@ func ValidatePvcControllerDisabled(pvcControllerDp *appsv1.Deployment, timeout, 
 }
 
 // ValidateStork validates Stork components and images
-func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster, k8sVersion string, timeout, interval time.Duration) error {
+func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Stork components")
 
 	storkDp := &appsv1.Deployment{
@@ -1613,14 +1613,14 @@ func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster
 
 	if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
 		logrus.Debug("Stork is enabled in StorageCluster")
-		return ValidateStorkEnabled(pxImageList, cluster, storkDp, storkSchedulerDp, k8sVersion, timeout, interval)
+		return ValidateStorkEnabled(pxImageList, cluster, storkDp, storkSchedulerDp, timeout, interval)
 	}
 	logrus.Debug("Stork is disabled in StorageCluster")
 	return ValidateStorkDisabled(cluster, storkDp, storkSchedulerDp, timeout, interval)
 }
 
 // ValidateStorkEnabled validates that all Stork components are enabled/created
-func ValidateStorkEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, storkDp, storkSchedulerDp *appsv1.Deployment, k8sVersion string, timeout, interval time.Duration) error {
+func ValidateStorkEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, storkDp, storkSchedulerDp *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Info("Validate Stork components are enabled")
 
 	t := func() (interface{}, bool, error) {
@@ -1653,43 +1653,6 @@ func ValidateStorkEnabled(pxImageList map[string]string, cluster *corev1.Storage
 			return nil, true, err
 		}
 
-		// Validate stork-scheduler deployment and pods
-		if err := validateDeployment(storkSchedulerDp, timeout, interval); err != nil {
-			return nil, true, err
-		}
-
-		K8sVer1_22, _ := version.NewVersion("1.22")
-		k8sMinVersionForKubeSchedulerConfiguration, _ := version.NewVersion("1.23")
-		kubeVersion, _, err := GetFullVersion()
-		if err != nil {
-			return nil, true, err
-		}
-
-		opVersion, _ := GetPxOperatorVersion()
-		if opVersion.LessThan(minOpVersionForKubeSchedConfig) {
-			if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) {
-				// Image tag for stork-scheduler is hardcoded to v1.21.4 for clusters 1.22 and up for Operator version 1.10.1 and below
-				if err = validateImageTag("v1.21.4", cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
-					return nil, true, err
-				}
-			} else {
-				if err = validateImageTag(k8sVersion, cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
-					return nil, true, err
-				}
-			}
-		} else {
-			if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) && kubeVersion.LessThan(k8sMinVersionForKubeSchedulerConfiguration) {
-				// Image tag for stork-scheduler is hardcoded to v1.21.4 for clusters 1.22
-				if err = validateImageTag("v1.21.4", cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
-					return nil, true, err
-				}
-			} else {
-				if err = validateImageTag(k8sVersion, cluster.Namespace, map[string]string{"name": "stork-scheduler"}); err != nil {
-					return nil, true, err
-				}
-			}
-		}
-
 		// Validate webhook-controller arguments
 		if err := validateStorkWebhookController(cluster.Spec.Stork.Args, storkDp, timeout, interval); err != nil {
 			return nil, true, err
@@ -1705,8 +1668,8 @@ func ValidateStorkEnabled(pxImageList map[string]string, cluster *corev1.Storage
 			return nil, true, err
 		}
 
-		// Validate stork scheduler deployment pod topology spread constraints
-		if err := validatePodTopologySpreadConstraints(storkSchedulerDp, timeout, interval); err != nil {
+		// Validate stork-scheduler deployment and image
+		if err := ValidateStorkScheduler(pxImageList, cluster, storkSchedulerDp, timeout, interval); err != nil {
 			return nil, true, err
 		}
 
@@ -1714,6 +1677,83 @@ func ValidateStorkEnabled(pxImageList map[string]string, cluster *corev1.Storage
 	}
 
 	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateStorkScheduler validates stork-scheduler deployment and container images inside pods
+func ValidateStorkScheduler(pxImageList map[string]string, cluster *corev1.StorageCluster, storkSchedulerDp *appsv1.Deployment, timeout, interval time.Duration) error {
+	logrus.Info("Validate stork-scheduler deployment and image")
+
+	// Validate stork-scheduler deployment and pods
+	if err := validateDeployment(storkSchedulerDp, timeout, interval); err != nil {
+		return err
+	}
+
+	// Get stork-scheduler pods
+	pods, err := coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "stork-scheduler"})
+	if err != nil {
+		return err
+	}
+
+	K8sVer1_22, _ := version.NewVersion("1.22")
+	k8sMinVersionForKubeSchedulerConfiguration, _ := version.NewVersion("1.23")
+	kubeVersion, _, err := GetFullVersion()
+	if err != nil {
+		return err
+	}
+
+	// Figure out what default registry to use for stork-scheduler image, based on PX Operator version
+	storkSchedulerImageName := "k8s.gcr.io/kube-scheduler-amd64"
+	opVersion, _ := GetPxOperatorVersion()
+	if opVersion.GreaterThanOrEqual(opVer23_3) {
+		storkSchedulerImageName = "registry.k8s.io/kube-scheduler-amd64"
+	}
+
+	// Check if stork-scheduler image was explicitly set in the px-version configmap
+	explicitStorkSchedulerImage := ""
+	if value, ok := pxImageList["kubeScheduler"]; ok {
+		explicitStorkSchedulerImage = value
+	}
+
+	if len(explicitStorkSchedulerImage) > 0 {
+		logrus.Debugf("Image for stork-scheduler was explicitly set in the px-version configmap to [%s]", explicitStorkSchedulerImage)
+		// Use this image as is, since it was explicitly set
+		if err := validateContainerImageInsidePods(cluster, explicitStorkSchedulerImage, "stork-scheduler", pods); err != nil {
+			return err
+		}
+	} else {
+		if opVersion.LessThan(minOpVersionForKubeSchedConfig) {
+			if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) {
+				// This image should have v1.21.4 tag
+				if err := validateContainerImageInsidePods(cluster, fmt.Sprintf("%s:v1.21.4", storkSchedulerImageName), "stork-scheduler", pods); err != nil {
+					return err
+				}
+			} else {
+				// This image should have k8s version tag
+				if err := validateContainerImageInsidePods(cluster, fmt.Sprintf("%s:v%s", storkSchedulerImageName, kubeVersion.String()), "stork-scheduler", pods); err != nil {
+					return err
+				}
+			}
+		} else {
+			if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) && kubeVersion.LessThan(k8sMinVersionForKubeSchedulerConfiguration) {
+				// This image should have v1.21.4 tag
+				if err := validateContainerImageInsidePods(cluster, fmt.Sprintf("%s:v1.21.4", storkSchedulerImageName), "stork-scheduler", pods); err != nil {
+					return err
+				}
+			} else {
+				// This image should have k8s version tag
+				if err := validateContainerImageInsidePods(cluster, fmt.Sprintf("%s:v%s", storkSchedulerImageName, kubeVersion.String()), "stork-scheduler", pods); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// Validate stork-scheduler deployment pod topology spread constraints
+	if err := validatePodTopologySpreadConstraints(storkSchedulerDp, timeout, interval); err != nil {
 		return err
 	}
 
@@ -2534,7 +2574,7 @@ func validateCsiExtImages(cluster *corev1.StorageCluster, pxImageList map[string
 }
 
 func validateContainerImageInsidePods(cluster *corev1.StorageCluster, expectedImage, containerName string, pods *v1.PodList) error {
-	logrus.Infof("Validating image for %s container inside pod(s)", containerName)
+	logrus.Infof("Validating image for [%s] container inside pod(s)", containerName)
 
 	// Get PX Operator version
 	opVersion, _ := GetPxOperatorVersion()
@@ -2561,22 +2601,22 @@ func validateContainerImageInsidePods(cluster *corev1.StorageCluster, expectedIm
 			if container.Name == containerName {
 				foundImage = container.Image
 				if opVersion.GreaterThanOrEqual(opVer1_9_1) && foundImage == expectedImage {
-					logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, expectedImage, foundImage)
+					logrus.Infof("Image inside %s[%s] matches, expected: [%s], actual: [%s]", pod.Name, containerName, expectedImage, foundImage)
 					foundContainer = true
 					break
 				} else if strings.Contains(foundImage, expectedImage) {
-					logrus.Infof("Image inside %s[%s] matches, expected: %s, actual: %s", pod.Name, containerName, expectedImage, foundImage)
+					logrus.Infof("Image inside %s[%s] matches, expected: [%s], actual: [%s]", pod.Name, containerName, expectedImage, foundImage)
 					foundContainer = true
 					break
 				} else {
-					return fmt.Errorf("failed to match container %s[%s] image, expected: %s, actual: %s",
+					return fmt.Errorf("failed to match container %s[%s] image, expected: [%s], actual: [%s]",
 						pod.Name, containerName, expectedImage, foundImage)
 				}
 			}
 		}
 
 		if !foundContainer {
-			return fmt.Errorf("failed to match container %s[%s] image, expected: %s, actual: %s",
+			return fmt.Errorf("failed to match container %s[%s] image, expected: [%s], actual: [%s]",
 				pod.Name, containerName, expectedImage, foundImage)
 		}
 	}

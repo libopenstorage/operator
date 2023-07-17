@@ -646,21 +646,21 @@ func BasicStorkRegression(tc *types.TestCase) func(*testing.T) {
 			cluster.Spec.Stork.Args["webhook-controller"] = "true"
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Disable Stork webhook-controller and validate StorageCluster")
 		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
 			cluster.Spec.Stork.Args["webhook-controller"] = "false"
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Remove Stork webhook-controller and validate StorageCluster")
 		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
 			delete(cluster.Spec.Stork.Args, "webhook-controller")
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Enable Stork hostNetwork and validate StorageCluster")
 		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
@@ -668,28 +668,28 @@ func BasicStorkRegression(tc *types.TestCase) func(*testing.T) {
 			cluster.Spec.Stork.HostNetwork = &hostNetworkValue
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Disable Stork hostNetwork and validate StorageCluster")
 		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
 			*cluster.Spec.Stork.HostNetwork = false
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Remove Stork hostNetwork and validate StorageCluster")
 		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
 			cluster.Spec.Stork.HostNetwork = nil
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 
 		logrus.Info("Disable Stork and validate StorageCluster")
 		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
 			cluster.Spec.Stork.Enabled = false
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 		require.False(t, cluster.Spec.Stork.Enabled, "failed to validate Stork is disabled: expected: false, actual: %v", cluster.Spec.Stork.Enabled)
 
 		logrus.Info("Enable Stork and validate StorageCluster")
@@ -697,7 +697,7 @@ func BasicStorkRegression(tc *types.TestCase) func(*testing.T) {
 			cluster.Spec.Stork.Enabled = true
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidateStork(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 		require.True(t, cluster.Spec.Stork.Enabled, "failed to validate Stork is enabled: expected: true, actual: %v", cluster.Spec.Stork.Enabled)
 	}
 }
