@@ -2043,14 +2043,14 @@ func TestStorageClusterDefaultsForGrafana(t *testing.T) {
 	cluster.Spec.Monitoring.Grafana.Enabled = true
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "grafana/grafana:v1.2.3",
+	require.Equal(t, "docker.io/grafana/grafana:v1.2.3",
 		cluster.Status.DesiredImages.Grafana)
 
 	// Use images from release manifest if desired was reset
 	cluster.Status.DesiredImages.Grafana = ""
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "grafana/grafana:v1.2.3",
+	require.Equal(t, "docker.io/grafana/grafana:v1.2.3",
 		cluster.Status.DesiredImages.Grafana)
 
 	// Do not overwrite desired images if nothing has changed
@@ -2077,7 +2077,7 @@ func TestStorageClusterDefaultsForGrafana(t *testing.T) {
 	cluster.Status.DesiredImages.Grafana = "grafana/grafana:old"
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "grafana/grafana:v1.2.3",
+	require.Equal(t, "docker.io/grafana/grafana:v1.2.3",
 		cluster.Status.DesiredImages.Grafana)
 
 	// Change desired images if px image has changed
@@ -2085,7 +2085,7 @@ func TestStorageClusterDefaultsForGrafana(t *testing.T) {
 	cluster.Status.DesiredImages.Grafana = "grafana/grafana:old"
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Equal(t, "grafana/grafana:v1.2.3",
+	require.Equal(t, "docker.io/grafana/grafana:v1.2.3",
 		cluster.Status.DesiredImages.Grafana)
 
 	// Reset desired images if grafana has been disabled
@@ -10212,7 +10212,7 @@ func (m *fakeManifest) GetVersions(
 			PrometheusConfigReloader:   "quay.io/coreos/prometheus-config-reloader:v1.2.3",
 			PrometheusConfigMapReload:  "quay.io/coreos/configmap-reload:v1.2.3",
 			AlertManager:               "quay.io/prometheus/alertmanager:v1.2.3",
-			Grafana:                    "grafana/grafana:v1.2.3",
+			Grafana:                    "docker.io/grafana/grafana:v1.2.3",
 			MetricsCollector:           "purestorage/realtime-metrics:latest",
 			MetricsCollectorProxy:      "envoyproxy/envoy:v1.19.1",
 			LogUploader:                "purestorage/log-upload:1.2.3",
