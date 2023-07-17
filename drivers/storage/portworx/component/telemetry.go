@@ -777,7 +777,7 @@ func (t *telemetry) createCCMGoConfigMapTelemetryPhonehome(
 ) (bool, error) {
 	cloudSupportPort, _, _ := getCCMCloudSupportPorts(cluster, defaultPhonehomePort)
 	config, err := readConfigMapDataFromFile(configFileNameTelemetryPhonehome, map[string]string{
-		configParameterPortworxPort:         fmt.Sprint(getCCMListeningPort(cluster)),
+		configParameterPortworxPort:         fmt.Sprint(GetCCMListeningPort(cluster)),
 		configParameterRestCloudSupportPort: fmt.Sprint(cloudSupportPort),
 	})
 	if err != nil {
@@ -875,8 +875,8 @@ func (t *telemetry) createDaemonSetTelemetryPhonehome(
 			for j := 0; j < len(container.Ports); j++ {
 				port := &container.Ports[j]
 				if port.Name == portNameLogUploaderContainer {
-					port.HostPort = int32(getCCMListeningPort(cluster))
-					port.ContainerPort = int32(getCCMListeningPort(cluster))
+					port.HostPort = int32(GetCCMListeningPort(cluster))
+					port.ContainerPort = int32(GetCCMListeningPort(cluster))
 				}
 			}
 		} else if container.Name == containerNameTelemetryProxy {
@@ -1192,7 +1192,7 @@ func readConfigMapDataFromFile(
 	return data, nil
 }
 
-func getCCMListeningPort(cluster *corev1.StorageCluster) int {
+func GetCCMListeningPort(cluster *corev1.StorageCluster) int {
 	defCCMPort := defaultCCMListeningPort
 
 	pxVer30, _ := version.NewVersion("3.0")
