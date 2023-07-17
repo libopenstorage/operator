@@ -64,20 +64,24 @@ const (
 	// DeploymentNameTelemetryCollectorV2 is name of telemetry metrics collector
 	DeploymentNameTelemetryCollectorV2 = "px-telemetry-metrics-collector"
 
-	roleFileNameTelemetry                       = "px-telemetry-role.yaml"
-	roleBindingFileNameTelemetry                = "px-telemetry-role-binding.yaml"
-	configFileNameTelemetryRegister             = "config_properties_px.yaml"
-	configFileNameTelemetryRegisterProxy        = "envoy-config-register.yaml"
-	configFileNameTelemetryRegisterCustomProxy  = "envoy-config-register-custom-proxy.yaml"
-	configFileNameTelemetryPhonehome            = "ccm.properties"
-	configFileNameTelemetryPhonehomeProxy       = "envoy-config-rest.yaml"
-	configFileNameTelemetryRestCustomProxy      = "envoy-config-rest-custom-proxy.yaml"
-	configFileNameTelemetryCollectorProxy       = "envoy-config-collector.yaml"
-	configFileNameTelemetryCollectorCustomProxy = "envoy-config-collector-custom-proxy.yaml"
-	configFileNameTelemetryTLSCertificate       = "tls_certificate_sds_secret.yaml"
-	deploymentFileNameTelemetryRegistration     = "registration-service.yaml"
-	deploymentFileNameTelemetryCollectorV2      = "metrics-collector-deployment.yaml"
-	daemonsetFileNameTelemetryPhonehome         = "phonehome-cluster.yaml"
+	roleFileNameTelemetry                            = "px-telemetry-role.yaml"
+	roleBindingFileNameTelemetry                     = "px-telemetry-role-binding.yaml"
+	configFileNameTelemetryRegister                  = "config_properties_px.yaml"
+	configFileNameTelemetryRegisterProxy             = "envoy-config-register.yaml"
+	configFileNameTelemetryRegisterCustomHttpProxy   = "envoy-config-register-custom-http-proxy.yaml"
+	configFileNameTelemetryRegisterCustomHttpsProxy  = "envoy-config-register-custom-https-proxy.yaml"
+	configFileNameTelemetryPhonehome                 = "ccm.properties"
+	configFileNameTelemetryPhonehomeProxy            = "envoy-config-rest.yaml"
+	configFileNameTelemetryPhonehomeCustomHttpProxy  = "envoy-config-rest-custom-http-proxy.yaml"
+	configFileNameTelemetryPhonehomeCustomHttpsProxy = "envoy-config-rest-custom-https-proxy.yaml"
+	configFileNameTelemetryCollectorProxy            = "envoy-config-collector.yaml"
+	configFileNameTelemetryCollectorCustomHttpProxy  = "envoy-config-collector-custom-http-proxy.yaml"
+	configFileNameTelemetryCollectorCustomHttpsProxy = "envoy-config-collector-custom-https-proxy.yaml"
+	configFileNameTelemetryTLSCertificate            = "tls_certificate_sds_secret.yaml"
+	configFileNameTelemetryCustomProxyTLS            = "envoy-config-custom-proxy-tls.yaml"
+	deploymentFileNameTelemetryRegistration          = "registration-service.yaml"
+	deploymentFileNameTelemetryCollectorV2           = "metrics-collector-deployment.yaml"
+	daemonsetFileNameTelemetryPhonehome              = "phonehome-cluster.yaml"
 
 	configParameterApplianceID                           = "APPLIANCE_ID"
 	configParameterComponentSN                           = "COMPONENT_SN"
@@ -614,12 +618,17 @@ func (t *telemetry) createCCMGoConfigMapRegisterProxy(
 			logrus.Errorf("failed to get custom proxy address and port from proxy %s: %v", proxy, err)
 			return k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameTelemetryRegisterProxy, cluster.Namespace, *ownerRef)
 		}
-		configFileName = configFileNameTelemetryRegisterCustomProxy
 		replaceMap[configParameterCloudSupportTCPProxyPort] = fmt.Sprint(tcpProxyPort)
 		replaceMap[configParameterCloudSupportEnvoyInternalRedirectPort] = fmt.Sprint(envoyRedirectPort)
 		replaceMap[configParameterCustomProxyAddress] = host
 		replaceMap[configParameterCustomProxyPort] = port
 		replaceMap[configParameterCustomProxyBasicAuth] = authHeader
+
+		if authHeader == "" {
+			configFileName = configFileNameTelemetryRegisterCustomHttpProxy
+		} else {
+			configFileName = configFileNameTelemetryRegisterCustomHttpsProxy
+		}
 	}
 
 	config, err := readConfigMapDataFromFile(configFileName, replaceMap)
@@ -664,12 +673,18 @@ func (t *telemetry) createCCMGoConfigMapTelemetryPhonehomeProxy(
 			logrus.Errorf("failed to get custom proxy address and port from %s: %v", proxy, err)
 			return k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace, *ownerRef)
 		}
-		configFileName = configFileNameTelemetryRestCustomProxy
+
 		replaceMap[configParameterCloudSupportTCPProxyPort] = fmt.Sprint(tcpProxyPort)
 		replaceMap[configParameterCloudSupportEnvoyInternalRedirectPort] = fmt.Sprint(envoyRedirectPort)
 		replaceMap[configParameterCustomProxyAddress] = host
 		replaceMap[configParameterCustomProxyPort] = port
 		replaceMap[configParameterCustomProxyBasicAuth] = authHeader
+
+		if authHeader == "" {
+			configFileName = configFileNameTelemetryPhonehomeCustomHttpProxy
+		} else {
+			configFileName = configFileNameTelemetryPhonehomeCustomHttpsProxy
+		}
 	}
 
 	config, err := readConfigMapDataFromFile(configFileName, replaceMap)
@@ -716,12 +731,18 @@ func (t *telemetry) createCCMGoConfigMapCollectorProxyV2(
 			logrus.Errorf("failed to get custom proxy address and port from %s: %v", proxy, err)
 			return k8sutil.DeleteConfigMap(t.k8sClient, ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace, *ownerRef)
 		}
-		configFileName = configFileNameTelemetryCollectorCustomProxy
+
 		replaceMap[configParameterCloudSupportTCPProxyPort] = fmt.Sprint(tcpProxyPort)
 		replaceMap[configParameterCloudSupportEnvoyInternalRedirectPort] = fmt.Sprint(envoyRedirectPort)
 		replaceMap[configParameterCustomProxyAddress] = host
 		replaceMap[configParameterCustomProxyPort] = port
 		replaceMap[configParameterCustomProxyBasicAuth] = authHeader
+
+		if authHeader == "" {
+			configFileName = configFileNameTelemetryCollectorCustomHttpProxy
+		} else {
+			configFileName = configFileNameTelemetryCollectorCustomHttpsProxy
+		}
 	}
 
 	config, err := readConfigMapDataFromFile(configFileName, replaceMap)
