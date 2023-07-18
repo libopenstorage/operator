@@ -14,6 +14,11 @@ func IsGKE() bool {
 	return Instance().ProviderName() == string(cloudops.GCE) && Instance().K8sDistributionName() == gkeDistribution
 }
 
+// IsAzure() returns whether the cloud environment is running Azure
+func IsAzure() bool {
+	return Instance().ProviderName() == string(cloudops.Azure)
+}
+
 // RequiresCheck returns whether a preflight check is needed based on the platform
 func RequiresCheck() bool {
 	return Instance().ProviderName() == string(cloudops.AWS) ||
