@@ -3465,10 +3465,6 @@ spec:
                             type: string
                             description: Shared secret is the name of the Kubernetes secret containing the shared key
                               used for signing RBAC tokens. The secret has to be present in the StorageCluster namespace.
-                  privileged:
-                    type: boolean
-                    description: Run Portworx containers in privileged mode. Processes in privileged containers are
-                      essentially equivalent to root on the host. Defaults to false.
                   tls:
                     type: object
                     description: Security configurations for a TLS enabled storage cluster
