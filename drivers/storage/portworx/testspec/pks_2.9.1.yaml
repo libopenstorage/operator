@@ -54,14 +54,7 @@ spec:
               port: 9015
           terminationMessagePath: "/tmp/px-termination-log"
           securityContext:
-            privileged: false
-            capabilities:
-              add:
-                - SYS_ADMIN
-                - SYS_PTRACE
-                - SYS_RAWIO
-                - SYS_MODULE
-                - LINUX_IMMUTABLE
+            privileged: true
           volumeMounts:
             - name: diagsdump
               mountPath: /var/cores
@@ -81,6 +74,7 @@ spec:
               mountPath: /opt/pwx
             - name: varlibosd
               mountPath: /var/lib/osd
+              mountPropagation: Bidirectional
             - name: procmount
               mountPath: /host_proc
             - name: sysdmount

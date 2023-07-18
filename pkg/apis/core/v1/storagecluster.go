@@ -199,10 +199,9 @@ type CSITopologySpec struct {
 
 // SecuritySpec is used to define the security configuration for a cluster.
 type SecuritySpec struct {
-	Enabled    bool      `json:"enabled,omitempty"` // CHECKME: remove this flag?
-	Privileged bool      `json:"privileged,omitempty"`
-	Auth       *AuthSpec `json:"auth,omitempty"`
-	TLS        *TLSSpec  `json:"tls,omitempty"`
+	Enabled bool      `json:"enabled,omitempty"`
+	Auth    *AuthSpec `json:"auth,omitempty"`
+	TLS     *TLSSpec  `json:"tls,omitempty"`
 }
 
 // AuthSpec lets the user define authorization (RBAC) configurations

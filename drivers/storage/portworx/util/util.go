@@ -150,6 +150,10 @@ const (
 	AnnotationSCCPriority = pxAnnotationPrefix + "/scc-priority"
 	// AnnotationFACDTopology is added when FACD topology was successfully installed on a *new* cluster (it's blocked for existing clusters)
 	AnnotationFACDTopology = pxAnnotationPrefix + "/facd-topology"
+	// AnnotationIsPrivileged [=false] used to remove privileged containers requirement
+	AnnotationIsPrivileged = pxAnnotationPrefix + "/privileged"
+	// AnnotationAppArmorPrefix controls which AppArmor profile will be used per container.
+	AnnotationAppArmorPrefix = "container.apparmor.security.beta.kubernetes.io/"
 	// AnnotationServerTLSMinVersion sets up TLS-servers w/ requested TLS as minimal version
 	AnnotationServerTLSMinVersion = pxAnnotationPrefix + "/tls-min-version"
 	// AnnotationServerTLSCipherSuites sets up TLS-servers w/ requested cipher suites
@@ -367,12 +371,10 @@ func IsVsphere(cluster *corev1.StorageCluster) bool {
 	return false
 }
 
-// IsPrivileged returns true if STC.security.privileged is TRUE
+// IsPrivileged returns true "privileged" annotation is MISSING, or NOT set to FALSE
 func IsPrivileged(cluster *corev1.StorageCluster) bool {
-	if cluster == nil || cluster.Spec.Security == nil {
-		return false
-	}
-	return cluster.Spec.Security.Privileged
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsPrivileged])
+	return err != nil || enabled
 }
 
 // GetCloudProvider returns the cloud provider string

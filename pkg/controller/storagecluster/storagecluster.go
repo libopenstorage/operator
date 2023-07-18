@@ -1277,7 +1277,7 @@ func (c *Controller) CreatePodTemplate(
 		// turn off AppArmor?
 		for _, c := range newTemplate.Spec.Containers {
 			if containersAppArmorOff[c.Name] {
-				newTemplate.Annotations[constants.AnnotationAppArmorPrefix+c.Name] = "unconfined"
+				newTemplate.Annotations[pxutil.AnnotationAppArmorPrefix+c.Name] = "unconfined"
 			}
 		}
 	}

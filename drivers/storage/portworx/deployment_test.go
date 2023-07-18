@@ -2724,14 +2724,18 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 
 	assertPodSpecEqual(t, expected, &actual)
 
-	// Test securityContxt w/ privileged=true
-	cluster.Spec.Security = &corev1.SecuritySpec{
-		Privileged: true,
-	}
+	// Test securityContxt w/ privileged=false
+	cluster.ObjectMeta.Annotations[pxutil.AnnotationIsPrivileged] = "false"
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
-	require.NotNil(t, actual.Containers[0].SecurityContext.Privileged)
-	assert.True(t, *actual.Containers[0].SecurityContext.Privileged)
+
+	pxc := actual.Containers[0]
+	require.Equal(t, "portworx", pxc.Name)
+	require.NotNil(t, pxc.SecurityContext.Privileged)
+	assert.False(t, *pxc.SecurityContext.Privileged)
+	require.NotNil(t, pxc.SecurityContext.Capabilities)
+	assert.Equal(t, 5, len(pxc.SecurityContext.Capabilities.Add))
+	assert.Empty(t, pxc.SecurityContext.Capabilities.Drop)
 }
 
 func TestPodSpecForK3s(t *testing.T) {
