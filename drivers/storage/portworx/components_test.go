@@ -12847,7 +12847,7 @@ func TestValidateTelemetryEnabled(t *testing.T) {
 	require.Nil(t, cluster.Spec.Monitoring)
 	require.Len(t, recorder.Events, 0)
 
-	// TestCase: telemetry should be disabled if using secure proxy on ccm-go
+	// TestCase: telemetry should be disabled if using secure proxy but with invalid http proxy format
 	cluster.Spec.Image = "portworx/oci-monitor:2.12.0"
 	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
 		Telemetry: &corev1.TelemetrySpec{
@@ -12865,7 +12865,7 @@ func TestValidateTelemetryEnabled(t *testing.T) {
 	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported with secure proxy",
+		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported with proxy in a format of",
 			v1.EventTypeWarning, util.TelemetryDisabledReason))
 
 	// TestCase: telemetry should be disabled if using invalid http proxy format
@@ -13311,7 +13311,7 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 	validateCCMGoComponents()
 }
 
-func TestTelemetryCCMGoProxy(t *testing.T) {
+func TestTelemetryCCMGoHTTPProxy(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -13402,7 +13402,7 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoRegisterProxyConfigMap_proxy.yaml")
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoRegisterProxyConfigMap_httpproxy.yaml")
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
 	require.NoError(t, err)
@@ -13412,7 +13412,7 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
 	require.Equal(t, expectedConfigMap.Data, configMap.Data)
 
-	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoPhonehomeProxyConfigMap_proxy.yaml")
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoPhonehomeProxyConfigMap_httpproxy.yaml")
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
 	require.NoError(t, err)
@@ -13422,7 +13422,7 @@ func TestTelemetryCCMGoProxy(t *testing.T) {
 	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
 	require.Equal(t, expectedConfigMap.Data, configMap.Data)
 
-	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoCollectorProxyConfigMap_proxy.yaml")
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoCollectorProxyConfigMap_httpproxy.yaml")
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
 	require.NoError(t, err)
@@ -13651,6 +13651,168 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryCollectorV2, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestTelemetryCCMGoHTTPSProxy(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	startPort := uint32(10001)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.12.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+			StartPort: &startPort,
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// TestCase: no px proxy specified
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Validate component proxy config map content
+	expectedConfigMap := testutil.GetExpectedConfigMap(t, "ccmGoRegisterProxyConfigMap.yaml")
+	configMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
+
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoPhonehomeProxyConfigMap.yaml")
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
+
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoCollectorProxyConfigMap.yaml")
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
+
+	// Add PX_HTTPS_PROXY environment variable and config maps should be updated
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxHTTPSProxy,
+			Value: "https://user:password@hostname:1234",
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoRegisterProxyConfigMap_httpsproxy.yaml")
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
+
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoPhonehomeProxyConfigMap_httpsproxy.yaml")
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
+
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoCollectorProxyConfigMap_httpsproxy.yaml")
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
+
+	// Remove PX_HTTPS_PROXY environment variable and config maps should be updated
+	cluster.Spec.Env = []v1.EnvVar{}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoRegisterProxyConfigMap.yaml")
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
+
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoPhonehomeProxyConfigMap.yaml")
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
+
+	expectedConfigMap = testutil.GetExpectedConfigMap(t, "ccmGoCollectorProxyConfigMap.yaml")
+	configMap = &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, configMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, configMap.Namespace)
+	require.Len(t, configMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, configMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, configMap.Data)
+
+	// When using invalid proxy format configmaps will be deleted
+	cluster.Spec.Env = []v1.EnvVar{
+		{
+			Name:  pxutil.EnvKeyPortworxHTTPSProxy,
+			Value: "https://user:password@hostnameonly",
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegisterProxy, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryPhonehomeProxy, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
