@@ -420,10 +420,9 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			}
 			if toUpdate.Spec.Monitoring.Grafana != nil &&
 				toUpdate.Spec.Monitoring.Grafana.Enabled &&
-				toUpdate.Status.DesiredImages.Grafana == "" || pxVersionChanged || grafanaVersionChanged {
+				(toUpdate.Status.DesiredImages.Grafana == "" || pxVersionChanged || grafanaVersionChanged) {
 				toUpdate.Status.DesiredImages.Grafana = release.Components.Grafana
 			}
-
 		}
 
 		if toUpdate.Status.DesiredImages.DynamicPlugin == "" || pxVersionChanged {

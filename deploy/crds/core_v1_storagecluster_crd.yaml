@@ -3866,6 +3866,9 @@ spec:
                   prometheus:
                     type: string
                     description: Desired image for Prometheus.
+                  grafana:
+                    type: string
+                    description: Desired image for Grafana.
                   alertManager:
                     type: string
                     description: Desired image for AlertManager.

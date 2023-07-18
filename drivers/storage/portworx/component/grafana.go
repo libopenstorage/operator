@@ -203,6 +203,7 @@ func (c *grafana) createGrafanaDeployment(
 	if err != nil {
 		return err
 	}
+	imageName = util.GetImageURN(cluster, imageName)
 
 	volumes, volumeMounts := c.getDesiredGrafanaVolumesAndMounts(cluster)
 	var existingImage string
