@@ -283,6 +283,7 @@ func TestReconcile(t *testing.T) {
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 	testStorageNode := "node1"
 	testStoragelessNode := "node2"
+	trueValue := true
 	storageNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            testStorageNode,
@@ -294,6 +295,9 @@ func TestReconcile(t *testing.T) {
 			Storage: &corev1.StorageStatus{
 				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
 				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
+			},
+			NodeAttributes: &corev1.NodeAttributes{
+				Storage: &trueValue,
 			},
 			Conditions: []corev1.NodeCondition{
 				{
@@ -408,7 +412,6 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	defaultQuantity, _ := resource.ParseQuantity("0")
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
@@ -418,6 +421,7 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 	controllerKind := corev1.SchemeGroupVersion.WithKind("StorageCluster")
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
+	trueValue := true
 	storageNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "node1",
@@ -425,19 +429,19 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 			OwnerReferences: []metav1.OwnerReference{*clusterRef},
 		},
 		Status: corev1.NodeStatus{
-			Storage: &corev1.StorageStatus{
-				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
-				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
-			},
 			Conditions: []corev1.NodeCondition{
 				{
 					Type:   corev1.NodeStateCondition,
 					Status: corev1.NodeOnlineStatus,
 				},
 			},
+			NodeAttributes: &corev1.NodeAttributes{
+				Storage: &trueValue,
+			},
 		},
 	}
 
+	falseValue := false
 	storageLessNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "node2",
@@ -445,15 +449,14 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 			OwnerReferences: []metav1.OwnerReference{*clusterRef},
 		},
 		Status: corev1.NodeStatus{
-			Storage: &corev1.StorageStatus{
-				TotalSize: defaultQuantity,
-				UsedSize:  defaultQuantity,
-			},
 			Conditions: []corev1.NodeCondition{
 				{
 					Type:   corev1.NodeStateCondition,
 					Status: corev1.NodeOnlineStatus,
 				},
+			},
+			NodeAttributes: &corev1.NodeAttributes{
+				Storage: &falseValue,
 			},
 		},
 	}
@@ -531,12 +534,8 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 	checkStorageLessPod.Annotations = nil
 	err = k8sClient.Update(context.TODO(), checkStorageLessPod)
 	require.NoError(t, err)
-	storageLessNode.Status.Conditions = append(
-		storageLessNode.Status.Conditions,
-		corev1.NodeCondition{
-			Type: corev1.NodeKVDBCondition,
-		},
-	)
+	hasKvdb := true
+	storageLessNode.Status.NodeAttributes.KVDB = &hasKvdb
 	err = k8sClient.Update(context.TODO(), storageLessNode)
 	require.NoError(t, err)
 
@@ -573,6 +572,7 @@ func TestReconcileKVDB(t *testing.T) {
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 	// node1 will not have any kvdb pods. So test will create
 	testKVDBNode1 := "node1"
+	trueValue := true
 	kvdbNode1 := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            testKVDBNode1,
@@ -581,11 +581,8 @@ func TestReconcileKVDB(t *testing.T) {
 		},
 		Status: corev1.NodeStatus{
 			Phase: string(corev1.NodeInitStatus),
-			Conditions: []corev1.NodeCondition{
-				{
-					Type:   corev1.NodeKVDBCondition,
-					Status: corev1.NodeOnlineStatus,
-				},
+			NodeAttributes: &corev1.NodeAttributes{
+				KVDB: &trueValue,
 			},
 		},
 	}
@@ -601,6 +598,7 @@ func TestReconcileKVDB(t *testing.T) {
 
 	// node2 will have kvdb pods but node is no longer kvdb. So test will check for deleted pods
 	testKVDBNode2 := "node2"
+	falseValue := false
 	kvdbNode2 := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            testKVDBNode2,
@@ -613,11 +611,9 @@ func TestReconcileKVDB(t *testing.T) {
 				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
 				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
 			},
-			Conditions: []corev1.NodeCondition{
-				{
-					Type:   corev1.NodeStateCondition,
-					Status: corev1.NodeOnlineStatus,
-				},
+			NodeAttributes: &corev1.NodeAttributes{
+				KVDB:    &falseValue,
+				Storage: &trueValue,
 			},
 		},
 	}
@@ -711,6 +707,7 @@ func TestReconcileKVDBOddSatusPodCleanup(t *testing.T) {
 
 	// node2 will have kvdb pods but node is no longer kvdb. So test will check for deleted pods
 	testKVDBNode2 := "node2"
+	trueValue := true
 	kvdbNode2 := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            testKVDBNode2,
@@ -719,15 +716,13 @@ func TestReconcileKVDBOddSatusPodCleanup(t *testing.T) {
 		},
 		Status: corev1.NodeStatus{
 			Phase: string(corev1.NodeInitStatus),
-			Conditions: []corev1.NodeCondition{
-				{
-					Type:   corev1.NodeKVDBCondition,
-					Status: corev1.NodeOnlineStatus,
-				},
-			},
-			Storage: corev1.StorageStatus{
+			Storage: &corev1.StorageStatus{
 				TotalSize: *resource.NewQuantity(20971520, resource.BinarySI),
 				UsedSize:  *resource.NewQuantity(10971520, resource.BinarySI),
+			},
+			NodeAttributes: &corev1.NodeAttributes{
+				KVDB:    &trueValue,
+				Storage: &trueValue,
 			},
 		},
 	}
@@ -834,6 +829,7 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 	controllerKind := corev1.SchemeGroupVersion.WithKind("StorageCluster")
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
+	trueValue := true
 	kvdbNode := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "kvdb-node",
@@ -842,11 +838,8 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 		},
 		Status: corev1.NodeStatus{
 			Phase: string(corev1.NodeInitStatus),
-			Conditions: []corev1.NodeCondition{
-				{
-					Type:   corev1.NodeKVDBCondition,
-					Status: corev1.NodeOnlineStatus,
-				},
+			NodeAttributes: &corev1.NodeAttributes{
+				KVDB: &trueValue,
 			},
 		},
 	}

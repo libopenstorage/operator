@@ -442,7 +442,9 @@ func getDeprecatedCRDBasePath() string {
 }
 
 func canNodeServeStorage(storagenode *corev1.StorageNode) bool {
-	if storagenode.Status.Storage == nil || storagenode.Status.Storage.TotalSize.IsZero() {
+	if storagenode.Status.NodeAttributes == nil ||
+		storagenode.Status.NodeAttributes.Storage == nil ||
+		!*storagenode.Status.NodeAttributes.Storage {
 		return false
 	}
 
@@ -459,12 +461,8 @@ func canNodeServeStorage(storagenode *corev1.StorageNode) bool {
 	return false
 }
 
-func isNodeRunningKVDB(storageNode *corev1.StorageNode) bool {
-	for _, cond := range storageNode.Status.Conditions {
-		if cond.Type == corev1.NodeKVDBCondition {
-			return true
-		}
-	}
-
-	return false
+func isNodeRunningKVDB(storagenode *corev1.StorageNode) bool {
+	return storagenode.Status.NodeAttributes != nil &&
+		storagenode.Status.NodeAttributes.KVDB != nil &&
+		*storagenode.Status.NodeAttributes.KVDB
 }

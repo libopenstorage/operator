@@ -468,9 +468,11 @@ func (p *portworx) updateStorageNodeStatus(
 	}
 	totalSize := resource.NewQuantity(totalSizeInBytes, resource.BinarySI)
 	usedSize := resource.NewQuantity(usedSizeInBytes, resource.BinarySI)
+	hasStorage := !totalSize.IsZero()
 
 	kvdbEntry, present := kvdbNodeMap[storageNode.Status.NodeUID]
-	if present && kvdbEntry != nil {
+	hasKvdb := present && kvdbEntry != nil
+	if hasKvdb {
 		nodeKVDBCondition := &corev1.NodeCondition{
 			Type:   corev1.NodeKVDBCondition,
 			Status: mapKVDBState(kvdbEntry.State),
@@ -492,8 +494,20 @@ func (p *portworx) updateStorageNodeStatus(
 		storageNode.Status.Conditions = storageNode.Status.Conditions[:k]
 	}
 
+	storageNode.Status.NodeAttributes = &corev1.NodeAttributes{
+		Storage: &hasStorage,
+		KVDB:    &hasKvdb,
+	}
+
 	operatorops.Instance().UpdateStorageNodeCondition(&storageNode.Status, nodeStateCondition)
 	storageNode.Status.Phase = getStorageNodePhase(&storageNode.Status)
+
+	if os, exists := node.NodeLabels[labelOperatingSystem]; exists {
+		storageNode.Status.OperatingSystem = os
+	}
+	if kernel, exists := node.NodeLabels[labelKernelVersion]; exists {
+		storageNode.Status.KernelVersion = kernel
+	}
 
 	if !reflect.DeepEqual(originalStorageNodeStatus, &storageNode.Status) ||
 		totalSize.Cmp(originalTotalSize) != 0 ||
@@ -597,14 +611,14 @@ func mapNodeStatus(status api.Status) corev1.NodeConditionStatus {
 		return corev1.NodeMaintenanceStatus
 
 	case api.Status_STATUS_OK:
-		fallthrough
-	case api.Status_STATUS_STORAGE_DOWN:
 		return corev1.NodeOnlineStatus
 
 	case api.Status_STATUS_DECOMMISSION:
 		return corev1.NodeDecommissionedStatus
 
 	case api.Status_STATUS_STORAGE_DEGRADED:
+		fallthrough
+	case api.Status_STATUS_STORAGE_DOWN:
 		fallthrough
 	case api.Status_STATUS_STORAGE_REBALANCE:
 		fallthrough
