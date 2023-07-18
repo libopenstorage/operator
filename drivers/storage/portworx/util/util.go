@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -711,15 +712,19 @@ var (
 // ParsePxProxy trims protocol prefix then splits the proxy address of the form "host:port" with possible basic authentication credential
 func ParsePxProxyURL(proxy string) (string, string, string, error) {
 	if strings.HasPrefix(proxy, HttpsProtocolPrefix) && strings.Contains(proxy, "@") {
-		proxy := strings.TrimPrefix(proxy, HttpsProtocolPrefix)
-		auth := strings.Split(proxy, "@")[0]
-		encodedAuth := base64.StdEncoding.EncodeToString([]byte(auth))
+		proxyUrl, err := url.Parse(proxy)
+		if err != nil {
+			return "", "", "", fmt.Errorf("failed to parse px proxy url %s", proxy)
+		}
+		username := proxyUrl.User.Username()
+		password, _ := proxyUrl.User.Password()
+		encodedAuth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
 		authHeader = fmt.Sprintf("Basic %s", encodedAuth)
-		host, port, err := net.SplitHostPort(strings.Split(proxy, "@")[1])
+		host, port, err := net.SplitHostPort(proxyUrl.Host)
 		if err != nil {
 			return "", "", "", err
 		} else if host == "" || port == "" || encodedAuth == "" {
-			return "", "", "", fmt.Errorf("failed to parse px proxy url %s", proxy)
+			return "", "", "", fmt.Errorf("failed to split px proxy to get host and port %s", proxy)
 		}
 		return host, port, authHeader, nil
 	} else {
@@ -729,7 +734,7 @@ func ParsePxProxyURL(proxy string) (string, string, string, error) {
 		if err != nil {
 			return "", "", "", err
 		} else if host == "" || port == "" {
-			return "", "", "", fmt.Errorf("failed to parse px proxy url %s", proxy)
+			return "", "", "", fmt.Errorf("failed to split px proxy to get host and port %s", proxy)
 		}
 		return host, port, authHeader, nil
 	}
