@@ -13985,7 +13985,7 @@ func TestValidateTelemetryEnabled(t *testing.T) {
 	require.Nil(t, cluster.Spec.Monitoring)
 	require.Len(t, recorder.Events, 0)
 
-	// TestCase: telemetry should be disabled if using secure proxy on ccm-go
+	// TestCase: telemetry should be disabled if using secure proxy but with invalid http proxy format
 	cluster.Spec.Image = "portworx/oci-monitor:2.12.0"
 	cluster.Spec.Monitoring = &corev1.MonitoringSpec{
 		Telemetry: &corev1.TelemetrySpec{
@@ -14003,7 +14003,7 @@ func TestValidateTelemetryEnabled(t *testing.T) {
 	require.False(t, cluster.Spec.Monitoring.Telemetry.Enabled)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported with secure proxy",
+		fmt.Sprintf("%v %v telemetry will be disabled: telemetry is not supported with proxy in a format of",
 			v1.EventTypeWarning, util.TelemetryDisabledReason))
 
 	// TestCase: telemetry should be disabled if using invalid http proxy format
