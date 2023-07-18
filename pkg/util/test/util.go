@@ -39,6 +39,7 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	certv1 "k8s.io/api/certificates/v1"
@@ -163,6 +164,7 @@ var (
 	opVer1_9_1, _                     = version.NewVersion("1.9.1-")
 	opVer1_10, _                      = version.NewVersion("1.10.0-")
 	opVer23_3, _                      = version.NewVersion("23.3.0-")
+	opVer23_8, _                      = version.NewVersion("23.8.0-")
 	opVer23_5, _                      = version.NewVersion("23.5.0-")
 	opVer23_5_1, _                    = version.NewVersion("23.5.1-")
 	opVer23_7, _                      = version.NewVersion("23.7.0-")
@@ -2907,6 +2909,10 @@ func validateStorkSecurityEnvVar(cluster *corev1.StorageCluster, storkDeployment
 		return err
 	}
 
+	if err := ValidateGrafana(cluster); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -2978,6 +2984,171 @@ func ValidatePrometheus(pxImageList map[string]string, cluster *corev1.StorageCl
 				return err
 			}
 		}
+	}
+
+	return nil
+}
+
+func ValidateGrafana(cluster *corev1.StorageCluster) error {
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return err
+	}
+	if opVersion.LessThanOrEqual(opVer23_8) {
+		logrus.Infof("Skipping grafana validation for operation version: [%s]", opVersion.String())
+		return nil
+	}
+
+	shouldBeInstalled := cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Grafana != nil &&
+		cluster.Spec.Monitoring.Grafana.Enabled && cluster.Spec.Monitoring.Prometheus != nil &&
+		cluster.Spec.Monitoring.Prometheus.Enabled
+	err = ValidateGrafanaDeployment(shouldBeInstalled)
+	if err != nil {
+		return err
+	}
+	err = ValidateGrafanaService(shouldBeInstalled)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ValidateGrafanaImage(shouldBeInstalled bool) error {
+	err := ValidateGrafanaDeployment(shouldBeInstalled)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ValidateGrafanaDeployment(shouldBeInstalled bool) error {
+	check := func() (interface{}, bool, error) {
+		pods, err := coreops.Instance().GetPods("kube-system", map[string]string{"app": "grafana"})
+		if err != nil {
+			return nil, true, err
+		}
+		if shouldBeInstalled {
+			if len(pods.Items) > 0 && pods.Items[0].Status.Phase == v1.PodRunning {
+				logrus.Infof("Grafana installed successfully")
+				return "", false, nil
+			} else {
+				logrus.Errorf("Grafana not yet ready")
+				return "", true, fmt.Errorf("grafana is not installed when it should be")
+			}
+		} else {
+			if len(pods.Items) < 1 {
+				logrus.Infof("Grafana uninstalled successfully")
+				return "", false, nil
+			} else {
+				logrus.Errorf("Grafana not yet uninstalled")
+				return "", true, fmt.Errorf("grafana is installed when it is expected to be uninstalled")
+			}
+		}
+	}
+
+	if _, err := task.DoRetryWithTimeout(check, 2*time.Minute, 30*time.Second); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ValidateGrafanaDeploymentImage(image string) error {
+	check := func() (interface{}, bool, error) {
+		pods, err := coreops.Instance().GetPods("kube-system", map[string]string{"app": "grafana"})
+		if err != nil {
+			return "", true, err
+		}
+		if len(pods.Items) > 0 && len(pods.Items[0].Spec.Containers) > 0 {
+			if pods.Items[0].Spec.Containers[0].Image == image {
+				logrus.Infof("Grafana installed successfully with image %s", image)
+				return "", false, nil
+			} else {
+				logrus.Errorf("Grafana not yet ready with image %s", image)
+				return "", true, fmt.Errorf("grafana is not installed with image %s", image)
+			}
+		} else {
+			return "", true, fmt.Errorf("grafana is not installed with image %s", image)
+		}
+	}
+
+	if _, err := task.DoRetryWithTimeout(check, 2*time.Minute, 30*time.Second); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ValidateGrafanaService(shouldBeInstalled bool) error {
+	check := func() (interface{}, bool, error) {
+		svcs, err := coreops.Instance().ListServices("kube-system", metav1.ListOptions{
+			LabelSelector: "app=grafana",
+		})
+		if err != nil {
+			return "", true, err
+		}
+
+		if shouldBeInstalled {
+			if len(svcs.Items) > 0 && svcs.Items[0].Spec.Ports[0].Port == 3000 {
+				logrus.Infof("Grafana svc installed successfully")
+				return "", false, nil
+			} else {
+				logrus.Errorf("Grafana svc not yet ready")
+				return "", true, fmt.Errorf("grafana is not installed when it should be")
+			}
+		} else {
+			if len(svcs.Items) < 1 {
+				logrus.Infof("Grafana svc uninstalled successfully")
+				return "", false, nil
+			} else {
+				logrus.Errorf("Grafana svc not yet uninstalled")
+				return "", true, fmt.Errorf("grafana svc is installed when it is expected to be uninstalled")
+			}
+		}
+	}
+
+	if _, err := task.DoRetryWithTimeout(check, 2*time.Minute, 30*time.Second); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ValidateGrafanaConfigmaps(t *testing.T, shouldBeInstalled bool) error {
+	check := func() (interface{}, bool, error) {
+		cms, err := coreops.Instance().ListConfigMap("kube-system", metav1.ListOptions{})
+		require.NoError(t, err)
+
+		var grafanaConfigmaps []v1.ConfigMap
+		for _, cm := range cms.Items {
+			if strings.Contains(cm.Name, "px-grafana-") {
+				grafanaConfigmaps = append(grafanaConfigmaps, cm)
+			}
+		}
+
+		if shouldBeInstalled {
+			if len(grafanaConfigmaps) == 3 {
+				logrus.Infof("Grafana configmaps are installed successfully")
+				return "", false, nil
+			} else {
+				logrus.Errorf("Grafana configmaps are not yet ready")
+				return "", true, fmt.Errorf("grafana is not installed when it should be")
+			}
+		} else {
+			if len(grafanaConfigmaps) < 3 {
+				logrus.Infof("Grafana configmaps uninstalled successfully")
+				return "", false, nil
+			} else {
+				logrus.Errorf("Grafana configmaps are not yet uninstalled")
+				return "", true, fmt.Errorf("grafana configmaps are installed when it is expected to be uninstalled")
+			}
+		}
+	}
+
+	if _, err := task.DoRetryWithTimeout(check, 2*time.Minute, 30*time.Second); err != nil {
+		return err
 	}
 
 	return nil

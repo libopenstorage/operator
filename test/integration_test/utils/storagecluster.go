@@ -1,10 +1,11 @@
 package utils
 
 import (
-	"github.com/libopenstorage/cloudops"
 	"path"
 	"strings"
 	"testing"
+
+	"github.com/libopenstorage/cloudops"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -317,6 +318,22 @@ func UpdateAndValidateCSI(cluster *corev1.StorageCluster, f func(*corev1.Storage
 	require.NoError(t, err)
 
 	err = testutil.ValidateCSI(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
+	require.NoError(t, err)
+
+	return latestLiveCluster
+}
+
+// UpdateAndValidateGrafana update StorageCluster, validates grafana and return latest version of live StorageCluster
+func UpdateAndValidateGrafana(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
+	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	newCluster := f(liveCluster)
+
+	latestLiveCluster, err := UpdateStorageCluster(newCluster)
+	require.NoError(t, err)
+
+	err = testutil.ValidateGrafana(cluster)
 	require.NoError(t, err)
 
 	return latestLiveCluster
