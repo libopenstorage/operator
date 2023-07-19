@@ -48,6 +48,9 @@ static_resources:
                 - header:
                     key: "product-version"
                     value: PRODUCT_VERSION
+                - header:
+                    key: "proxy-authorization"
+                    value: "BASIC_AUTH"
                 route:
                   host_rewrite_literal: REGISTER_PROXY_URL
                   cluster: cluster_register_cloud_support
@@ -100,6 +103,9 @@ static_resources:
             - header:
                 key: "product-version"
                 value: PRODUCT_VERSION
+            - header:
+                key: "proxy-authorization"
+                value: "BASIC_AUTH"
   clusters:
   - name: cluster_register_cloud_support
     type: STRICT_DNS
@@ -176,3 +182,8 @@ static_resources:
               socket_address:
                 address: CUSTOM_PROXY_ADDRESS
                 port_value: CUSTOM_PROXY_PORT
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        sni: CUSTOM_PROXY_ADDRESS

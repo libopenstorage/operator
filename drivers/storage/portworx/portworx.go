@@ -1470,10 +1470,9 @@ func setTLSDefaults(
 // setTelemetryDefaults validates and sets telemetry values
 // Telemetry will be disabled if:
 // 1. It's disabled explicitly
-// 2. HTTPS proxy is configured
-// 3. HTTP proxy url is not in a format of hostname:port
-// 4. PX version incompatible
-// 5. Cannot ping Arcus endpoint when first time enabled (telemetry cert is not created yet)
+// 2. HTTP/HTTPS proxy url is not in a format of hostname:port
+// 3. PX version incompatible
+// 4. Cannot ping Arcus endpoint when first time enabled (telemetry cert is not created yet)
 // Otherwise it will be enabled by default
 func (p *portworx) setTelemetryDefaults(
 	toUpdate *corev1.StorageCluster,
@@ -1496,15 +1495,11 @@ func (p *portworx) setTelemetryDefaults(
 	} else if !pxutil.IsCCMGoSupported(pxVersion) {
 		// CCM Java case, PX version is between 2.8 and 2.12, don't set any default values
 		return nil
-	} else if proxyType == pxutil.EnvKeyPortworxHTTPProxy {
-		// CCM Go is supported, but HTTP proxy cannot be split into host and port
-		if _, _, proxyFormatErr := pxutil.SplitPxProxyHostPort(proxy); proxyFormatErr != nil {
+	} else if proxyType == pxutil.EnvKeyPortworxHTTPProxy || proxyType == pxutil.EnvKeyPortworxHTTPSProxy {
+		// CCM Go is supported, but HTTP/HTTPS proxy cannot be split into host and port
+		if _, _, _, proxyFormatErr := pxutil.ParsePxProxyURL(proxy); proxyFormatErr != nil {
 			err = fmt.Errorf("telemetry is not supported with proxy in a format of: %s", proxy)
 		}
-	} else if proxyType == pxutil.EnvKeyPortworxHTTPSProxy {
-		// CCM Go is not supported with https proxy
-		// TODO: remove when HTTPS proxy is supported
-		err = fmt.Errorf("telemetry is not supported with secure proxy: %s", proxy)
 	}
 	if toUpdate.Spec.Monitoring == nil {
 		toUpdate.Spec.Monitoring = &corev1.MonitoringSpec{}

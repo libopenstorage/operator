@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -256,6 +257,10 @@ const (
 
 	// TelemetryCertName is name of the telemetry cert.
 	TelemetryCertName = "pure-telemetry-certs"
+	// HttpProtocolPrefix is the prefix for HTTP protocol
+	HttpProtocolPrefix = "http://"
+	// HttpsProtocolPrefix is the prefix for HTTPS protocol
+	HttpsProtocolPrefix = "https://"
 )
 
 var (
@@ -700,17 +705,39 @@ func GetPxProxyEnvVarValue(cluster *corev1.StorageCluster) (string, string) {
 	return "", ""
 }
 
-// SplitPxProxyHostPort trims protocol prefix then splits the proxy address of the form "host:port"
-func SplitPxProxyHostPort(proxy string) (string, string, error) {
-	proxy = strings.TrimPrefix(proxy, "http://")
-	proxy = strings.TrimPrefix(proxy, "https://")
-	address, port, err := net.SplitHostPort(proxy)
-	if err != nil {
-		return "", "", err
-	} else if address == "" || port == "" {
-		return "", "", fmt.Errorf("failed to split px proxy address %s", proxy)
+var (
+	authHeader string
+)
+
+// ParsePxProxy trims protocol prefix then splits the proxy address of the form "host:port" with possible basic authentication credential
+func ParsePxProxyURL(proxy string) (string, string, string, error) {
+	if strings.HasPrefix(proxy, HttpsProtocolPrefix) && strings.Contains(proxy, "@") {
+		proxyUrl, err := url.Parse(proxy)
+		if err != nil {
+			return "", "", "", fmt.Errorf("failed to parse px proxy url %s", proxy)
+		}
+		username := proxyUrl.User.Username()
+		password, _ := proxyUrl.User.Password()
+		encodedAuth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+		authHeader = fmt.Sprintf("Basic %s", encodedAuth)
+		host, port, err := net.SplitHostPort(proxyUrl.Host)
+		if err != nil {
+			return "", "", "", err
+		} else if host == "" || port == "" || encodedAuth == "" {
+			return "", "", "", fmt.Errorf("failed to split px proxy to get host and port %s", proxy)
+		}
+		return host, port, authHeader, nil
+	} else {
+		proxy = strings.TrimPrefix(proxy, HttpProtocolPrefix)
+		proxy = strings.TrimPrefix(proxy, HttpsProtocolPrefix) // treat https proxy as http proxy if no credential provided
+		host, port, err := net.SplitHostPort(proxy)
+		if err != nil {
+			return "", "", "", err
+		} else if host == "" || port == "" {
+			return "", "", "", fmt.Errorf("failed to split px proxy to get host and port %s", proxy)
+		}
+		return host, port, authHeader, nil
 	}
-	return address, port, nil
 }
 
 // GetValueFromEnvVar returns the value of v1.EnvVar Value or ValueFrom
