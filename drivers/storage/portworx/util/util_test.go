@@ -508,6 +508,8 @@ func TestGetTLSMinVersion(t *testing.T) {
 		{" VersionTLS11 ", "VersionTLS11", false},
 		{"VersionTLS12", "VersionTLS12", false},
 		{"VersionTLS13", "VersionTLS13", false},
+		{"versiontls13", "VersionTLS13", false},
+		{"VERSIONTLS13", "VersionTLS13", false},
 		{"VersionTLS14", "", true},
 		{"VersionTLS3", "", true},
 	}

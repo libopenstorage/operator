@@ -1485,9 +1485,15 @@ func GetTLSMinVersion(cluster *corev1.StorageCluster) (string, error) {
 	}
 	req = strings.Trim(req, " \t")
 
-	if req == "VersionTLS10" || req == "VersionTLS11" || req == "VersionTLS12" || req == "VersionTLS13" {
-		// valid value
-		return req, nil
+	switch strings.ToUpper(req) {
+	case "VERSIONTLS10":
+		return "VersionTLS10", nil
+	case "VERSIONTLS11":
+		return "VersionTLS11", nil
+	case "VERSIONTLS12":
+		return "VersionTLS12", nil
+	case "VERSIONTLS13":
+		return "VersionTLS13", nil
 	}
 
 	return "", fmt.Errorf("invalid TLS version: expected one of VersionTLS1{0..3}, got %s", req)
