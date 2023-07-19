@@ -13683,6 +13683,19 @@ func TestTelemetryCCMGoHTTPSProxy(t *testing.T) {
 	}
 	createTelemetrySecret(t, k8sClient, cluster.Namespace)
 
+	// PWX-27401 reconcile collector to validate specs
+	err = k8sClient.Create(
+		context.TODO(),
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      component.DeploymentNameTelemetryCollectorV2,
+				Namespace: cluster.Namespace,
+			},
+		},
+		&client.CreateOptions{},
+	)
+	require.NoError(t, err)
+
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
