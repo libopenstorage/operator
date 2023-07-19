@@ -813,6 +813,9 @@ func TestPodSpecForVsphere(t *testing.T) {
 		"-secret_type", "k8s",
 	}
 
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	_, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
@@ -835,6 +838,9 @@ func TestPodSpecForVsphere(t *testing.T) {
 		"-b",
 		"-secret_type", "k8s",
 	}
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
@@ -859,12 +865,20 @@ func TestPodSpecForVsphere(t *testing.T) {
 		"-secret_type", "k8s",
 	}
 
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
 }
 
 func TestPodSpecWithNetworkSpec(t *testing.T) {
@@ -1837,7 +1851,6 @@ func TestPodSpecWithCloudStorageSpecOnAzure(t *testing.T) {
 	err := preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
 
-	require.True(t, preflight.IsAzure())
 	c := preflight.Instance()
 	require.Equal(t, cloudops.Azure, c.ProviderName())
 

@@ -432,8 +432,17 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Annotations[pxutil.AnnotationIsEKS] = "true"
 	} else if preflight.IsGKE() {
 		toUpdate.Annotations[pxutil.AnnotationIsGKE] = "true"
-	} else if preflight.IsAzure() {
-		toUpdate.Annotations[pxutil.AnnotationIsAKS] = "true"
+	}
+
+	if len(preflight.Instance().ProviderName()) > 0 {
+		if toUpdate.Spec.CloudStorage == nil {
+			toUpdate.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+		}
+		// Cloud provider exists, if not set then set it
+		if toUpdate.Spec.CloudStorage.Provider == nil || len(*toUpdate.Spec.CloudStorage.Provider) == 0 {
+			cloudProvider := preflight.Instance().ProviderName()
+			toUpdate.Spec.CloudStorage.Provider = &cloudProvider
+		}
 	}
 
 	removeDeprecatedFields(toUpdate)
