@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -654,6 +655,18 @@ func (c *Controller) syncStorageCluster(
 				cluster.Annotations = make(map[string]string)
 			}
 			cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+		}
+	}
+
+	if _, miscExists := cluster.Annotations[pxutil.AnnotationMiscArgs]; miscExists {
+		// Cleanup remove '-T dmthin' from misc args if it exists.  It would have been added due to a bug
+		miscAnnotations := cluster.Annotations[pxutil.AnnotationMiscArgs]
+		dmThinStr := `-T *dmthin`
+		if dmExists, err := regexp.MatchString(dmThinStr, miscAnnotations); err == nil {
+			rexp := regexp.MustCompile(dmThinStr)
+			if dmExists {
+				cluster.Annotations[pxutil.AnnotationMiscArgs] = rexp.ReplaceAllString(miscAnnotations, "")
+			}
 		}
 	}
 
