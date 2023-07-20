@@ -201,7 +201,7 @@ func TestValidate(t *testing.T) {
 	preFlighter := NewPreFlighter(cluster, k8sClient, podSpec)
 	require.NotNil(t, preFlighter)
 
-	/// Create preflighter podSpec
+	// / Create preflighter podSpec
 	preflightDSCheck, err := preFlighter.CreatePreFlightDaemonsetSpec(clusterRef)
 	require.NoError(t, err)
 	require.NotNil(t, preflightDSCheck)
@@ -2108,6 +2108,25 @@ func TestStorageClusterDefaultsForNodeSpecsWithCloudStorage(t *testing.T) {
 	require.Equal(t, "type=node-metadata", *cluster.Spec.Nodes[0].CloudStorage.SystemMdDeviceSpec)
 	require.Equal(t, "type=node-kvdb", *cluster.Spec.Nodes[0].CloudStorage.KvdbDeviceSpec)
 	require.Equal(t, maxStorageNodesForNodeGroup, *cluster.Spec.Nodes[0].CloudStorage.MaxStorageNodesPerZonePerNodeGroup)
+}
+
+func TestStorageClusterDefaultsForPlugin(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.1.5.1",
+		},
+	}
+
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, cluster.Status.DesiredImages.DynamicPlugin, "portworx/portworx-dynamic-plugin:1.0.0")
+	require.Equal(t, cluster.Status.DesiredImages.DynamicPluginProxy, "nginxinc/nginx-unprivileged:1.23")
 }
 
 func assertDefaultSecuritySpec(t *testing.T, cluster *corev1.StorageCluster) {
@@ -8455,6 +8474,8 @@ func (m *fakeManifest) GetVersions(
 			MetricsCollectorProxy:      "envoyproxy/envoy:v1.19.1",
 			LogUploader:                "purestorage/log-upload:1.2.3",
 			TelemetryProxy:             "purestorage/envoy:1.2.3",
+			DynamicPlugin:              "portworx/portworx-dynamic-plugin:1.0.0",
+			DynamicPluginProxy:         "nginxinc/nginx-unprivileged:1.23",
 		},
 	}
 	if m.k8sVersion != nil && m.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
