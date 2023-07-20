@@ -623,6 +623,25 @@ func (c *Controller) createOrUpdateDeprecatedCRD() error {
 	return nil
 }
 
+func (c *Controller) miscCleanUp(cluster *corev1.StorageCluster) error {
+	// cleanup  depricated -T dmthin
+	if _, miscExists := cluster.Annotations[pxutil.AnnotationMiscArgs]; miscExists {
+		// remove '-T dmthin' from misc args if it exists.  It would have been added due to a bug
+		miscAnnotations := cluster.Annotations[pxutil.AnnotationMiscArgs]
+		dmThinStr := `-T *dmthin`
+		if dmExists, err := regexp.MatchString(dmThinStr, miscAnnotations); err == nil {
+			rexp := regexp.MustCompile(dmThinStr)
+			if dmExists {
+				cluster.Annotations[pxutil.AnnotationMiscArgs] = rexp.ReplaceAllString(miscAnnotations, "")
+				if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (c *Controller) syncStorageCluster(
 	cluster *corev1.StorageCluster,
 ) error {
@@ -658,16 +677,9 @@ func (c *Controller) syncStorageCluster(
 		}
 	}
 
-	if _, miscExists := cluster.Annotations[pxutil.AnnotationMiscArgs]; miscExists {
-		// Cleanup remove '-T dmthin' from misc args if it exists.  It would have been added due to a bug
-		miscAnnotations := cluster.Annotations[pxutil.AnnotationMiscArgs]
-		dmThinStr := `-T *dmthin`
-		if dmExists, err := regexp.MatchString(dmThinStr, miscAnnotations); err == nil {
-			rexp := regexp.MustCompile(dmThinStr)
-			if dmExists {
-				cluster.Annotations[pxutil.AnnotationMiscArgs] = rexp.ReplaceAllString(miscAnnotations, "")
-			}
-		}
+	// General clean cause by previous issues
+	if err := c.miscCleanUp(cluster); err != nil {
+		return err
 	}
 
 	// Ensure Stork is deployed with right configuration
