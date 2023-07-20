@@ -46,7 +46,6 @@ func volumeMounts() []v1.VolumeMount {
 }
 
 func makeDiagPodTemplate(cluster *corev1.StorageCluster, diag *portworxv1.PortworxDiag, ns string, nodeName string, nodeID string) (*v1.PodTemplateSpec, error) {
-	svcLinks := true
 	terminationGP := int64(10)
 	privileged := true
 
@@ -79,11 +78,8 @@ func makeDiagPodTemplate(cluster *corev1.StorageCluster, diag *portworxv1.Portwo
 		},
 		Spec: v1.PodSpec{
 			NodeName:                      nodeName,
-			HostPID:                       true,                      // We *do* need this
-			HostNetwork:                   true,                      // Do we need this?: https://portworx.atlassian.net/browse/PWX-32177
-			RestartPolicy:                 v1.RestartPolicyOnFailure, //
-			DNSPolicy:                     v1.DNSClusterFirst,        // Do we need this? https://portworx.atlassian.net/browse/PWX-32177
-			EnableServiceLinks:            &svcLinks,                 // Do we need this? https://portworx.atlassian.net/browse/PWX-32177
+			HostPID:                       true,
+			RestartPolicy:                 v1.RestartPolicyOnFailure,
 			ServiceAccountName:            pxutil.PortworxServiceAccountName(cluster),
 			TerminationGracePeriodSeconds: &terminationGP,
 			Volumes:                       volumes(),

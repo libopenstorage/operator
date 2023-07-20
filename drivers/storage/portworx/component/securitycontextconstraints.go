@@ -195,7 +195,7 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 			AllowHostNetwork:         true,
 			AllowHostPID:             false,
 			AllowHostPorts:           false,
-			AllowPrivilegeEscalation: boolPtr(false),
+			AllowPrivilegeEscalation: boolPtr(true),
 			AllowPrivilegedContainer: true,
 			AllowedUnsafeSysctls:     []string{"*"},
 			AllowedCapabilities: []corev1.Capability{
