@@ -106,7 +106,7 @@ func RunPxCmd(command ...string) (string, string, error) {
 }
 
 func RunPxCmdInPod(pod *v1.Pod, input ...string) (string, string, error) {
-	var out, err bytes.Buffer
+	var out, stderr bytes.Buffer
 	if pod == nil || len(input) <= 0 {
 		return "", "", os.ErrInvalid
 	}
@@ -116,19 +116,20 @@ func RunPxCmdInPod(pod *v1.Pod, input ...string) (string, string, error) {
 	if logrus.IsLevelEnabled(logrus.DebugLevel) {
 		logrus.Debugf("run on %s via %s: `%s`", pod.Spec.NodeName, pod.Name, strings.Join(command, " "))
 	}
+	request := &coreops.RunCommandInPodExRequest{
+		Command:       command,
+		PODName:       pod.Name,
+		ContainerName: "portworx",
+		Namespace:     pod.Namespace,
+		UseTTY:        false,
+		Stdin:         nil,
+		Stdout:        &out,
+		Stderr:        &stderr,
+	}
 
-	retErr := coreops.Instance().RunCommandInPodEx(&coreops.RunCommandInPodExRequest{
-		command,
-		pod.Name,
-		"portworx",
-		pod.Namespace,
-		false,
-		nil,
-		&out,
-		&err,
-	})
+	retErr := coreops.Instance().RunCommandInPodEx(request)
 	if retErr != nil {
 		return "", "", retErr
 	}
-	return out.String(), err.String(), nil
+	return out.String(), stderr.String(), nil
 }
