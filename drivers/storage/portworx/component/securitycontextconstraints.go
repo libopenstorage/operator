@@ -28,6 +28,8 @@ const (
 	SCCComponentName = "scc"
 	// PxSCCName name of portworx securityContextConstraints
 	PxSCCName = "portworx"
+	// PxRestrictedSCCName name of portworx-restricted securityContextConstraints
+	PxRestrictedSCCName = "portworx-restricted"
 	// PxNodeWiperServiceAccountName name of portworx node wiper service account
 	PxNodeWiperServiceAccountName = "px-node-wiper"
 )
@@ -189,11 +191,11 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 				Name: PxSCCName,
 			},
 			AllowHostDirVolumePlugin: true,
-			AllowHostIPC:             true,
+			AllowHostIPC:             false,
 			AllowHostNetwork:         true,
-			AllowHostPID:             true,
-			AllowHostPorts:           true,
-			AllowPrivilegeEscalation: boolPtr(true),
+			AllowHostPID:             false,
+			AllowHostPorts:           false,
+			AllowPrivilegeEscalation: boolPtr(false),
 			AllowPrivilegedContainer: true,
 			AllowedUnsafeSysctls:     []string{"*"},
 			AllowedCapabilities: []corev1.Capability{
@@ -222,9 +224,50 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, LhServiceAccountName),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, PVCServiceAccountName),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CollectorServiceAccountName),
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, ServiceAccountNameTelemetry),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-node-wiper"),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-prometheus"),
 				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "stork-scheduler"),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: PxRestrictedSCCName,
+			},
+			AllowHostDirVolumePlugin: true,
+			AllowHostIPC:             false,
+			AllowHostNetwork:         true,
+			AllowHostPID:             false,
+			AllowHostPorts:           false,
+			AllowPrivilegeEscalation: boolPtr(false),
+			AllowPrivilegedContainer: false,
+			FSGroup: ocp_secv1.FSGroupStrategyOptions{
+				Type: ocp_secv1.FSGroupStrategyMustRunAs,
+			},
+			ReadOnlyRootFilesystem: false,
+			RunAsUser: ocp_secv1.RunAsUserStrategyOptions{
+				Type: ocp_secv1.RunAsUserStrategyMustRunAsRange,
+			},
+			SELinuxContext: ocp_secv1.SELinuxContextStrategyOptions{
+				Type: ocp_secv1.SELinuxStrategyMustRunAs,
+			},
+			SupplementalGroups: ocp_secv1.SupplementalGroupsStrategyOptions{
+				Type: ocp_secv1.SupplementalGroupsStrategyRunAsAny,
+			},
+			Volumes: []ocp_secv1.FSType{
+				ocp_secv1.FSTypeConfigMap,
+				ocp_secv1.FSTypeDownwardAPI,
+				ocp_secv1.FSTypeEmptyDir,
+				ocp_secv1.FSTypeHostPath,
+				ocp_secv1.FSTypePersistentVolumeClaim,
+				ocp_secv1.FSProjected,
+				ocp_secv1.FSTypeSecret,
+			},
+			Groups: nil,
+			Users: []string{
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CSIServiceAccountName),
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, LhServiceAccountName),
+				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, PVCServiceAccountName),
 			},
 		},
 	}
