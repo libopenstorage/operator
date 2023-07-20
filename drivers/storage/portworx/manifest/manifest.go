@@ -53,8 +53,8 @@ const (
 	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.24.0"
 
 	// default dynamic plugin images
-	defaultDynamicPluginImage      = "portworx/portworx-dynamic-plugin:1.0.0"
-	defaultDynamicPluginProxyImage = "nginxinc/nginx-unprivileged:1.23"
+	DefaultDynamicPluginImage      = "portworx/portworx-dynamic-plugin:1.0.0"
+	DefaultDynamicPluginProxyImage = "nginxinc/nginx-unprivileged:1.23"
 
 	defaultManifestRefreshInterval = 3 * time.Hour
 )
@@ -228,8 +228,8 @@ func defaultRelease(
 			Lighthouse: defaultLighthouseImage,
 			NodeWiper:  defaultNodeWiperImage,
 			PxRepo:     defaultPxRepoImage,
-			DynamicPlugin:      defaultDynamicPluginImage,
-			DynamicPluginProxy: defaultDynamicPluginProxyImage,
+			DynamicPlugin:      DefaultDynamicPluginImage,
+			DynamicPluginProxy: DefaultDynamicPluginProxyImage,
 
 		},
 	}
@@ -261,11 +261,11 @@ func fillDefaults(
 	}
 
 	if rel.Components.DynamicPlugin == "" {
-		rel.Components.DynamicPlugin = defaultDynamicPluginImage
+		rel.Components.DynamicPlugin = DefaultDynamicPluginImage
 	}
 
 	if rel.Components.DynamicPluginProxy == "" {
-		rel.Components.DynamicPluginProxy = defaultDynamicPluginProxyImage
+		rel.Components.DynamicPluginProxy = DefaultDynamicPluginProxyImage
 	}
 	fillCSIDefaults(rel, k8sVersion)
 	fillPrometheusDefaults(rel, k8sVersion)
