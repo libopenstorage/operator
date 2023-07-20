@@ -4068,6 +4068,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 				Used:      2147483648,
 			},
 		},
+		NodeLabels: map[string]string{
+			labelOperatingSystem: "Ubuntu 16.04.7 LTS",
+			labelKernelVersion:   "4.4.0-210-generic",
+		},
 	}
 	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*api.StorageNode{expectedNodeOne, expectedNodeTwo},
@@ -4103,6 +4107,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NotNil(t, nodeStatus.Status.Storage)
 	require.Equal(t, int64(0), nodeStatus.Status.Storage.TotalSize.Value())
 	require.Equal(t, int64(0), nodeStatus.Status.Storage.UsedSize.Value())
+	require.False(t, *nodeStatus.Status.NodeAttributes.Storage)
+	require.False(t, *nodeStatus.Status.NodeAttributes.KVDB)
+	require.Empty(t, nodeStatus.Status.OperatingSystem)
+	require.Empty(t, nodeStatus.Status.KernelVersion)
 
 	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
@@ -4121,6 +4129,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NotNil(t, nodeStatus.Status.Storage)
 	require.Equal(t, int64(42949672960), nodeStatus.Status.Storage.TotalSize.Value())
 	require.Equal(t, int64(12884901888), nodeStatus.Status.Storage.UsedSize.Value())
+	require.True(t, true, *nodeStatus.Status.NodeAttributes.Storage)
+	require.False(t, *nodeStatus.Status.NodeAttributes.KVDB)
+	require.Equal(t, "Ubuntu 16.04.7 LTS", nodeStatus.Status.OperatingSystem)
+	require.Equal(t, "4.4.0-210-generic", nodeStatus.Status.KernelVersion)
 
 	// Return only one node in enumerate for future tests
 	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
@@ -4284,8 +4296,8 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Online", nodeStatus.Status.Phase)
-	require.Equal(t, corev1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
+	require.Equal(t, corev1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDegraded
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DEGRADED
@@ -8824,6 +8836,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			}
 		}
 		require.True(t, found)
+		require.True(t, *checkStorageNode.Status.NodeAttributes.KVDB)
 	}
 
 	// TEST 2: Remove KVDB condition
@@ -8849,9 +8862,10 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			}
 		}
 		require.False(t, found)
+		require.False(t, *checkStorageNode.Status.NodeAttributes.KVDB)
 	}
 
-	// TEST 4: Check kvdn node state translations
+	// TEST 4: Check kvdb node state translations
 	kvdbNodeStateTests := []struct {
 		state                   int
 		nodeType                int
@@ -8924,6 +8938,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			}
 		}
 		require.True(t, found)
+		require.True(t, *checkStorageNode.Status.NodeAttributes.KVDB)
 		require.Equal(t, kvdbNodeStateTest.expectedConditionStatus, status)
 		require.NotEmpty(t, conditionMsg)
 		require.True(t, strings.Contains(conditionMsg, kvdbNodeStateTest.expectedNodeType))
@@ -9067,6 +9082,7 @@ func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
 			}
 		}
 		require.True(t, found)
+		require.True(t, *checkStorageNode.Status.NodeAttributes.KVDB)
 	}
 }
 
