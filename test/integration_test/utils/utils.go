@@ -1,6 +1,11 @@
 package utils
 
 import (
+	"bytes"
+	"fmt"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	"github.com/sirupsen/logrus"
+	"os"
 	"regexp"
 	"strings"
 
@@ -87,4 +92,44 @@ func mergeEnvVars(origList, newList []v1.EnvVar) []v1.EnvVar {
 		mergedList = append(mergedList, *(env.DeepCopy()))
 	}
 	return mergedList
+}
+
+func RunPxCmd(command ...string) (string, string, error) {
+	pl, err := coreops.Instance().ListPods(map[string]string{"name": "portworx"})
+	if err != nil {
+		return "", "", err
+	}
+	if len(pl.Items) == 0 {
+		return "", "", fmt.Errorf("no pods found")
+	}
+	return RunPxCmdInPod(&pl.Items[0], command...)
+}
+
+func RunPxCmdInPod(pod *v1.Pod, input ...string) (string, string, error) {
+	var out, stderr bytes.Buffer
+	if pod == nil || len(input) <= 0 {
+		return "", "", os.ErrInvalid
+	}
+	command := []string{"nsenter", "--mount=/host_proc/1/ns/mnt", "--", "/bin/bash", "-c"}
+	command = append(command, input...)
+
+	if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		logrus.Debugf("run on %s via %s: `%s`", pod.Spec.NodeName, pod.Name, strings.Join(command, " "))
+	}
+	request := &coreops.RunCommandInPodExRequest{
+		Command:       command,
+		PODName:       pod.Name,
+		ContainerName: "portworx",
+		Namespace:     pod.Namespace,
+		UseTTY:        false,
+		Stdin:         nil,
+		Stdout:        &out,
+		Stderr:        &stderr,
+	}
+
+	retErr := coreops.Instance().RunCommandInPodEx(request)
+	if retErr != nil {
+		return "", "", retErr
+	}
+	return out.String(), stderr.String(), nil
 }
