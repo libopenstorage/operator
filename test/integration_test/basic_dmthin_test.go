@@ -112,7 +112,7 @@ func BasicInstallDmthin(tc *types.TestCase) func(*testing.T) {
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
 		// Verify we see PXStoreV2 in pxctl status output
-		out, _, err := ci_utils.RunPxCmd("/usr/local/bin/pxctl status| grep 'PX-StoreV2'|wc -l")
+		out, _, err := ci_utils.RunPxCmd("/usr/local/bin/pxctl status| grep -c 'PX-StoreV2'")
 		require.NoError(t, err)
 		out = strings.TrimSpace(out)
 		val, err := strconv.Atoi(out)
