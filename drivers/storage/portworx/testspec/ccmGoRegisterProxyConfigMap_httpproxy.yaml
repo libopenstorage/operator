@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: px-telemetry-collector-proxy
+  name: px-telemetry-register-proxy
   namespace: kube-test
   ownerReferences:
   - apiVersion: core.libopenstorage.org/v1
@@ -9,22 +9,22 @@ metadata:
     controller: true
     kind: StorageCluster
 data:
-  envoy-config.yaml: |-
+  envoy-config-register.yaml: |-
     admin:
       address:
         socket_address:
           address: 127.0.0.1
           port_value: 9901
     node:
-      id: "id_rest"
-      cluster: "cluster_rest"
+      id: "id_register"
+      cluster: "cluster_register"
     static_resources:
       listeners:
-      - name: listener_cloud_support
+      - name: listener_register_cloud_support
         address:
           socket_address:
             address: 127.0.0.1
-            port_value: 11000
+            port_value: 13001
         filter_chains:
         - filters:
           - name: envoy.filters.network.http_connection_manager
@@ -37,6 +37,8 @@ data:
                   "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
               http_filters:
               - name: envoy.filters.http.router
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
               route_config:
                 name: local_route
                 virtual_hosts:
@@ -54,49 +56,52 @@ data:
                         value: test-clusteruid
                     - header:
                         key: "component-sn"
-                        value: portworx-metrics-node
+                        value: px-cluster
                     - header:
                         key: "product-version"
                         value: 2.12.0
+                    - header:
+                        key: "proxy-authorization"
+                        value: ""
                     route:
-                      host_rewrite_literal: rest.cloud-support.purestorage.com
-                      cluster: cluster_cloud_support
-      - name: listener_cloud_support_tcp_proxy
+                      host_rewrite_literal: register.cloud-support.purestorage.com
+                      cluster: cluster_register_cloud_support
+      - name: listener_register_cloud_support_tcp_proxy
         address:
           socket_address:
             protocol: TCP
             address: 127.0.0.1
-            port_value: 11002
+            port_value: 13003
         filter_chains:
         - filters:
           - name: envoy.filters.network.tcp_proxy
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
-              stat_prefix: ingress_tcp_proxy
+              stat_prefix: ingress_register_tcp_proxy
               access_log:
               - name: envoy.access_loggers.stdout
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
-              cluster: cluster_cloud_support_tcp_proxy
-      - name: listener_customer_proxy_envoy_internal_redirect
+              cluster: cluster_register_cloud_support_tcp_proxy
+      - name: listener_register_customer_proxy_envoy_internal_redirect
         address:
           socket_address:
             protocol: TCP
             address: 127.0.0.1
-            port_value: 11004
+            port_value: 13005
         filter_chains:
         - filters:
           - name: envoy.filters.network.tcp_proxy
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
-              stat_prefix: ingress_customer_proxy_envoy_internal_redirect
+              stat_prefix: ingress_register_customer_proxy_envoy_internal_redirect
               access_log:
               - name: envoy.access_loggers.stdout
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
               cluster: cluster_customer_proxy
               tunneling_config:
-                hostname: rest.cloud-support.purestorage.com:443
+                hostname: register.cloud-support.purestorage.com:443
                 headers_to_add:
                 - header:
                     key: "product-name"
@@ -106,69 +111,70 @@ data:
                     value: test-clusteruid
                 - header:
                     key: "component-sn"
-                    value: portworx-metrics-node
+                    value: px-cluster
                 - header:
                     key: "product-version"
                     value: 2.12.0
+                - header:
+                    key: "proxy-authorization"
+                    value: ""
       clusters:
-      - name: cluster_cloud_support
+      - name: cluster_register_cloud_support
         type: STRICT_DNS
         dns_lookup_family: V4_ONLY
         lb_policy: ROUND_ROBIN
         load_assignment:
-          cluster_name: cluster_cloud_support
+          cluster_name: cluster_register_cloud_support
           endpoints:
           - lb_endpoints:
             - endpoint:
                 address:
                   socket_address:
                     address: localhost
-                    port_value: 11004
+                    port_value: 13005
         transport_socket:
           name: envoy.transport_sockets.tls
           typed_config:
             "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
             common_tls_context:
-              tls_certificate_sds_secret_configs:
-                name: tls_sds
-                sds_config:
-                  path: /etc/envoy/tls_certificate_sds_secret.yaml
+              tls_certificates:
+              - certificate_chain:
+                private_key:
               validation_context:
                 trusted_ca:
                   filename: /etc/ssl/certs/ca-certificates.crt
                 match_typed_subject_alt_names:
                 - san_type: DNS
                   matcher:
-                    exact: rest.cloud-support.purestorage.com
-      - name: cluster_cloud_support_tcp_proxy
+                    exact: register.cloud-support.purestorage.com
+      - name: cluster_register_cloud_support_tcp_proxy
         type: STRICT_DNS
         dns_lookup_family: V4_ONLY
         lb_policy: ROUND_ROBIN
         load_assignment:
-          cluster_name: cluster_cloud_support_tcp_proxy
+          cluster_name: cluster_register_cloud_support_tcp_proxy
           endpoints:
           - lb_endpoints:
             - endpoint:
                 address:
                   socket_address:
                     address: localhost
-                    port_value: 11004
+                    port_value: 13005
         transport_socket:
           name: envoy.transport_sockets.tls
           typed_config:
             "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
             common_tls_context:
-              tls_certificate_sds_secret_configs:
-                name: tls_sds
-                sds_config:
-                  path: /etc/envoy/tls_certificate_sds_secret.yaml
+              tls_certificates:
+              - certificate_chain:
+                private_key:
               validation_context:
                 trusted_ca:
                   filename: /etc/ssl/certs/ca-certificates.crt
                 match_typed_subject_alt_names:
                 - san_type: DNS
                   matcher:
-                    exact: rest.cloud-support.purestorage.com
+                    exact: register.cloud-support.purestorage.com
       - name: cluster_customer_proxy
         type: STRICT_DNS
         dns_lookup_family: V4_ONLY

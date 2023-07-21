@@ -36,7 +36,7 @@ import (
 
 const (
 	storkDriverName                   = "pxd"
-	defaultPortworxImage              = "portworx/oci-monitor"
+	DefaultPortworxImage              = "portworx/oci-monitor"
 	defaultSecretsProvider            = "k8s"
 	defaultTokenLifetime              = "24h"
 	defaultSelfSignedIssuer           = "operator.portworx.io"
@@ -45,6 +45,8 @@ const (
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
 	labelPortworxVersion              = "PX Version"
+	labelOperatingSystem              = "OS"
+	labelKernelVersion                = "Kernel Version"
 	defaultEksCloudStorageType        = "gp3"
 	defaultEksCloudStorageDeviceSize  = "150"
 )
@@ -451,7 +453,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 		if toUpdate.Spec.Version == "" && pxEnabled {
 			if toUpdate.Spec.Image == "" {
-				toUpdate.Spec.Image = defaultPortworxImage
+				toUpdate.Spec.Image = DefaultPortworxImage
 			}
 			toUpdate.Spec.Image = toUpdate.Spec.Image + ":" + release.PortworxVersion
 			toUpdate.Spec.Version = release.PortworxVersion
@@ -546,6 +548,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 		if toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Prometheus != nil {
 			prometheusVersionChanged := p.hasPrometheusVersionChanged(toUpdate)
+			grafanaVersionChanged := p.hasGrafanaVersionChanged(toUpdate)
 			if toUpdate.Spec.Monitoring.Prometheus.Enabled &&
 				(toUpdate.Status.DesiredImages.PrometheusOperator == "" || pxVersionChanged || prometheusVersionChanged) {
 				toUpdate.Status.DesiredImages.Prometheus = release.Components.Prometheus
@@ -557,6 +560,11 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				toUpdate.Spec.Monitoring.Prometheus.AlertManager.Enabled &&
 				(toUpdate.Status.DesiredImages.AlertManager == "" || pxVersionChanged || prometheusVersionChanged) {
 				toUpdate.Status.DesiredImages.AlertManager = release.Components.AlertManager
+			}
+			if toUpdate.Spec.Monitoring.Grafana != nil &&
+				toUpdate.Spec.Monitoring.Grafana.Enabled &&
+				(toUpdate.Status.DesiredImages.Grafana == "" || pxVersionChanged || grafanaVersionChanged) {
+				toUpdate.Status.DesiredImages.Grafana = release.Components.Grafana
 			}
 		}
 
@@ -643,6 +651,12 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Spec.Monitoring.Prometheus.AlertManager == nil ||
 		!toUpdate.Spec.Monitoring.Prometheus.AlertManager.Enabled {
 		toUpdate.Status.DesiredImages.AlertManager = ""
+	}
+
+	if toUpdate.Spec.Monitoring == nil ||
+		toUpdate.Spec.Monitoring.Grafana == nil ||
+		!toUpdate.Spec.Monitoring.Grafana.Enabled {
+		toUpdate.Status.DesiredImages.Grafana = ""
 	}
 
 	setAutopilotDefaults(toUpdate)
@@ -1445,10 +1459,9 @@ func setTLSDefaults(
 // setTelemetryDefaults validates and sets telemetry values
 // Telemetry will be disabled if:
 // 1. It's disabled explicitly
-// 2. HTTPS proxy is configured
-// 3. HTTP proxy url is not in a format of hostname:port
-// 4. PX version incompatible
-// 5. Cannot ping Arcus endpoint when first time enabled (telemetry cert is not created yet)
+// 2. HTTP/HTTPS proxy url is not in a format of hostname:port
+// 3. PX version incompatible
+// 4. Cannot ping Arcus endpoint when first time enabled (telemetry cert is not created yet)
 // Otherwise it will be enabled by default
 func (p *portworx) setTelemetryDefaults(
 	toUpdate *corev1.StorageCluster,
@@ -1471,15 +1484,11 @@ func (p *portworx) setTelemetryDefaults(
 	} else if !pxutil.IsCCMGoSupported(pxVersion) {
 		// CCM Java case, PX version is between 2.8 and 2.12, don't set any default values
 		return nil
-	} else if proxyType == pxutil.EnvKeyPortworxHTTPProxy {
-		// CCM Go is supported, but HTTP proxy cannot be split into host and port
-		if _, _, proxyFormatErr := pxutil.SplitPxProxyHostPort(proxy); proxyFormatErr != nil {
+	} else if proxyType == pxutil.EnvKeyPortworxHTTPProxy || proxyType == pxutil.EnvKeyPortworxHTTPSProxy {
+		// CCM Go is supported, but HTTP/HTTPS proxy cannot be split into host and port
+		if _, _, _, proxyFormatErr := pxutil.ParsePxProxyURL(proxy); proxyFormatErr != nil {
 			err = fmt.Errorf("telemetry is not supported with proxy in a format of: %s", proxy)
 		}
-	} else if proxyType == pxutil.EnvKeyPortworxHTTPSProxy {
-		// CCM Go is not supported with https proxy
-		// TODO: remove when HTTPS proxy is supported
-		err = fmt.Errorf("telemetry is not supported with secure proxy: %s", proxy)
 	}
 	if toUpdate.Spec.Monitoring == nil {
 		toUpdate.Spec.Monitoring = &corev1.MonitoringSpec{}
@@ -1593,8 +1602,10 @@ func (p *portworx) hasComponentChanged(cluster *corev1.StorageCluster) bool {
 		hasMetricsCollectorChanged(cluster) ||
 		hasLogUploaderChanged(cluster) ||
 		hasPrometheusChanged(cluster) ||
+		hasGrafanaChanged(cluster) ||
 		hasAlertManagerChanged(cluster) ||
 		p.hasPrometheusVersionChanged(cluster) ||
+		p.hasGrafanaVersionChanged(cluster) ||
 		hasPxRepoChanged(cluster) ||
 		p.hasKubernetesVersionChanged(cluster)
 }
@@ -1660,6 +1671,13 @@ func hasPrometheusChanged(cluster *corev1.StorageCluster) bool {
 		cluster.Status.DesiredImages.PrometheusOperator == ""
 }
 
+func hasGrafanaChanged(cluster *corev1.StorageCluster) bool {
+	return cluster.Spec.Monitoring != nil &&
+		cluster.Spec.Monitoring.Grafana != nil &&
+		cluster.Spec.Monitoring.Grafana.Enabled &&
+		cluster.Status.DesiredImages.Grafana == ""
+}
+
 func (p *portworx) hasKubernetesVersionChanged(cluster *corev1.StorageCluster) bool {
 	if p.k8sVersion == nil {
 		return false
@@ -1685,6 +1703,12 @@ func (p *portworx) hasPrometheusVersionChanged(cluster *corev1.StorageCluster) b
 	return p.k8sVersion != nil &&
 		p.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) &&
 		cluster.Status.DesiredImages.PrometheusOperator == manifest.DefaultPrometheusOperatorImage
+}
+
+func (p *portworx) hasGrafanaVersionChanged(cluster *corev1.StorageCluster) bool {
+	return p.k8sVersion != nil &&
+		p.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) &&
+		cluster.Status.DesiredImages.Grafana == manifest.DefaultGrafanaImage
 }
 
 func hasAlertManagerChanged(cluster *corev1.StorageCluster) bool {

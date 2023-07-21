@@ -331,6 +331,18 @@ func (c *pvcController) createDeployment(
 		command = append(command, "--secure-port="+AksPVCControllerSecurePort)
 	}
 
+	if min, err := pxutil.GetTLSMinVersion(cluster); err != nil {
+		return err
+	} else if min != "" {
+		command = append(command, "--tls-min-version="+min)
+	}
+
+	if cs, err := pxutil.GetTLSCipherSuites(cluster); err != nil {
+		return err
+	} else if cs != "" {
+		command = append(command, "--tls-cipher-suites="+cs)
+	}
+
 	existingDeployment := &appsv1.Deployment{}
 	err = c.k8sClient.Get(
 		context.TODO(),

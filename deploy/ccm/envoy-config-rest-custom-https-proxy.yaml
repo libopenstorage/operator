@@ -11,7 +11,7 @@ static_resources:
   - name: listener_cloud_support
     address:
       socket_address:
-        address: 127.0.0.1
+        address: 0.0.0.0
         port_value: REST_CLOUD_SUPPORT_PORT
     filter_chains:
     - filters:
@@ -25,6 +25,8 @@ static_resources:
               "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
           http_filters:
           - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
           route_config:
             name: local_route
             virtual_hosts:
@@ -41,11 +43,11 @@ static_resources:
                     key: "appliance-id"
                     value: APPLIANCE_ID
                 - header:
-                    key: "component-sn"
-                    value: COMPONENT_SN
-                - header:
                     key: "product-version"
                     value: PRODUCT_VERSION
+                - header:
+                    key: "proxy-authorization"
+                    value: "BASIC_AUTH"
                 route:
                   host_rewrite_literal: REST_PROXY_URL
                   cluster: cluster_cloud_support
@@ -93,11 +95,11 @@ static_resources:
                 key: "appliance-id"
                 value: APPLIANCE_ID
             - header:
-                key: "component-sn"
-                value: COMPONENT_SN
-            - header:
                 key: "product-version"
                 value: PRODUCT_VERSION
+            - header:
+                key: "proxy-authorization"
+                value: "BASIC_AUTH"
   clusters:
   - name: cluster_cloud_support
     type: STRICT_DNS
@@ -176,3 +178,8 @@ static_resources:
               socket_address:
                 address: CUSTOM_PROXY_ADDRESS
                 port_value: CUSTOM_PROXY_PORT
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        sni: CUSTOM_PROXY_ADDRESS

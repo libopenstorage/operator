@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -13,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -47,6 +49,8 @@ type PreFlightPortworx interface {
 	ProcessPreFlightResults(recorder record.EventRecorder, storageNodes []*corev1.StorageNode) error
 	// DeletePreFlight deletes the pre-flight daemonset
 	DeletePreFlight() error
+	// CreatePreFlightDaemonsetSpec is used to create the pre-fligh daemonset pod spec
+	CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerReference) (*appsv1.DaemonSet, error)
 }
 
 type preFlightPortworx struct {
@@ -88,6 +92,135 @@ func getPreFlightPodsFromNamespace(k8sClient client.Client, namespace string) (*
 	pods, err := k8sutil.GetDaemonSetPods(k8sClient, ds)
 
 	return ds, pods, err
+}
+
+func (u *preFlightPortworx) CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerReference) (*appsv1.DaemonSet, error) {
+	// Create daemonset from podSpec
+	labels := map[string]string{
+		"name": pxPreFlightDaemonSetName,
+	}
+
+	preflightDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pxPreFlightDaemonSetName,
+			Namespace:       u.cluster.Namespace,
+			Labels:          labels,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: u.podSpec,
+			},
+		},
+	}
+	/* TODO  PWX-28826 Run DMThin pre-flight checks
+
+	Operator starts a daemonset with oci-monitor pods in pre-flight mode (--preflight)
+	Operator waits for all daemonset pods to be 1/1 (for this the oci-monitor in preflight mode must not exit).
+		oci-monitor pod has to declare it’s done
+	Operator deletes the preflight daemonset
+	Operator reads Checks in the StorageNode for each node
+	If Checks in any of the nodes
+		fail: Operator sets backend to btrfs
+			// Log, raise event and do nothing. Default already at btrfs
+		all success: Operator sets backend to PX-storeV2
+			// Append PX-storeV2 backend use MiscArgs()
+			toUpdate.Annotations[pxutil.AnnotationMiscArgs] = " -T PX-storeV2"
+
+	   	u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(miscArgs)
+	*/
+
+	// Object preflightDS.Spec.Template.Spec is created above using 'u.podSpec' however
+	// check to make sure the necessary spec objects exist.
+	if len(u.podSpec.Containers) <= 0 {
+		return nil, fmt.Errorf("podSpec.Containers object not created")
+	}
+
+	if u.podSpec.Containers[0].Name != "portworx" {
+		return nil, fmt.Errorf("podSpec.Containers object not created correctly, 'portworx' container not first")
+	}
+
+	// Add pre-flight param
+	preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"--pre-flight"},
+		preflightDS.Spec.Template.Spec.Containers[0].Args...)
+
+	pxVer31, _ := version.NewVersion("3.1")
+	if pxutil.GetPortworxVersion(u.cluster).GreaterThanOrEqual(pxVer31) {
+		// Requires OCI-Mon changes so only supported in 3.1
+		if preflightDS.Spec.Template.Spec.Containers[0].ReadinessProbe == nil {
+			return nil, fmt.Errorf("readinessProbe object not created")
+		}
+
+		if preflightDS.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet == nil {
+			return nil, fmt.Errorf("probeHandler.HTTPGet object not created")
+		}
+
+		preFltEndPtPort := component.GetCCMListeningPort(u.cluster) + 1 // preflight endpoint port  +1 CCM uploader port
+		logrus.Infof("runPreflight: Setting port: %d", preFltEndPtPort)
+		preflightDS.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Port = intstr.FromInt(preFltEndPtPort)
+		// Add pre-flight param w/--pre-flight-port
+		preflightDS.Spec.Template.Spec.Containers[0].Args = append(
+			[]string{"--pre-flight-port", fmt.Sprintf("%d", preFltEndPtPort)},
+			preflightDS.Spec.Template.Spec.Containers[0].Args...)
+	}
+
+	checkArgs := func(args []string) {
+		for i, arg := range args {
+			if arg == "-T" {
+				if dmthinRegex.Match([]byte(args[i+1])) {
+					u.hardFail = true
+				}
+			}
+		}
+	}
+
+	// Check for pre-existing DMthin in container args
+	checkArgs(u.podSpec.Containers[0].Args)
+
+	if !u.hardFail {
+		// If PX-StoreV2 param does not exist add it
+		preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"-T", "px-storev2"},
+			preflightDS.Spec.Template.Spec.Containers[0].Args...)
+	} else {
+		logrus.Infof("runPreflight: running pre-flight with existing PX-StoreV2 param, hard fail check enabled")
+	}
+
+	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {
+		preflightDS.Spec.Template.Spec.ImagePullSecrets = append(
+			[]v1.LocalObjectReference{},
+			v1.LocalObjectReference{
+				Name: *u.cluster.Spec.ImagePullSecret,
+			},
+		)
+	}
+
+	preflightDS.Spec.Template.Spec.ServiceAccountName = PxPreFlightServiceAccountName
+
+	if u.cluster.Spec.Placement != nil {
+		if u.cluster.Spec.Placement.NodeAffinity != nil {
+			preflightDS.Spec.Template.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: u.cluster.Spec.Placement.NodeAffinity.DeepCopy(),
+			}
+		}
+
+		if len(u.cluster.Spec.Placement.Tolerations) > 0 {
+			preflightDS.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+			for _, toleration := range u.cluster.Spec.Placement.Tolerations {
+				preflightDS.Spec.Template.Spec.Tolerations = append(
+					preflightDS.Spec.Template.Spec.Tolerations,
+					*(toleration.DeepCopy()),
+				)
+			}
+		}
+	}
+
+	return preflightDS, nil
 }
 
 // GetPreFlightPods returns the pods of the pre-flight daemonset
@@ -146,161 +279,106 @@ func (u *preFlightPortworx) RunPreFlight() error {
 		}
 	}
 
-	// Create daemonset from podSpec
-	labels := map[string]string{
-		"name": pxPreFlightDaemonSetName,
-	}
-
-	preflightDS := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            pxPreFlightDaemonSetName,
-			Namespace:       u.cluster.Namespace,
-			Labels:          labels,
-			OwnerReferences: []metav1.OwnerReference{*ownerRef},
-		},
-		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
-			},
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: u.podSpec,
-			},
-		},
-	}
-	/* TODO  PWX-28826 Run DMThin pre-flight checks
-
-	Operator starts a daemonset with oci-monitor pods in pre-flight mode (--preflight)
-	Operator waits for all daemonset pods to be 1/1 (for this the oci-monitor in preflight mode must not exit).
-		oci-monitor pod has to declare it’s done
-	Operator deletes the preflight daemonset
-	Operator reads Checks in the StorageNode for each node
-	If Checks in any of the nodes
-		fail: Operator sets backend to btrfs
-			// Log, raise event and do nothing. Default already at btrfs
-		all success: Operator sets backend to PX-storeV2
-			// Append PX-storeV2 backend use MiscArgs()
-			toUpdate.Annotations[pxutil.AnnotationMiscArgs] = " -T PX-storeV2"
-
-	   	u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(miscArgs)
-	*/
-
-	checkArgs := func(args []string) {
-		for i, arg := range args {
-			if arg == "-T" {
-				if dmthinRegex.Match([]byte(args[i+1])) {
-					u.hardFail = true
-				}
-			}
-		}
-	}
-
-	// Check for pre-existing DMthin in container args
-	checkArgs(u.podSpec.Containers[0].Args)
-
-	if !u.hardFail {
-		// If PX-StoreV2 param does not exist add it
-		preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"-T", "px-storev2"},
-			preflightDS.Spec.Template.Spec.Containers[0].Args...)
-	} else {
-		logrus.Infof("runPreflight: running pre-flight with existing PX-StoreV2 param, hard fail check enabled")
-	}
-
-	// Add pre-flight param
-	preflightDS.Spec.Template.Spec.Containers[0].Args = append([]string{"--pre-flight"},
-		preflightDS.Spec.Template.Spec.Containers[0].Args...)
-
-	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {
-		preflightDS.Spec.Template.Spec.ImagePullSecrets = append(
-			[]v1.LocalObjectReference{},
-			v1.LocalObjectReference{
-				Name: *u.cluster.Spec.ImagePullSecret,
-			},
-		)
-	}
-
-	preflightDS.Spec.Template.Spec.ServiceAccountName = PxPreFlightServiceAccountName
-
-	if u.cluster.Spec.Placement != nil {
-		if u.cluster.Spec.Placement.NodeAffinity != nil {
-			preflightDS.Spec.Template.Spec.Affinity = &v1.Affinity{
-				NodeAffinity: u.cluster.Spec.Placement.NodeAffinity.DeepCopy(),
-			}
-		}
-
-		if len(u.cluster.Spec.Placement.Tolerations) > 0 {
-			preflightDS.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
-			for _, toleration := range u.cluster.Spec.Placement.Tolerations {
-				preflightDS.Spec.Template.Spec.Tolerations = append(
-					preflightDS.Spec.Template.Spec.Tolerations,
-					*(toleration.DeepCopy()),
-				)
-			}
-		}
+	preflightDS, specErr := u.CreatePreFlightDaemonsetSpec(ownerRef)
+	if specErr != nil {
+		logrus.Errorf("runPreFlight: failed to create preflight daemonset spec: %v", specErr)
 	}
 
 	err = u.k8sClient.Create(context.TODO(), preflightDS)
 	if err != nil {
-		logrus.Errorf("RunPreFlight: error creating: %v", err)
+		logrus.Errorf("runPreFlight: error creating: %v", err)
 	}
 
+	return err
+}
+
+func (u *preFlightPortworx) processNodesChecks(recorder record.EventRecorder, storageNodes []*corev1.StorageNode) bool {
+
+	if len(storageNodes) == 0 {
+		logrus.Errorf("pre-flight: storageNodes list empty, unable to process pre-flight results")
+		return false
+	}
+
+	passed := true
+	for _, node := range storageNodes {
+		// Process storageNode checks list for failures. Also make sure the "status" check entry
+		// exists, this indicates all the checks were submitted from the pre-flight pod.
+		logrus.Infof("storageNode[%s]: %#v ", node.Name, node.Status.Checks)
+		if len(node.Status.Checks) == 0 {
+			logrus.Errorf("storageNodes checks list empty, pre-flight results not returned")
+			passed = false
+			continue
+		}
+
+		statusExists := false
+		for _, check := range node.Status.Checks {
+			if check.Type == "status" {
+				statusExists = true
+				continue
+			}
+
+			msg := fmt.Sprintf("%s pre-flight check ", check.Type)
+			if check.Success {
+				msg = msg + "passed: " + check.Reason
+				k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, msg)
+				continue
+			}
+			msg = msg + "failed: " + check.Reason
+			k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, msg)
+			passed = false // pre-flight status check failed, keep going for logging
+		}
+
+		if !statusExists {
+			logrus.Errorf("storageNodes checks list status entry not found, pre-flight did not complete")
+			passed = false
+		}
+	}
+
+	return passed
+}
+
+func (u *preFlightPortworx) processPassedChecks(recorder record.EventRecorder) {
+	if !u.hardFail { // Enable DMthin via misc args if not enabled already
+		u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T px-storev2")
+		// Remove depricate '-T dmthin'
+		u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.ReplaceAll(u.cluster.Annotations[pxutil.AnnotationMiscArgs], "-T dmthin", "")
+		k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling PX-StoreV2")
+	} else {
+		k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "PX-StoreV2 currently enabled")
+	}
+
+	// Add 64G metadata drive.
+	if u.cluster.Spec.CloudStorage == nil {
+		u.cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+	}
+
+	if u.cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil {
+		cmetaData := DefCmetaData
+		u.cluster.Spec.CloudStorage.SystemMdDeviceSpec = &cmetaData
+	}
+}
+
+func (u *preFlightPortworx) processFailedChecks(recorder record.EventRecorder) error {
+	if !u.hardFail { // Enable DMthin via misc args if not enabled already
+		k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Not enabling PX-StoreV2")
+		return nil
+	}
+
+	// hardFail is enabled, fail if any pre-flight check fails.
+	err := fmt.Errorf("PX-StoreV2 pre-check failed")
+	k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, err.Error())
 	return err
 }
 
 func (u *preFlightPortworx) ProcessPreFlightResults(recorder record.EventRecorder, storageNodes []*corev1.StorageNode) error {
 	logrus.Infof("pre-flight: process pre-flight results...")
 
-	passed := true
-	for _, node := range storageNodes {
-		logrus.Infof("storageNode[%s]: %#v ", node.Name, node.Status.Checks)
-		if len(node.Status.Checks) > 1 {
-			for _, check := range node.Status.Checks {
-				if check.Type != "status" {
-					msg := fmt.Sprintf("%s pre-flight check ", check.Type)
-					if check.Success {
-						msg = msg + "passed: " + check.Reason
-						k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, msg)
-					} else {
-						msg = msg + "failed: " + check.Reason
-						k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, msg)
-					}
-				}
-			}
-			passed = false
-		}
+	passed := u.processNodesChecks(recorder, storageNodes)
+	if !passed {
+		return u.processFailedChecks(recorder)
 	}
 
-	if passed {
-		if !u.hardFail { // Enable DMthin via misc args if not enabled already
-			u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.TrimSpace(u.cluster.Annotations[pxutil.AnnotationMiscArgs] + " -T px-storev2")
-			// Remove depricate '-T dmthin'
-			u.cluster.Annotations[pxutil.AnnotationMiscArgs] = strings.ReplaceAll(u.cluster.Annotations[pxutil.AnnotationMiscArgs], "-T dmthin", "")
-			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Enabling PX-StoreV2")
-		} else {
-			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "PX-StoreV2 currently enabled")
-		}
-
-		// Add 64G metadata drive.
-		if u.cluster.Spec.CloudStorage == nil {
-			u.cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
-		}
-
-		if u.cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil {
-			cmetaData := DefCmetaData
-			u.cluster.Spec.CloudStorage.SystemMdDeviceSpec = &cmetaData
-		}
-	} else {
-		if !u.hardFail { // Enable DMthin via misc args if not enabled already
-			k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, "Not enabling PX-StoreV2")
-		} else { // hardFail is enabled, fail if any pre-flight check fails.
-			err := fmt.Errorf("PX-StoreV2 pre-check failed")
-			k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, err.Error())
-			return err
-		}
-	}
-
+	u.processPassedChecks(recorder)
 	return nil
 }
 

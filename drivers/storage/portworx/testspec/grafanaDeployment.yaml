@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: grafana
+  name: px-grafana
+  namespace: kube-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: px/enabled
+                operator: NotIn
+                values:
+                - "false"
+              - key: node-role.kubernetes.io/master
+                operator: DoesNotExist
+            - matchExpressions:
+              - key: px/enabled
+                operator: NotIn
+                values:
+                - "false"
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+              - key: node-role.kubernetes.io/worker
+                operator: Exists
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: name
+                operator: In
+                values:
+                - px-grafana
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - image: docker.io/grafana/grafana:v1.2.3
+        imagePullPolicy: Always
+        name: grafana
+        readinessProbe:
+          httpGet:
+            path: /login
+            port: 3000
+        resources:
+          requests:
+            cpu: 100m
+        volumeMounts:
+        - mountPath: /etc/grafana/provisioning/dashboards
+          name: grafana-dashboard-config
+        - mountPath: /var/lib/grafana/dashboards
+          name: grafana-dashboard-templates
+        - mountPath: /etc/grafana/provisioning/datasources
+          name: grafana-source-config
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: px-grafana-dashboard-config
+        name: grafana-dashboard-config
+      - configMap:
+          defaultMode: 420
+          name: px-grafana-dashboards-json
+        name: grafana-dashboard-templates
+      - configMap:
+          defaultMode: 420
+          name: px-grafana-datasource-config
+        name: grafana-source-config
+        

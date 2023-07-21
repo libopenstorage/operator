@@ -94,13 +94,6 @@ func TestValidate(t *testing.T) {
 		},
 	}
 
-	storageNode := &corev1.StorageNode{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "node-1",
-			Namespace: cluster.Namespace,
-		},
-	}
-
 	labels := map[string]string{
 		"name": pxPreFlightDaemonSetName,
 	}
@@ -121,7 +114,26 @@ func TestValidate(t *testing.T) {
 		},
 	}
 
-	k8sClient := testutil.FakeK8sClient(preflightDS)
+	checks := []corev1.CheckResult{
+		{
+			Type:    "status",
+			Reason:  "oci-mon: pre-flight completed",
+			Success: true,
+		},
+	}
+
+	status := corev1.NodeStatus{
+		Checks: checks,
+	}
+
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: status,
+	}
 
 	preFlightPod1 := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -138,6 +150,9 @@ func TestValidate(t *testing.T) {
 			},
 		},
 	}
+
+	k8sClient := testutil.FakeK8sClient(preflightDS)
+
 	err := k8sClient.Create(context.TODO(), preFlightPod1)
 	require.NoError(t, err)
 
@@ -163,6 +178,234 @@ func TestValidate(t *testing.T) {
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling PX-StoreV2"))
 	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaData)
+
+	//
+	// Validate Pre-flight Daemonset Pod Spec
+	//
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationPreflightCheck: "true",
+	}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	podSpec, err := driver.GetStoragePodSpec(cluster, "")
+	require.NoError(t, err)
+	require.Equal(t, 2, len(podSpec.Containers))
+
+	// phone-home cm volume mount, should not exists since pre-flight is enabled
+	for _, cnt := range podSpec.Containers {
+		for _, volumeMount := range cnt.VolumeMounts {
+			require.True(t, volumeMount.Name != "ccm-phonehome-config")
+		}
+	}
+
+	preFlighter := NewPreFlighter(cluster, k8sClient, podSpec)
+	require.NotNil(t, preFlighter)
+
+	/// Create preflighter podSpec
+	preflightDSCheck, err := preFlighter.CreatePreFlightDaemonsetSpec(clusterRef)
+	require.NoError(t, err)
+	require.NotNil(t, preflightDSCheck)
+
+	// Make sure the phone-home cm volume mount, still does not exists
+	for _, cnt := range preflightDSCheck.Spec.Template.Spec.Containers {
+		for _, volumeMount := range cnt.VolumeMounts {
+			require.True(t, volumeMount.Name != "ccm-phonehome-config")
+		}
+	}
+}
+
+func TestValidateCheckFailure(t *testing.T) {
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	labels := map[string]string{
+		"name": pxPreFlightDaemonSetName,
+	}
+
+	clusterRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	preflightDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pxPreFlightDaemonSetName,
+			Namespace:       cluster.Namespace,
+			Labels:          labels,
+			UID:             types.UID("preflight-ds-uid"),
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
+	}
+
+	checks := []corev1.CheckResult{
+		{
+			Type:    "usage",
+			Reason:  "px-runc: PX-StoreV2 unsupported storage disk spec: 'consume unused' (-A/-a) options not valid with PX-StoreV2",
+			Success: false,
+		},
+		{
+			Type:    "status",
+			Reason:  "oci-mon: pre-flight completed",
+			Success: true,
+		},
+	}
+
+	status := corev1.NodeStatus{
+		Checks: checks,
+	}
+
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: status,
+	}
+
+	preFlightPod1 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "preflight-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: preflightDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{
+				{
+					Name:  "portworx",
+					Ready: true,
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(preflightDS)
+
+	err := k8sClient.Create(context.TODO(), preFlightPod1)
+	require.NoError(t, err)
+
+	preflightDS.Status.DesiredNumberScheduled = int32(1)
+	err = k8sClient.Status().Update(context.TODO(), preflightDS)
+	require.NoError(t, err)
+
+	recorder := record.NewFakeRecorder(100)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = k8sClient.Create(context.TODO(), storageNode)
+	require.NoError(t, err)
+
+	err = driver.Validate(cluster)
+	require.NoError(t, err)
+	require.NotEmpty(t, recorder.Events)
+	require.Len(t, recorder.Events, 3)
+	<-recorder.Events // Pop first event which is Default telemetry enabled event
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedPreFlight, "usage pre-flight check failed"))
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Not enabling PX-StoreV2"))
+}
+
+func TestValidateMissingRequiredCheck(t *testing.T) {
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	labels := map[string]string{
+		"name": pxPreFlightDaemonSetName,
+	}
+
+	clusterRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	preflightDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pxPreFlightDaemonSetName,
+			Namespace:       cluster.Namespace,
+			Labels:          labels,
+			UID:             types.UID("preflight-ds-uid"),
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
+	}
+
+	checks := []corev1.CheckResult{
+		{},
+	}
+
+	status := corev1.NodeStatus{
+		Checks: checks,
+	}
+
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: status,
+	}
+
+	preFlightPod1 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "preflight-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: preflightDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{
+				{
+					Name:  "portworx",
+					Ready: true,
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(preflightDS)
+
+	err := k8sClient.Create(context.TODO(), preFlightPod1)
+	require.NoError(t, err)
+
+	preflightDS.Status.DesiredNumberScheduled = int32(1)
+	err = k8sClient.Status().Update(context.TODO(), preflightDS)
+	require.NoError(t, err)
+
+	recorder := record.NewFakeRecorder(100)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = k8sClient.Create(context.TODO(), storageNode)
+	require.NoError(t, err)
+
+	err = driver.Validate(cluster)
+	require.NoError(t, err)
+	require.NotEmpty(t, recorder.Events)
+	for i := 0; i < len(recorder.Events); i++ { // Get last record
+		<-recorder.Events
+	}
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Not enabling PX-StoreV2"))
 }
 
 func TestGetSelectorLabels(t *testing.T) {
@@ -338,7 +581,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	require.NoError(t, err)
 
 	// Use default image from release manifest when spec.image is not set
-	require.Equal(t, defaultPortworxImage+":2.10.0", cluster.Spec.Image)
+	require.Equal(t, DefaultPortworxImage+":2.10.0", cluster.Spec.Image)
 	require.Equal(t, "2.10.0", cluster.Spec.Version)
 	require.Equal(t, "2.10.0", cluster.Status.Version)
 	require.True(t, cluster.Spec.Kvdb.Internal)
@@ -352,7 +595,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 	cluster.Spec.Version = "  "
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Equal(t, defaultPortworxImage+":2.10.0", cluster.Spec.Image)
+	require.Equal(t, DefaultPortworxImage+":2.10.0", cluster.Spec.Image)
 	require.Equal(t, "2.10.0", cluster.Spec.Version)
 	require.Equal(t, "2.10.0", cluster.Status.Version)
 
@@ -1749,6 +1992,107 @@ func TestStorageClusterDefaultsForAlertManager(t *testing.T) {
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.AlertManager)
+}
+
+func TestStorageClusterDefaultsForGrafana(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.8.0",
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+
+	// Don't enable grafana by default
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Monitoring)
+	require.Empty(t, cluster.Status.DesiredImages.Grafana)
+
+	// Don't enable grafana if prometheus spec is nil
+	cluster.Spec.Monitoring = &corev1.MonitoringSpec{}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Monitoring.Prometheus)
+	require.Empty(t, cluster.Status.DesiredImages.Grafana)
+
+	// Don't enable grafana if grafana spec is nil
+	cluster.Spec.Monitoring.Prometheus = &corev1.PrometheusSpec{}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Monitoring.Grafana)
+	require.Empty(t, cluster.Status.DesiredImages.Grafana)
+
+	// Don't enable grafana if nothing specified in grafana spec
+	cluster.Spec.Monitoring.Grafana = &corev1.GrafanaSpec{}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Monitoring.Grafana)
+	require.Empty(t, cluster.Status.DesiredImages.Grafana)
+
+	// Use images from release manifest if enabled
+	cluster.Spec.Monitoring.Prometheus.Enabled = true
+	cluster.Spec.Monitoring.Grafana.Enabled = true
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "docker.io/grafana/grafana:v1.2.3",
+		cluster.Status.DesiredImages.Grafana)
+
+	// Use images from release manifest if desired was reset
+	cluster.Status.DesiredImages.Grafana = ""
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "docker.io/grafana/grafana:v1.2.3",
+		cluster.Status.DesiredImages.Grafana)
+
+	// Do not overwrite desired images if nothing has changed
+	cluster.Status.DesiredImages.Grafana = "grafana/grafana:old"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "grafana/grafana:old",
+		cluster.Status.DesiredImages.Grafana)
+
+	// Do not overwrite desired images even if
+	// some other component has changed
+	cluster.Spec.UserInterface = &corev1.UserInterfaceSpec{
+		Enabled: true,
+	}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "grafana/grafana:old",
+		cluster.Status.DesiredImages.Grafana)
+	require.Equal(t, "portworx/px-lighthouse:2.3.4",
+		cluster.Status.DesiredImages.UserInterface)
+
+	// Change desired images if px image is not set (new cluster)
+	cluster.Spec.Image = ""
+	cluster.Status.DesiredImages.Grafana = "grafana/grafana:old"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "docker.io/grafana/grafana:v1.2.3",
+		cluster.Status.DesiredImages.Grafana)
+
+	// Change desired images if px image has changed
+	cluster.Spec.Image = "px/image:4.0.0"
+	cluster.Status.DesiredImages.Grafana = "grafana/grafana:old"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, "docker.io/grafana/grafana:v1.2.3",
+		cluster.Status.DesiredImages.Grafana)
+
+	// Reset desired images if grafana has been disabled
+	cluster.Spec.Monitoring.Grafana.Enabled = false
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Status.DesiredImages.Grafana)
 }
 
 func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
@@ -3724,6 +4068,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 				Used:      2147483648,
 			},
 		},
+		NodeLabels: map[string]string{
+			labelOperatingSystem: "Ubuntu 16.04.7 LTS",
+			labelKernelVersion:   "4.4.0-210-generic",
+		},
 	}
 	expectedNodeEnumerateResp := &api.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*api.StorageNode{expectedNodeOne, expectedNodeTwo},
@@ -3759,6 +4107,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NotNil(t, nodeStatus.Status.Storage)
 	require.Equal(t, int64(0), nodeStatus.Status.Storage.TotalSize.Value())
 	require.Equal(t, int64(0), nodeStatus.Status.Storage.UsedSize.Value())
+	require.False(t, *nodeStatus.Status.NodeAttributes.Storage)
+	require.False(t, *nodeStatus.Status.NodeAttributes.KVDB)
+	require.Empty(t, nodeStatus.Status.OperatingSystem)
+	require.Empty(t, nodeStatus.Status.KernelVersion)
 
 	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-two", cluster.Namespace)
@@ -3777,6 +4129,10 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NotNil(t, nodeStatus.Status.Storage)
 	require.Equal(t, int64(42949672960), nodeStatus.Status.Storage.TotalSize.Value())
 	require.Equal(t, int64(12884901888), nodeStatus.Status.Storage.UsedSize.Value())
+	require.True(t, true, *nodeStatus.Status.NodeAttributes.Storage)
+	require.False(t, *nodeStatus.Status.NodeAttributes.KVDB)
+	require.Equal(t, "Ubuntu 16.04.7 LTS", nodeStatus.Status.OperatingSystem)
+	require.Equal(t, "4.4.0-210-generic", nodeStatus.Status.KernelVersion)
 
 	// Return only one node in enumerate for future tests
 	expectedNodeEnumerateResp = &api.SdkNodeEnumerateWithFiltersResponse{
@@ -3940,8 +4296,8 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	nodeStatus = &corev1.StorageNode{}
 	err = testutil.Get(k8sClient, nodeStatus, "node-one", cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, "Online", nodeStatus.Status.Phase)
-	require.Equal(t, corev1.NodeOnlineStatus, nodeStatus.Status.Conditions[0].Status)
+	require.Equal(t, "Degraded", nodeStatus.Status.Phase)
+	require.Equal(t, corev1.NodeDegradedStatus, nodeStatus.Status.Conditions[0].Status)
 
 	// Status StorageDegraded
 	expectedNodeOne.Status = api.Status_STATUS_STORAGE_DEGRADED
@@ -8480,6 +8836,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			}
 		}
 		require.True(t, found)
+		require.True(t, *checkStorageNode.Status.NodeAttributes.KVDB)
 	}
 
 	// TEST 2: Remove KVDB condition
@@ -8505,9 +8862,10 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			}
 		}
 		require.False(t, found)
+		require.False(t, *checkStorageNode.Status.NodeAttributes.KVDB)
 	}
 
-	// TEST 4: Check kvdn node state translations
+	// TEST 4: Check kvdb node state translations
 	kvdbNodeStateTests := []struct {
 		state                   int
 		nodeType                int
@@ -8580,6 +8938,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			}
 		}
 		require.True(t, found)
+		require.True(t, *checkStorageNode.Status.NodeAttributes.KVDB)
 		require.Equal(t, kvdbNodeStateTest.expectedConditionStatus, status)
 		require.NotEmpty(t, conditionMsg)
 		require.True(t, strings.Contains(conditionMsg, kvdbNodeStateTest.expectedNodeType))
@@ -8723,6 +9082,7 @@ func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
 			}
 		}
 		require.True(t, found)
+		require.True(t, *checkStorageNode.Status.NodeAttributes.KVDB)
 	}
 }
 
@@ -9868,6 +10228,7 @@ func (m *fakeManifest) GetVersions(
 			PrometheusConfigReloader:   "quay.io/coreos/prometheus-config-reloader:v1.2.3",
 			PrometheusConfigMapReload:  "quay.io/coreos/configmap-reload:v1.2.3",
 			AlertManager:               "quay.io/prometheus/alertmanager:v1.2.3",
+			Grafana:                    "docker.io/grafana/grafana:v1.2.3",
 			MetricsCollector:           "purestorage/realtime-metrics:latest",
 			MetricsCollectorProxy:      "envoyproxy/envoy:v1.19.1",
 			LogUploader:                "purestorage/log-upload:1.2.3",

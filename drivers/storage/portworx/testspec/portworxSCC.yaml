@@ -1,8 +1,8 @@
 allowHostDirVolumePlugin: true
-allowHostIPC: true
+allowHostIPC: false
 allowHostNetwork: true
-allowHostPID: true
-allowHostPorts: true
+allowHostPID: false
+allowHostPorts: false
 allowPrivilegeEscalation: true
 allowPrivilegedContainer: true
 allowedCapabilities:
