@@ -2427,7 +2427,7 @@ func TestStorageClusterDefaultsForPlugin(t *testing.T) {
 
 	err := driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Equal(t, cluster.Status.DesiredImages.DynamicPlugin, "portworx/portworx-dynamic-plugin:1.0.0")
+	require.Equal(t, cluster.Status.DesiredImages.DynamicPlugin, "portworx/portworx-dynamic-plugin:1.1.0")
 	require.Equal(t, cluster.Status.DesiredImages.DynamicPluginProxy, "nginxinc/nginx-unprivileged:1.23")
 }
 
@@ -10253,7 +10253,7 @@ func (m *fakeManifest) GetVersions(
 			LogUploader:                "purestorage/log-upload:1.2.3",
 			TelemetryProxy:             "purestorage/envoy:1.2.3",
 			PxRepo:                     "portworx/px-repo:" + compVersion,
-			DynamicPlugin:              "portworx/portworx-dynamic-plugin:1.0.0",
+			DynamicPlugin:              "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:         "nginxinc/nginx-unprivileged:1.23",
 		},
 	}

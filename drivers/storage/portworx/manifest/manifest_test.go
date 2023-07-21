@@ -41,7 +41,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 			PxRepo:                    "portworx/px-repo:1.1.0",
-			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.0.0",
+			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
 		},
 	}
@@ -82,7 +82,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 			PxRepo:                    "portworx/px-repo:1.1.0",
-			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.0.0",
+			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
 		},
 	}
@@ -175,7 +175,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 			PxRepo:                    "portworx/px-repo:1.1.0",
-			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.0.0",
+			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
 		},
 	}
@@ -268,7 +268,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			LogUploader:               "purestorage/log-upload:1.0.0",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			PxRepo:                    "portworx/px-repo:1.1.0",
-			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.0.0",
+			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
 		},
 	}
@@ -351,7 +351,7 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 			PxRepo:                    "portworx/px-repo:1.1.0",
-			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.0.0",
+			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
 		},
 	}
