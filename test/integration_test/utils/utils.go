@@ -5,15 +5,22 @@ import (
 	"fmt"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 	"os"
 	"regexp"
 	"strings"
+	"testing"
+	"time"
 
 	"github.com/hashicorp/go-version"
 	v1 "k8s.io/api/core/v1"
 
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
+
+type PxctlMetadata struct {
+	PxStoreV2NodeCount uint
+}
 
 // MakeDNS1123Compatible will make the given string a valid DNS1123 name, which is the same
 // validation that Kubernetes uses for its object names.
@@ -94,6 +101,21 @@ func mergeEnvVars(origList, newList []v1.EnvVar) []v1.EnvVar {
 	return mergedList
 }
 
+func RunPxCmdRetry(command ...string) (string, string, error) {
+	var out string
+	var stderr string
+	var err error
+	for i := 0; i < 4; i++ {
+		out, stderr, err = RunPxCmd(command...)
+		// Occassionally, commands are terminated due to bad connections. Let's retry them.
+		if err == nil || strings.Contains(err.Error(), "command terminated") {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return out, stderr, err
+}
+
 func RunPxCmd(command ...string) (string, string, error) {
 	pl, err := coreops.Instance().ListPods(map[string]string{"name": "portworx"})
 	if err != nil {
@@ -131,5 +153,20 @@ func RunPxCmdInPod(pod *v1.Pod, input ...string) (string, string, error) {
 	if retErr != nil {
 		return "", "", retErr
 	}
+	logrus.Debugf("CMD: %v, Output:%v", input, out.String())
 	return out.String(), stderr.String(), nil
+}
+func AnalyzePxctlStatus(t *testing.T, px_status string) PxctlMetadata {
+	output := PxctlMetadata{}
+	output.PxStoreV2NodeCount = uint(getPxStoreV2NodeCount(t, px_status))
+	return output
+}
+
+func getPxStoreV2NodeCount(t *testing.T, px_status string) int {
+	out := strings.Split(px_status, "SchedulerNodeName")
+	require.Greater(t, len(out), 1, "Could not find SchedulerNodeName in the pxctl status output")
+	out = strings.Split(out[1], "Global Storage Pool")
+	require.Greater(t, len(out), 1, "Could not find \"Global Storage Pool\" string the pxctl status output")
+	return strings.Count(strings.ToLower(out[0]), "px-storev2")
+
 }
