@@ -1174,14 +1174,6 @@ func setPortworxStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
 	}
 
 	if toUpdate.Spec.CloudStorage != nil {
-		if len(preflight.Instance().ProviderName()) > 0 {
-			// Cloud provider exists, if not set then set it
-			if toUpdate.Spec.CloudStorage.Provider == nil || len(*toUpdate.Spec.CloudStorage.Provider) == 0 {
-				cloudProvider := preflight.Instance().ProviderName()
-				toUpdate.Spec.CloudStorage.Provider = &cloudProvider
-			}
-		}
-
 		providerName := toUpdate.Spec.CloudStorage.Provider
 
 		// if provider is not set, let's check if it's vSphere

@@ -751,54 +751,6 @@ func ParsePxProxyURL(proxy string) (string, string, string, error) {
 	}
 }
 
-// GetValueFromEnvVar returns the value of v1.EnvVar Value or ValueFrom
-func GetValueFromEnvVar(ctx context.Context, client client.Client, envVar *v1.EnvVar, namespace string) (string, error) {
-
-	if valueFrom := envVar.ValueFrom; valueFrom != nil {
-		if valueFrom.SecretKeyRef != nil {
-			key := valueFrom.SecretKeyRef.Key
-			secretName := valueFrom.SecretKeyRef.Name
-
-			// Get secret key
-			secret := &v1.Secret{}
-			err := client.Get(ctx, types.NamespacedName{
-				Name:      secretName,
-				Namespace: namespace,
-			}, secret)
-			if err != nil {
-				return "", err
-			}
-			value := secret.Data[key]
-			if len(value) == 0 {
-				return "", fmt.Errorf("failed to find env var value %s in secret %s in namespace %s", key, secretName, namespace)
-			}
-
-			return string(value), nil
-		} else if valueFrom.ConfigMapKeyRef != nil {
-			cmName := valueFrom.ConfigMapKeyRef.Name
-			key := valueFrom.ConfigMapKeyRef.Key
-			configMap := &v1.ConfigMap{}
-			if err := client.Get(ctx, types.NamespacedName{
-				Name:      cmName,
-				Namespace: namespace,
-			}, configMap); err != nil {
-				return "", err
-			}
-
-			value, ok := configMap.Data[key]
-			if !ok {
-				return "", fmt.Errorf("failed to find env var value %s in configmap %s in namespace %s", key, cmName, namespace)
-			}
-
-			return value, nil
-		}
-	} else {
-		return envVar.Value, nil
-	}
-
-	return "", nil
-}
-
 func getSpecsBaseDir() string {
 	return PortworxSpecsDir
 }
