@@ -568,6 +568,14 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			}
 		}
 
+		if toUpdate.Status.DesiredImages.DynamicPlugin == "" || pxVersionChanged {
+			toUpdate.Status.DesiredImages.DynamicPlugin = release.Components.DynamicPlugin
+		}
+
+		if toUpdate.Status.DesiredImages.DynamicPluginProxy == "" || pxVersionChanged {
+			toUpdate.Status.DesiredImages.DynamicPluginProxy = release.Components.DynamicPluginProxy
+		}
+
 		// set misc image defaults
 		imagesData := []struct {
 			desiredImage *string
