@@ -52,6 +52,10 @@ const (
 	defaultNewPrometheusConfigReloaderImage = "quay.io/prometheus-operator/prometheus-config-reloader:v0.56.3"
 	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.24.0"
 
+	// default dynamic plugin images
+	DefaultDynamicPluginImage      = "portworx/portworx-dynamic-plugin:1.1.0"
+	DefaultDynamicPluginProxyImage = "nginxinc/nginx-unprivileged:1.23"
+
 	defaultManifestRefreshInterval = 3 * time.Hour
 )
 
@@ -90,6 +94,8 @@ type Release struct {
 	KubeScheduler              string `yaml:"kubeScheduler,omitempty"`
 	KubeControllerManager      string `yaml:"kubeControllerManager,omitempty"`
 	Pause                      string `yaml:"pause,omitempty"`
+	DynamicPlugin              string `yaml:"dynamicPlugin,omitempty"`
+	DynamicPluginProxy         string `yaml:"dynamicPluginProxy,omitempty"`
 }
 
 // Version is the response structure from a versions source
@@ -217,11 +223,13 @@ func defaultRelease(
 	rel := &Version{
 		PortworxVersion: DefaultPortworxVersion,
 		Components: Release{
-			Stork:      defaultStorkImage,
-			Autopilot:  defaultAutopilotImage,
-			Lighthouse: defaultLighthouseImage,
-			NodeWiper:  defaultNodeWiperImage,
-			PxRepo:     defaultPxRepoImage,
+			Stork:              defaultStorkImage,
+			Autopilot:          defaultAutopilotImage,
+			Lighthouse:         defaultLighthouseImage,
+			NodeWiper:          defaultNodeWiperImage,
+			PxRepo:             defaultPxRepoImage,
+			DynamicPlugin:      DefaultDynamicPluginImage,
+			DynamicPluginProxy: DefaultDynamicPluginProxyImage,
 		},
 	}
 	fillCSIDefaults(rel, k8sVersion)
@@ -249,6 +257,14 @@ func fillDefaults(
 	}
 	if rel.Components.PxRepo == "" {
 		rel.Components.PxRepo = defaultPxRepoImage
+	}
+
+	if rel.Components.DynamicPlugin == "" {
+		rel.Components.DynamicPlugin = DefaultDynamicPluginImage
+	}
+
+	if rel.Components.DynamicPluginProxy == "" {
+		rel.Components.DynamicPluginProxy = DefaultDynamicPluginProxyImage
 	}
 	fillCSIDefaults(rel, k8sVersion)
 	fillPrometheusDefaults(rel, k8sVersion)
