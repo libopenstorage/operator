@@ -90,6 +90,7 @@ var (
 	controllerKind       = corev1.SchemeGroupVersion.WithKind("StorageCluster")
 	crdBaseDir           = getCRDBasePath
 	deprecatedCRDBaseDir = getDeprecatedCRDBasePath
+	dmThinRexp           = regexp.MustCompile(`-T *dmthin`)
 )
 
 // Controller reconciles a StorageCluster object
@@ -628,14 +629,11 @@ func (c *Controller) miscCleanUp(cluster *corev1.StorageCluster) error {
 	if _, miscExists := cluster.Annotations[pxutil.AnnotationMiscArgs]; miscExists {
 		// remove '-T dmthin' from misc args if it exists.  It would have been added due to a bug
 		miscAnnotations := cluster.Annotations[pxutil.AnnotationMiscArgs]
-		dmThinStr := `-T *dmthin`
-		if dmExists, err := regexp.MatchString(dmThinStr, miscAnnotations); err == nil {
-			rexp := regexp.MustCompile(dmThinStr)
-			if dmExists {
-				cluster.Annotations[pxutil.AnnotationMiscArgs] = rexp.ReplaceAllString(miscAnnotations, "")
-				if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
-					return err
-				}
+		dmMatched := dmThinRexp.FindStringSubmatch(miscAnnotations)
+		if len(dmMatched) > 0 {
+			cluster.Annotations[pxutil.AnnotationMiscArgs] = dmThinRexp.ReplaceAllString(miscAnnotations, "")
+			if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
+				return err
 			}
 		}
 	}
