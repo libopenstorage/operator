@@ -50,7 +50,7 @@ const (
 	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.24.0"
 
 	// default dynamic plugin images
-	DefaultDynamicPluginImage      = "portworx/portworx-dynamic-plugin:1.0.0"
+	DefaultDynamicPluginImage      = "portworx/portworx-dynamic-plugin:1.1.0"
 	DefaultDynamicPluginProxyImage = "nginxinc/nginx-unprivileged:1.23"
 
 	defaultManifestRefreshInterval = 3 * time.Hour

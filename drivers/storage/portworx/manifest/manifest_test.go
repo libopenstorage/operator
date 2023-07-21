@@ -39,7 +39,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			Telemetry:                 "image/ccm-service:3.2.11",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
-			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.0.0",
+			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
 		},
 	}
@@ -78,7 +78,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			Telemetry:                 "image/ccm-service:2.6.0",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
-			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.0.0",
+			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
 		},
 	}
@@ -169,7 +169,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			Telemetry:                 "image/ccm-service:3.2.11",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
-			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.0.0",
+			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
 		},
 	}
@@ -260,7 +260,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			TelemetryProxy:            "purestorage/telemetry-envoy:1.0.0",
 			LogUploader:               "purestorage/log-upload:1.0.0",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
-			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.0.0",
+			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
 		},
 	}
@@ -341,7 +341,7 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			Telemetry:                 "image/ccm-service:3.2.11",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
-			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.0.0",
+			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
 		},
 	}
