@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"github.com/libopenstorage/cloudops"
 	"path"
 	"strings"
 	"testing"
@@ -44,7 +45,7 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 
 	if cluster.Namespace != PxNamespace {
 		// If this is OCP on vSphere, attempt to find and copy PX vSphere secret to custom namespace
-		if IsOcp && CloudProvider == "vsphere" {
+		if IsOcp && CloudProvider == cloudops.Vsphere {
 			logrus.Debugf("This is OpenShift cluster and PX will be deployed in custom namespace %s, attempting to find and copy PX vSphere secret to custom namespace %s", cluster.Namespace, cluster.Namespace)
 			if err := testutil.FindAndCopyVsphereSecretToCustomNamespace(cluster.Namespace); err != nil {
 				return err
@@ -60,7 +61,7 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 		cluster.Annotations["portworx.io/is-openshift"] = "true"
 
 		// Create PX vSphere Env var credentials, if PX vSphere secret exists
-		if CloudProvider == "vsphere" {
+		if CloudProvider == cloudops.Vsphere {
 			ocpEnvVarCreds, err := testutil.CreateVsphereCredentialEnvVarsFromSecret(cluster.Namespace)
 			if err != nil {
 				return err
