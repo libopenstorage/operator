@@ -854,6 +854,9 @@ func TestPodSpecForVsphere(t *testing.T) {
 		"-secret_type", "k8s",
 	}
 
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	_, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
@@ -877,6 +880,9 @@ func TestPodSpecForVsphere(t *testing.T) {
 		"-secret_type", "k8s",
 	}
 
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
@@ -899,6 +905,9 @@ func TestPodSpecForVsphere(t *testing.T) {
 		"-b",
 		"-secret_type", "k8s",
 	}
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
@@ -1705,6 +1714,178 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
 
 	cluster.Spec.CloudStorage.Provider = nil
+}
+
+func TestPodSpecWithCloudStorageSpecOnEKS(t *testing.T) {
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "node1",
+				Labels: map[string]string{v1.LabelTopologyZone: "zone1"},
+			},
+			Spec: v1.NodeSpec{ProviderID: "aws://node-id-1"},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "node2",
+				Labels: map[string]string{v1.LabelTopologyZone: "zone2"},
+			},
+			Spec: v1.NodeSpec{ProviderID: "aws://node-id-2"},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "node3",
+				Labels: map[string]string{v1.LabelTopologyZone: "zone3"},
+			},
+			Spec: v1.NodeSpec{ProviderID: "aws://node-id-3"},
+		},
+	}}
+	versionClient := fakek8sclient.NewSimpleClientset(fakeK8sNodes)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.21.14-eks-ba74326",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+	k8sClient := testutil.FakeK8sClient(fakeK8sNodes)
+	err := preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring:   &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			CloudStorage: &corev1.CloudStorageSpec{},
+		},
+	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	expectedArgs := []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-b",
+		"-cloud_provider", "aws",
+		"-secret_type", "k8s",
+	}
+	actual, _ := driver.GetStoragePodSpec(cluster, fakeK8sNodes.Items[0].Name)
+
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+}
+
+func TestPodSpecWithCloudStorageSpecOnGCE(t *testing.T) {
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Spec: v1.NodeSpec{ProviderID: "gce://node-id-1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}, Spec: v1.NodeSpec{ProviderID: "gce://node-id-2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}, Spec: v1.NodeSpec{ProviderID: "gce://node-id-3"}},
+	}}
+
+	versionClient := fakek8sclient.NewSimpleClientset(fakeK8sNodes)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.26.5-gke.1200",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+	k8sClient := testutil.FakeK8sClient(fakeK8sNodes)
+	err := preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	require.True(t, preflight.IsGKE())
+	c := preflight.Instance()
+	require.Equal(t, cloudops.GCE, c.ProviderName())
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image:        "portworx/oci-monitor:3.0.0",
+			CloudStorage: &corev1.CloudStorageSpec{},
+		},
+	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	expectedArgs := []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-b",
+		"-cloud_provider", "gce",
+		"-secret_type", "k8s",
+	}
+	actual, _ := driver.GetStoragePodSpec(cluster, fakeK8sNodes.Items[0].Name)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+}
+
+func TestPodSpecWithCloudStorageSpecOnAzure(t *testing.T) {
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Spec: v1.NodeSpec{ProviderID: "azure://node-id-1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}, Spec: v1.NodeSpec{ProviderID: "azure://node-id-2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}, Spec: v1.NodeSpec{ProviderID: "azure://node-id-3"}},
+	}}
+
+	versionClient := fakek8sclient.NewSimpleClientset(fakeK8sNodes)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.26.5",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+	k8sClient := testutil.FakeK8sClient(fakeK8sNodes)
+	err := preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	c := preflight.Instance()
+	require.Equal(t, cloudops.Azure, c.ProviderName())
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image:        "portworx/oci-monitor:3.0.0",
+			CloudStorage: &corev1.CloudStorageSpec{},
+		},
+	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	expectedArgs := []string{
+		"-c", "px-cluster",
+		"-x", "kubernetes",
+		"-b",
+		"-cloud_provider", "azure",
+		"-secret_type", "k8s",
+	}
+	actual, _ := driver.GetStoragePodSpec(cluster, fakeK8sNodes.Items[0].Name)
+	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
 }
 
 func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {

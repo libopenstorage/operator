@@ -29,6 +29,7 @@ import (
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -356,6 +357,11 @@ func GetCloudProvider(cluster *corev1.StorageCluster) string {
 	if IsVsphere(cluster) {
 		return cloudops.Vsphere
 	}
+
+	if len(preflight.Instance().ProviderName()) > 0 {
+		return preflight.Instance().ProviderName()
+	}
+
 	// TODO: implement conditions for other providers
 	return ""
 }

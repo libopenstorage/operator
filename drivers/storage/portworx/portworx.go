@@ -301,6 +301,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 	if preflight.IsEKS() {
 		toUpdate.Annotations[pxutil.AnnotationIsEKS] = "true"
+	} else if preflight.IsGKE() {
+		toUpdate.Annotations[pxutil.AnnotationIsGKE] = "true"
 	}
 
 	removeDeprecatedFields(toUpdate)
