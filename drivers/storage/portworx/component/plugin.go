@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	commonerrors "errors"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	"strings"
 
 	version "github.com/hashicorp/go-version"
@@ -227,6 +228,12 @@ func (p *plugin) createDeployment(filename, deploymentName string, ownerRef *met
 	}
 	deployment.Namespace = cluster.Namespace
 	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	if deployment.Name == PluginDeploymentName {
+		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPluginImage(cluster)
+	}
+	if deployment.Name == NginxDeploymentName {
+		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPluginProxyImage(cluster)
+	}
 
 	existingDeployment := &appsv1.Deployment{}
 	getErr := p.client.Get(
@@ -353,4 +360,23 @@ func isVersionSupported(v string) bool {
 	}
 
 	return currentVersion.GreaterThanOrEqual(targetVersion)
+}
+
+func getDesiredPluginImage(cluster *corev1.StorageCluster) string {
+	imageName := manifest.DefaultDynamicPluginImage
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.DynamicPlugin != "" {
+		imageName = cluster.Status.DesiredImages.DynamicPlugin
+	}
+	imageName = util.GetImageURN(cluster, imageName)
+	return imageName
+}
+
+func getDesiredPluginProxyImage(cluster *corev1.StorageCluster) string {
+	imageName := manifest.DefaultDynamicPluginProxyImage
+
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.DynamicPluginProxy != "" {
+		imageName = cluster.Status.DesiredImages.DynamicPluginProxy
+	}
+	imageName = util.GetImageURN(cluster, imageName)
+	return imageName
 }
