@@ -19,3 +19,7 @@ func (vsphereProvider) GetDefaultMetadataDrive() *string {
 func (vsphereProvider) GetDefaultKvdbDrive() *string {
 	return stringPtr("type=zeroedthick,size=32")
 }
+
+func (vsphereProvider) GetDefaultJournalDrive() *string {
+	return stringPtr("type=zeroedthick,size=32")
+}
