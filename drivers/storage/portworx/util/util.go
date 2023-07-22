@@ -29,6 +29,7 @@ import (
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -371,6 +372,11 @@ func GetCloudProvider(cluster *corev1.StorageCluster) string {
 	if IsVsphere(cluster) {
 		return cloudops.Vsphere
 	}
+
+	if len(preflight.Instance().ProviderName()) > 0 {
+		return preflight.Instance().ProviderName()
+	}
+
 	// TODO: implement conditions for other providers
 	return ""
 }
@@ -743,54 +749,6 @@ func ParsePxProxyURL(proxy string) (string, string, string, error) {
 		}
 		return host, port, authHeader, nil
 	}
-}
-
-// GetValueFromEnvVar returns the value of v1.EnvVar Value or ValueFrom
-func GetValueFromEnvVar(ctx context.Context, client client.Client, envVar *v1.EnvVar, namespace string) (string, error) {
-
-	if valueFrom := envVar.ValueFrom; valueFrom != nil {
-		if valueFrom.SecretKeyRef != nil {
-			key := valueFrom.SecretKeyRef.Key
-			secretName := valueFrom.SecretKeyRef.Name
-
-			// Get secret key
-			secret := &v1.Secret{}
-			err := client.Get(ctx, types.NamespacedName{
-				Name:      secretName,
-				Namespace: namespace,
-			}, secret)
-			if err != nil {
-				return "", err
-			}
-			value := secret.Data[key]
-			if len(value) == 0 {
-				return "", fmt.Errorf("failed to find env var value %s in secret %s in namespace %s", key, secretName, namespace)
-			}
-
-			return string(value), nil
-		} else if valueFrom.ConfigMapKeyRef != nil {
-			cmName := valueFrom.ConfigMapKeyRef.Name
-			key := valueFrom.ConfigMapKeyRef.Key
-			configMap := &v1.ConfigMap{}
-			if err := client.Get(ctx, types.NamespacedName{
-				Name:      cmName,
-				Namespace: namespace,
-			}, configMap); err != nil {
-				return "", err
-			}
-
-			value, ok := configMap.Data[key]
-			if !ok {
-				return "", fmt.Errorf("failed to find env var value %s in configmap %s in namespace %s", key, cmName, namespace)
-			}
-
-			return value, nil
-		}
-	} else {
-		return envVar.Value, nil
-	}
-
-	return "", nil
 }
 
 func getSpecsBaseDir() string {

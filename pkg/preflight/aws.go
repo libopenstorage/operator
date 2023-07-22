@@ -15,8 +15,8 @@ import (
 
 	"github.com/libopenstorage/cloudops"
 	awsops "github.com/libopenstorage/cloudops/aws"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
@@ -99,11 +99,11 @@ func (a *aws) setAWSCredentialEnvVars(cluster *corev1.StorageCluster) error {
 	}
 
 	// Get the credentials from secrets or values
-	accessKey, err := pxutil.GetValueFromEnvVar(context.TODO(), a.k8sClient, accessKeyEnv, cluster.Namespace)
+	accessKey, err := k8s.GetValueFromEnvVar(context.TODO(), a.k8sClient, accessKeyEnv, cluster.Namespace)
 	if err != nil {
 		return err
 	}
-	secretKey, err := pxutil.GetValueFromEnvVar(context.TODO(), a.k8sClient, secretKeyEnv, cluster.Namespace)
+	secretKey, err := k8s.GetValueFromEnvVar(context.TODO(), a.k8sClient, secretKeyEnv, cluster.Namespace)
 	if err != nil {
 		return err
 	}
