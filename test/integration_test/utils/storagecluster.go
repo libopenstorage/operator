@@ -243,7 +243,7 @@ func UpdateAndValidatePvcController(cluster *corev1.StorageCluster, f func(*core
 }
 
 // UpdateAndValidateStork update StorageCluster, validates Stork components only and return latest version of live StorageCluster
-func UpdateAndValidateStork(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, k8sVersion string, t *testing.T) *corev1.StorageCluster {
+func UpdateAndValidateStork(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
 	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -252,7 +252,7 @@ func UpdateAndValidateStork(cluster *corev1.StorageCluster, f func(*corev1.Stora
 	latestLiveCluster, err := UpdateStorageCluster(newCluster)
 	require.NoError(t, err)
 
-	err = testutil.ValidateStork(pxSpecImages, latestLiveCluster, k8sVersion, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
+	err = testutil.ValidateStork(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
 	require.NoError(t, err)
 
 	return latestLiveCluster
