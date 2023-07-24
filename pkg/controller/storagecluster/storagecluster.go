@@ -623,7 +623,7 @@ func (c *Controller) miscCleanUp(cluster *corev1.StorageCluster) error {
 		dmMatched := dmThinRexp.FindStringSubmatch(miscAnnotations)
 		if len(dmMatched) > 0 {
 			cluster.Annotations[pxutil.AnnotationMiscArgs] = dmThinRexp.ReplaceAllString(miscAnnotations, "")
-			if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
+			if err := c.client.Update(context.TODO(), cluster); err != nil {
 				return err
 			}
 		}
