@@ -1,6 +1,7 @@
 package cloud_provider
 
 import (
+	"github.com/libopenstorage/cloudops"
 	"github.com/libopenstorage/operator/test/integration_test/utils"
 	"log"
 	"strings"
@@ -21,7 +22,8 @@ func stringPtr(str string) *string {
 }
 
 func isVsphere() bool {
-	return strings.Contains(utils.PxEnvVars, "VSPHERE_VCENTER")
+	return strings.Contains(utils.PxEnvVars, "VSPHERE_VCENTER") ||
+		utils.CloudProvider == cloudops.Vsphere
 }
 
 func GetCloudProvider() Provider {

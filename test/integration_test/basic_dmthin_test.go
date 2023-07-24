@@ -73,7 +73,7 @@ var testDmthinCases = []types.TestCase{
 	},
 }
 
-func TestStorageClusterBasicDMthin(t *testing.T) {
+func TestDMthinCloudDrivesBasic(t *testing.T) {
 	for _, testCase := range testDmthinCases {
 		testCase.RunTest(t)
 	}
