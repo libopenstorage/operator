@@ -1401,7 +1401,7 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 	}
 
 	// Validate KVDB
-	if err = ValidateKvdb(cluster, timeout, interval); err != nil {
+	if err = ValidateKvdb(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
@@ -1409,18 +1409,18 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 }
 
 // ValidateKvdb validates Portworx KVDB components
-func ValidateKvdb(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func ValidateKvdb(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Internal KVDB components")
 	if cluster.Spec.Kvdb.Internal {
 		logrus.Debug("Internal KVDB is enabled in StorageCluster")
-		return ValidateInternalKvdbEnabled(cluster, timeout, interval)
+		return ValidateInternalKvdbEnabled(pxImageList, cluster, timeout, interval)
 	}
 	logrus.Debug("Internal KVDB is disabled in StorageCluster")
 	return ValidateInternalKvdbDisabled(cluster, timeout, interval)
 }
 
 // ValidateInternalKvdbEnabled validates that all Internal KVDB components are enabled/created
-func ValidateInternalKvdbEnabled(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func ValidateInternalKvdbEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Debug("Validate Internal KVDB components are enabled")
 
 	t := func() (interface{}, bool, error) {
@@ -1436,6 +1436,29 @@ func ValidateInternalKvdbEnabled(cluster *corev1.StorageCluster, timeout, interv
 			return nil, true, fmt.Errorf("failed to validate KVDB pod count, expected: %d, actual: %d", desiredKvdbPodCount, len(podList.Items))
 		}
 		logrus.Debugf("Found all %d/%d Internal KVDB pods", len(podList.Items), desiredKvdbPodCount)
+
+		// Figure out what default registry to use for kvdb image, based on PX Operator version
+		kvdbImageName := "k8s.gcr.io/pause"
+		opVersion, _ := GetPxOperatorVersion()
+		if opVersion.GreaterThanOrEqual(opVer23_3) {
+			kvdbImageName = "registry.k8s.io/pause"
+		}
+
+		// Check if kvdb image was explicitly set in the px-version configmap
+		explicitKvdbImage := ""
+		if value, ok := pxImageList["pause"]; ok {
+			explicitKvdbImage = value
+		}
+
+		if len(explicitKvdbImage) > 0 {
+			if err := validateContainerImageInsidePods(cluster, explicitKvdbImage, "portworx-kvdb", podList); err != nil {
+				return nil, true, err
+			}
+		} else {
+			if err := validateContainerImageInsidePods(cluster, fmt.Sprintf("%s:3.1", kvdbImageName), "portworx-kvdb", podList); err != nil {
+				return nil, true, err
+			}
+		}
 
 		// Validate Portworx KVDB service
 		portworxKvdbServiceName := "portworx-kvdb-service"
