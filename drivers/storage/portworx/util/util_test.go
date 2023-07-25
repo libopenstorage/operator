@@ -201,3 +201,100 @@ func TestGetPortworxVersion(t *testing.T) {
 	assert.True(t, GetPortworxVersion(cluster).Equal(pxVer30))
 
 }
+
+func TestGetTLSMinVersion(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "px-cluster",
+			Namespace:   "kube-system",
+			Annotations: make(map[string]string),
+		},
+		Spec: corev1.StorageClusterSpec{},
+	}
+
+	ret, err := GetTLSMinVersion(cluster)
+	assert.NoError(t, err)
+	assert.Empty(t, ret)
+
+	data := []struct {
+		input     string
+		expectOut string
+		expectErr bool
+	}{
+		{"", "", false},
+		{"VersionTLS10", "VersionTLS10", false},
+		{"  VersionTLS10", "VersionTLS10", false},
+		{"VersionTLS10\t", "VersionTLS10", false},
+		{" VersionTLS11 ", "VersionTLS11", false},
+		{"VersionTLS12", "VersionTLS12", false},
+		{"VersionTLS13", "VersionTLS13", false},
+		{"versiontls13", "VersionTLS13", false},
+		{"VERSIONTLS13", "VersionTLS13", false},
+		{"VersionTLS14", "", true},
+		{"VersionTLS3", "", true},
+	}
+	for i, td := range data {
+		cluster.ObjectMeta.Annotations[AnnotationServerTLSMinVersion] = td.input
+		ret, err = GetTLSMinVersion(cluster)
+		if td.expectErr {
+			assert.Error(t, err, "Expecting error for #%d / %v", i+1, td)
+		} else {
+			assert.NoError(t, err, "Expecting NO error for #%d / %v", i+1, td)
+			assert.Equal(t, td.expectOut, ret, "Unexpected result for #%d / %v", i+1, td)
+		}
+	}
+}
+
+func TestGetTLSCipherSuites(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "px-cluster",
+			Namespace:   "kube-system",
+			Annotations: make(map[string]string),
+		},
+		Spec: corev1.StorageClusterSpec{},
+	}
+
+	ret, err := GetTLSCipherSuites(cluster)
+	assert.NoError(t, err)
+	assert.Empty(t, ret)
+
+	data := []struct {
+		input     string
+		expectOut string
+		expectErr bool
+	}{
+		{"", "", false},
+		{
+			"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+			"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+			false,
+		},
+		{
+			"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+			"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+			false,
+		},
+		{
+			"	  TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 :: TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 \t",
+			"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+			false,
+		},
+		{
+			"tls_ecdhe_ecdsa_with_aes_256_gcm_sha384 tls_ecdhe_rsa_with_aes_256_gcm_sha384 tls_ecdhe_rsa_with_aes_128_gcm_sha256",
+			"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+			false,
+		},
+		{"x,y", "", true},
+	}
+	for i, td := range data {
+		cluster.ObjectMeta.Annotations[AnnotationServerTLSCipherSuites] = td.input
+		ret, err = GetTLSCipherSuites(cluster)
+		if td.expectErr {
+			assert.Error(t, err, "Expecting error for #%d / %v", i+1, td)
+		} else {
+			assert.NoError(t, err, "Expecting NO error for #%d / %v", i+1, td)
+			assert.Equal(t, td.expectOut, ret, "Unexpected result for #%d / %v", i+1, td)
+		}
+	}
+}

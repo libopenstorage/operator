@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
@@ -142,6 +143,10 @@ const (
 	AnnotationPreflightCheck = pxAnnotationPrefix + "/preflight-check"
 	// AnnotationFACDTopology is added when FACD topology was successfully installed on a *new* cluster (it's blocked for existing clusters)
 	AnnotationFACDTopology = pxAnnotationPrefix + "/facd-topology"
+	// AnnotationServerTLSMinVersion sets up TLS-servers w/ requested TLS as minimal version
+	AnnotationServerTLSMinVersion = pxAnnotationPrefix + "/tls-min-version"
+	// AnnotationServerTLSCipherSuites sets up TLS-servers w/ requested cipher suites
+	AnnotationServerTLSCipherSuites = pxAnnotationPrefix + "/tls-cipher-suites"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -1148,4 +1153,64 @@ func IsFreshInstall(cluster *corev1.StorageCluster) bool {
 		cluster.Status.Phase == string(corev1.ClusterStateInit) ||
 		(cluster.Status.Phase == string(corev1.ClusterStateDegraded) &&
 			util.GetStorageClusterCondition(cluster, PortworxComponentName, corev1.ClusterConditionTypeRuntimeState) == nil)
+}
+
+// GetTLSMinVersion gets requested TLS version and validates it
+func GetTLSMinVersion(cluster *corev1.StorageCluster) (string, error) {
+	req := cluster.Annotations[AnnotationServerTLSMinVersion]
+	if req == "" {
+		return "", nil
+	}
+	req = strings.Trim(req, " \t")
+
+	switch strings.ToUpper(req) {
+	case "VERSIONTLS10":
+		return "VersionTLS10", nil
+	case "VERSIONTLS11":
+		return "VersionTLS11", nil
+	case "VERSIONTLS12":
+		return "VersionTLS12", nil
+	case "VERSIONTLS13":
+		return "VersionTLS13", nil
+	}
+
+	return "", fmt.Errorf("invalid TLS version: expected one of VersionTLS1{0..3}, got %s", req)
+}
+
+// GetTLSCipherSuites gets requested TLS ciphers suites and validates it
+// - RETURN: the normalized comma-separated list of cipher suites, or error if requested unknown cipher
+func GetTLSCipherSuites(cluster *corev1.StorageCluster) (string, error) {
+	req := cluster.Annotations[AnnotationServerTLSCipherSuites]
+	if req == "" {
+		return "", nil
+	}
+
+	csMap := make(map[string]bool)
+	for _, c := range tls.CipherSuites() {
+		csMap[c.Name] = true
+	}
+	icsMap := make(map[string]bool)
+	for _, c := range tls.InsecureCipherSuites() {
+		icsMap[c.Name] = true
+	}
+
+	req = strings.ToUpper(req)
+	parts := strings.FieldsFunc(req, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == ':' || r == ';' || r == ','
+	})
+	outList := make([]string, 0, len(parts))
+
+	for _, p := range parts {
+		if p == "" {
+			// nop..
+		} else if _, has := csMap[p]; has {
+			outList = append(outList, p)
+		} else if _, has = icsMap[p]; has {
+			logrus.Warnf("Requested insecure cipher suite %s", p)
+			outList = append(outList, p)
+		} else {
+			return "", fmt.Errorf("unknown cipher suite %s", p)
+		}
+	}
+	return strings.Join(outList, ","), nil
 }
