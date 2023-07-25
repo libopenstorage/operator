@@ -39,7 +39,6 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	certv1 "k8s.io/api/certificates/v1"
@@ -2928,7 +2927,7 @@ func ValidateMonitoring(pxImageList map[string]string, cluster *corev1.StorageCl
 	if err := ValidateAlertManager(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
-	if err := ValidateGrafana(cluster); err != nil {
+	if err := ValidateGrafana(pxImageList, cluster); err != nil {
 		return err
 	}
 
@@ -2988,7 +2987,7 @@ func ValidatePrometheus(pxImageList map[string]string, cluster *corev1.StorageCl
 	return nil
 }
 
-func ValidateGrafana(cluster *corev1.StorageCluster) error {
+func ValidateGrafana(pxImageList map[string]string, cluster *corev1.StorageCluster) error {
 	opVersion, err := GetPxOperatorVersion()
 	if err != nil {
 		return err
@@ -3001,8 +3000,7 @@ func ValidateGrafana(cluster *corev1.StorageCluster) error {
 	shouldBeInstalled := cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Grafana != nil &&
 		cluster.Spec.Monitoring.Grafana.Enabled && cluster.Spec.Monitoring.Prometheus != nil &&
 		cluster.Spec.Monitoring.Prometheus.Enabled
-	image := cluster.Status.DesiredImages.Grafana
-	err = ValidateGrafanaDeployment(shouldBeInstalled, image)
+	err = ValidateGrafanaDeployment(cluster, shouldBeInstalled, pxImageList)
 	if err != nil {
 		return err
 	}
@@ -3010,11 +3008,15 @@ func ValidateGrafana(cluster *corev1.StorageCluster) error {
 	if err != nil {
 		return err
 	}
+	err = ValidateGrafanaConfigmaps(shouldBeInstalled)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-func ValidateGrafanaDeployment(shouldBeInstalled bool, image string) error {
+func ValidateGrafanaDeployment(cluster *corev1.StorageCluster, shouldBeInstalled bool, pxImageList map[string]string) error {
 	check := func() (interface{}, bool, error) {
 		pods, err := coreops.Instance().GetPods("kube-system", map[string]string{"app": "grafana"})
 		if err != nil {
@@ -3026,7 +3028,7 @@ func ValidateGrafanaDeployment(shouldBeInstalled bool, image string) error {
 				return "", true, fmt.Errorf("grafana is not installed when it should be")
 			}
 
-			err := ValidateGrafanaDeploymentImage(image)
+			err := validateContainerImageInsidePods(cluster, pxImageList["grafana"], "grafana", pods)
 			if err != nil {
 				logrus.Errorf("Grafana image is invalid yet ready")
 				return "", true, fmt.Errorf("grafana is not installed when it should be")
@@ -3116,10 +3118,12 @@ func ValidateGrafanaService(shouldBeInstalled bool) error {
 	return nil
 }
 
-func ValidateGrafanaConfigmaps(t *testing.T, shouldBeInstalled bool) error {
+func ValidateGrafanaConfigmaps(shouldBeInstalled bool) error {
 	check := func() (interface{}, bool, error) {
 		cms, err := coreops.Instance().ListConfigMap("kube-system", metav1.ListOptions{})
-		require.NoError(t, err)
+		if err != nil {
+			return "", true, err
+		}
 
 		var grafanaConfigmaps []v1.ConfigMap
 		for _, cm := range cms.Items {
