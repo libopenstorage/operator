@@ -77,45 +77,68 @@ func TestGetServiceTypeFromAnnotation(t *testing.T) {
 	require.Equal(t, v1.ServiceType(""), ServiceType(cluster, "other-services"))
 }
 
-func TestSplitPxProxyHostPort(t *testing.T) {
+func TestParsePxProxyURL(t *testing.T) {
 	// Valid cases
-	address, port, err := SplitPxProxyHostPort("http.proxy.address:1234")
+	host, port, authHeader, err := ParsePxProxyURL("http.proxy.address:1234")
 	require.NoError(t, err)
-	require.Equal(t, "http.proxy.address", address)
+	require.Equal(t, "http.proxy.address", host)
 	require.Equal(t, "1234", port)
+	require.Equal(t, "", authHeader)
 
-	address, port, err = SplitPxProxyHostPort("http://http.proxy.address:1234")
+	host, port, authHeader, err = ParsePxProxyURL("http://http.proxy.address:1234")
 	require.NoError(t, err)
-	require.Equal(t, "http.proxy.address", address)
+	require.Equal(t, "http.proxy.address", host)
 	require.Equal(t, "1234", port)
+	require.Equal(t, "", authHeader)
 
-	address, port, err = SplitPxProxyHostPort("1.2.3.4:1234")
+	host, port, authHeader, err = ParsePxProxyURL("https://http.proxy.address:1234")
 	require.NoError(t, err)
-	require.Equal(t, "1.2.3.4", address)
+	require.Equal(t, "http.proxy.address", host)
 	require.Equal(t, "1234", port)
+	require.Equal(t, "", authHeader)
 
-	address, port, err = SplitPxProxyHostPort("[1:2:3:4:5:6:7:8]:1234")
+	host, port, authHeader, err = ParsePxProxyURL("1.2.3.4:1234")
 	require.NoError(t, err)
-	require.Equal(t, "1:2:3:4:5:6:7:8", address)
+	require.Equal(t, "1.2.3.4", host)
 	require.Equal(t, "1234", port)
+	require.Equal(t, "", authHeader)
+
+	host, port, authHeader, err = ParsePxProxyURL("[1:2:3:4:5:6:7:8]:1234")
+	require.NoError(t, err)
+	require.Equal(t, "1:2:3:4:5:6:7:8", host)
+	require.Equal(t, "1234", port)
+	require.Equal(t, "", authHeader)
+
+	// The only valid format for HTTPS proxy
+	host, port, authHeader, err = ParsePxProxyURL("https://user:password@http.proxy.address:1234")
+	require.NoError(t, err)
+	require.Equal(t, "http.proxy.address", host)
+	require.Equal(t, "1234", port)
+	require.Equal(t, "Basic dXNlcjpwYXNzd29yZA==", authHeader)
 
 	// Invalid cases
-	_, _, err = SplitPxProxyHostPort("")
+	_, _, _, err = ParsePxProxyURL("")
 	require.Error(t, err)
 
-	_, _, err = SplitPxProxyHostPort("http://address")
+	_, _, _, err = ParsePxProxyURL("http://address")
 	require.Error(t, err)
 
-	_, _, err = SplitPxProxyHostPort("address:")
+	_, _, _, err = ParsePxProxyURL("address:")
 	require.Error(t, err)
 
-	_, _, err = SplitPxProxyHostPort("1:2:3:4:5:6:7:8")
+	_, _, _, err = ParsePxProxyURL("1:2:3:4:5:6:7:8")
 	require.Error(t, err)
 
-	_, _, err = SplitPxProxyHostPort(":1234")
+	_, _, _, err = ParsePxProxyURL(":1234")
 	require.Error(t, err)
 
-	_, _, err = SplitPxProxyHostPort("user:password@host:1234")
+	_, _, _, err = ParsePxProxyURL("user:password@http.proxy.address:1234")
+	require.Error(t, err)
+
+	_, _, _, err = ParsePxProxyURL("https://user:password@address")
+	require.Error(t, err)
+
+	_, _, _, err = ParsePxProxyURL("https://user:password@:1234")
 	require.Error(t, err)
 }
 
