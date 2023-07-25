@@ -2909,10 +2909,6 @@ func validateStorkSecurityEnvVar(cluster *corev1.StorageCluster, storkDeployment
 		return err
 	}
 
-	if err := ValidateGrafana(cluster); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -2930,6 +2926,9 @@ func ValidateMonitoring(pxImageList map[string]string, cluster *corev1.StorageCl
 	}
 
 	if err := ValidateAlertManager(pxImageList, cluster, timeout, interval); err != nil {
+		return err
+	}
+	if err := ValidateGrafana(cluster); err != nil {
 		return err
 	}
 
@@ -2994,7 +2993,7 @@ func ValidateGrafana(cluster *corev1.StorageCluster) error {
 	if err != nil {
 		return err
 	}
-	if opVersion.LessThanOrEqual(opVer23_8) {
+	if opVersion.LessThan(opVer23_8) {
 		logrus.Infof("Skipping grafana validation for operation version: [%s]", opVersion.String())
 		return nil
 	}
@@ -3002,7 +3001,8 @@ func ValidateGrafana(cluster *corev1.StorageCluster) error {
 	shouldBeInstalled := cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Grafana != nil &&
 		cluster.Spec.Monitoring.Grafana.Enabled && cluster.Spec.Monitoring.Prometheus != nil &&
 		cluster.Spec.Monitoring.Prometheus.Enabled
-	err = ValidateGrafanaDeployment(shouldBeInstalled)
+	image := cluster.Status.DesiredImages.Grafana
+	err = ValidateGrafanaDeployment(shouldBeInstalled, image)
 	if err != nil {
 		return err
 	}
@@ -3014,29 +3014,26 @@ func ValidateGrafana(cluster *corev1.StorageCluster) error {
 	return nil
 }
 
-func ValidateGrafanaImage(shouldBeInstalled bool) error {
-	err := ValidateGrafanaDeployment(shouldBeInstalled)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func ValidateGrafanaDeployment(shouldBeInstalled bool) error {
+func ValidateGrafanaDeployment(shouldBeInstalled bool, image string) error {
 	check := func() (interface{}, bool, error) {
 		pods, err := coreops.Instance().GetPods("kube-system", map[string]string{"app": "grafana"})
 		if err != nil {
 			return nil, true, err
 		}
 		if shouldBeInstalled {
-			if len(pods.Items) > 0 && pods.Items[0].Status.Phase == v1.PodRunning {
-				logrus.Infof("Grafana installed successfully")
-				return "", false, nil
-			} else {
+			if len(pods.Items) == 0 || pods.Items[0].Status.Phase != v1.PodRunning {
 				logrus.Errorf("Grafana not yet ready")
 				return "", true, fmt.Errorf("grafana is not installed when it should be")
 			}
+
+			err := ValidateGrafanaDeploymentImage(image)
+			if err != nil {
+				logrus.Errorf("Grafana image is invalid yet ready")
+				return "", true, fmt.Errorf("grafana is not installed when it should be")
+			}
+
+			logrus.Infof("Grafana installed successfully")
+			return "", false, nil
 		} else {
 			if len(pods.Items) < 1 {
 				logrus.Infof("Grafana uninstalled successfully")
@@ -3061,20 +3058,23 @@ func ValidateGrafanaDeploymentImage(image string) error {
 		if err != nil {
 			return "", true, err
 		}
-		if len(pods.Items) > 0 && len(pods.Items[0].Spec.Containers) > 0 {
-			if pods.Items[0].Spec.Containers[0].Image == image {
+
+		podCount := len(pods.Items)
+		if podCount > 0 && len(pods.Items[0].Spec.Containers) > 0 {
+			actualImage := pods.Items[0].Spec.Containers[0].Image
+			if actualImage == image {
 				logrus.Infof("Grafana installed successfully with image %s", image)
 				return "", false, nil
 			} else {
 				logrus.Errorf("Grafana not yet ready with image %s", image)
-				return "", true, fmt.Errorf("grafana is not installed with image %s", image)
+				return "", true, fmt.Errorf("grafana is not installed with expected image %s. actual: %s", image, actualImage)
 			}
 		} else {
-			return "", true, fmt.Errorf("grafana is not installed with image %s", image)
+			return "", true, fmt.Errorf("grafana is not installed with image %s. number of pods: %v", image, podCount)
 		}
 	}
 
-	if _, err := task.DoRetryWithTimeout(check, 2*time.Minute, 30*time.Second); err != nil {
+	if _, err := task.DoRetryWithTimeout(check, 1*time.Minute, 10*time.Second); err != nil {
 		return err
 	}
 

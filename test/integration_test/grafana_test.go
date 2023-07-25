@@ -92,7 +92,8 @@ var grafanaTestCases = []types.TestCase{
 				logrus.Infof("Validate Grafana not installed by default")
 				cluster, err = ci_utils.DeployStorageCluster(cluster, ci_utils.PxSpecImages)
 				require.NoError(t, err)
-				cluster, err = updateGrafanaInstallation(t, cluster, false, false)
+				cluster, err = updateGrafanaInstallation(t, cluster, true, true)
+				require.NoError(t, err)
 				err = testutil.ValidateGrafanaDeploymentImage("docker.io/grafana/grafana:8.5.27")
 				require.NoError(t, err)
 
