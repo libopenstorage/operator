@@ -1014,7 +1014,7 @@ func BasicKvdbRegression(tc *types.TestCase) func(*testing.T) {
 		logrus.Info("Delete portworx KVDB pods and validate they get re-deployed")
 		err = coreops.Instance().DeletePodsByLabels(cluster.Namespace, map[string]string{"kvdb": "true"}, 120*time.Second)
 		require.NoError(t, err)
-		err = testutil.ValidateKvdb(cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval)
+		err = testutil.ValidateKvdb(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval)
 		require.NoError(t, err)
 	}
 }
