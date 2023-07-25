@@ -3556,7 +3556,7 @@ func validateTelemetryStatusInPxctl(telemetryShouldBeEnabled bool, cluster *core
 			}
 
 			// Find Telemetry status line
-			telemetryStatusString := regexp.MustCompile("Telemetry:.*").FindString(output)
+			telemetryStatusString := regexp.MustCompile("^Telemetry:.*").FindString(output)
 			if len(telemetryStatusString) <= 0 {
 				return nil, true, fmt.Errorf("got empty Telemetry status line, command output did not match expected, output [%s]", strings.TrimSpace(output))
 			}
