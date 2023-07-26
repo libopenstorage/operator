@@ -3004,11 +3004,11 @@ func ValidateGrafana(pxImageList map[string]string, cluster *corev1.StorageClust
 	if err != nil {
 		return err
 	}
-	err = ValidateGrafanaService(shouldBeInstalled)
+	err = ValidateGrafanaService(cluster, shouldBeInstalled)
 	if err != nil {
 		return err
 	}
-	err = ValidateGrafanaConfigmaps(shouldBeInstalled)
+	err = ValidateGrafanaConfigmaps(cluster, shouldBeInstalled)
 	if err != nil {
 		return err
 	}
@@ -3017,145 +3017,67 @@ func ValidateGrafana(pxImageList map[string]string, cluster *corev1.StorageClust
 }
 
 func ValidateGrafanaDeployment(cluster *corev1.StorageCluster, shouldBeInstalled bool, pxImageList map[string]string) error {
-	check := func() (interface{}, bool, error) {
-		pods, err := coreops.Instance().GetPods("kube-system", map[string]string{"app": "grafana"})
-		if err != nil {
-			return nil, true, err
-		}
-		if shouldBeInstalled {
-			if len(pods.Items) == 0 || pods.Items[0].Status.Phase != v1.PodRunning {
-				logrus.Errorf("Grafana not yet ready")
-				return "", true, fmt.Errorf("grafana is not installed when it should be")
-			}
-
-			err := validateContainerImageInsidePods(cluster, pxImageList["grafana"], "grafana", pods)
-			if err != nil {
-				logrus.Errorf("Grafana image is invalid yet ready")
-				return "", true, fmt.Errorf("grafana is not installed when it should be")
-			}
-
-			logrus.Infof("Grafana installed successfully")
-			return "", false, nil
-		} else {
-			if len(pods.Items) < 1 {
-				logrus.Infof("Grafana uninstalled successfully")
-				return "", false, nil
-			} else {
-				logrus.Errorf("Grafana not yet uninstalled")
-				return "", true, fmt.Errorf("grafana is installed when it is expected to be uninstalled")
-			}
-		}
+	deployment, err := appops.Instance().GetDeployment("px-grafana", cluster.Namespace)
+	if err != nil {
+		return err
 	}
 
-	if _, err := task.DoRetryWithTimeout(check, 2*time.Minute, 30*time.Second); err != nil {
+	if err := appops.Instance().ValidateDeployment(deployment, 2*time.Minute, 10*time.Second); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func ValidateGrafanaDeploymentImage(image string) error {
-	check := func() (interface{}, bool, error) {
-		pods, err := coreops.Instance().GetPods("kube-system", map[string]string{"app": "grafana"})
-		if err != nil {
-			return "", true, err
-		}
-
-		podCount := len(pods.Items)
-		if podCount > 0 && len(pods.Items[0].Spec.Containers) > 0 {
-			actualImage := pods.Items[0].Spec.Containers[0].Image
-			if actualImage == image {
-				logrus.Infof("Grafana installed successfully with image %s", image)
-				return "", false, nil
-			} else {
-				logrus.Errorf("Grafana not yet ready with image %s", image)
-				return "", true, fmt.Errorf("grafana is not installed with expected image %s. actual: %s", image, actualImage)
-			}
-		} else {
-			return "", true, fmt.Errorf("grafana is not installed with image %s. number of pods: %v", image, podCount)
-		}
-	}
-
-	if _, err := task.DoRetryWithTimeout(check, 1*time.Minute, 10*time.Second); err != nil {
+func ValidateGrafanaService(cluster *corev1.StorageCluster, shouldBeInstalled bool) error {
+	svcs, err := coreops.Instance().ListServices(cluster.Namespace, metav1.ListOptions{
+		LabelSelector: "app=grafana",
+	})
+	if err != nil {
 		return err
 	}
 
-	return nil
+	if shouldBeInstalled {
+		if len(svcs.Items) > 0 && svcs.Items[0].Spec.Ports[0].Port == 3000 {
+			return nil
+		} else {
+			return fmt.Errorf("grafana is not installed when it should be")
+		}
+	} else {
+		if len(svcs.Items) < 1 {
+			return nil
+		} else {
+			return fmt.Errorf("grafana svc is installed when it is expected to be uninstalled")
+		}
+	}
 }
 
-func ValidateGrafanaService(shouldBeInstalled bool) error {
-	check := func() (interface{}, bool, error) {
-		svcs, err := coreops.Instance().ListServices("kube-system", metav1.ListOptions{
-			LabelSelector: "app=grafana",
-		})
-		if err != nil {
-			return "", true, err
-		}
-
-		if shouldBeInstalled {
-			if len(svcs.Items) > 0 && svcs.Items[0].Spec.Ports[0].Port == 3000 {
-				logrus.Infof("Grafana svc installed successfully")
-				return "", false, nil
-			} else {
-				logrus.Errorf("Grafana svc not yet ready")
-				return "", true, fmt.Errorf("grafana is not installed when it should be")
-			}
-		} else {
-			if len(svcs.Items) < 1 {
-				logrus.Infof("Grafana svc uninstalled successfully")
-				return "", false, nil
-			} else {
-				logrus.Errorf("Grafana svc not yet uninstalled")
-				return "", true, fmt.Errorf("grafana svc is installed when it is expected to be uninstalled")
-			}
-		}
-	}
-
-	if _, err := task.DoRetryWithTimeout(check, 2*time.Minute, 30*time.Second); err != nil {
+func ValidateGrafanaConfigmaps(cluster *corev1.StorageCluster, shouldBeInstalled bool) error {
+	cms, err := coreops.Instance().ListConfigMap(cluster.Namespace, metav1.ListOptions{})
+	if err != nil {
 		return err
 	}
 
-	return nil
-}
-
-func ValidateGrafanaConfigmaps(shouldBeInstalled bool) error {
-	check := func() (interface{}, bool, error) {
-		cms, err := coreops.Instance().ListConfigMap("kube-system", metav1.ListOptions{})
-		if err != nil {
-			return "", true, err
+	var grafanaConfigmaps []v1.ConfigMap
+	for _, cm := range cms.Items {
+		if strings.Contains(cm.Name, "px-grafana-") {
+			grafanaConfigmaps = append(grafanaConfigmaps, cm)
 		}
+	}
 
-		var grafanaConfigmaps []v1.ConfigMap
-		for _, cm := range cms.Items {
-			if strings.Contains(cm.Name, "px-grafana-") {
-				grafanaConfigmaps = append(grafanaConfigmaps, cm)
-			}
-		}
-
-		if shouldBeInstalled {
-			if len(grafanaConfigmaps) == 3 {
-				logrus.Infof("Grafana configmaps are installed successfully")
-				return "", false, nil
-			} else {
-				logrus.Errorf("Grafana configmaps are not yet ready")
-				return "", true, fmt.Errorf("grafana is not installed when it should be")
-			}
+	if shouldBeInstalled {
+		if len(grafanaConfigmaps) == 3 {
+			return nil
 		} else {
-			if len(grafanaConfigmaps) < 3 {
-				logrus.Infof("Grafana configmaps uninstalled successfully")
-				return "", false, nil
-			} else {
-				logrus.Errorf("Grafana configmaps are not yet uninstalled")
-				return "", true, fmt.Errorf("grafana configmaps are installed when it is expected to be uninstalled")
-			}
+			return fmt.Errorf("grafana is not installed when it should be")
+		}
+	} else {
+		if len(grafanaConfigmaps) < 3 {
+			return nil
+		} else {
+			return fmt.Errorf("grafana configmaps are installed when it is expected to be uninstalled")
 		}
 	}
-
-	if _, err := task.DoRetryWithTimeout(check, 2*time.Minute, 30*time.Second); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // ValidateTelemetryV1Disabled validates telemetry components are uninstalled as expected
