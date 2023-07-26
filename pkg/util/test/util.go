@@ -3555,15 +3555,21 @@ func validateTelemetryStatusInPxctl(telemetryShouldBeEnabled bool, cluster *core
 				return nil, true, fmt.Errorf("got error while trying to get Telemetry status from pxctl, Err: %v", err)
 			}
 
-			if telemetryShouldBeEnabled && !strings.Contains(output, "Healthy") {
-				return nil, true, fmt.Errorf("[%s (%s)] Telemetry is enabled and should be Healthy in pxctl status on PX node, but got [%s]", pxPod.Spec.NodeName, pxPod.Name, strings.TrimSpace(output))
-			} else if !telemetryShouldBeEnabled && !strings.Contains(output, "Disabled") {
-				return nil, true, fmt.Errorf("[%s (%s)] Telemetry is not enabled and should be Disabled in pxctl status on PX node, but got [%s]", pxPod.Spec.NodeName, pxPod.Name, strings.TrimSpace(output))
-			} else if !strings.Contains(output, "Disabled") && !strings.Contains(output, "Healthy") {
-				return nil, true, fmt.Errorf("[%s (%s)] Telemetry is Enabled=%v, but pxctl on PX node returned unexpected status [%s]", pxPod.Spec.NodeName, pxPod.Name, telemetryShouldBeEnabled, output)
+			// Find Telemetry status line
+			telemetryStatusString := regexp.MustCompile("^Telemetry:.*").FindString(output)
+			if len(telemetryStatusString) <= 0 {
+				return nil, true, fmt.Errorf("got empty Telemetry status line, command output did not match expected, output [%s]", strings.TrimSpace(output))
 			}
 
-			logrus.Infof("[%s(%s)] Telemetry is Enabled=%v and pxctl status on PX node reports [%s]", pxPod.Spec.NodeName, pxPod.Name, telemetryShouldBeEnabled, strings.TrimSpace(output))
+			if telemetryShouldBeEnabled && !strings.Contains(telemetryStatusString, "Healthy") {
+				return nil, true, fmt.Errorf("[%s (%s)] Telemetry is enabled and should be Healthy in pxctl status on PX node, but got [%s]", pxPod.Spec.NodeName, pxPod.Name, strings.TrimSpace(telemetryStatusString))
+			} else if !telemetryShouldBeEnabled && !strings.Contains(telemetryStatusString, "Disabled") {
+				return nil, true, fmt.Errorf("[%s (%s)] Telemetry is not enabled and should be Disabled in pxctl status on PX node, but got [%s]", pxPod.Spec.NodeName, pxPod.Name, strings.TrimSpace(telemetryStatusString))
+			} else if !strings.Contains(telemetryStatusString, "Disabled") && !strings.Contains(telemetryStatusString, "Healthy") {
+				return nil, true, fmt.Errorf("[%s (%s)] Telemetry is Enabled=%v, but pxctl on PX node returned unexpected status [%s]", pxPod.Spec.NodeName, pxPod.Name, telemetryShouldBeEnabled, telemetryStatusString)
+			}
+
+			logrus.Infof("[%s(%s)] Telemetry is Enabled=%v and pxctl status on PX node reports [%s]", pxPod.Spec.NodeName, pxPod.Name, telemetryShouldBeEnabled, strings.TrimSpace(telemetryStatusString))
 		}
 		return nil, false, nil
 	}
