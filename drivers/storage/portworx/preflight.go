@@ -32,8 +32,10 @@ const (
 	pxPreFlightDaemonSetName          = "px-pre-flight"
 	// PxPreFlightServiceAccountName name of portworx pre flight service account
 	PxPreFlightServiceAccountName = "px-pre-flight"
-	// DefCmetaData default metadata cloud device for DMthin
+	// DefCmetaData default metadata cloud device for DMthin AWS
 	DefCmetaData = "type=gp3,size=64"
+	// DefCmetaVsphere default metadata cloud device for DMthin Vsphere
+	DefCmetaVsphere = "type=eagerzeroedthick,size=64"
 )
 
 // PreFlightPortworx provides a set of APIs to uninstall portworx
@@ -354,6 +356,9 @@ func (u *preFlightPortworx) processPassedChecks(recorder record.EventRecorder) {
 
 	if u.cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil {
 		cmetaData := DefCmetaData
+		if pxutil.IsVsphere(u.cluster) {
+			cmetaData = DefCmetaVsphere
+		}
 		u.cluster.Spec.CloudStorage.SystemMdDeviceSpec = &cmetaData
 	}
 }
