@@ -1295,7 +1295,37 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 	for _, fn := range extensions {
 		volumeInfoList = append(volumeInfoList, fn()...)
 	}
+	volumeInfoList = t.overrideVolumeMount(volumeInfoList)
 	return t.mountsFromVolInfo(volumeInfoList)
+}
+
+func (t *template) overrideVolumeMount(volInfos []volumeInfo) []volumeInfo {
+	volPaths := map[string]int{}
+
+	for i := range volInfos {
+		volPaths[volInfos[i].mountPath] = i
+	}
+
+	for i := range t.cluster.Spec.Volumes {
+		v := t.cluster.Spec.Volumes[i]
+		existingVolIdx, ok := volPaths[v.MountPath]
+		if !ok {
+			volInfos = append(volInfos, volumeInfo{
+				name:             v.Name,
+				readOnly:         v.ReadOnly,
+				hostPath:         v.HostPath.String(),
+				mountPath:        v.MountPath,
+				mountPropagation: v.MountPropagation,
+				hostPathType:     v.HostPath.Type,
+				configMapType:    v.ConfigMap,
+			})
+		} else {
+			volInfos[existingVolIdx].hostPath = v.HostPath.String()
+			volInfos[existingVolIdx].mountPropagation = v.MountPropagation
+		}
+	}
+
+	return volInfos
 }
 
 func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
