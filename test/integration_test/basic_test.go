@@ -1137,7 +1137,7 @@ func InstallWithNodeTopologyLabels(tc *types.TestCase) func(*testing.T) {
 }
 
 // BasicGrafanaRegression does the following steps:
-// 1. Test Case: Grafana disabled by default
+// 1. Test Case: Install initial cluster and grafana disabled by default
 // 2. Test Case: Grafana disabled by default even with prometheus enabled
 // 3. Test Case: Grafana not installed when prometheus isn't enabled
 // 4. Test Case: Grafana installed once enabled with prometheus
@@ -1152,11 +1152,9 @@ func BasicGrafanaRegression(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
+		// 1. Test Case: Install initial cluster and grafana disabled by default
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
-
-		// 1. Test Case: Grafana disabled by default
-		// Validate monitoring block is nil
-		require.Nil(t, cluster.Spec.Monitoring, "failed to validate monitoring block, it should be nil by default, but it seems there is something set in there %+v", cluster.Spec.Monitoring)
+		require.Nil(t, cluster.Spec.Monitoring.Grafana, "failed to validate grafana block, it should be nil by default, but it seems there is something set in there %+v", cluster.Spec.Monitoring)
 
 		// 2. Test Case: Grafana disabled by default even with prometheus enabled
 		logrus.Info("Enable prometheus and validate StorageCluster")
