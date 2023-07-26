@@ -4436,3 +4436,105 @@ func assertContainerEqual(t *testing.T, expected, actual v1.Container) {
 	assert.ElementsMatch(t, expected.Env, actual.Env)
 	assert.ElementsMatch(t, expected.VolumeMounts, actual.VolumeMounts)
 }
+
+func Test_template_overrideVolumeMount(t *testing.T) {
+	testVols := getCommonVolumeList(pxutil.MinimumPxVersionAutoTLS)
+	hp0 := &v1.HostPathVolumeSource{
+		Path: "/test0",
+	}
+	overRideVols := append(testVols, []volumeInfo{}...)
+	for i := range overRideVols {
+		if overRideVols[i].name == "diagsdump" {
+			overRideVols[i].hostPath = hp0.String()
+			overRideVols[i].mountPropagation = mountPropagationModePtr(v1.MountPropagationBidirectional)
+			break
+		}
+	}
+
+	hp1 := &v1.HostPathVolumeSource{
+		Path: "/test1",
+	}
+	hp2 := &v1.HostPathVolumeSource{
+		Path: "/test1",
+	}
+	additionalMounts := append(testVols, volumeInfo{
+		name:             "test",
+		hostPath:         hp2.String(),
+		mountPath:        "/test2",
+		mountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
+	})
+	for i := range additionalMounts {
+		if additionalMounts[i].name == "diagsdump" {
+			additionalMounts[i].hostPath = hp1.String()
+			additionalMounts[i].mountPropagation = mountPropagationModePtr(v1.MountPropagationBidirectional)
+			break
+		}
+	}
+
+	tests := []struct {
+		name     string
+		vols     []corev1.VolumeSpec
+		volInfos []volumeInfo
+		want     []volumeInfo
+	}{
+		{
+			"no override",
+			[]corev1.VolumeSpec{},
+			testVols,
+			testVols,
+		},
+		{
+			"override existing volume mounts",
+			[]corev1.VolumeSpec{
+				{
+					Name:      "diagsdump",
+					MountPath: "/var/cores",
+					VolumeSource: v1.VolumeSource{
+						HostPath: hp0,
+					},
+					MountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
+				},
+			},
+			testVols,
+			overRideVols,
+		},
+		{
+			"override existing volume mounts and append new mounts",
+			[]corev1.VolumeSpec{
+				{
+					Name:      "diagsdump",
+					MountPath: "/var/cores",
+					VolumeSource: v1.VolumeSource{
+						HostPath: hp1,
+					},
+					MountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
+				},
+				{
+					Name:      "test",
+					MountPath: "/test2",
+					VolumeSource: v1.VolumeSource{
+						HostPath: hp2,
+					},
+					MountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
+				},
+			},
+			testVols,
+			additionalMounts,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := &template{
+				cluster: &corev1.StorageCluster{
+					Spec: corev1.StorageClusterSpec{
+						Volumes: tt.vols,
+					},
+				},
+			}
+			// if got := tr.overrideVolumeMount(tt.volInfos); !reflect.DeepEqual(got, tt.want) {
+			if got := tr.overrideVolumeMount(tt.volInfos); !assert.Equal(t, got, tt.want) {
+				t.Errorf("template.overrideVolumeMount() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
