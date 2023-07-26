@@ -63,6 +63,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 )
 
 const (
@@ -447,8 +448,10 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		err = c.client.List(context.TODO(), k8sNodeList)
 		if err == nil {
 			for _, node := range k8sNodeList.Items {
-				logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
-				c.createStorageNode(cluster, node.Name)
+				if !coreops.Instance().IsNodeMaster(node) {
+					logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
+					c.createStorageNode(cluster, node.Name)
+				}
 			}
 		} else {
 			logrus.WithError(err).Errorf("Failed to get cluster nodes")
