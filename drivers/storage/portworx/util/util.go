@@ -2,11 +2,13 @@ package util
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"math"
 	"net"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -27,6 +29,7 @@ import (
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -147,6 +150,10 @@ const (
 	AnnotationSCCPriority = pxAnnotationPrefix + "/scc-priority"
 	// AnnotationFACDTopology is added when FACD topology was successfully installed on a *new* cluster (it's blocked for existing clusters)
 	AnnotationFACDTopology = pxAnnotationPrefix + "/facd-topology"
+	// AnnotationServerTLSMinVersion sets up TLS-servers w/ requested TLS as minimal version
+	AnnotationServerTLSMinVersion = pxAnnotationPrefix + "/tls-min-version"
+	// AnnotationServerTLSCipherSuites sets up TLS-servers w/ requested cipher suites
+	AnnotationServerTLSCipherSuites = pxAnnotationPrefix + "/tls-cipher-suites"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -256,6 +263,10 @@ const (
 
 	// TelemetryCertName is name of the telemetry cert.
 	TelemetryCertName = "pure-telemetry-certs"
+	// HttpProtocolPrefix is the prefix for HTTP protocol
+	HttpProtocolPrefix = "http://"
+	// HttpsProtocolPrefix is the prefix for HTTPS protocol
+	HttpsProtocolPrefix = "https://"
 )
 
 var (
@@ -361,6 +372,11 @@ func GetCloudProvider(cluster *corev1.StorageCluster) string {
 	if IsVsphere(cluster) {
 		return cloudops.Vsphere
 	}
+
+	if len(preflight.Instance().ProviderName()) > 0 {
+		return preflight.Instance().ProviderName()
+	}
+
 	// TODO: implement conditions for other providers
 	return ""
 }
@@ -700,65 +716,39 @@ func GetPxProxyEnvVarValue(cluster *corev1.StorageCluster) (string, string) {
 	return "", ""
 }
 
-// SplitPxProxyHostPort trims protocol prefix then splits the proxy address of the form "host:port"
-func SplitPxProxyHostPort(proxy string) (string, string, error) {
-	proxy = strings.TrimPrefix(proxy, "http://")
-	proxy = strings.TrimPrefix(proxy, "https://")
-	address, port, err := net.SplitHostPort(proxy)
-	if err != nil {
-		return "", "", err
-	} else if address == "" || port == "" {
-		return "", "", fmt.Errorf("failed to split px proxy address %s", proxy)
-	}
-	return address, port, nil
-}
+var (
+	authHeader string
+)
 
-// GetValueFromEnvVar returns the value of v1.EnvVar Value or ValueFrom
-func GetValueFromEnvVar(ctx context.Context, client client.Client, envVar *v1.EnvVar, namespace string) (string, error) {
-
-	if valueFrom := envVar.ValueFrom; valueFrom != nil {
-		if valueFrom.SecretKeyRef != nil {
-			key := valueFrom.SecretKeyRef.Key
-			secretName := valueFrom.SecretKeyRef.Name
-
-			// Get secret key
-			secret := &v1.Secret{}
-			err := client.Get(ctx, types.NamespacedName{
-				Name:      secretName,
-				Namespace: namespace,
-			}, secret)
-			if err != nil {
-				return "", err
-			}
-			value := secret.Data[key]
-			if len(value) == 0 {
-				return "", fmt.Errorf("failed to find env var value %s in secret %s in namespace %s", key, secretName, namespace)
-			}
-
-			return string(value), nil
-		} else if valueFrom.ConfigMapKeyRef != nil {
-			cmName := valueFrom.ConfigMapKeyRef.Name
-			key := valueFrom.ConfigMapKeyRef.Key
-			configMap := &v1.ConfigMap{}
-			if err := client.Get(ctx, types.NamespacedName{
-				Name:      cmName,
-				Namespace: namespace,
-			}, configMap); err != nil {
-				return "", err
-			}
-
-			value, ok := configMap.Data[key]
-			if !ok {
-				return "", fmt.Errorf("failed to find env var value %s in configmap %s in namespace %s", key, cmName, namespace)
-			}
-
-			return value, nil
+// ParsePxProxy trims protocol prefix then splits the proxy address of the form "host:port" with possible basic authentication credential
+func ParsePxProxyURL(proxy string) (string, string, string, error) {
+	if strings.HasPrefix(proxy, HttpsProtocolPrefix) && strings.Contains(proxy, "@") {
+		proxyUrl, err := url.Parse(proxy)
+		if err != nil {
+			return "", "", "", fmt.Errorf("failed to parse px proxy url %s", proxy)
 		}
+		username := proxyUrl.User.Username()
+		password, _ := proxyUrl.User.Password()
+		encodedAuth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+		authHeader = fmt.Sprintf("Basic %s", encodedAuth)
+		host, port, err := net.SplitHostPort(proxyUrl.Host)
+		if err != nil {
+			return "", "", "", err
+		} else if host == "" || port == "" || encodedAuth == "" {
+			return "", "", "", fmt.Errorf("failed to split px proxy to get host and port %s", proxy)
+		}
+		return host, port, authHeader, nil
 	} else {
-		return envVar.Value, nil
+		proxy = strings.TrimPrefix(proxy, HttpProtocolPrefix)
+		proxy = strings.TrimPrefix(proxy, HttpsProtocolPrefix) // treat https proxy as http proxy if no credential provided
+		host, port, err := net.SplitHostPort(proxy)
+		if err != nil {
+			return "", "", "", err
+		} else if host == "" || port == "" {
+			return "", "", "", fmt.Errorf("failed to split px proxy to get host and port %s", proxy)
+		}
+		return host, port, authHeader, nil
 	}
-
-	return "", nil
 }
 
 func getSpecsBaseDir() string {
@@ -1443,4 +1433,64 @@ func SetTelemetryCertOwnerRef(
 	secret.OwnerReferences = references
 
 	return k8sClient.Update(context.TODO(), secret)
+}
+
+// GetTLSMinVersion gets requested TLS version and validates it
+func GetTLSMinVersion(cluster *corev1.StorageCluster) (string, error) {
+	req := cluster.Annotations[AnnotationServerTLSMinVersion]
+	if req == "" {
+		return "", nil
+	}
+	req = strings.Trim(req, " \t")
+
+	switch strings.ToUpper(req) {
+	case "VERSIONTLS10":
+		return "VersionTLS10", nil
+	case "VERSIONTLS11":
+		return "VersionTLS11", nil
+	case "VERSIONTLS12":
+		return "VersionTLS12", nil
+	case "VERSIONTLS13":
+		return "VersionTLS13", nil
+	}
+
+	return "", fmt.Errorf("invalid TLS version: expected one of VersionTLS1{0..3}, got %s", req)
+}
+
+// GetTLSCipherSuites gets requested TLS ciphers suites and validates it
+// - RETURN: the normalized comma-separated list of cipher suites, or error if requested unknown cipher
+func GetTLSCipherSuites(cluster *corev1.StorageCluster) (string, error) {
+	req := cluster.Annotations[AnnotationServerTLSCipherSuites]
+	if req == "" {
+		return "", nil
+	}
+
+	csMap := make(map[string]bool)
+	for _, c := range tls.CipherSuites() {
+		csMap[c.Name] = true
+	}
+	icsMap := make(map[string]bool)
+	for _, c := range tls.InsecureCipherSuites() {
+		icsMap[c.Name] = true
+	}
+
+	req = strings.ToUpper(req)
+	parts := strings.FieldsFunc(req, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == ':' || r == ';' || r == ','
+	})
+	outList := make([]string, 0, len(parts))
+
+	for _, p := range parts {
+		if p == "" {
+			// nop..
+		} else if _, has := csMap[p]; has {
+			outList = append(outList, p)
+		} else if _, has = icsMap[p]; has {
+			logrus.Warnf("Requested insecure cipher suite %s", p)
+			outList = append(outList, p)
+		} else {
+			return "", fmt.Errorf("unknown cipher suite %s", p)
+		}
+	}
+	return strings.Join(outList, ","), nil
 }
