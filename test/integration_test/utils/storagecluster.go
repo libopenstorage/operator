@@ -333,7 +333,7 @@ func UpdateAndValidateGrafana(cluster *corev1.StorageCluster, f func(*corev1.Sto
 	latestLiveCluster, err := UpdateStorageCluster(newCluster)
 	require.NoError(t, err)
 
-	err = testutil.ValidateGrafana(pxSpecImages, cluster)
+	err = testutil.ValidateGrafana(pxSpecImages, latestLiveCluster)
 	require.NoError(t, err)
 
 	return latestLiveCluster

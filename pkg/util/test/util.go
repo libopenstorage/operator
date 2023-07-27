@@ -2997,9 +2997,9 @@ func ValidateGrafana(pxImageList map[string]string, cluster *corev1.StorageClust
 		return nil
 	}
 
-	shouldBeInstalled := cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Grafana != nil &&
-		cluster.Spec.Monitoring.Grafana.Enabled && cluster.Spec.Monitoring.Prometheus != nil &&
-		cluster.Spec.Monitoring.Prometheus.Enabled
+	shouldBeInstalled := cluster.Spec.Monitoring != nil &&
+		cluster.Spec.Monitoring.Grafana != nil && cluster.Spec.Monitoring.Grafana.Enabled &&
+		cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.Enabled
 	err = ValidateGrafanaDeployment(cluster, shouldBeInstalled, pxImageList)
 	if err != nil {
 		return err
@@ -3017,13 +3017,24 @@ func ValidateGrafana(pxImageList map[string]string, cluster *corev1.StorageClust
 }
 
 func ValidateGrafanaDeployment(cluster *corev1.StorageCluster, shouldBeInstalled bool, pxImageList map[string]string) error {
-	deployment, err := appops.Instance().GetDeployment("px-grafana", cluster.Namespace)
-	if err != nil {
-		return fmt.Errorf("failed to get deployment in ns %v: %v", cluster.Namespace, err)
-	}
 
-	if err := appops.Instance().ValidateDeployment(deployment, 2*time.Minute, 10*time.Second); err != nil {
-		return err
+	// Deployment to validate
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-grafana",
+			Namespace: cluster.Namespace,
+		},
+	}
+	if shouldBeInstalled {
+		if err := appops.Instance().ValidateDeployment(deployment, 2*time.Minute, 10*time.Second); err != nil {
+			return fmt.Errorf("failed to validate deployment %s/%s. should be installed: %v. err: %v",
+				deployment.Namespace, deployment.Name, shouldBeInstalled, err)
+		}
+	} else {
+		if err := appops.Instance().ValidateTerminatedDeployment(deployment, 2*time.Minute, 10*time.Second); err != nil {
+			return fmt.Errorf("failed to validate terminated deployment %s/%s. should be installed: %v. err: %v",
+				deployment.Namespace, deployment.Name, shouldBeInstalled, err)
+		}
 	}
 
 	return nil
