@@ -33,7 +33,7 @@ const (
 	// PxPreFlightServiceAccountName name of portworx pre flight service account
 	PxPreFlightServiceAccountName = "px-pre-flight"
 	// DefCmetaData default metadata cloud device for DMthin AWS
-	DefCmetaData = "type=gp3,size=64"
+	DefCmetaAWS = "type=gp3,size=64"
 	// DefCmetaVsphere default metadata cloud device for DMthin Vsphere
 	DefCmetaVsphere = "type=eagerzeroedthick,size=64"
 )
@@ -355,7 +355,7 @@ func (u *preFlightPortworx) processPassedChecks(recorder record.EventRecorder) {
 	}
 
 	if u.cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil {
-		cmetaData := DefCmetaData
+		cmetaData := DefCmetaAWS
 		if pxutil.IsVsphere(u.cluster) {
 			cmetaData = DefCmetaVsphere
 		}

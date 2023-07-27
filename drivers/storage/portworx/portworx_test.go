@@ -177,7 +177,7 @@ func TestValidate(t *testing.T) {
 	<-recorder.Events // Pop first event which is Default telemetry enabled event
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling PX-StoreV2"))
-	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaData)
+	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaAWS)
 
 	//
 	// Validate Pre-flight Daemonset Pod Spec
