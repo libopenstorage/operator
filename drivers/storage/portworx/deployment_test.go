@@ -4455,7 +4455,7 @@ func Test_template_overrideVolumeMount(t *testing.T) {
 		Path: "/test1",
 	}
 	hp2 := &v1.HostPathVolumeSource{
-		Path: "/test1",
+		Path: "/test2",
 	}
 	additionalMounts := append(testVols, volumeInfo{
 		name:             "test",
