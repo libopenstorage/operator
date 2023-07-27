@@ -209,11 +209,11 @@ func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error
 
 func TestShouldPodBeOnNode(t *testing.T) {
 	// Diag is nil: should return false
-	should := shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, nil)
+	should := shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, nil, nil)
 	require.False(t, should)
 
 	// Diag.Spec.Portworx is nil: should return false
-	should = shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, &diagv1.PortworxDiag{
+	should = shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: nil,
 		},
@@ -221,7 +221,7 @@ func TestShouldPodBeOnNode(t *testing.T) {
 	require.False(t, should)
 
 	// NodeSelector.All is true: should return true
-	should = shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, &diagv1.PortworxDiag{
+	should = shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: &diagv1.PortworxComponent{
 				NodeSelector: diagv1.NodeSelector{
@@ -233,7 +233,7 @@ func TestShouldPodBeOnNode(t *testing.T) {
 	require.True(t, should)
 
 	// NodeSelector.All is false, NodeSelector.IDs is nil and NodeSelector.Labels is nil: should return true
-	should = shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, &diagv1.PortworxDiag{
+	should = shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: &diagv1.PortworxComponent{
 				NodeSelector: diagv1.NodeSelector{
@@ -246,7 +246,7 @@ func TestShouldPodBeOnNode(t *testing.T) {
 	require.False(t, should)
 
 	// NodeSelector.All is false, NodeSelector.IDs is empty and NodeSelector.Labels is empty: should return false
-	should = shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, &diagv1.PortworxDiag{
+	should = shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: &diagv1.PortworxComponent{
 				NodeSelector: diagv1.NodeSelector{
@@ -259,7 +259,7 @@ func TestShouldPodBeOnNode(t *testing.T) {
 	require.False(t, should)
 
 	// NodeSelector.IDs contains the given node ID: should return true
-	should = shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, &diagv1.PortworxDiag{
+	should = shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: &diagv1.PortworxComponent{
 				NodeSelector: diagv1.NodeSelector{
@@ -271,7 +271,7 @@ func TestShouldPodBeOnNode(t *testing.T) {
 	require.True(t, should)
 
 	// NodeSelector.IDs contains some node IDs but not the given node ID: should return false
-	should = shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, &diagv1.PortworxDiag{
+	should = shouldPodBeOnNode("some-uuid", "node1", []v1.Node{}, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: &diagv1.PortworxComponent{
 				NodeSelector: diagv1.NodeSelector{
@@ -289,7 +289,7 @@ func TestShouldPodBeOnNode(t *testing.T) {
 				Name: "node2",
 			},
 		},
-	}, &diagv1.PortworxDiag{
+	}, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: &diagv1.PortworxComponent{
 				NodeSelector: diagv1.NodeSelector{
@@ -312,7 +312,7 @@ func TestShouldPodBeOnNode(t *testing.T) {
 				},
 			},
 		},
-	}, &diagv1.PortworxDiag{
+	}, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: &diagv1.PortworxComponent{
 				NodeSelector: diagv1.NodeSelector{
@@ -335,7 +335,7 @@ func TestShouldPodBeOnNode(t *testing.T) {
 				},
 			},
 		},
-	}, &diagv1.PortworxDiag{
+	}, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: &diagv1.PortworxComponent{
 				NodeSelector: diagv1.NodeSelector{
@@ -358,7 +358,7 @@ func TestShouldPodBeOnNode(t *testing.T) {
 				},
 			},
 		},
-	}, &diagv1.PortworxDiag{
+	}, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: &diagv1.PortworxComponent{
 				NodeSelector: diagv1.NodeSelector{
@@ -382,7 +382,7 @@ func TestShouldPodBeOnNode(t *testing.T) {
 				},
 			},
 		},
-	}, &diagv1.PortworxDiag{
+	}, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: &diagv1.PortworxComponent{
 				NodeSelector: diagv1.NodeSelector{
@@ -410,7 +410,7 @@ func TestShouldPodBeOnNode(t *testing.T) {
 	// Both node1 and node2 should be valid
 	// node1 because it has the correct ID
 	// node2 because it has the correct label
-	should = shouldPodBeOnNode("some-uuid", "node1", nodes, &diagv1.PortworxDiag{
+	should = shouldPodBeOnNode("some-uuid", "node1", nodes, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: &diagv1.PortworxComponent{
 				NodeSelector: diagv1.NodeSelector{
@@ -423,7 +423,7 @@ func TestShouldPodBeOnNode(t *testing.T) {
 		},
 	})
 	require.True(t, should)
-	should = shouldPodBeOnNode("some-uuid", "node2", nodes, &diagv1.PortworxDiag{
+	should = shouldPodBeOnNode("some-uuid", "node2", nodes, nil, &diagv1.PortworxDiag{
 		Spec: diagv1.PortworxDiagSpec{
 			Portworx: &diagv1.PortworxComponent{
 				NodeSelector: diagv1.NodeSelector{
@@ -522,16 +522,17 @@ func TestGetNodeIDToStatusMap(t *testing.T) {
 }
 
 func TestGetPodsDiff(t *testing.T) {
-	// Node 0 will be missing a status entirely (should add a status and create a pod)
+	c := Controller{}
+
+	// Node 0 will be missing a status entirely: as node statuses is already populated we won't add a new entry
 	// Node 1 will have a status but be missing a pod (should create a pod)
 	// Node 2 will be completed successfully (should delete a pod)
 	// Node 3 will be completed and failed (should delete a pod)
 	// Node 4 will be in progress (should not change anything)
 	// Node 5 will not match the selector (should delete the existing pod)
-	// Node 6 will not match the selector (should not create a new pod)
 
 	// Test object setup
-	n := 7
+	n := 6
 	pods := make([]v1.Pod, n)
 	nodes := make([]v1.Node, n)
 	nodeIDToName := make(map[string]string)
@@ -544,8 +545,8 @@ func TestGetPodsDiff(t *testing.T) {
 		nodeIDToName[fmt.Sprintf("id%d", i)] = fmt.Sprintf("node%d", i)
 	}
 
-	prs, err := getPodsDiff(
-		&v1.PodList{Items: pods[2:6]}, // Only pass in a subset of the nodes to simulate some not existing
+	prs, err := c.getPodsDiff(
+		&v1.PodList{Items: pods[2:]}, // Only pass in a subset of the nodes to simulate some not existing
 		&v1.NodeList{Items: nodes},
 		&diagv1.PortworxDiag{
 			Spec: diagv1.PortworxDiagSpec{
@@ -561,18 +562,11 @@ func TestGetPodsDiff(t *testing.T) {
 					{NodeID: "id2", Status: diagv1.NodeStatusCompleted},
 					{NodeID: "id3", Status: diagv1.NodeStatusFailed},
 					{NodeID: "id4", Status: diagv1.NodeStatusInProgress},
-					{NodeID: "id5", Status: diagv1.NodeStatusInProgress},
-					{NodeID: "id6", Status: diagv1.NodeStatusInProgress},
 				},
 			},
-		}, nodeIDToName)
-	require.ElementsMatch(t, prs.nodeStatusesToAdd, []*diagv1.NodeStatus{
-		{
-			NodeID: "id0",
-			Status: diagv1.NodeStatusPending,
-		},
-	})
-	require.ElementsMatch(t, prs.nodesToCreatePodsFor, []string{"node0", "node1"})
+		}, nil, nodeIDToName)
+	require.Empty(t, prs.nodeStatusesToAdd)
+	require.ElementsMatch(t, prs.nodesToCreatePodsFor, []string{"node1"})
 	require.ElementsMatch(t, prs.podsToDelete, []*v1.Pod{&pods[2], &pods[3], &pods[5]})
 	require.NoError(t, err)
 }
