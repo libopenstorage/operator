@@ -89,6 +89,10 @@ func InitPreflightChecker(client client.Client) error {
 		instance = &aws{
 			checker: *c,
 		}
+	} else if IsGKE() {
+		instance = &gce{
+			checker: *c,
+		}
 	}
 
 	return nil
@@ -122,8 +126,9 @@ func getK8sDistributionName() (string, error) {
 	logrus.Infof("cluster is running k8s distribution %s", k8sVersion.String())
 	if strings.Contains(strings.ToLower(k8sVersion.String()), eksDistribution) {
 		return eksDistribution, nil
+	} else if strings.Contains(strings.ToLower(k8sVersion.String()), gkeDistribution) {
+		return gkeDistribution, nil
 	}
-
 	// TODO: detect other k8s distribution names
 	return "", nil
 }

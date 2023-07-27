@@ -432,6 +432,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 	if preflight.IsEKS() {
 		toUpdate.Annotations[pxutil.AnnotationIsEKS] = "true"
+	} else if preflight.IsGKE() {
+		toUpdate.Annotations[pxutil.AnnotationIsGKE] = "true"
 	}
 
 	removeDeprecatedFields(toUpdate)
@@ -566,6 +568,14 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				(toUpdate.Status.DesiredImages.Grafana == "" || pxVersionChanged || grafanaVersionChanged) {
 				toUpdate.Status.DesiredImages.Grafana = release.Components.Grafana
 			}
+		}
+
+		if toUpdate.Status.DesiredImages.DynamicPlugin == "" || pxVersionChanged {
+			toUpdate.Status.DesiredImages.DynamicPlugin = release.Components.DynamicPlugin
+		}
+
+		if toUpdate.Status.DesiredImages.DynamicPluginProxy == "" || pxVersionChanged {
+			toUpdate.Status.DesiredImages.DynamicPluginProxy = release.Components.DynamicPluginProxy
 		}
 
 		// set misc image defaults
