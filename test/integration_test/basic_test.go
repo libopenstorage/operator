@@ -178,7 +178,11 @@ var testStorageClusterBasicCases = []types.TestCase{
 		}),
 		TestFunc: BasicGrafanaRegression,
 		ShouldSkip: func(tc *types.TestCase) bool {
-			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer23_8)
+			skip := ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer23_8)
+			if skip {
+				logrus.Info("Skipping BasicGrafanaRegression since operator version is less than 23.8.x")
+			}
+			return skip
 		},
 	},
 	{
