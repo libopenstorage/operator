@@ -1280,5 +1280,8 @@ func BasicGrafanaRegression(tc *types.TestCase) func(*testing.T) {
 		}
 		cluster = ci_utils.UpdateAndValidateGrafana(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 		require.Nil(t, cluster.Spec.Monitoring, "failed to validate Monitoring block, it should be nil here, but it is not: %+v", cluster.Spec.Monitoring)
+
+		// Delete and validate StorageCluster deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 	}
 }

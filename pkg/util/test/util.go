@@ -3019,7 +3019,7 @@ func ValidateGrafana(pxImageList map[string]string, cluster *corev1.StorageClust
 func ValidateGrafanaDeployment(cluster *corev1.StorageCluster, shouldBeInstalled bool, pxImageList map[string]string) error {
 	deployment, err := appops.Instance().GetDeployment("px-grafana", cluster.Namespace)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get deployment in ns %v: %v", cluster.Namespace, err)
 	}
 
 	if err := appops.Instance().ValidateDeployment(deployment, 2*time.Minute, 10*time.Second); err != nil {
