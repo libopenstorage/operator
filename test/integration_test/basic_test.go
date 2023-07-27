@@ -177,6 +177,9 @@ var testStorageClusterBasicCases = []types.TestCase{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-stc"},
 		}),
 		TestFunc: BasicGrafanaRegression,
+		ShouldSkip: func(tc *types.TestCase) bool {
+			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer23_8)
+		},
 	},
 	{
 		TestName:        "BasicPvcControllerRegression",
