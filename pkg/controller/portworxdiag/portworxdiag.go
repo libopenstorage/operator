@@ -103,6 +103,18 @@ func (c *Controller) StartWatch() error {
 		return fmt.Errorf("failed to watch PortworxDiags: %v", err)
 	}
 
+	// Watch for changes to Pods that belong to PortworxDiag object
+	err = c.ctrl.Watch(
+		&source.Kind{Type: &v1.Pod{}},
+		&handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &diagv1.PortworxDiag{},
+		},
+	)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
