@@ -245,7 +245,7 @@ func getNodeIDToStatusMap(nodeStatuses []diagv1.NodeStatus) map[string]string {
 }
 
 func (c *Controller) getNodeIDsWithSelectedVolumes(diag *diagv1.PortworxDiag, stc *corev1.StorageCluster) ([]string, error) {
-	if diag == nil || diag.Spec.Portworx == nil || diag.Spec.Portworx.VolumeSelector.IDs == nil || diag.Spec.Portworx.VolumeSelector.Labels == nil {
+	if diag == nil || diag.Spec.Portworx == nil || (diag.Spec.Portworx.VolumeSelector.IDs == nil && diag.Spec.Portworx.VolumeSelector.Labels == nil) {
 		return []string{}, nil
 	}
 
@@ -689,11 +689,11 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 	stc, err := c.fetchSTC()
 	if err != nil {
 		logrus.WithError(err).Error("Failed to find StorageCluster object")
-		k8s.WarningEvent(c.recorder, diag, util.FailedSyncReason, fmt.Sprintf("Failed to find StorageCluster object %s in namespace %s: %v", stc.Name, stc.Namespace, err))
-		err = c.patchPhase(diag, diagv1.DiagStatusFailed, fmt.Sprintf("Failed to find StorageCluster object %s in namespace %s: %v", stc.Name, stc.Namespace, err))
-		if err != nil {
-			k8s.WarningEvent(c.recorder, diag, util.FailedSyncReason, fmt.Sprintf("failed to patch PortworxDiag with %s status: %v", diagv1.DiagStatusFailed, err))
-			return fmt.Errorf("failed to patch PortworxDiag with %s status: %v", diagv1.DiagStatusFailed, err)
+		k8s.WarningEvent(c.recorder, diag, util.FailedSyncReason, fmt.Sprintf("Failed to find StorageCluster object: %v", err))
+		patchErr := c.patchPhase(diag, diagv1.DiagStatusFailed, fmt.Sprintf("Failed to find StorageCluster object: %v", err))
+		if patchErr != nil {
+			k8s.WarningEvent(c.recorder, diag, util.FailedSyncReason, fmt.Sprintf("failed to patch PortworxDiag with %s status: %v", diagv1.DiagStatusFailed, patchErr))
+			return fmt.Errorf("failed to patch PortworxDiag with %s status: %v", diagv1.DiagStatusFailed, patchErr)
 		}
 
 		return fmt.Errorf("failed to find StorageCluster object: %v", err)
