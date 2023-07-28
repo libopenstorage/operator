@@ -635,6 +635,9 @@ func getCSIDeploymentSpec(
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: CSIServiceAccountName,
+					NodeSelector: map[string]string{
+						"kubernetes.io/os": "linux",
+					},
 					Containers: []v1.Container{
 						{
 							Name:            csiProvisionerContainerName,

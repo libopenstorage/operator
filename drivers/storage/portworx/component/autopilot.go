@@ -526,6 +526,9 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: AutopilotServiceAccountName,
+					NodeSelector: map[string]string{
+						"kubernetes.io/os": "linux",
+					},
 					Containers: []v1.Container{
 						{
 							Name:            AutopilotContainerName,

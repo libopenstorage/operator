@@ -511,6 +511,9 @@ func getPrometheusOperatorDeploymentSpec(
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: PrometheusOperatorServiceAccountName,
+					NodeSelector: map[string]string{
+						"kubernetes.io/os": "linux",
+					},
 					Containers: []v1.Container{
 						{
 							Name:            "px-prometheus-operator",

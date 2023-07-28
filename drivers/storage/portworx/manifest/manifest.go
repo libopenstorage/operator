@@ -96,6 +96,7 @@ type Release struct {
 	Pause                      string `yaml:"pause,omitempty"`
 	DynamicPlugin              string `yaml:"dynamicPlugin,omitempty"`
 	DynamicPluginProxy         string `yaml:"dynamicPluginProxy,omitempty"`
+	LivenessProbe              string `yaml:"livenessProbe,omitempty"`
 }
 
 // Version is the response structure from a versions source

@@ -586,6 +586,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			{&toUpdate.Status.DesiredImages.KubeControllerManager, release.Components.KubeControllerManager},
 			{&toUpdate.Status.DesiredImages.KubeScheduler, release.Components.KubeScheduler},
 			{&toUpdate.Status.DesiredImages.Pause, release.Components.Pause},
+			{&toUpdate.Status.DesiredImages.LivenessProbe, release.Components.LivenessProbe},
 		}
 		for _, v := range imagesData {
 			if *v.desiredImage == "" {
