@@ -814,7 +814,7 @@ func BasicPvcControllerRegression(tc *types.TestCase) func(*testing.T) {
 			cluster.Annotations["portworx.io/pvc-controller"] = "true"
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 		require.Equal(t, cluster.Annotations["portworx.io/pvc-controller"], "true")
 
 		logrus.Info("Set PVC Controller custom secure-port in the annotations and validate StorageCluster")
@@ -822,7 +822,7 @@ func BasicPvcControllerRegression(tc *types.TestCase) func(*testing.T) {
 			cluster.Annotations["portworx.io/pvc-controller-secure-port"] = "1111"
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 		require.Equal(t, cluster.Annotations["portworx.io/pvc-controller-secure-port"], "1111")
 
 		logrus.Info("Delete PVC Controller custom secure-port from the annotations and validate StorageCluster")
@@ -830,7 +830,7 @@ func BasicPvcControllerRegression(tc *types.TestCase) func(*testing.T) {
 			delete(cluster.Annotations, "portworx.io/pvc-controller-secure-port")
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 		require.Empty(t, cluster.Annotations["portworx.io/pvc-controller-secure-port"], "failed to validate portworx.io/pvc-controller-secure-port annotation, it shouldn't be here, because it was deleted")
 
 		logrus.Info("Disable PVC Controller annotation and validate StorageCluster")
@@ -838,7 +838,7 @@ func BasicPvcControllerRegression(tc *types.TestCase) func(*testing.T) {
 			cluster.Annotations["portworx.io/pvc-controller"] = "false"
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 		require.Equal(t, cluster.Annotations["portworx.io/pvc-controller"], "false")
 
 		logrus.Info("Delete PVC Controller annotation and validate StorageCluster")
@@ -846,7 +846,7 @@ func BasicPvcControllerRegression(tc *types.TestCase) func(*testing.T) {
 			delete(cluster.Annotations, "portworx.io/pvc-controller")
 			return cluster
 		}
-		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, ci_utils.K8sVersion, t)
+		cluster = ci_utils.UpdateAndValidatePvcController(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
 		require.Empty(t, cluster.Annotations["portworx.io/pvc-controller"], "failed to validate portworx.io/pvc-controller annotation, it shouldn't be here, because it was deleted")
 
 		// Delete and validate StorageCluster deletion
