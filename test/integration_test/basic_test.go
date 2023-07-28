@@ -171,6 +171,21 @@ var testStorageClusterBasicCases = []types.TestCase{
 		TestFunc: BasicAutopilotRegression,
 	},
 	{
+		TestName:        "BasicGrafanaRegression",
+		TestrailCaseIDs: []string{},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-stc"},
+		}),
+		TestFunc: BasicGrafanaRegression,
+		ShouldSkip: func(tc *types.TestCase) bool {
+			skip := ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer23_8)
+			if skip {
+				logrus.Info("Skipping BasicGrafanaRegression since operator version is less than 23.8.x")
+			}
+			return skip
+		},
+	},
+	{
 		TestName:        "BasicPvcControllerRegression",
 		TestrailCaseIDs: []string{"C58438", "C54697", "C54698", "C54707", "C58437", "C54476", "C54477"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
@@ -1125,5 +1140,148 @@ func InstallWithNodeTopologyLabels(tc *types.TestCase) func(*testing.T) {
 				require.NoError(t, err)
 			}
 		}
+	}
+}
+
+// BasicGrafanaRegression does the following steps:
+// 1. Test Case: Install initial cluster and grafana disabled by default
+// 2. Test Case: Grafana disabled by default even with prometheus enabled
+// 3. Test Case: Grafana not installed when prometheus isn't enabled
+// 4. Test Case: Grafana installed once enabled with prometheus
+// 5. Test Case: Grafana disabled once prometheus is disabled
+// 6. Test Case: Grafana disabled if grafana is disabled as well
+// 7. Test Case: Grafana disabled if prometheus spec is removed
+// 8. Test Case: Grafana disabled if grafana spec is removed
+// 9. Test Case: Grafana disabled if monitoring spec is removed
+func BasicGrafanaRegression(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		// 1. Test Case: Install initial cluster and grafana disabled by default
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		require.Nil(t, cluster.Spec.Monitoring.Grafana, "failed to validate grafana block, it should be nil by default, but it seems there is something set in there %+v", cluster.Spec.Monitoring)
+
+		// 2. Test Case: Grafana disabled by default even with prometheus enabled
+		logrus.Info("Enable prometheus and validate StorageCluster")
+		updateParamFunc := func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: true,
+				},
+			}
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateGrafana(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NotNil(t, cluster.Spec.Monitoring, "failed to validate monitoring block, it should not be nil here, but it is: %+v", cluster.Spec.Monitoring)
+		require.NotNil(t, cluster.Spec.Monitoring.Prometheus, "failed to validate prometheus block, it should not be nil here, but it is: %+v", cluster.Spec.Monitoring.Prometheus)
+		require.True(t, cluster.Spec.Monitoring.Prometheus.Enabled, "failed to validate Prometheus is enabled: expected: true, actual: %v", cluster.Spec.Monitoring.Prometheus.Enabled)
+
+		// 3. Test Case: Grafana not installed when prometheus isn't enabled
+		logrus.Info("Enable only grafana and validate StorageCluster")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: false,
+				},
+				Grafana: &corev1.GrafanaSpec{
+					Enabled: true,
+				},
+			}
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateGrafana(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NotNil(t, cluster.Spec.Monitoring, "failed to validate monitoring block, it should not be nil here, but it is: %+v", cluster.Spec.Monitoring)
+		require.NotNil(t, cluster.Spec.Monitoring.Grafana, "failed to validate Grafana block, it should not be nil here, but it is: %+v", cluster.Spec.Monitoring.Grafana)
+		require.True(t, cluster.Spec.Monitoring.Grafana.Enabled, "failed to validate Grafana is enabled: expected: true, actual: %v", cluster.Spec.Monitoring.Grafana.Enabled)
+
+		// 4. Test Case: Grafana installed once enabled with prometheus
+		logrus.Info("Enable both grafana and prometheus and validate StorageCluster")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: true,
+				},
+				Grafana: &corev1.GrafanaSpec{
+					Enabled: true,
+				},
+			}
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateGrafana(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NotNil(t, cluster.Spec.Monitoring, "failed to validate monitoring block, it should not be nil here, but it is: %+v", cluster.Spec.Monitoring)
+		require.NotNil(t, cluster.Spec.Monitoring.Grafana, "failed to validate Grafana block, it should not be nil here, but it is: %+v", cluster.Spec.Monitoring.Grafana)
+		require.True(t, cluster.Spec.Monitoring.Grafana.Enabled, "failed to validate Grafana is enabled: expected: true, actual: %v", cluster.Spec.Monitoring.Grafana.Enabled)
+		require.NotNil(t, cluster.Spec.Monitoring.Prometheus, "failed to validate Prometheus block, it should not be nil here, but it is: %+v", cluster.Spec.Monitoring.Prometheus)
+		require.True(t, cluster.Spec.Monitoring.Prometheus.Enabled, "failed to validate Prometheus is enabled: expected: true, actual: %v", cluster.Spec.Monitoring.Prometheus.Enabled)
+
+		// 5. Test Case: Grafana disabled once prometheus is disabled
+		logrus.Info("Disable prometheus and validate StorageCluster")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: false,
+				},
+				Grafana: &corev1.GrafanaSpec{
+					Enabled: true,
+				},
+			}
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateGrafana(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NotNil(t, cluster.Spec.Monitoring, "failed to validate monitoring block, it should not be nil here, but it is: %+v", cluster.Spec.Monitoring)
+		require.NotNil(t, cluster.Spec.Monitoring.Grafana, "failed to validate Grafana block, it should not be nil here, but it is: %+v", cluster.Spec.Monitoring.Grafana)
+		require.True(t, cluster.Spec.Monitoring.Grafana.Enabled, "failed to validate Grafana is enabled: expected: true, actual: %v", cluster.Spec.Monitoring.Grafana.Enabled)
+		require.NotNil(t, cluster.Spec.Monitoring.Prometheus, "failed to validate Prometheus block, it should not be nil here, but it is: %+v", cluster.Spec.Monitoring.Prometheus)
+		require.False(t, cluster.Spec.Monitoring.Prometheus.Enabled, "failed to validate Prometheus is disabled: expected: false, actual: %v", cluster.Spec.Monitoring.Prometheus.Enabled)
+
+		// 6. Test Case: Grafana disabled if grafana is disabled as well
+		logrus.Info("Disable grafana and validate StorageCluster")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring = &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: false,
+				},
+				Grafana: &corev1.GrafanaSpec{
+					Enabled: false,
+				},
+			}
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateGrafana(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.NotNil(t, cluster.Spec.Monitoring, "failed to validate monitoring block, it should not be nil here, but it is: %+v", cluster.Spec.Monitoring)
+		require.NotNil(t, cluster.Spec.Monitoring.Grafana, "failed to validate Grafana block, it should not be nil here, but it is: %+v", cluster.Spec.Monitoring.Grafana)
+		require.False(t, cluster.Spec.Monitoring.Grafana.Enabled, "failed to validate Grafana is disabled: expected: false, actual: %v", cluster.Spec.Monitoring.Grafana.Enabled)
+
+		// 7. Test Case: Grafana disabled if prometheus spec is removed
+		logrus.Info("Remove Prometheus block (set it to nil) and validate StorageCluster")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring.Prometheus = nil
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateGrafana(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.Nil(t, cluster.Spec.Monitoring.Prometheus, "failed to validate Prometheus block, it should be nil here, but it is not: %+v", cluster.Spec.Monitoring.Prometheus)
+
+		// 8. Test Case: Grafana disabled if grafana spec is removed
+		logrus.Info("Remove Grafana block (set it to nil) and validate StorageCluster")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring.Grafana = nil
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateGrafana(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.Nil(t, cluster.Spec.Monitoring.Grafana, "failed to validate Grafana block, it should be nil here, but it is not: %+v", cluster.Spec.Monitoring.Grafana)
+
+		// 9. Test Case: Grafana disabled if monitoring spec is removed
+		logrus.Info("Remove Monitoring block (set it to nil) and validate StorageCluster")
+		updateParamFunc = func(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+			cluster.Spec.Monitoring = nil
+			return cluster
+		}
+		cluster = ci_utils.UpdateAndValidateGrafana(cluster, updateParamFunc, ci_utils.PxSpecImages, t)
+		require.Nil(t, cluster.Spec.Monitoring, "failed to validate Monitoring block, it should be nil here, but it is not: %+v", cluster.Spec.Monitoring)
+
+		// Delete and validate StorageCluster deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 	}
 }
