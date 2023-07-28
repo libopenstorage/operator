@@ -5,11 +5,11 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: csi-pwx-node-win
+      app: px-csi-node-win
   template:
     metadata:
       labels:
-        app: csi-pwx-node-win
+        app: px-csi-node-win
     spec:
       containers:
         - args:
@@ -89,8 +89,8 @@ spec:
       securityContext: {}
       terminationGracePeriodSeconds: 30
       tolerations:
-        - key: os
-          value: Windows
+      - key: os
+        value: Windows
       volumes:
         - hostPath:
             path: \\.\pipe\csi-proxy-filesystem-v1
