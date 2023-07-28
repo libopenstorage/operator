@@ -164,8 +164,11 @@ var (
 	opVer1_10, _                      = version.NewVersion("1.10.0-")
 	opVer23_3, _                      = version.NewVersion("23.3.0-")
 	opVer23_5, _                      = version.NewVersion("23.5.0-")
+	opVer23_5_1, _                    = version.NewVersion("23.5.1-")
 	opVer23_7, _                      = version.NewVersion("23.7.0-")
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
+
+	pxVer3_0, _ = version.NewVersion("3.0")
 
 	// minimumPxVersionCCMJAVA minimum PX version to install ccm-java
 	minimumPxVersionCCMJAVA, _ = version.NewVersion("2.8")
@@ -3045,6 +3048,11 @@ func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageClu
 		return err
 	}
 	logrus.Infof("PX Operator version: [%s]", opVersion.String())
+
+	if pxVersion.GreaterThanOrEqual(pxVer3_0) && opVersion.LessThan(opVer23_5_1) {
+		logrus.Warnf("Skipping Telemetry validation as it is not support for PX Operator version less than [23.5.1] and PX version [3.0.0] or greater")
+		return nil
+	}
 
 	if pxVersion.GreaterThanOrEqual(minimumPxVersionCCMGO) && opVersion.GreaterThanOrEqual(opVer1_10) {
 		if shouldTelemetryBeEnabled(cluster) {
