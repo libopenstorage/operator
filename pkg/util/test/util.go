@@ -1,6 +1,8 @@
 package test
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	cryptoTls "crypto/tls"
@@ -39,6 +41,8 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	certv1 "k8s.io/api/certificates/v1"
@@ -153,6 +157,9 @@ const (
 
 	defaultRunCmdInPxPodTimeout  = 25 * time.Second
 	defaultRunCmdInPxPodInterval = 5 * time.Second
+
+	etcHostsFile       = "/etc/hosts"
+	tempEtcHostsMarker = "### px-operator unit-test"
 )
 
 // TestSpecPath is the path for all test specs. Due to currently functional test and
@@ -4786,4 +4793,93 @@ func CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName 
 // BoolPtr returns a pointer to provided bool value
 func BoolPtr(val bool) *bool {
 	return &val
+}
+
+// setupEtcHosts sets up given ip/hosts in `/etc/hosts` file for "local" DNS resolution  (i.e. emulate K8s DNS)
+// - you will need to be a root-user to run this
+// - also, make sure your `/etc/nsswitch.conf` file contains `hosts: files ...` as a first entry
+// - hostnames should be in `<service>.<namespace>` format
+func SetupEtcHosts(t *testing.T, ip string, hostnames ...string) {
+	if len(hostnames) <= 0 {
+		return
+	}
+	if err := unix.Access(etcHostsFile, unix.W_OK); err != nil {
+		t.Skipf("This test requires ROOT user  (writeable /etc/hosts): %s", err)
+	}
+
+	// read original content
+	content, err := os.ReadFile("/etc/hosts")
+	require.NoError(t, err)
+
+	if ip == "" {
+		ip = "127.0.0.1"
+	}
+
+	// update content
+	bb := bytes.NewBuffer(content)
+	bb.WriteString(tempEtcHostsMarker)
+	bb.WriteRune('\n')
+	for _, hn := range hostnames {
+		bb.WriteString(ip)
+		bb.WriteRune('\t')
+		bb.WriteString(hn)
+		bb.WriteRune('\t')
+		bb.WriteString(hn)
+		bb.WriteString(".svc.cluster.local")
+		bb.WriteRune('\n')
+	}
+
+	// overwrite /etc/hosts
+	fd, err := os.OpenFile(etcHostsFile, os.O_WRONLY|os.O_TRUNC, 0666)
+	require.NoError(t, err)
+
+	n, err := fd.Write(bb.Bytes())
+	require.NoError(t, err)
+	assert.Equal(t, bb.Len(), n, "short write")
+	fd.Close()
+
+	// waiting for dns can be resolved
+	for i := 0; i < 60; i++ {
+		var ips []net.IP
+		ips, err = net.LookupIP(hostnames[0])
+		if err != nil || !strings.Contains(fmt.Sprintf("%v", ips), ip) {
+			logrus.WithFields(logrus.Fields{
+				"error": err,
+				"ips":   ips,
+				"ip":    ip,
+				"hosts": hostnames,
+			}).Warnf("failed to set /etc/hosts, retrying")
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		break
+	}
+	require.NoError(t, err)
+}
+
+func RestoreEtcHosts(t *testing.T) {
+	fd, err := os.Open(etcHostsFile)
+	require.NoError(t, err)
+	var bb bytes.Buffer
+	scan := bufio.NewScanner(fd)
+	for scan.Scan() {
+		line := scan.Text()
+		if line == tempEtcHostsMarker {
+			// skip copying everything below `tempEtcHostsMarker`
+			break
+		}
+		bb.WriteString(line)
+		bb.WriteRune('\n')
+	}
+	fd.Close()
+
+	// overwrite /etc/hosts
+	require.True(t, bb.Len() > 0)
+	fd, err = os.OpenFile(etcHostsFile, os.O_WRONLY|os.O_TRUNC, 0666)
+	require.NoError(t, err)
+
+	n, err := fd.Write(bb.Bytes())
+	require.NoError(t, err)
+	assert.Equal(t, bb.Len(), n, "short write")
+	fd.Close()
 }

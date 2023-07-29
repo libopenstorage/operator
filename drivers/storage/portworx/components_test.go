@@ -1,14 +1,10 @@
 package portworx
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"net"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -35,7 +31,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sys/unix"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -56,11 +51,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
-
-const (
-	etcHostsFile       = "/etc/hosts"
-	tempEtcHostsMarker = "### px-operator unit-test"
 )
 
 func TestOrderOfComponents(t *testing.T) {
@@ -5025,95 +5015,6 @@ func TestSecuritySkipAnnotationIsAdded(t *testing.T) {
 	require.Equal(t, "true", updatedUserToken.Annotations[component.AnnotationSkipResource])
 }
 
-// setupEtcHosts sets up given ip/hosts in `/etc/hosts` file for "local" DNS resolution  (i.e. emulate K8s DNS)
-// - you will need to be a root-user to run this
-// - also, make sure your `/etc/nsswitch.conf` file contains `hosts: files ...` as a first entry
-// - hostnames should be in `<service>.<namespace>` format
-func setupEtcHosts(t *testing.T, ip string, hostnames ...string) {
-	if len(hostnames) <= 0 {
-		return
-	}
-	if err := unix.Access(etcHostsFile, unix.W_OK); err != nil {
-		t.Skipf("This test requires ROOT user  (writeable /etc/hosts): %s", err)
-	}
-
-	// read original content
-	content, err := os.ReadFile("/etc/hosts")
-	require.NoError(t, err)
-
-	if ip == "" {
-		ip = "127.0.0.1"
-	}
-
-	// update content
-	bb := bytes.NewBuffer(content)
-	bb.WriteString(tempEtcHostsMarker)
-	bb.WriteRune('\n')
-	for _, hn := range hostnames {
-		bb.WriteString(ip)
-		bb.WriteRune('\t')
-		bb.WriteString(hn)
-		bb.WriteRune('\t')
-		bb.WriteString(hn)
-		bb.WriteString(".svc.cluster.local")
-		bb.WriteRune('\n')
-	}
-
-	// overwrite /etc/hosts
-	fd, err := os.OpenFile(etcHostsFile, os.O_WRONLY|os.O_TRUNC, 0666)
-	require.NoError(t, err)
-
-	n, err := fd.Write(bb.Bytes())
-	require.NoError(t, err)
-	assert.Equal(t, bb.Len(), n, "short write")
-	fd.Close()
-
-	// waiting for dns can be resolved
-	for i := 0; i < 60; i++ {
-		var ips []net.IP
-		ips, err = net.LookupIP(hostnames[0])
-		if err != nil || !strings.Contains(fmt.Sprintf("%v", ips), ip) {
-			logrus.WithFields(logrus.Fields{
-				"error": err,
-				"ips":   ips,
-				"ip":    ip,
-				"hosts": hostnames,
-			}).Warnf("failed to set /etc/hosts, retrying")
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		break
-	}
-	require.NoError(t, err)
-}
-
-func restoreEtcHosts(t *testing.T) {
-	fd, err := os.Open(etcHostsFile)
-	require.NoError(t, err)
-	var bb bytes.Buffer
-	scan := bufio.NewScanner(fd)
-	for scan.Scan() {
-		line := scan.Text()
-		if line == tempEtcHostsMarker {
-			// skip copying everything below `tempEtcHostsMarker`
-			break
-		}
-		bb.WriteString(line)
-		bb.WriteRune('\n')
-	}
-	fd.Close()
-
-	// overwrite /etc/hosts
-	require.True(t, bb.Len() > 0)
-	fd, err = os.OpenFile(etcHostsFile, os.O_WRONLY|os.O_TRUNC, 0666)
-	require.NoError(t, err)
-
-	n, err := fd.Write(bb.Bytes())
-	require.NoError(t, err)
-	assert.Equal(t, bb.Len(), n, "short write")
-	fd.Close()
-}
-
 func TestGuestAccessSecurity(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -5131,8 +5032,8 @@ func TestGuestAccessSecurity(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -12283,8 +12184,8 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
 		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
@@ -12438,8 +12339,8 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
 		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
@@ -12562,8 +12463,8 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{}
 	mockNodeServer.EXPECT().
@@ -12690,8 +12591,8 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
 		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
@@ -12792,8 +12693,8 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -12905,8 +12806,8 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
 		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
@@ -14060,8 +13961,8 @@ func TestSetTelemetryDefaultWithoutCertCreated(t *testing.T) {
 	// registration endpoint reachable: yes/no
 	// HTTP proxy provided: yes/no
 	// telemetry spec: empty/enabled
-	setupEtcHosts(t, "127.0.0.1", "register.cloud-support.purestorage.com")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, "127.0.0.1", "register.cloud-support.purestorage.com")
+	defer testutil.RestoreEtcHosts(t)
 
 	// TestCase: cannot ping, no proxy, telemetry empty
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -14196,8 +14097,8 @@ func TestSetTelemetryDefaultWithCertCreated(t *testing.T) {
 	// Parameters:
 	// HTTP proxy provided: yes/no
 	// telemetry spec: empty/enabled
-	setupEtcHosts(t, "127.0.0.1", "register.cloud-support.purestorage.com")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, "127.0.0.1", "register.cloud-support.purestorage.com")
+	defer testutil.RestoreEtcHosts(t)
 
 	// TestCase: no proxy, telemetry empty
 	err = driver.SetDefaultsOnStorageCluster(cluster)

@@ -3149,8 +3149,8 @@ func TestUpdateDeprecatedClusterStatus(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -3249,8 +3249,8 @@ func TestUpdateClusterStatus(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -3563,8 +3563,8 @@ func TestPortworxInstallCondition(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -3786,8 +3786,8 @@ func TestPortworxUpdateCondition(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -4117,8 +4117,8 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -4503,8 +4503,8 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -4854,8 +4854,8 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -4996,8 +4996,8 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -5202,8 +5202,8 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -5328,8 +5328,8 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -5609,8 +5609,8 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -5821,8 +5821,8 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeForNonExistingNodes(t *testin
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -5936,8 +5936,8 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -6239,8 +6239,8 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -6383,8 +6383,8 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -6909,8 +6909,8 @@ func TestDeleteClusterShouldResetSDKConnection(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -8853,8 +8853,8 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+"."+clusterNS)
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+"."+clusterNS)
+	defer testutil.RestoreEtcHosts(t)
 
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -9096,8 +9096,8 @@ func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+"."+clusterNS)
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+"."+clusterNS)
+	defer testutil.RestoreEtcHosts(t)
 
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -9558,8 +9558,8 @@ func TestGetStorageNodes(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	// Create fake k8s client with fake service that will point the client
 	// to the mock sdk server address
@@ -9781,8 +9781,8 @@ func testStoragelessNodesUpgrade(t *testing.T, expectedValue uint32, storageless
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	setupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
-	defer restoreEtcHosts(t)
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
