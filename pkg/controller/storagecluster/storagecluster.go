@@ -446,7 +446,7 @@ func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) error {
 			for _, node := range k8sNodeList.Items {
 				if !coreops.Instance().IsNodeMaster(node) {
 					logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
-					c.createStorageNode(cluster, node.Name)
+					c.createStorageNode(toUpdate, node.Name)
 				}
 			}
 		} else {
