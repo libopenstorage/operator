@@ -526,9 +526,6 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: AutopilotServiceAccountName,
-					NodeSelector: map[string]string{
-						"kubernetes.io/os": "linux",
-					},
 					Containers: []v1.Container{
 						{
 							Name:            AutopilotContainerName,
@@ -561,6 +558,21 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 												Values: []string{
 													AutopilotDeploymentName,
 												},
+											},
+										},
+									},
+								},
+							},
+						},
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "kubernetes.io/os",
+												Operator: v1.NodeSelectorOpIn,
+												Values:   []string{"linux"},
 											},
 										},
 									},

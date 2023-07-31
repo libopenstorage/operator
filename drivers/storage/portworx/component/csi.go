@@ -635,9 +635,6 @@ func getCSIDeploymentSpec(
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: CSIServiceAccountName,
-					NodeSelector: map[string]string{
-						"kubernetes.io/os": "linux",
-					},
 					Containers: []v1.Container{
 						{
 							Name:            csiProvisionerContainerName,
@@ -666,6 +663,23 @@ func getCSIDeploymentSpec(
 								HostPath: &v1.HostPathVolumeSource{
 									Path: csiConfig.DriverBasePath(),
 									Type: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
+								},
+							},
+						},
+					},
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "kubernetes.io/os",
+												Operator: v1.NodeSelectorOpIn,
+												Values:   []string{"linux"},
+											},
+										},
+									},
 								},
 							},
 						},

@@ -81,8 +81,15 @@ spec:
               name: registration-dir
       dnsPolicy: ClusterFirst
       hostNetwork: true
-      nodeSelector:
-        kubernetes.io/os: windows
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - windows
       priorityClassName: system-node-critical
       restartPolicy: Always
       schedulerName: default-scheduler

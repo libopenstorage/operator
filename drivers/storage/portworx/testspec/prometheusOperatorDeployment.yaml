@@ -27,6 +27,15 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - linux
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
