@@ -63,6 +63,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 )
 
 const (
@@ -443,8 +444,10 @@ func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) error {
 		if err == nil {
 			// Create StorageNodes to return pre-flight checks used by c.Driver.Validate().
 			for _, node := range k8sNodeList.Items {
-				logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
-				c.createStorageNode(toUpdate, node.Name)
+				if !coreops.Instance().IsNodeMaster(node) {
+					logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
+					c.createStorageNode(cluster, node.Name)
+				}
 			}
 		} else {
 			logrus.WithError(err).Errorf("Failed to get cluster nodes")
@@ -551,7 +554,7 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 	if !reflect.DeepEqual(cluster, toUpdate) {
 		toUpdate.DeepCopyInto(cluster)
 		if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
-			return err
+			return fmt.Errorf("UpdateStorageCluster failure, %v", err)
 		}
 
 		cluster.Status = *toUpdate.Status.DeepCopy()
@@ -560,7 +563,7 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 			if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
 				k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
 					"preflight check failed to update storage cluster status. Need to rerun preflight or skip it")
-				return err
+				return fmt.Errorf("UpdateStorageClusterStatus failure, %v", err)
 			}
 		}
 	}
