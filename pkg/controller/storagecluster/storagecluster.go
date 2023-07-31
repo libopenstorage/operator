@@ -493,12 +493,12 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 	if !reflect.DeepEqual(cluster, toUpdate) {
 		toUpdate.DeepCopyInto(cluster)
 		if err := c.client.Update(context.TODO(), cluster); err != nil {
-			return fmt.Errorf("Update storage cluster failure, %v", err)
+			return fmt.Errorf("update storage cluster failure, %v", err)
 		}
 
 		cluster.Status = *toUpdate.Status.DeepCopy()
 		if err := c.client.Status().Update(context.TODO(), cluster); err != nil {
-			return fmt.Errorf("Update storage cluster status failure, %v", err)
+			return fmt.Errorf("update storage cluster status failure, %v", err)
 		}
 	}
 	return err
