@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/libopenstorage/openstorage/api"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	diagv1 "github.com/libopenstorage/operator/pkg/apis/portworx/v1"
 	"github.com/libopenstorage/operator/pkg/mock"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
@@ -16,6 +20,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	fakeextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -25,12 +30,107 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
+
+var (
+	podCreateCount = 0
+)
+
+func createK8sNode(nodeName string, allowedPods int) *v1.Node {
+	return &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   nodeName,
+			Labels: make(map[string]string),
+		},
+		Status: v1.NodeStatus{
+			Allocatable: map[v1.ResourceName]resource.Quantity{
+				v1.ResourcePods: resource.MustParse(strconv.Itoa(allowedPods)),
+			},
+		},
+	}
+}
+
+func createGRPCStorageNode(name, id string) *api.StorageNode {
+	return &api.StorageNode{
+		Id:                id,
+		SchedulerNodeName: name,
+	}
+}
+
+func setUpGRPCMocks(t *testing.T, ns string) (*mock.MockOpenStorageNodeServer, *mock.MockOpenStorageVolumeServer, *v1.Service, func()) {
+	var (
+		sdkServerIP   = "127.0.0.1"
+		sdkServerPort = 23888
+	)
+
+	// Run this first to detect permission errors early
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+"."+ns)
+
+	mockCtrl := gomock.NewController(t)
+
+	// Create the mock servers that can be used to mock SDK calls
+	var (
+		mockNodeServer   = mock.NewMockOpenStorageNodeServer(mockCtrl)
+		mockVolumeServer = mock.NewMockOpenStorageVolumeServer(mockCtrl)
+
+		// Start an sdk server that implements the mock servers
+		mockSdk = mock.NewSdkServer(mock.SdkServers{
+			Node:   mockNodeServer,
+			Volume: mockVolumeServer,
+		})
+	)
+
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+
+	pxService := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: ns,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	}
+
+	return mockNodeServer, mockVolumeServer, pxService, func() {
+		mockSdk.Stop()
+		mockCtrl.Finish()
+		testutil.RestoreEtcHosts(t)
+	}
+}
+
+func applyPodControlTemplates(t *testing.T, k8sClient client.Client, podControl *k8scontroller.FakePodControl) []*v1.Pod {
+	createdPods := []*v1.Pod{}
+	for _, template := range podControl.Templates {
+		newPod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      template.GenerateName + strconv.Itoa(podCreateCount),
+				Namespace: template.Namespace,
+				Labels:    template.Labels,
+			},
+			Spec: template.Spec,
+		}
+		err := k8sClient.Create(context.Background(), newPod)
+		require.NoError(t, err)
+		createdPods = append(createdPods, newPod)
+		podCreateCount += 1
+	}
+	podControl.Templates = []v1.PodTemplateSpec{}
+	return createdPods
+}
 
 func TestInit(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
@@ -725,4 +825,358 @@ func TestGetDiagObject(t *testing.T) {
 	require.Equal(t, diagOurs, diag)
 	require.False(t, otherRunning)
 	require.NoError(t, err)
+}
+
+func TestReconcile_BasicLifecycle(t *testing.T) {
+	const ns = "test-ns"
+
+	mockNodeServer, _, pxService, cleanupMocks := setUpGRPCMocks(t, ns)
+	defer cleanupMocks()
+
+	k8sNodes := []*v1.Node{
+		createK8sNode("k8s-node-1", 1),
+		createK8sNode("k8s-node-2", 1),
+		createK8sNode("k8s-node-3", 1),
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "stc", Namespace: ns},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "cluster-uid",
+		},
+	}
+	diag := &diagv1.PortworxDiag{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-diag", Namespace: ns},
+		Spec: diagv1.PortworxDiagSpec{
+			Portworx: &diagv1.PortworxComponent{
+				NodeSelector: diagv1.NodeSelector{
+					All: true,
+				},
+			},
+		},
+	}
+
+	var err error
+
+	k8sClient := testutil.FakeK8sClient(diag, cluster, pxService)
+	for _, node := range k8sNodes {
+		err = k8sClient.Create(context.Background(), node)
+		require.NoError(t, err)
+	}
+	recorder := record.NewFakeRecorder(10)
+	podControl := &k8scontroller.FakePodControl{}
+	controller := Controller{
+		client:     k8sClient,
+		recorder:   recorder,
+		podControl: podControl,
+	}
+
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(&api.SdkNodeEnumerateWithFiltersResponse{
+			Nodes: []*api.StorageNode{
+				createGRPCStorageNode("k8s-node-1", "uuid-1"),
+				createGRPCStorageNode("k8s-node-2", "uuid-2"),
+				createGRPCStorageNode("k8s-node-3", "uuid-3"),
+			},
+		}, nil).Times(4)
+
+	// Verify initial reconcile
+	_, err = controller.Reconcile(context.TODO(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: diag.Name, Namespace: diag.Namespace},
+	})
+	require.NoError(t, err)
+
+	// Check that all nodes have pods being created and have the node names set
+	require.Len(t, podControl.Templates, 3)
+	nodesWithPods := []string{}
+	for _, pod := range podControl.Templates {
+		nodesWithPods = append(nodesWithPods, pod.Spec.NodeName)
+	}
+	require.ElementsMatch(t, []string{"k8s-node-1", "k8s-node-2", "k8s-node-3"}, nodesWithPods)
+
+	// Check that the updated diag has the proper node statuses
+	updatedDiag := &diagv1.PortworxDiag{}
+	err = testutil.Get(k8sClient, updatedDiag, diag.Name, diag.Namespace)
+	require.NoError(t, err)
+
+	require.Len(t, updatedDiag.Status.NodeStatuses, 3)
+	require.ElementsMatch(t, []diagv1.NodeStatus{
+		{NodeID: "uuid-1", Status: diagv1.NodeStatusPending},
+		{NodeID: "uuid-2", Status: diagv1.NodeStatusPending},
+		{NodeID: "uuid-3", Status: diagv1.NodeStatusPending},
+	}, updatedDiag.Status.NodeStatuses)
+	require.Equal(t, diagv1.DiagStatusPending, updatedDiag.Status.Phase)
+	require.Equal(t, cluster.Status.ClusterUID, updatedDiag.Status.ClusterUUID)
+
+	// Go through and actually create the pods
+	createdPods := applyPodControlTemplates(t, k8sClient, podControl)
+
+	// Verify that the diag status updates as diags move to in progress
+	for i := range updatedDiag.Status.NodeStatuses {
+		updatedDiag.Status.NodeStatuses[i].Status = diagv1.NodeStatusInProgress
+	}
+	err = k8sClient.Update(context.Background(), updatedDiag)
+	require.NoError(t, err)
+
+	// Verify that missing pods get recreated
+	err = k8sClient.Delete(context.Background(), createdPods[0])
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: diag.Name, Namespace: diag.Namespace},
+	})
+	require.NoError(t, err)
+	require.Len(t, podControl.Templates, 1)
+	require.Equal(t, createdPods[0].Spec.NodeName, podControl.Templates[0].Spec.NodeName)
+
+	// Check that the updated diag has the proper phase
+	updatedDiag = &diagv1.PortworxDiag{}
+	err = testutil.Get(k8sClient, updatedDiag, diag.Name, diag.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, diagv1.DiagStatusInProgress, updatedDiag.Status.Phase)
+
+	// Go through and re-create the pods again
+	applyPodControlTemplates(t, k8sClient, podControl)
+
+	// Verify that the pods are deleted when a node status is marked as complete
+	updatedDiag.Status.NodeStatuses[0].Status = diagv1.NodeStatusCompleted
+	err = k8sClient.Update(context.Background(), updatedDiag)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: diag.Name, Namespace: diag.Namespace},
+	})
+	require.NoError(t, err)
+	require.Len(t, podControl.DeletePodName, 1)
+	podControl.DeletePodName = []string{}
+
+	// Check that the updated diag has the proper phase
+	updatedDiag = &diagv1.PortworxDiag{}
+	err = testutil.Get(k8sClient, updatedDiag, diag.Name, diag.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, diagv1.DiagStatusInProgress, updatedDiag.Status.Phase)
+
+	// Verify that once all the pods are complete, the phase is complete and the pods are deleted
+	updatedDiag = &diagv1.PortworxDiag{}
+	err = testutil.Get(k8sClient, updatedDiag, diag.Name, diag.Namespace)
+	require.NoError(t, err)
+	for i := range updatedDiag.Status.NodeStatuses {
+		updatedDiag.Status.NodeStatuses[i].Status = diagv1.NodeStatusCompleted
+	}
+	err = k8sClient.Update(context.Background(), updatedDiag)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: diag.Name, Namespace: diag.Namespace},
+	})
+	require.NoError(t, err)
+
+	// Check that the updated diag has the proper phase
+	updatedDiag = &diagv1.PortworxDiag{}
+	err = testutil.Get(k8sClient, updatedDiag, diag.Name, diag.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, diagv1.DiagStatusCompleted, updatedDiag.Status.Phase)
+
+	// Check that the pods are deleted
+	require.Len(t, podControl.DeletePodName, 3)
+	podControl.DeletePodName = []string{}
+
+	// Check that future reconciles do no work
+	_, err = controller.Reconcile(context.TODO(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: diag.Name, Namespace: diag.Namespace},
+	})
+	require.NoError(t, err)
+	require.Empty(t, podControl.Templates)
+	require.Empty(t, podControl.DeletePodName)
+}
+
+func TestReconcile_NodeSelectors(t *testing.T) {
+	const ns = "test-ns"
+
+	mockNodeServer, _, pxService, cleanupMocks := setUpGRPCMocks(t, ns)
+	defer cleanupMocks()
+
+	k8sNodes := []*v1.Node{
+		createK8sNode("k8s-node-1", 1),
+		createK8sNode("k8s-node-2", 1),
+		createK8sNode("k8s-node-3", 1),
+		createK8sNode("k8s-node-4", 1),
+	}
+	k8sNodes[0].Labels["dothediag"] = "true"
+	k8sNodes[1].Labels["dothediag"] = "false"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "stc", Namespace: ns},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "cluster-uid",
+		},
+	}
+	diag := &diagv1.PortworxDiag{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-diag", Namespace: ns},
+		Spec: diagv1.PortworxDiagSpec{
+			Portworx: &diagv1.PortworxComponent{
+				NodeSelector: diagv1.NodeSelector{
+					All: false,
+					IDs: []string{"uuid-4"},
+					Labels: map[string]string{
+						"dothediag": "true",
+					},
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(diag, cluster, pxService)
+	for _, node := range k8sNodes {
+		err := k8sClient.Create(context.Background(), node)
+		require.NoError(t, err)
+	}
+	recorder := record.NewFakeRecorder(10)
+	podControl := &k8scontroller.FakePodControl{}
+	controller := Controller{
+		client:     k8sClient,
+		recorder:   recorder,
+		podControl: podControl,
+	}
+
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(&api.SdkNodeEnumerateWithFiltersResponse{
+			Nodes: []*api.StorageNode{
+				createGRPCStorageNode("k8s-node-1", "uuid-1"),
+				createGRPCStorageNode("k8s-node-2", "uuid-2"),
+				createGRPCStorageNode("k8s-node-3", "uuid-3"),
+				createGRPCStorageNode("k8s-node-4", "uuid-4"),
+			},
+		}, nil).
+		Times(1)
+
+	_, err := controller.Reconcile(context.TODO(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: diag.Name, Namespace: diag.Namespace},
+	})
+	require.NoError(t, err)
+
+	// Check that all nodes have pods being created and have the node names set
+	require.Len(t, podControl.Templates, 2)
+	nodesWithPods := []string{}
+	for _, pod := range podControl.Templates {
+		nodesWithPods = append(nodesWithPods, pod.Spec.NodeName)
+	}
+	require.ElementsMatch(t, []string{"k8s-node-1", "k8s-node-4"}, nodesWithPods)
+
+	// Check that the updated diag has the proper node statuses
+	updatedDiag := &diagv1.PortworxDiag{}
+	err = testutil.Get(k8sClient, updatedDiag, diag.Name, diag.Namespace)
+	require.NoError(t, err)
+
+	require.Len(t, updatedDiag.Status.NodeStatuses, 2)
+	require.ElementsMatch(t, []diagv1.NodeStatus{
+		{NodeID: "uuid-1", Status: diagv1.NodeStatusPending},
+		{NodeID: "uuid-4", Status: diagv1.NodeStatusPending},
+	}, updatedDiag.Status.NodeStatuses)
+	require.Equal(t, diagv1.DiagStatusPending, updatedDiag.Status.Phase)
+	require.Equal(t, cluster.Status.ClusterUID, updatedDiag.Status.ClusterUUID)
+}
+
+func TestReconcile_VolumeSelectors(t *testing.T) {
+	const ns = "test-ns"
+
+	mockNodeServer, mockVolumeServer, pxService, cleanupMocks := setUpGRPCMocks(t, ns)
+	defer cleanupMocks()
+
+	k8sNodes := []*v1.Node{
+		createK8sNode("k8s-node-1", 1),
+		createK8sNode("k8s-node-2", 1),
+		createK8sNode("k8s-node-3", 1),
+		createK8sNode("k8s-node-4", 1),
+	}
+	k8sNodes[0].Labels["dothediag"] = "true"
+	k8sNodes[1].Labels["dothediag"] = "false"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "stc", Namespace: ns},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "cluster-uid",
+		},
+	}
+	diag := &diagv1.PortworxDiag{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-diag", Namespace: ns},
+		Spec: diagv1.PortworxDiagSpec{
+			Portworx: &diagv1.PortworxComponent{
+				VolumeSelector: diagv1.VolumeSelector{
+					IDs: []string{"vol-4"},
+					Labels: map[string]string{
+						"dothediag": "true",
+					},
+				},
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(diag, cluster, pxService)
+	for _, node := range k8sNodes {
+		err := k8sClient.Create(context.Background(), node)
+		require.NoError(t, err)
+	}
+	recorder := record.NewFakeRecorder(10)
+	podControl := &k8scontroller.FakePodControl{}
+	controller := Controller{
+		client:     k8sClient,
+		recorder:   recorder,
+		podControl: podControl,
+	}
+
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(&api.SdkNodeEnumerateWithFiltersResponse{
+			Nodes: []*api.StorageNode{
+				createGRPCStorageNode("k8s-node-1", "uuid-1"),
+				createGRPCStorageNode("k8s-node-2", "uuid-2"),
+				createGRPCStorageNode("k8s-node-3", "uuid-3"),
+				createGRPCStorageNode("k8s-node-4", "uuid-4"),
+			},
+		}, nil).
+		Times(1)
+	mockVolumeServer.EXPECT().
+		Inspect(gomock.Any(), VolumeInspectRequestWithVolumeID("vol-4")).
+		Return(&api.SdkVolumeInspectResponse{
+			Volume: &api.Volume{
+				ReplicaSets: []*api.ReplicaSet{{Nodes: []string{"uuid-4"}}},
+			}}, nil).
+		Times(1)
+	mockVolumeServer.EXPECT().
+		InspectWithFilters(gomock.Any(), VolumeInspectWithFilterRequestWithLabels(map[string]string{"dothediag": "true"})).
+		Return(&api.SdkVolumeInspectWithFiltersResponse{
+			Volumes: []*api.SdkVolumeInspectResponse{
+				{Volume: &api.Volume{ReplicaSets: []*api.ReplicaSet{{Nodes: []string{"uuid-1"}}}}},
+			},
+		}, nil).
+		Times(1)
+
+	_, err := controller.Reconcile(context.TODO(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: diag.Name, Namespace: diag.Namespace},
+	})
+	require.NoError(t, err)
+
+	// Check that all nodes have pods being created and have the node names set
+	require.Len(t, podControl.Templates, 2)
+	nodesWithPods := []string{}
+	for _, pod := range podControl.Templates {
+		nodesWithPods = append(nodesWithPods, pod.Spec.NodeName)
+	}
+	require.ElementsMatch(t, []string{"k8s-node-1", "k8s-node-4"}, nodesWithPods)
+
+	// Check that the updated diag has the proper node statuses
+	updatedDiag := &diagv1.PortworxDiag{}
+	err = testutil.Get(k8sClient, updatedDiag, diag.Name, diag.Namespace)
+	require.NoError(t, err)
+
+	require.Len(t, updatedDiag.Status.NodeStatuses, 2)
+	require.ElementsMatch(t, []diagv1.NodeStatus{
+		{NodeID: "uuid-1", Status: diagv1.NodeStatusPending},
+		{NodeID: "uuid-4", Status: diagv1.NodeStatusPending},
+	}, updatedDiag.Status.NodeStatuses)
+	require.Equal(t, diagv1.DiagStatusPending, updatedDiag.Status.Phase)
+	require.Equal(t, cluster.Status.ClusterUID, updatedDiag.Status.ClusterUUID)
 }
