@@ -16119,6 +16119,112 @@ func TestPluginInstallAndUninstall(t *testing.T) {
 
 }
 
+// test if install can be enabled on windows and non-windows node clusters
+func TestWindowsComponentEnabled(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{}
+	windowsComponent, _ := component.Get(component.WindowsComponentName)
+
+	// test on only linux node cluster that install should be disabled
+	node1 := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node1",
+			Labels: map[string]string{
+				"kubernetes.io/os": "linux",
+			},
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), node1)
+	require.NoError(t, err)
+
+	enabled := windowsComponent.IsEnabled(cluster)
+	require.Equal(t, false, enabled)
+
+	// test that on windows node install should be enabled
+	node2 := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node2",
+			Labels: map[string]string{
+				"kubernetes.io/os": "windows",
+			},
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), node2)
+	require.NoError(t, err)
+
+	enabled = windowsComponent.IsEnabled(cluster)
+	require.Equal(t, true, enabled)
+}
+
+// test installation of daemonset and storageclass, and uninstall
+func TestWindowsComponentInstallAndUninstall(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	node := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node1",
+			Labels: map[string]string{
+				"kubernetes.io/os": "windows",
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), node)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// test creation of px-csi-win daemonset
+	expectedWinCsiDs := testutil.GetExpectedDaemonSet(t, "win.yaml")
+	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &expectedWinCsiDs.Spec.Template.Spec)
+	actualWinCsiDs := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, actualWinCsiDs, component.WindowsDaemonSetName, "kube-system")
+	require.NoError(t, err)
+	require.Equal(t, expectedWinCsiDs.Name, actualWinCsiDs.Name)
+	require.Equal(t, expectedWinCsiDs.Spec, actualWinCsiDs.Spec)
+
+	// test creation od storageclass
+	expectedSC := testutil.GetExpectedStorageClass(t, "px-csi-win-storageclass.yaml")
+	actualSc := &storagev1.StorageClass{}
+	err = testutil.Get(k8sClient, actualSc, component.WindowsStorageClass, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSC.Name, actualSc.Name)
+	require.Equal(t, expectedSC.Parameters, actualSc.Parameters)
+	require.Equal(t, expectedSC.Provisioner, actualSc.Provisioner)
+	require.Equal(t, expectedSC.ReclaimPolicy, actualSc.ReclaimPolicy)
+	require.Equal(t, expectedSC.VolumeBindingMode, actualSc.VolumeBindingMode)
+
+	// test deletion
+	pluginComponent, _ := component.Get(component.WindowsComponentName)
+	err = pluginComponent.Delete(cluster)
+	require.NoError(t, err)
+}
+
 func reregisterComponents() {
 	// Skipping registering of some components to avoid blocking
 	// other tests. Skipped components: PortworxCRD, DisruptionBudget
@@ -16142,6 +16248,7 @@ func reregisterComponents() {
 	component.RegisterPxRepoComponent()
 	component.RegisterSCCComponent()
 	component.RegisterPortworxPluginComponent()
+	component.RegisterWindowsComponent()
 	pxutil.SpecsBaseDir = func() string {
 		return "../../../bin/configs"
 	}

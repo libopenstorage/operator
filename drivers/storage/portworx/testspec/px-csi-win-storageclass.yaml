@@ -1,0 +1,12 @@
+allowVolumeExpansion: true
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: px-csi-win
+parameters:
+  winshare: "true"
+  repl: "2"
+  sharedv4: "true"
+provisioner: pxd.portworx.com
+reclaimPolicy: Delete
+volumeBindingMode: Immediate

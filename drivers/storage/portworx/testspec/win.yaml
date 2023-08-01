@@ -3,6 +3,8 @@ kind: DaemonSet
 metadata:
   annotations:
     deprecated.daemonset.template.generation: '1'
+  name: "px-csi-node-win"
+  namespace: "kube-system"
 spec:
   selector:
     matchLabels:
@@ -23,7 +25,9 @@ spec:
           env:
             - name: CSI_ENDPOINT
               value: 'unix://C:\\csi\\csi.sock'
+          imagePullPolicy: IfNotPresent
           name: liveness-probe
+          image: registry.k8s.io/sig-storage/livenessprobe:v2.7.0
           resources:
             limits:
               memory: 100Mi
@@ -51,6 +55,7 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: spec.nodeName
+          imagePullPolicy: IfNotPresent
           livenessProbe:
             exec:
               command:
@@ -63,6 +68,7 @@ spec:
             successThreshold: 1
             timeoutSeconds: 30
           name: node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.2
           resources:
             limits:
               memory: 100Mi
@@ -95,8 +101,8 @@ spec:
       securityContext: {}
       terminationGracePeriodSeconds: 30
       tolerations:
-      - key: os
-        value: Windows
+        - key: os
+          value: Windows
       volumes:
         - hostPath:
             path: 'C:\var\lib\kubelet\plugins_registry\'

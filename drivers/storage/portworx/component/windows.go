@@ -147,7 +147,7 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 		return getErr
 	}
 
-	// pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &daemonSet.Spec.Template.Spec)
+	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &daemonSet.Spec.Template.Spec)
 
 	equal, _ := util.DeepEqualPodTemplate(&daemonSet.Spec.Template, &existingDaemonSet.Spec.Template)
 	if !equal && !w.isCreated {
