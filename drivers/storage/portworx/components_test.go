@@ -74,7 +74,7 @@ func TestOrderOfComponents(t *testing.T) {
 	for i, comp := range components {
 		componentNames[i] = comp.Name()
 	}
-	require.Len(t, components, 21)
+	require.Len(t, components, 22)
 	// Higher priority components come first
 	require.ElementsMatch(t,
 		[]string{
@@ -104,6 +104,7 @@ func TestOrderOfComponents(t *testing.T) {
 			component.AlertManagerComponentName,
 			component.GrafanaComponentName,
 			component.PluginComponentName,
+			component.WindowsComponentName,
 		},
 		componentNames[4:],
 	)
