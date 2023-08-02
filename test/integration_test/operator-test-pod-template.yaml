@@ -60,6 +60,7 @@ spec:
     - -portworx-device-specs=PORTWORX_DEVICE_SPECS
     - -portworx-kvdb-spec=PORTWORX_KVDB_SPEC
     - -portworx-env-vars=PORTWORX_ENV_VARS
+    - -portworx-custom-annotations=PORTWORX_CUSTOM_ANNOTATIONS
     - -is-ocp=IS_OCP
     - -is-eks=IS_EKS
     - -is-aks=IS_AKS

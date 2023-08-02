@@ -80,6 +80,10 @@ func setup() error {
 		"portworx-env-vars",
 		"",
 		"List of comma separated environment variables that will be added to StorageCluster spec")
+	flag.StringVar(&ci_utils.PxCustomAnnotations,
+		"portworx-custom-annotations",
+		"",
+		"List of comma separated custom annotations that will be added to StorageCluster spec")
 	flag.StringVar(&ci_utils.PxDeviceSpecs,
 		"portworx-device-specs",
 		"",
