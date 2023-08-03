@@ -98,8 +98,22 @@ func (p *portworx) Init(
 }
 
 func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
+
+	condition := &corev1.ClusterCondition{
+		Source: pxutil.PortworxComponentName,
+		Type:   corev1.ClusterConditionTypePreflight,
+	}
+
+	setClusterCondition := func(status corev1.ClusterConditionStatus, msg string) {
+		condition.Status = status
+		condition.Message = msg
+		util.UpdateStorageClusterCondition(cluster, condition)
+	}
+
 	podSpec, err := p.GetStoragePodSpec(cluster, "")
 	if err != nil {
+		err = fmt.Errorf("pre-flight: get storage pod spec: %v", err)
+		setClusterCondition(corev1.ClusterConditionStatusFailed, err.Error())
 		return err
 	}
 
@@ -119,6 +133,8 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
 	check = strings.TrimSpace(strings.ToLower(check))
 	if !ok || check == "skip" {
+		setClusterCondition(corev1.ClusterConditionStatusDisabled, "pre-flight: aborted...")
+		logrus.Infof(condition.Message)
 		deletePreflight()
 		return nil
 	}
@@ -127,26 +143,24 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	err = preFlighter.RunPreFlight()
 	if err != nil {
 		if !errors.IsAlreadyExists(err) {
+			err = fmt.Errorf("pre-flight: run error: %v", err)
+			setClusterCondition(corev1.ClusterConditionStatusFailed, err.Error())
+			deletePreflight()
 			return err
 		}
 		logrus.Debugf("pre-flight: container already running...")
 	}
 
-	condition := &corev1.ClusterCondition{
-		Source: pxutil.PortworxComponentName,
-		Type:   corev1.ClusterConditionTypePreflight,
-	}
-
 	completed, inProgress, total, age, err := preFlighter.GetPreFlightStatus()
 	if err != nil {
 		if errors.IsNotFound(err) {
-			condition.Status = corev1.ClusterConditionStatusInProgress
-			condition.Message = "pre-flight: in progress..."
+			setClusterCondition(corev1.ClusterConditionStatusInProgress, "pre-flight: has not started yet...")
 			logrus.Infof(condition.Message)
-			util.UpdateStorageClusterCondition(cluster, condition)
 			return nil
 		}
-		logrus.Errorf("pre-flight: error getting pre-flight status: %v", err)
+		err = fmt.Errorf("pre-flight: error getting pre-flight status: %v", err)
+		setClusterCondition(corev1.ClusterConditionStatusFailed, err.Error())
+		deletePreflight()
 		return err
 	}
 
@@ -156,17 +170,13 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	} else {
 		if age >= 15*time.Minute {
 			err = fmt.Errorf("pre-flight: pre-flight check timed out")
-			condition.Status = corev1.ClusterConditionStatusTimeout
-			condition.Message = err.Error()
-			logrus.Errorf("%v", err)
+			setClusterCondition(corev1.ClusterConditionStatusTimeout, err.Error())
 			deletePreflight()
-		} else {
-			condition.Status = corev1.ClusterConditionStatusInProgress
-			condition.Message = "pre-flight: in progress..."
+			return err
 		}
+		setClusterCondition(corev1.ClusterConditionStatusInProgress, "pre-flight: in progress...")
 		logrus.Infof(condition.Message)
-		util.UpdateStorageClusterCondition(cluster, condition)
-		return err
+		return nil
 	}
 
 	// Process all the StorageNode.Status.Checks
@@ -174,23 +184,28 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 
 	storageNodes, err = p.storageNodesList(cluster)
 	if err != nil {
-		logrus.Errorf("pre-flight incomplete: Error getting storage node list: %v", err)
+		err = fmt.Errorf("pre-flight incomplete: Error getting storage node list: %v", err)
+		setClusterCondition(corev1.ClusterConditionStatusFailed, err.Error())
+		deletePreflight()
 		return err
 	}
 
 	logrus.Infof("pre-flight: process pre-flight results...")
 	err = preFlighter.ProcessPreFlightResults(p.recorder, storageNodes)
-	if err == nil {
-		condition.Status = corev1.ClusterConditionStatusCompleted
-		condition.Message = "pre-flight: done..."
-		util.UpdateStorageClusterCondition(cluster, condition)
+	if err != nil {
+		err = fmt.Errorf("pre-flight: Error processing results: %v", err)
+		setClusterCondition(corev1.ClusterConditionStatusFailed, err.Error())
 		deletePreflight()
-	} else {
-		logrus.Errorf("pre-flight: Error processing results: %v", err)
+		return err
 	}
 
-	return err
+	setClusterCondition(corev1.ClusterConditionStatusCompleted, "pre-flight: done...")
+	logrus.Infof(condition.Message)
+	deletePreflight()
+
+	return nil
 }
+
 func (p *portworx) initializeComponents() {
 	for _, comp := range component.GetAll() {
 		comp.Initialize(p.k8sClient, *p.k8sVersion, p.scheme, p.recorder)

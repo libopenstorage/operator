@@ -415,26 +415,26 @@ func (c *Controller) validateCloudStorageLabelKey(cluster *corev1.StorageCluster
 	return nil
 }
 
-func bringUpStorageCluster(cluster *corev1.StorageCluster) (bool, error) {
+func isPreflightComplete(cluster *corev1.StorageCluster) bool {
 	// Check pre-check status
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
 	check = strings.TrimSpace(strings.ToLower(check))
 	if !ok || check == "skip" {
-		return true, nil
+		return true
 	} else if check == "false" {
 		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
 		if condition != nil {
 			if condition.Status == corev1.ClusterConditionStatusCompleted {
-				return true, nil
+				return true
 			}
 		} else {
-			return true, nil
+			return true
 		}
 	}
-	return false, nil
+	return false
 }
 
-func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) error {
+func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) (corev1.ClusterConditionStatus, error) {
 	storageNodes := &corev1.StorageNodeList{}
 	serr := c.client.List(context.TODO(), storageNodes,
 		&client.ListOptions{Namespace: toUpdate.Namespace})
@@ -447,26 +447,31 @@ func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) error {
 				if !coreops.Instance().IsNodeMaster(node) {
 					logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
 					c.createStorageNode(toUpdate, node.Name)
+				} else {
+					logrus.Infof("Skipping pre-flight storage node entry for master node: %s", node.Name)
 				}
 			}
 		} else {
 			logrus.WithError(err).Errorf("Failed to get cluster nodes")
+			// *** Should we just return an error on pre-flight here? ***
 		}
 	}
+
+	conditionStatus := corev1.ClusterConditionStatusInProgress // Default condition status
 
 	// Run driver specific pre-flights
 	err := c.Driver.Validate(toUpdate)
-	if err == nil {
-		condition := util.GetStorageClusterCondition(toUpdate, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
-		if condition != nil && condition.Status == corev1.ClusterConditionStatusCompleted {
-			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
-		}
-	} else {
+	if err != nil {
 		logrus.WithError(err).Errorf("pre-flight validate failed")
-		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+		conditionStatus = corev1.ClusterConditionStatusFailed // Condition status is set in Validate(), but set a default to be safe
 	}
 
-	if toUpdate.Annotations[pxutil.AnnotationPreflightCheck] == "false" {
+	condition := util.GetStorageClusterCondition(toUpdate, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+	if condition != nil { // Get condition status set in Validate()
+		conditionStatus = condition.Status
+	}
+
+	if conditionStatus != corev1.ClusterConditionStatusInProgress { // Status not in progress must be done or an issue occurred
 		// Delete StorageNodes created for c.Driver.Validate() checks.
 		storageNodes = &corev1.StorageNodeList{}
 		serr = c.client.List(context.TODO(), storageNodes,
@@ -484,7 +489,7 @@ func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) error {
 		}
 	}
 
-	return err
+	return conditionStatus, err
 }
 
 func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
@@ -496,7 +501,8 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 	} else if check == "false" {
 		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
 		if condition != nil && condition.Status == corev1.ClusterConditionStatusFailed {
-			return fmt.Errorf("please make sure your cluster meet all prerequisites and rerun preflight check")
+			return fmt.Errorf("FATAL: preflight checks have failed on your cluster.  " +
+				"Check events and contact support to help make sure your cluster meets all prerequisites")
 		}
 		// preflight passed or not required
 		logrus.Infof("preflight check not required")
@@ -507,6 +513,8 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 
 	var err error
 
+	conditionStatus := corev1.ClusterConditionStatusInProgress
+
 	// Do the preflight check for eks only for now to check the cloud drive permission
 	if preflight.IsEKS() {
 		//  Only executed once in 1st pre-flight loop cycle.  If preflight condition is not set its 1st time through  pre-flight loop
@@ -514,6 +522,7 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		if condition == nil {
 			if err = preflight.Instance().CheckCloudDrivePermission(cluster); err != nil {
 				logrus.WithError(err).Errorf("permission check for eks cloud drive failed")
+				conditionStatus = corev1.ClusterConditionStatusFailed
 			}
 		}
 	}
@@ -524,27 +533,24 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 
 	// Skip over driver Validate() if an error has occurred
 	if err == nil {
-		err = c.driverValidate(toUpdate)
-	} else {
-		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+		conditionStatus, err = c.driverValidate(toUpdate)
 	}
 
 	condition := &corev1.ClusterCondition{
 		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypePreflight,
+		Status: conditionStatus,
 	}
 
 	if err != nil {
 		logrus.Errorf("storage cluster preflight check failed")
-		condition.Status = corev1.ClusterConditionStatusFailed
+		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 		condition.Message = err.Error()
 	} else {
-		if toUpdate.Annotations[pxutil.AnnotationPreflightCheck] != "false" { // In progress
-			condition.Status = corev1.ClusterConditionStatusInProgress
-			logrus.Infof("storage cluster preflight in progress...")
-
-		} else {
-			condition.Status = corev1.ClusterConditionStatusCompleted
+		condition.Message = "pre-flight: in progress..."
+		if conditionStatus != corev1.ClusterConditionStatusInProgress {
+			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+			condition.Message = "pre-flight: done..."
 		}
 	}
 
@@ -739,12 +745,8 @@ func (c *Controller) syncStorageCluster(
 		return err
 	}
 
-	if startOk, err := bringUpStorageCluster(cluster); err == nil {
-		if !startOk {
-			return nil // not ready yet, continue
-		}
-	} else {
-		return fmt.Errorf("unable to check if StorageCluster %v/%v can be started: %v", cluster.Namespace, cluster.Name, err)
+	if !isPreflightComplete(cluster) {
+		return nil // not ready yet, continue
 	}
 
 	// Ensure Stork is deployed with right configuration
@@ -906,7 +908,7 @@ func (c *Controller) gcNeeded(obj client.Object) bool {
 
 	if obj.GetObjectKind().GroupVersionKind().Kind == "ConfigMap" {
 		if obj.GetName() == "px-attach-driveset-lock" ||
-			strings.HasPrefix(obj.GetName(), "px-bringup-queue-lock") {
+			strings.HasPrefix(obj.GetName(), "pxb-ringup-queue-lock") {
 			return true
 		}
 	}
