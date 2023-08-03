@@ -12,23 +12,31 @@ spec:
     - alert: PortworxVolumeUsageCritical
       annotations:
         description: Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is over 80% used for
-          more than 10 minutes.
+          more than 5 minutes.
         summary: Portworx volume capacity is at {{$value}}% used.
       expr: 100 * (px_volume_usage_bytes / px_volume_capacity_bytes) > 80
       for: 5m
       labels:
-        issue: Portworx volume {{$labels.volumeid}} usage on {{$labels.instance}} is high.
+        issue: Portworx volume {{$labels.volumeid}} usage on {{$labels.instance}} is critical.
         severity: critical
+        resource_type: portworx-volume
+        resource_name: "{{$labels.volumeid}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PortworxVolumeUsage
       annotations:
         description: Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is over 70% used for
-          more than 10 minutes.
+          more than 5 minutes.
         summary: Portworx volume {{$labels.volumeid}} on {{$labels.instance}} is at {{$value}}% used.
       expr: 100 * (px_volume_usage_bytes / px_volume_capacity_bytes) > 70
       for: 5m
       labels:
-        issue: Portworx volume {{$labels.volumeid}} usage on {{$labels.instance}} is critical.
+        issue: Portworx volume {{$labels.volumeid}} usage on {{$labels.instance}} is high.
         severity: warning
+        resource_type: portworx-volume
+        resource_name: "{{$labels.volumeid}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PortworxVolumeNotInQuorum
       annotations:
         description: Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is out of quorum. Please check all nodes with that volume replicas are online.
@@ -37,6 +45,10 @@ spec:
       labels:
         issue: Portworx volume out of quorum.
         severity: warning
+        resource_type: portworx-volume
+        resource_name: "{{$labels.volumeid}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PortworxVolumeInResync
       annotations:
         description: Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is in resync state.
@@ -45,6 +57,10 @@ spec:
       labels:
         issue: Portworx volume in resync state.
         severity: warning
+        resource_type: portworx-volume
+        resource_name: "{{$labels.volumeid}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PortworxVolumeDegraded
       annotations:
         description: Portworx volume {{$labels.volumeid}} from cluster {{$labels.cluster}} is in degraded state. Please check all nodes with that volume replicas are online.
@@ -53,42 +69,58 @@ spec:
       labels:
         issue: Portworx volume in degraded state.
         severity: warning
+        resource_type: portworx-volume
+        resource_name: "{{$labels.volumeid}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PortworxStorageUsageCritical
       annotations:
-        description: Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is over 80% used
-          for more than 10 minutes.
-        summary: Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is at {{$value}}% used.
+        description: Portworx storage on {{$labels.instance}} is over 80% used
+          for more than 5 minutes.
+        summary: Portworx storage on {{$labels.instance}} is at {{$value}}% used.
       expr: 100 * (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)
         > 80
       for: 5m
       labels:
-        issue: Portworx storage {{$labels.volumeid}} usage on {{$labels.instance}} is critical.
+        issue: Portworx storage usage on {{$labels.instance}} is critical.
         severity: critical
+        resource_type: portworx-node
+        resource_name: "{{$labels.node}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PortworxStorageUsage
       annotations:
-        description: Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is over 70% used
-          for more than 10 minutes.
-        summary: Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is at {{$value}}% used.
+        description: Portworx storage on {{$labels.instance}} is over 70% used
+          for more than 5 minutes.
+        summary: Portworx storage on {{$labels.instance}} is at {{$value}}% used.
       expr: 100 * (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)
         > 70
       for: 5m
       labels:
-        issue: Portworx storage {{$labels.volumeid}} usage on {{$labels.instance}} is critical.
+        issue: Portworx storage usage on {{$labels.instance}} is high.
         severity: warning
+        resource_type: portworx-node
+        resource_name: "{{$labels.node}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PortworxStorageWillFill
       annotations:
-        description: Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is over 70% full
-          and has been predicted to fill within 2 weeks for more than 10 minutes.
-        summary: Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is over 70% full and
+        description: Portworx storage on {{$labels.instance}} is over 70% full
+          and has been predicted to fill within 2 weeks.
+        summary: Portworx storage on {{$labels.instance}} is over 70% full and
           is predicted to fill within 2 weeks.
       expr: (100 * (1 - (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)))
         < 30 and predict_linear(px_cluster_disk_available_bytes[1h], 14 * 86400) <
         0
       for: 10m
       labels:
-        issue: Portworx storage {{$labels.volumeid}} on {{$labels.instance}} is predicted to fill within
+        issue: Portworx storage on {{$labels.instance}} is predicted to fill within
           2 weeks.
         severity: warning
+        resource_type: portworx-node
+        resource_name: "{{$labels.node}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PortworxStorageNodeDown
       annotations:
         description: Portworx Storage Node has been offline for more than 5 minutes.
@@ -98,6 +130,10 @@ spec:
       labels:
         issue: Portworx Storage Node is Offline.
         severity: critical
+        resource_type: portworx-cluster
+        resource_name: "{{$labels.cluster}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PortworxQuorumUnhealthy
       annotations:
         description: Portworx cluster Quorum Unhealthy for more than 5 minutes.
@@ -107,6 +143,10 @@ spec:
       labels:
         issue: Portworx Quorum Unhealthy.
         severity: critical
+        resource_type: portworx-cluster
+        resource_name: "{{$labels.cluster}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PortworxMemberDown
       annotations:
         description: Portworx cluster member(s) has(have) been down for more than
@@ -118,6 +158,10 @@ spec:
       labels:
         issue: Portworx cluster member(s) is(are) down.
         severity: critical
+        resource_type: portworx-cluster
+        resource_name: "{{$labels.cluster}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PXBackupError
       annotations:
         description: Failed to take backup for volume {{$labels.volumename}} with error {{$labels.error_string}}.
@@ -126,6 +170,10 @@ spec:
       labels:
         issue: Cloudsnap backup error.
         severity: warning
+        resource_type: portworx-volume
+        resource_name: "{{$labels.volumename}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PXKvdbNodeViewUnhealthy
       annotations:
         description: Portworx node {{$labels.node_id}} from cluster {{$labels.cluster}} is unable to talk to kvdb. Please check the KVDB health and node's connection to KVDB.
@@ -135,6 +183,10 @@ spec:
       labels:
         issue: Portworx node {{$labels.node_id}} is unable to talk to kvdb.
         severity: critical
+        resource_type: portworx-node
+        resource_name: "{{$labels.node}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PXKvdbClusterViewUnhealthy
       annotations:
         description: Portworx node {{$labels.node_id}} from cluster {{$labels.cluster}} is reporting that the cluster is unable to talk to kvdb. Please check KVDB health and the node's connection to KVDB and the other nodes in the cluster.
@@ -143,6 +195,10 @@ spec:
       labels:
         issue: Portworx cluster {{$labels.cluster}} is unable to talk to kvdb.
         severity: critical
+        resource_type: portworx-cluster
+        resource_name: "{{$labels.cluster}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
   - name: Portworx PoolResize Alerts
     rules:
     - alert: PoolExpandSuccessful
@@ -153,6 +209,10 @@ spec:
       labels:
         issue: Portworx pool expand successful.
         severity: warning
+        resource_type: portworx-node
+        resource_name: "{{$labels.node}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: PoolExpandFailure
       annotations:
         description: Pool expansion for pool {{$labels.POOL}} from node {{$labels.instance}}, from Portworx cluster {{$labels.clusterid}} failed. Please check Portworx alerts for more details.
@@ -161,6 +221,10 @@ spec:
       labels:
         issue: Portworx pool expand failure.
         severity: critical
+        resource_type: portworx-node
+        resource_name: "{{$labels.node}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
   - name: Portworx VolumeResize Alerts
     rules:
     - alert: VolumeResizeSuccessful
@@ -171,6 +235,10 @@ spec:
       labels:
         issue: Portworx volume resize successful.
         severity: warning
+        resource_type: portworx-volume
+        resource_name: "{{$labels.volumeid}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: VolumeResizeDeferred
       annotations:
         description: Volume resize for volume {{$labels.volumeid}} from Portworx cluster {{$labels.clusterid}} deferred. Please check Portworx alerts for more details.
@@ -179,6 +247,10 @@ spec:
       labels:
         issue: Portworx volume resize deferred.
         severity: warning
+        resource_type: portworx-volume
+        resource_name: "{{$labels.volumeid}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
     - alert: VolumeResizeFailed
       annotations:
         description: Volume resize for volume {{$labels.volumeid}} from Portworx cluster {{$labels.clusterid}} failed. Please check Portworx alerts for more details.
@@ -187,3 +259,7 @@ spec:
       labels:
         issue: Portworx volume resize failure.
         severity: critical
+        resource_type: portworx-volume
+        resource_name: "{{$labels.volumeid}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
