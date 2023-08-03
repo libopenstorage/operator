@@ -176,6 +176,9 @@ var (
 	opVer23_7, _                      = version.NewVersion("23.7.0-")
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
 
+	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
+	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
+
 	pxVer3_0, _ = version.NewVersion("3.0")
 
 	// minimumPxVersionCCMJAVA minimum PX version to install ccm-java
@@ -1399,13 +1402,8 @@ func IsK3sCluster() bool {
 }
 
 func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
-	k8sVersion, err := GetK8SVersion()
-	if err != nil {
-		return err
-	}
-
 	// Validate PVC Controller components and images
-	if err := ValidatePvcController(pxImageList, cluster, k8sVersion, timeout, interval); err != nil {
+	if err := ValidatePvcController(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
@@ -1425,23 +1423,157 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 	}
 
 	// Validate Monitoring
-	if err = ValidateMonitoring(pxImageList, cluster, timeout, interval); err != nil {
+	if err := ValidateMonitoring(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
 	// Validate PortworxProxy
-	if err = ValidatePortworxProxy(cluster, timeout, interval); err != nil {
+	if err := ValidatePortworxProxy(cluster, timeout, interval); err != nil {
 		return err
 	}
 
 	// Validate Security
 	previouslyEnabled := false // NOTE: This is set to false by default as we are not expecting Security to be previously enabled here
-	if err = ValidateSecurity(cluster, previouslyEnabled, timeout, interval); err != nil {
+	if err := ValidateSecurity(cluster, previouslyEnabled, timeout, interval); err != nil {
+		return err
+	}
+
+	// Validate OCP Dynamic Plugin
+	if err := ValidateOpenshiftDynamicPlugin(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
 	// Validate KVDB
-	if err = ValidateKvdb(pxImageList, cluster, timeout, interval); err != nil {
+	if err := ValidateKvdb(pxImageList, cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateOpenshiftDynamicPlugin validates OCP Dynamic Plugin components
+func ValidateOpenshiftDynamicPlugin(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validate Openshift Dynamic Plugin components")
+	logrus.Info("Check OCP and PX Operator versions to determine whether Openshift Dynamic Plugin should be deployed..")
+	pxVersion := GetPortworxVersion(cluster)
+	logrus.Infof("PX Version: [%s]", pxVersion.String())
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return err
+	}
+	logrus.Infof("PX Operator version: [%s]", opVersion.String())
+
+	// Get k8s version
+	kbVer, err := GetK8SVersion()
+	if err != nil {
+		return err
+	}
+	k8sVersion, _ := version.NewVersion(kbVer)
+
+	// Validate Dynamic plugin only if PX Operator 23.5.0+ and OCP 4.12+ (k8s v1.25+)
+	if opVersion.GreaterThanOrEqual(opVer23_5) && isOpenshift(cluster) && k8sVersion.GreaterThanOrEqual(minK8sVersionForDynamicPlugin) {
+		logrus.Info("Openshift Dynamic Plugin should be deployed")
+		if err := ValidateOpenshiftDynamicPluginEnabled(pxImageList, cluster, timeout, interval); err != nil {
+			return fmt.Errorf("failed to validate Openshift Dynamic Plugin components, Err: %v", err)
+		}
+		logrus.Info("Successfully validated all Openshift Dynamic Plugin components")
+		return nil
+	}
+
+	logrus.Info("Openshift Dynamic Plugin is not supported, will skip validation")
+	return nil
+}
+
+// ValidateOpenshiftDynamicPluginEnabled validates that all Openshift Dynamic Plugin components are enabled/created
+func ValidateOpenshiftDynamicPluginEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	t := func() (interface{}, bool, error) {
+		// Validate px-plugin Deployment and pods
+		pxPluginDeployment, err := appops.Instance().GetDeployment("px-plugin", cluster.Namespace)
+		if err != nil {
+			return nil, true, err
+		}
+
+		if err := validateDeployment(pxPluginDeployment, timeout, interval); err != nil {
+			return nil, true, err
+		}
+
+		pxPluginPods, err := appops.Instance().GetDeploymentPods(pxPluginDeployment)
+		if err != nil {
+			return nil, true, err
+		}
+
+		// Validate image inside px-plugin pods
+		if image, ok := pxImageList["dynamicPlugin"]; ok {
+			if err := validateContainerImageInsidePods(cluster, image, "px-plugin", &v1.PodList{Items: pxPluginPods}); err != nil {
+				return nil, true, err
+			}
+		} else {
+			logrus.Warn("Did not find [dynamicPlugin] in the list of images in the version manifest, skipping image validation")
+		}
+
+		// Validate px-plugin-proxy Deployment and pods
+		pxPluginProxyDeployment, err := appops.Instance().GetDeployment("px-plugin-proxy", cluster.Namespace)
+		if err != nil {
+			return nil, true, err
+		}
+
+		if err := validateDeployment(pxPluginProxyDeployment, timeout, interval); err != nil {
+			return nil, true, err
+		}
+
+		pxPluginProxyPods, err := appops.Instance().GetDeploymentPods(pxPluginProxyDeployment)
+		if err != nil {
+			return nil, true, err
+		}
+
+		// Validate image inside px-plugin-proxy pods
+		if image, ok := pxImageList["dynamicPluginProxy"]; ok {
+			if err := validateContainerImageInsidePods(cluster, image, "nginx", &v1.PodList{Items: pxPluginProxyPods}); err != nil {
+				return nil, true, err
+			}
+		} else {
+			logrus.Warn("Did not find [dynamicPluginProxy] in the list of images in the version manifest, skipping image validation")
+		}
+
+		// Validate px-plugin Service
+		_, err = coreops.Instance().GetService("px-plugin", cluster.Namespace)
+		if errors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("failed to validate Service [px-plugin], Err: %v", err)
+		}
+
+		// Validate px-plugin-proxy Service
+		_, err = coreops.Instance().GetService("px-plugin-proxy", cluster.Namespace)
+		if errors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("failed to validate Service [px-plugin-proxy], Err: %v", err)
+		}
+
+		// Validate px-plugin ConfigMap
+		_, err = coreops.Instance().GetConfigMap("px-plugin", cluster.Namespace)
+		if errors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("failed to validate Configmap [px-plugin], Err: %v", err)
+		}
+
+		// Validate px-plugin-proxy-conf ConfigMap
+		_, err = coreops.Instance().GetConfigMap("px-plugin-proxy-conf", cluster.Namespace)
+		if errors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("failed to validate Configmap [px-plugin-proxy-conf], Err: %v", err)
+		}
+
+		// Validate px-plugin-cer Secret
+		_, err = coreops.Instance().GetSecret("px-plugin-cert", cluster.Namespace)
+		if errors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("failed to validate Secret [px-plugin-cert], Err: %v", err)
+		}
+
+		// Validate px-plugin-proxy Secret
+		_, err = coreops.Instance().GetSecret("px-plugin-proxy", cluster.Namespace)
+		if errors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("failed to validate Secret [px-plugin-proxy], Err: %v", err)
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
 		return err
 	}
 
@@ -1549,7 +1681,7 @@ func ValidateInternalKvdbDisabled(cluster *corev1.StorageCluster, timeout, inter
 }
 
 // ValidatePvcController validates PVC Controller components and images
-func ValidatePvcController(pxImageList map[string]string, cluster *corev1.StorageCluster, k8sVersion string, timeout, interval time.Duration) error {
+func ValidatePvcController(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate PVC Controller components")
 
 	pvcControllerDp := &appsv1.Deployment{
@@ -1561,14 +1693,19 @@ func ValidatePvcController(pxImageList map[string]string, cluster *corev1.Storag
 
 	// Check if PVC Controller is enabled or disabled
 	if isPVCControllerEnabled(cluster) {
-		return ValidatePvcControllerEnabled(pvcControllerDp, cluster, k8sVersion, timeout, interval)
+		return ValidatePvcControllerEnabled(pvcControllerDp, cluster, timeout, interval)
 	}
 	return ValidatePvcControllerDisabled(pvcControllerDp, timeout, interval)
 }
 
 // ValidatePvcControllerEnabled validates that all PVC Controller components are enabled/created
-func ValidatePvcControllerEnabled(pvcControllerDp *appsv1.Deployment, cluster *corev1.StorageCluster, k8sVersion string, timeout, interval time.Duration) error {
+func ValidatePvcControllerEnabled(pvcControllerDp *appsv1.Deployment, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("PVC Controller should be enabled")
+
+	k8sVersion, err := GetK8SVersion()
+	if err != nil {
+		return err
+	}
 
 	t := func() (interface{}, bool, error) {
 		if err := appops.Instance().ValidateDeployment(pvcControllerDp, timeout, interval); err != nil {
@@ -2934,6 +3071,7 @@ func ValidateMonitoring(pxImageList map[string]string, cluster *corev1.StorageCl
 	if err := ValidateAlertManager(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
+
 	if err := ValidateGrafana(pxImageList, cluster); err != nil {
 		return err
 	}
