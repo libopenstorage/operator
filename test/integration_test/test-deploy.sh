@@ -24,6 +24,7 @@ is_oke=false
 portworx_device_specs=""
 portworx_kvdb_spec=""
 portworx_env_vars=""
+portworx_custom_annotations=""
 log_level="debug"
 for i in "$@"
 do
@@ -148,6 +149,12 @@ case $i in
         shift
         shift
         ;;
+    --portworx-custom-annotations)
+        echo "Flag for Portworx Custom Annotations: $2"
+        portworx_custom_annotations=$2
+        shift
+        shift
+        ;;
     --short-test)
         echo "Skip tests that are long/not supported: $2"
         short_test=$2
@@ -209,6 +216,14 @@ if [ "$portworx_env_vars" != "" ]; then
     sed -i 's|'PORTWORX_ENV_VARS'|'"$portworx_env_vars"'|g' $test_pod_spec
 else
     sed -i '/PORTWORX_ENV_VARS/d' $test_pod_spec
+fi
+
+# Portworx custom annotations
+if [ "$portworx_custom_annotations" != "" ]; then
+    echo "Portworx Custom Annotations: $portworx_custom_annotations"
+    sed -i 's|'PORTWORX_CUSTOM_ANNOTATIONS'|'"$portworx_custom_annotations"'|g' $test_pod_spec
+else
+    sed -i '/PORTWORX_CUSTOM_ANNOTATIONS/d' $test_pod_spec
 fi
 
 # Set OCP
