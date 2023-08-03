@@ -28,6 +28,10 @@ var (
 	PxOperatorVer1_8_1, _ = version.NewVersion("1.8.1-")
 	// PxOperatorVer23_3 portworx-operator 23.3 minimum version
 	PxOperatorVer23_3, _ = version.NewVersion("23.3-")
+	// PxOperatorVer23_5_0 portworx-operator 23.5.0 version to check for known Telemetry port issue
+	PxOperatorVer23_5_0, _ = version.NewVersion("23.5.0")
+	// PxOperatorVer23_5_1 portworx-operator 23.5.1 version
+	PxOperatorVer23_5_1, _ = version.NewVersion("23.5.1")
 	// PxOperatorVer23_8 portworx-operator 23.8 minimum version
 	PxOperatorVer23_8, _ = version.NewVersion("23.8-")
 )
