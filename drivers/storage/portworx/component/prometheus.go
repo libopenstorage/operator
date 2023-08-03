@@ -610,17 +610,19 @@ func (c *prometheus) createPrometheusInstance(
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: monitoringv1.PrometheusSpec{
-			Image:              &prometheusImageName,
-			LogLevel:           "debug",
-			ServiceAccountName: PrometheusServiceAccountName,
-			ServiceMonitorSelector: &metav1.LabelSelector{
-				MatchExpressions: []metav1.LabelSelectorRequirement{
-					{
-						Key:      "prometheus",
-						Operator: metav1.LabelSelectorOpIn,
-						Values: []string{
-							PxServiceMonitor,
-							PxBackupServiceMonitor,
+			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
+				Image:              &prometheusImageName,
+				LogLevel:           "debug",
+				ServiceAccountName: PrometheusServiceAccountName,
+				ServiceMonitorSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "prometheus",
+							Operator: metav1.LabelSelectorOpIn,
+							Values: []string{
+								PxServiceMonitor,
+								PxBackupServiceMonitor,
+							},
 						},
 					},
 				},
@@ -668,11 +670,11 @@ func (c *prometheus) createPrometheusInstance(
 	}
 
 	if cluster.Spec.Monitoring.Prometheus.Retention != "" {
-		prometheusInst.Spec.Retention = cluster.Spec.Monitoring.Prometheus.Retention
+		prometheusInst.Spec.Retention = monitoringv1.Duration(cluster.Spec.Monitoring.Prometheus.Retention)
 	}
 
 	if cluster.Spec.Monitoring.Prometheus.RetentionSize != "" {
-		prometheusInst.Spec.RetentionSize = cluster.Spec.Monitoring.Prometheus.RetentionSize
+		prometheusInst.Spec.RetentionSize = monitoringv1.ByteSize(cluster.Spec.Monitoring.Prometheus.RetentionSize)
 	}
 
 	if cluster.Spec.Monitoring.Prometheus.Storage != nil {

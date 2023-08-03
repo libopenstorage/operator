@@ -57,8 +57,8 @@ const (
 	// snapshots with encryption enabled
 	PxDbCloudSnapshotEncryptedCSIStorageClass = "px-csi-db-cloud-snapshot-encrypted"
 
-	portworxInTreeProvisioner = "kubernetes.io/portworx-volume"
-	portworxCSIProvisioner    = "pxd.portworx.com"
+	PortworxInTreeProvisioner = "kubernetes.io/portworx-volume"
+	PortworxCSIProvisioner    = "pxd.portworx.com"
 
 	portworxIoProfile = "db_remote"
 )
@@ -121,7 +121,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 				Name:        PxDbStorageClass,
 				Annotations: docAnnotations,
 			},
-			Provisioner: portworxInTreeProvisioner,
+			Provisioner: PortworxInTreeProvisioner,
 			Parameters: map[string]string{
 				api.SpecHaLevel:   "3",
 				api.SpecIoProfile: portworxIoProfile,
@@ -135,7 +135,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 					"params/note": "Ensure that you have a cluster-wide secret created in the configured secrets provider",
 				},
 			},
-			Provisioner: portworxInTreeProvisioner,
+			Provisioner: PortworxInTreeProvisioner,
 			Parameters: map[string]string{
 				api.SpecHaLevel:   "3",
 				api.SpecIoProfile: portworxIoProfile,
@@ -147,7 +147,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: PxReplicatedStorageClass,
 			},
-			Provisioner: portworxInTreeProvisioner,
+			Provisioner: PortworxInTreeProvisioner,
 			Parameters: map[string]string{
 				api.SpecHaLevel: "2",
 			},
@@ -157,7 +157,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: PxReplicatedEncryptedStorageClass,
 			},
-			Provisioner: portworxInTreeProvisioner,
+			Provisioner: PortworxInTreeProvisioner,
 			Parameters: map[string]string{
 				api.SpecHaLevel: "2",
 				api.SpecSecure:  "true",
@@ -172,7 +172,7 @@ func (c *portworxStorageClass) Reconcile(cluster *corev1.StorageCluster) error {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: PxDbLocalSnapshotStorageClass,
 				},
-				Provisioner: portworxInTreeProvisioner,
+				Provisioner: PortworxInTreeProvisioner,
 				Parameters: map[string]string{
 					api.SpecHaLevel:   "3",
 					api.SpecIoProfile: portworxIoProfile,
@@ -187,7 +187,7 @@ annotations:
 				ObjectMeta: metav1.ObjectMeta{
 					Name: PxDbLocalSnapshotEncryptedStorageClass,
 				},
-				Provisioner: portworxInTreeProvisioner,
+				Provisioner: PortworxInTreeProvisioner,
 				Parameters: map[string]string{
 					api.SpecHaLevel:   "3",
 					api.SpecSecure:    "true",
@@ -203,7 +203,7 @@ annotations:
 				ObjectMeta: metav1.ObjectMeta{
 					Name: PxDbCloudSnapshotStorageClass,
 				},
-				Provisioner: portworxInTreeProvisioner,
+				Provisioner: PortworxInTreeProvisioner,
 				Parameters: map[string]string{
 					api.SpecHaLevel:   "3",
 					api.SpecIoProfile: portworxIoProfile,
@@ -218,7 +218,7 @@ annotations:
 				ObjectMeta: metav1.ObjectMeta{
 					Name: PxDbCloudSnapshotEncryptedStorageClass,
 				},
-				Provisioner: portworxInTreeProvisioner,
+				Provisioner: PortworxInTreeProvisioner,
 				Parameters: map[string]string{
 					api.SpecHaLevel:   "3",
 					api.SpecSecure:    "true",
@@ -246,7 +246,7 @@ annotations:
 					Name:        PxDbCSIStorageClass,
 					Annotations: docAnnotations,
 				},
-				Provisioner: portworxCSIProvisioner,
+				Provisioner: PortworxCSIProvisioner,
 				Parameters: map[string]string{
 					api.SpecHaLevel:   "3",
 					api.SpecIoProfile: portworxIoProfile,
@@ -260,7 +260,7 @@ annotations:
 						"params/note": "Ensure that you have a cluster-wide secret created in the configured secrets provider",
 					},
 				},
-				Provisioner: portworxCSIProvisioner,
+				Provisioner: PortworxCSIProvisioner,
 				Parameters: map[string]string{
 					api.SpecHaLevel:   "3",
 					api.SpecIoProfile: portworxIoProfile,
@@ -272,7 +272,7 @@ annotations:
 				ObjectMeta: metav1.ObjectMeta{
 					Name: PxReplicatedCSIStorageClass,
 				},
-				Provisioner: portworxCSIProvisioner,
+				Provisioner: PortworxCSIProvisioner,
 				Parameters: map[string]string{
 					api.SpecHaLevel: "2",
 				},
@@ -282,7 +282,7 @@ annotations:
 				ObjectMeta: metav1.ObjectMeta{
 					Name: PxReplicatedEncryptedCSIStorageClass,
 				},
-				Provisioner: portworxCSIProvisioner,
+				Provisioner: PortworxCSIProvisioner,
 				Parameters: map[string]string{
 					api.SpecHaLevel: "2",
 					api.SpecSecure:  "true",
@@ -297,7 +297,7 @@ annotations:
 					ObjectMeta: metav1.ObjectMeta{
 						Name: PxDbLocalSnapshotCSIStorageClass,
 					},
-					Provisioner: portworxCSIProvisioner,
+					Provisioner: PortworxCSIProvisioner,
 					Parameters: map[string]string{
 						api.SpecHaLevel:   "3",
 						api.SpecIoProfile: portworxIoProfile,
@@ -312,7 +312,7 @@ annotations:
 					ObjectMeta: metav1.ObjectMeta{
 						Name: PxDbLocalSnapshotEncryptedCSIStorageClass,
 					},
-					Provisioner: portworxCSIProvisioner,
+					Provisioner: PortworxCSIProvisioner,
 					Parameters: map[string]string{
 						api.SpecHaLevel:   "3",
 						api.SpecSecure:    "true",
@@ -328,7 +328,7 @@ annotations:
 					ObjectMeta: metav1.ObjectMeta{
 						Name: PxDbCloudSnapshotCSIStorageClass,
 					},
-					Provisioner: portworxCSIProvisioner,
+					Provisioner: PortworxCSIProvisioner,
 					Parameters: map[string]string{
 						api.SpecHaLevel:   "3",
 						api.SpecIoProfile: portworxIoProfile,
@@ -343,7 +343,7 @@ annotations:
 					ObjectMeta: metav1.ObjectMeta{
 						Name: PxDbCloudSnapshotEncryptedCSIStorageClass,
 					},
-					Provisioner: portworxCSIProvisioner,
+					Provisioner: PortworxCSIProvisioner,
 					Parameters: map[string]string{
 						api.SpecHaLevel:   "3",
 						api.SpecSecure:    "true",

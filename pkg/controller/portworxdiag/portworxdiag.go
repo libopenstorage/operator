@@ -648,19 +648,21 @@ func (c *Controller) updateDiagFields(diag *diagv1.PortworxDiag, stc *corev1.Sto
 }
 
 func (c *Controller) patchPhase(diag *diagv1.PortworxDiag, newPhase string, newMessage string) error {
-	patch := []map[string]interface{}{
-		{
-			"op":    "add",
-			"path":  "/status/phase",
-			"value": newPhase,
-		},
-		{
-			"op":    "add",
-			"path":  "/status/message",
-			"value": newMessage,
-		},
+	patches := []map[string]interface{}{}
+
+	if patch := getMissingStatusPatch(diag); patch != nil {
+		patches = append(patches, patch)
 	}
-	body, err := json.Marshal(patch)
+	patches = append(patches, map[string]interface{}{
+		"op":    "add",
+		"path":  "/status/phase",
+		"value": newPhase,
+	}, map[string]interface{}{
+		"op":    "add",
+		"path":  "/status/message",
+		"value": newMessage,
+	})
+	body, err := json.Marshal(patches)
 	if err != nil {
 		return fmt.Errorf("failed to marshal json patch to JSON: %v", err)
 	}
