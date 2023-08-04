@@ -533,7 +533,6 @@ func TestVarLibOsdMountForPxVersion2_9_1(t *testing.T) {
 	expected = getExpectedPodSpecFromDaemonset(t, "testspec/pks_2.9.1.yaml")
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assertPodSpecEqual(t, expected, &actual)
-
 }
 
 func TestExtraVolumeMountPathWithConflictShouldBeIgnored(t *testing.T) {
@@ -2721,9 +2720,22 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 
 	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
-	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
+
+	// Test securityContxt w/ privileged=false
+	cluster.ObjectMeta.Annotations[pxutil.AnnotationIsPrivileged] = "false"
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+
+	pxc := actual.Containers[0]
+	require.Equal(t, "portworx", pxc.Name)
+	require.NotNil(t, pxc.SecurityContext.Privileged)
+	assert.False(t, *pxc.SecurityContext.Privileged)
+	require.NotNil(t, pxc.SecurityContext.Capabilities)
+	assert.Equal(t, 5, len(pxc.SecurityContext.Capabilities.Add))
+	assert.Empty(t, pxc.SecurityContext.Capabilities.Drop)
 }
 
 func TestPodSpecForK3s(t *testing.T) {

@@ -88,10 +88,13 @@ const (
 var _ reconcile.Reconciler = &Controller{}
 
 var (
-	controllerKind       = corev1.SchemeGroupVersion.WithKind("StorageCluster")
-	crdBaseDir           = getCRDBasePath
-	deprecatedCRDBaseDir = getDeprecatedCRDBasePath
-	dmThinRexp           = regexp.MustCompile(`-T *dmthin`)
+	controllerKind        = corev1.SchemeGroupVersion.WithKind("StorageCluster")
+	crdBaseDir            = getCRDBasePath
+	deprecatedCRDBaseDir  = getDeprecatedCRDBasePath
+	dmThinRexp            = regexp.MustCompile(`-T *dmthin`)
+	containersAppArmorOff = map[string]bool{
+		"portworx": true,
+	}
 )
 
 // Controller reconciles a StorageCluster object
@@ -1263,10 +1266,20 @@ func (c *Controller) CreatePodTemplate(
 	podSpec.NodeName = node.Name
 	newTemplate := v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: cluster.Namespace,
-			Labels:    c.StorageClusterSelectorLabels(cluster),
+			Namespace:   cluster.Namespace,
+			Labels:      c.StorageClusterSelectorLabels(cluster),
+			Annotations: make(map[string]string),
 		},
 		Spec: podSpec,
+	}
+
+	if !pxutil.IsPrivileged(cluster) {
+		// turn off AppArmor?
+		for _, c := range newTemplate.Spec.Containers {
+			if containersAppArmorOff[c.Name] {
+				newTemplate.Annotations[pxutil.AnnotationAppArmorPrefix+c.Name] = "unconfined"
+			}
+		}
 	}
 
 	if len(node.Labels) > 0 {
@@ -1274,15 +1287,15 @@ func (c *Controller) CreatePodTemplate(
 		if err != nil {
 			return v1.PodTemplateSpec{}, fmt.Errorf("failed to encode node labels")
 		}
-		newTemplate.Annotations = map[string]string{constants.AnnotationNodeLabels: string(encodedNodeLabels)}
+		newTemplate.Annotations[constants.AnnotationNodeLabels] = string(encodedNodeLabels)
 	}
 	if customAnnotations := util.GetCustomAnnotations(cluster, k8s.Pod, ComponentName); customAnnotations != nil {
-		if newTemplate.Annotations == nil {
-			newTemplate.Annotations = make(map[string]string)
-		}
 		for k, v := range customAnnotations {
 			newTemplate.Annotations[k] = v
 		}
+	}
+	if len(newTemplate.Annotations) <= 0 {
+		newTemplate.Annotations = nil
 	}
 	if len(hash) > 0 {
 		newTemplate.Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
