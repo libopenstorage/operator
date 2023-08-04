@@ -49,6 +49,7 @@ const (
 	labelKernelVersion                = "Kernel Version"
 	defaultEksCloudStorageType        = "gp3"
 	defaultEksCloudStorageDeviceSize  = "150"
+	preFlightTimeOut                  = 15 * time.Minute
 )
 
 var (
@@ -168,7 +169,7 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	if total != 0 && completed == total {
 		logrus.Infof("pre-flight: checks completed...")
 	} else {
-		if age >= 15*time.Minute {
+		if age >= preFlightTimeOut {
 			err = fmt.Errorf("pre-flight: pre-flight check timed out")
 			setClusterCondition(corev1.ClusterConditionStatusTimeout, err.Error())
 			deletePreflight()

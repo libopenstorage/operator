@@ -923,7 +923,7 @@ func (c *Controller) gcNeeded(obj client.Object) bool {
 
 	if obj.GetObjectKind().GroupVersionKind().Kind == "ConfigMap" {
 		if obj.GetName() == "px-attach-driveset-lock" ||
-			strings.HasPrefix(obj.GetName(), "pxb-ringup-queue-lock") {
+			strings.HasPrefix(obj.GetName(), "px-bringup-queue-lock") {
 			return true
 		}
 	}
