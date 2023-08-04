@@ -153,6 +153,7 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 
 	return err
 }
+
 func (p *portworx) initializeComponents() {
 	for _, comp := range component.GetAll() {
 		comp.Initialize(p.k8sClient, *p.k8sVersion, p.scheme, p.recorder)
