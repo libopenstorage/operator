@@ -3308,16 +3308,41 @@ func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageClu
 	}
 
 	if pxVersion.GreaterThanOrEqual(minimumPxVersionCCMGO) && opVersion.GreaterThanOrEqual(opVer1_10) {
-		if shouldTelemetryBeEnabled(cluster) {
-			return ValidateTelemetryV2Enabled(pxImageList, cluster, timeout, interval)
-		}
-		return ValidateTelemetryV2Disabled(cluster, timeout, interval)
-	} else {
-		if shouldTelemetryBeEnabled(cluster) {
-			return ValidateTelemetryV1Enabled(pxImageList, cluster, timeout, interval)
-		}
-		return ValidateTelemetryV1Disabled(cluster, timeout, interval)
+		return ValidateTelemetryV2(pxImageList, cluster, timeout, interval)
 	}
+	return ValidateTelemetryV1(pxImageList, cluster, timeout, interval)
+}
+
+// ValidateTelemetryV1 validates old version of ccm-java telemetry
+func ValidateTelemetryV1(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validating Telemetry (ccm-java)")
+	if shouldTelemetryBeEnabled(cluster) {
+		if err := ValidateTelemetryV1Enabled(pxImageList, cluster, timeout, interval); err != nil {
+			return fmt.Errorf("failed to validate Telemetry enabled, Err: %v", err)
+		}
+		return nil
+	}
+
+	if err := ValidateTelemetryV1Disabled(cluster, timeout, interval); err != nil {
+		return fmt.Errorf("failed to validate Telemetry disabled, Err: %v", err)
+	}
+	return nil
+}
+
+// ValidateTelemetryV2 validates new version of ccm-go telemetry
+func ValidateTelemetryV2(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validating Telemetry (ccm-go)")
+	if shouldTelemetryBeEnabled(cluster) {
+		if err := ValidateTelemetryV2Enabled(pxImageList, cluster, timeout, interval); err != nil {
+			return fmt.Errorf("failed to validate Telemetry enabled, Err: %v", err)
+		}
+		return nil
+	}
+
+	if err := ValidateTelemetryV2Disabled(cluster, timeout, interval); err != nil {
+		return fmt.Errorf("failed to validate Telemetry disabled, Err: %v", err)
+	}
+	return nil
 }
 
 // shouldTelemetryBeEnabled validates if Telemetry should be auto enabled/disabled by default
@@ -4041,7 +4066,7 @@ func validatePxTelemetryPhonehomeV2(pxImageList map[string]string, cluster *core
 	// Validate px-telemetry-phonehome daemonset, pods and container images
 	logrus.Info("Validate px-telemetry-phonehome daemonset and images")
 	if err := appops.Instance().ValidateDaemonSet("px-telemetry-phonehome", cluster.Namespace, timeout); err != nil {
-		return err
+		return fmt.Errorf("failed to validate [px-telemetry-phonehome] daemonset in [%s] namespace, Err: %v", cluster.Namespace, err)
 	}
 
 	telemetryPhonehomeDs, err := appops.Instance().GetDaemonSet("px-telemetry-phonehome", cluster.Namespace)
@@ -4094,7 +4119,7 @@ func validatePxTelemetryMetricsCollectorV2(pxImageList map[string]string, cluste
 		},
 	}
 	if err := appops.Instance().ValidateDeployment(metricsCollectorDep, timeout, interval); err != nil {
-		return err
+		return fmt.Errorf("failed to validate [%s] deployment in [%s] namespace, Err: %v", metricsCollectorDep.Name, metricsCollectorDep.Namespace, err)
 	}
 
 	pods, err := appops.Instance().GetDeploymentPods(metricsCollectorDep)
@@ -4142,7 +4167,7 @@ func validatePxTelemetryRegistrationV2(pxImageList map[string]string, cluster *c
 		},
 	}
 	if err := appops.Instance().ValidateDeployment(registrationServiceDep, timeout, interval); err != nil {
-		return err
+		return fmt.Errorf("failed to validate [%s] deployment in [%s] namespace, Err: %v", registrationServiceDep.Name, registrationServiceDep.Namespace, err)
 	}
 
 	pods, err := appops.Instance().GetDeploymentPods(registrationServiceDep)
@@ -4287,7 +4312,7 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 				},
 			}
 			if err := appops.Instance().ValidateDeployment(&dep, timeout, interval); err != nil {
-				return nil, true, err
+				return nil, true, fmt.Errorf("failed to validate [%s] deployment in [%s] namespace, Err: %v", dep.Name, dep.Namespace, err)
 			}
 
 			deployment, err := appops.Instance().GetDeployment(dep.Name, dep.Namespace)

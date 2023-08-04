@@ -48,6 +48,16 @@ const (
 	SecretKeyKvdbACLToken = "acl-token"
 )
 
+var (
+	pxVer2_3_2, _ = version.NewVersion("2.3.2")
+	pxVer2_5_5, _ = version.NewVersion("2.5.5")
+	pxVer2_6, _   = version.NewVersion("2.6")
+	pxVer2_8, _   = version.NewVersion("2.8")
+	pxVer2_9_1, _ = version.NewVersion("2.9.1")
+	pxVer3_0, _   = version.NewVersion("3.0")
+	pxVer3_0_1, _ = version.NewVersion("3.0.1")
+)
+
 type volumeInfo struct {
 	name             string
 	hostPath         string // The path on the host
@@ -63,8 +73,9 @@ type volumeInfo struct {
 }
 
 type pksVolumeInfo struct {
-	hostPath  string
-	mountPath string
+	hostPath         string
+	mountPath        string
+	mountPropagation *v1.MountPropagationMode
 }
 
 var (
@@ -290,6 +301,14 @@ func (p *portworx) GetStoragePodSpec(
 		t.cloudConfig = cloudConfig
 	}
 
+	if _, has := t.cluster.Annotations[pxutil.AnnotationIsPrivileged]; has {
+		if pxutil.GetPortworxVersion(cluster).LessThan(pxVer3_0_1) {
+			err = fmt.Errorf("failed to create pod spec: need portworx %s or higher to use annotation '%s'",
+				pxVer3_0_1, pxutil.AnnotationIsPrivileged)
+			return v1.PodSpec{}, err
+		}
+	}
+
 	containers := t.portworxContainer(cluster)
 	podSpec := v1.PodSpec{
 		HostPID:            pxutil.IsHostPidEnabled(cluster),
@@ -485,7 +504,7 @@ func (t *template) portworxContainer(cluster *corev1.StorageCluster) v1.Containe
 	sc := &v1.SecurityContext{
 		Privileged: boolPtr(true),
 	}
-	if t.isBottleRocketOS() {
+	if !pxutil.IsPrivileged(cluster) || t.isBottleRocketOS() {
 		sc.Privileged = boolPtr(false)
 		sc.Capabilities = &v1.Capabilities{
 			Add: []v1.Capability{
@@ -942,9 +961,8 @@ func (t *template) getArguments() []string {
 		}
 
 	} else if t.cluster.Spec.CloudStorage != nil {
-		pxVer, _ := version.NewVersion("2.8")
 		// Cloud provider parameter was added in newer version.
-		if t.pxVersion.GreaterThanOrEqual(pxVer) {
+		if t.pxVersion.GreaterThanOrEqual(pxVer2_8) {
 			cloudProvider := t.getCloudProvider()
 			if len(cloudProvider) > 0 {
 				args = append(args, "-cloud_provider", cloudProvider)
@@ -1016,6 +1034,14 @@ func (t *template) getArguments() []string {
 	if t.cluster.Annotations[pxutil.AnnotationLogFile] != "" {
 		args = append(args, "--log", t.cluster.Annotations[pxutil.AnnotationLogFile])
 	}
+	// for non-privileged and PKS, add shared mounts via parameters
+	if t.pxVersion.GreaterThanOrEqual(pxVer3_0_1) &&
+		(!pxutil.IsPrivileged(t.cluster) || pxutil.IsPKS(t.cluster)) {
+		args = append(args,
+			"-v", "/var/lib/osd/pxns:/var/lib/osd/pxns:shared",
+			"-v", "/var/lib/osd/mounts:/var/lib/osd/mounts:shared",
+		)
+	}
 
 	rtOpts := make([]string, 0)
 	for k, v := range t.cluster.Spec.RuntimeOpts {
@@ -1068,7 +1094,6 @@ func (t *template) getArguments() []string {
 
 		marketplaceName := strings.TrimSpace(os.Getenv(pxutil.EnvKeyMarketplaceName))
 		if marketplaceName != "" {
-			pxVer2_5_5, _ := version.NewVersion("2.5.5")
 			if t.pxVersion.GreaterThanOrEqual(pxVer2_5_5) {
 				args = append(args, "-marketplace_name", marketplaceName)
 			}
@@ -1107,7 +1132,6 @@ func (t *template) getEnvList() []v1.EnvVar {
 		},
 	}
 
-	pxVer2_6, _ := version.NewVersion("2.6")
 	if t.pxVersion.LessThan(pxVer2_6) {
 		envMap["AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS"] = &v1.EnvVar{
 			Name:  "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS",
@@ -1128,9 +1152,13 @@ func (t *template) getEnvList() []v1.EnvVar {
 	}
 
 	if t.isPKS {
+		ev := "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
+		if t.pxVersion.GreaterThanOrEqual(pxVer3_0_1) {
+			ev = "rm -fr /var/lib/osd/driver"
+		}
 		envMap["PRE-EXEC"] = &v1.EnvVar{
 			Name:  "PRE-EXEC",
-			Value: "rm -fr /var/lib/osd/driver",
+			Value: ev,
 		}
 	}
 
@@ -1156,7 +1184,6 @@ func (t *template) getEnvList() []v1.EnvVar {
 	}
 
 	if t.cluster.Spec.ImagePullSecret != nil && *t.cluster.Spec.ImagePullSecret != "" {
-		pxVer2_3_2, _ := version.NewVersion("2.3.2")
 		if t.pxVersion.LessThan(pxVer2_3_2) {
 			envMap["REGISTRY_CONFIG"] = &v1.EnvVar{
 				Name: "REGISTRY_CONFIG",
@@ -1288,8 +1315,7 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 	if t.cluster.Annotations != nil {
 		preFltCheck = strings.TrimSpace(strings.ToLower(t.cluster.Annotations[pxutil.AnnotationPreflightCheck]))
 	}
-	pxVer30, _ := version.NewVersion("3.0")
-	if t.pxVersion.GreaterThanOrEqual(pxVer30) && preFltCheck != "true" {
+	if t.pxVersion.GreaterThanOrEqual(pxVer3_0) && preFltCheck != "true" {
 		extensions = append(extensions, t.getTelemetryPhoneHomeVolumeInfoList)
 	}
 	for _, fn := range extensions {
@@ -1301,6 +1327,7 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 	volumeMounts := make([]v1.VolumeMount, 0, len(vols))
 	mountPathSet := make(map[string]bool)
+	runPrivileged := pxutil.IsPrivileged(t.cluster)
 	for _, v := range vols {
 		volMount := v1.VolumeMount{
 			Name:             v.name,
@@ -1309,8 +1336,24 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 			ReadOnly:         v.readOnly,
 			MountPropagation: v.mountPropagation,
 		}
-		if t.isPKS && v.pks != nil && v.pks.mountPath != "" {
-			volMount.MountPath = v.pks.mountPath
+		if !runPrivileged && v.mountPropagation != nil && *v.mountPropagation == v1.MountPropagationBidirectional {
+			logrus.Warnf("Cannot use %s:%s:shared mount on non-privileged containers"+
+				" (downgrading to non-shared, set %s=true annotation to enable)",
+				v.hostPath, v.mountPath, pxutil.AnnotationIsPrivileged)
+			volMount.MountPropagation = nil
+		}
+
+		if t.isPKS && v.pks != nil {
+			if v.pks.mountPath != "" {
+				volMount.MountPath = v.pks.mountPath
+			}
+			if v.pks.mountPropagation != nil {
+				if *(v.pks.mountPropagation) == "-" {
+					volMount.MountPropagation = nil
+				} else {
+					volMount.MountPropagation = v.pks.mountPropagation
+				}
+			}
 		}
 		if volMount.MountPath != "" {
 			volumeMounts = append(volumeMounts, volMount)
@@ -1358,8 +1401,7 @@ func (t *template) getVolumes() []v1.Volume {
 	if t.cluster.Annotations != nil {
 		preFltCheck = strings.TrimSpace(strings.ToLower(t.cluster.Annotations[pxutil.AnnotationPreflightCheck]))
 	}
-	pxVer30, _ := version.NewVersion("3.0")
-	if t.pxVersion.GreaterThanOrEqual(pxVer30) && preFltCheck != "true" {
+	if t.pxVersion.GreaterThanOrEqual(pxVer3_0) && preFltCheck != "true" {
 		extensions = append(extensions, t.getTelemetryPhoneHomeVolumeInfoList)
 	}
 
@@ -1810,17 +1852,35 @@ func getDefaultVolumeInfoList(pxVersion *version.Version) []volumeInfo {
 // getCommonVolumeList returns a common list of volumes across all containers
 func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
 	list := make([]volumeInfo, 0)
-	pxVer2_9_1, _ := version.NewVersion("2.9.1")
-	if pxVersion.GreaterThanOrEqual(pxVer2_9_1) {
+
+	if pxVersion.GreaterThanOrEqual(pxVer3_0_1) {
 		list = append(list, volumeInfo{
-			name:      "varlibosd",
-			hostPath:  "/var/lib/osd",
-			mountPath: "/var/lib/osd",
-			pks: &pksVolumeInfo{
-				hostPath: "/var/vcap/store/lib/osd",
-			},
+			name:             "varlibosd",
+			hostPath:         "/var/lib/osd",
+			mountPath:        "/var/lib/osd",
 			mountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
+			pks: &pksVolumeInfo{
+				hostPath:         "/var/vcap/store/lib/osd",
+				mountPropagation: mountPropagationModePtr(v1.MountPropagationMode("-")),
+			},
 		})
+	} else {
+		list = append(list, volumeInfo{
+			name: "pxlogs",
+			pks: &pksVolumeInfo{
+				mountPath: "/var/lib/osd/log",
+				hostPath:  "/var/vcap/store/lib/osd/log",
+			},
+		})
+
+		if pxVersion.GreaterThanOrEqual(pxVer2_9_1) {
+			list = append(list, volumeInfo{
+				name:             "varlibosd",
+				hostPath:         "/var/lib/osd",
+				mountPath:        "/var/lib/osd",
+				mountPropagation: mountPropagationModePtr(v1.MountPropagationBidirectional),
+			})
+		}
 	}
 
 	list = append(list, []volumeInfo{
