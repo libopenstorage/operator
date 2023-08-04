@@ -460,7 +460,7 @@ func (t *template) portworxContainer(cluster *corev1.StorageCluster) v1.Containe
 	sc := &v1.SecurityContext{
 		Privileged: boolPtr(true),
 	}
-	if t.isBottleRocketOS() {
+	if !pxutil.IsPrivileged(cluster) || t.isBottleRocketOS() {
 		sc.Privileged = boolPtr(false)
 		sc.Capabilities = &v1.Capabilities{
 			Add: []v1.Capability{
@@ -1212,6 +1212,7 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 	volumeMounts := make([]v1.VolumeMount, 0, len(vols))
 	mountPathSet := make(map[string]bool)
+	runPrivileged := pxutil.IsPrivileged(t.cluster)
 	for _, v := range vols {
 		volMount := v1.VolumeMount{
 			Name:             v.name,
@@ -1219,6 +1220,12 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 			SubPath:          v.subPath,
 			ReadOnly:         v.readOnly,
 			MountPropagation: v.mountPropagation,
+		}
+		if !runPrivileged && v.mountPropagation != nil && *v.mountPropagation == v1.MountPropagationBidirectional {
+			logrus.Warnf("Cannot use %s:%s:shared mount on non-privileged containers"+
+				" (downgrading to non-shared, set %s=true annotation to enable)",
+				v.hostPath, v.mountPath, pxutil.AnnotationIsPrivileged)
+			volMount.MountPropagation = nil
 		}
 		if t.isPKS && v.pks != nil && v.pks.mountPath != "" {
 			volMount.MountPath = v.pks.mountPath
