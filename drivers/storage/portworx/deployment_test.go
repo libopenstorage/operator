@@ -2,6 +2,7 @@ package portworx
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -2171,6 +2172,40 @@ func TestPKSPodSpec(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assertPodSpecEqual(t, expected, &actual)
+
+	// check PKS when using px-2.9.1
+
+	cluster.Spec.Image = "portworx/oci-monitor:2.9.1"
+	expected_2_9_1 := expected.DeepCopy()
+	expected_2_9_1.Containers[0].Image = "docker.io/" + cluster.Spec.Image
+	podSpecAddMount(expected_2_9_1, "varlibosd", "/var/lib/osd:/var/lib/osd:shared")
+	podSpecRemoveEnv(expected_2_9_1, "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS")
+
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	assertPodSpecEqual(t, expected_2_9_1, &actual)
+
+	// check PKS when using px-3.0.1
+
+	cluster.Spec.Image = "portworx/oci-monitor:3.0.1"
+	expected_3_0_1 := expected_2_9_1.DeepCopy()
+	expected_3_0_1.Containers[0].Image = "docker.io/" + cluster.Spec.Image
+	expected_3_0_1.Containers[0].Args = append(expected_3_0_1.Containers[0].Args,
+		"-v", "/var/lib/osd/pxns:/var/lib/osd/pxns:shared",
+		"-v", "/var/lib/osd/mounts:/var/lib/osd/mounts:shared",
+	)
+	podSpecRemoveMount(expected_3_0_1, "varlibosd")
+	podSpecRemoveMount(expected_3_0_1, "pxlogs")
+	podSpecAddMount(expected_3_0_1, "varlibosd", "/var/vcap/store/lib/osd:/var/lib/osd")
+	podSpecRemoveEnv(expected_3_0_1, "PRE-EXEC")
+	expected_3_0_1.Containers[0].Env = append(expected_3_0_1.Containers[0].Env, v1.EnvVar{
+		Name: "PRE-EXEC", Value: "rm -fr /var/lib/osd/driver",
+	})
+
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assertPodSpecEqual(t, expected_3_0_1, &actual)
 }
 
 func TestOpenshiftRuncPodSpec(t *testing.T) {
@@ -2234,16 +2269,39 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 
 	// Test securityContxt w/ privileged=false
 	cluster.ObjectMeta.Annotations[pxutil.AnnotationIsPrivileged] = "false"
+
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "need portworx 3.0.1 or higher to use annotation '"+
+		pxutil.AnnotationIsPrivileged+"'")
+
+	cluster.Spec.Image = "portworx/oci-monitor:3.0.1"
+	expected_3_0_1 := expected.DeepCopy()
+	expected_3_0_1.Containers[0].Image = "docker.io/" + cluster.Spec.Image
+	expected_3_0_1.Containers[0].Args = append(expected_3_0_1.Containers[0].Args,
+		"-v", "/var/lib/osd/pxns:/var/lib/osd/pxns:shared",
+		"-v", "/var/lib/osd/mounts:/var/lib/osd/mounts:shared",
+	)
+	expected_3_0_1.Containers[0].SecurityContext = &v1.SecurityContext{
+		Privileged: boolPtr(false),
+		Capabilities: &v1.Capabilities{
+			Add: []v1.Capability{
+				"SYS_ADMIN", "SYS_PTRACE", "SYS_RAWIO", "SYS_MODULE", "LINUX_IMMUTABLE",
+			},
+		},
+	}
+	podSpecAddMount(expected_3_0_1, "varlibosd", "/var/lib/osd:/var/lib/osd")
+	podSpecRemoveEnv(expected_3_0_1, "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS")
+
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
 
-	pxc := actual.Containers[0]
-	require.Equal(t, "portworx", pxc.Name)
-	require.NotNil(t, pxc.SecurityContext.Privileged)
-	assert.False(t, *pxc.SecurityContext.Privileged)
-	require.NotNil(t, pxc.SecurityContext.Capabilities)
-	assert.Equal(t, 5, len(pxc.SecurityContext.Capabilities.Add))
-	assert.Empty(t, pxc.SecurityContext.Capabilities.Drop)
+	assertPodSpecEqual(t, expected_3_0_1, &actual)
+
+	require.Equal(t, 1, len(actual.Containers))
+	for _, v := range actual.Containers[0].VolumeMounts {
+		assert.Nil(t, v.MountPropagation, "Wrong propagation on %v", v)
+	}
 }
 
 func TestPodSpecForK3s(t *testing.T) {
@@ -3931,4 +3989,69 @@ func assertContainerEqual(t *testing.T, expected, actual v1.Container) {
 	assert.ElementsMatch(t, expected.Args, actual.Args)
 	assert.ElementsMatch(t, expected.Env, actual.Env)
 	assert.ElementsMatch(t, expected.VolumeMounts, actual.VolumeMounts)
+}
+
+func podSpecAddMount(ps *v1.PodSpec, name, mntSpec string) {
+	if ps == nil || name == "" || mntSpec == "" {
+		return
+	}
+	parts := strings.Split(mntSpec, ":")
+	src := v1.Volume{
+		Name: name,
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: parts[0],
+			},
+		},
+	}
+	dst := v1.VolumeMount{
+		Name:      name,
+		MountPath: parts[1],
+	}
+	if len(parts) > 2 {
+		if parts[2] == "shared" || parts[2] == "rshared" {
+			dst.MountPropagation = mountPropagationModePtr(v1.MountPropagationBidirectional)
+		}
+	}
+	ps.Volumes = append(ps.Volumes, src)
+	ps.Containers[0].VolumeMounts = append(ps.Containers[0].VolumeMounts, dst)
+}
+
+func podSpecRemoveMount(ps *v1.PodSpec, name string) {
+	if ps == nil || name == "" {
+		return
+	}
+
+	newVols := make([]v1.Volume, 0, len(ps.Volumes))
+	for _, v := range ps.Volumes {
+		if v.Name == name {
+			continue
+		}
+		newVols = append(newVols, v)
+	}
+	ps.Volumes = newVols
+
+	newVolMmounts := make([]v1.VolumeMount, 0, len(ps.Containers[0].VolumeMounts))
+	for _, v := range ps.Containers[0].VolumeMounts {
+		if v.Name == name {
+			continue
+		}
+		newVolMmounts = append(newVolMmounts, v)
+	}
+	ps.Containers[0].VolumeMounts = newVolMmounts
+}
+
+func podSpecRemoveEnv(ps *v1.PodSpec, name string) {
+	if ps == nil || name == "" {
+		return
+	}
+
+	newEnv := make([]v1.EnvVar, 0, len(ps.Containers[0].Env))
+	for _, v := range ps.Containers[0].Env {
+		if v.Name == name {
+			continue
+		}
+		newEnv = append(newEnv, v)
+	}
+	ps.Containers[0].Env = newEnv
 }
