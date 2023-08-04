@@ -5,6 +5,7 @@ package integrationtest
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -447,6 +448,8 @@ func BasicUpgradeOperator(tc *types.TestCase) func(*testing.T) {
 			require.NoError(t, err)
 			pxOperatorImage, err := ci_utils.GetPxOperatorImage(pxOperatorDeployment)
 			require.NoError(t, err)
+			lastHopVersion, err := ci_utils.GetPXOperatorVersion(pxOperatorDeployment)
+			require.NoError(t, err)
 			if len(lastHopImage) == 0 {
 				// This is initially deployed PX Operator version
 				lastHopImage = pxOperatorImage
@@ -483,9 +486,35 @@ func BasicUpgradeOperator(tc *types.TestCase) func(*testing.T) {
 			require.Equal(t, pxOperatorImage, hopImage)
 
 			// Validate StorageCluster
+			// NOTE: This is a workaround for a known Telemetry port issue, where restart of PX pods is required for them to set port from 9024 to new expected port 9029
+			telemetryErr := "failed to validate Telemetry"
 			err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
-			require.NoError(t, err)
+			actualTelemetryErr := err
 
+			// NOTE: This is a workaround for a known Telemetry port issue, where restart of PX pods is required for them to set port from 9024 to new expected port 9029
+			if actualTelemetryErr != nil {
+				if strings.Contains(actualTelemetryErr.Error(), telemetryErr) {
+					logrus.Warnf("Got Telemetry error: %v", actualTelemetryErr)
+					logrus.Info("Checking if Telemetry error is expected and needs a workaround to get it to work after the upgrade of PX Operator..")
+					currentHopVersion, err := ci_utils.GetPXOperatorVersion(pxOperatorDeployment)
+					require.NoError(t, err)
+					if lastHopVersion.LessThanOrEqual(ci_utils.PxOperatorVer23_5_1) && currentHopVersion.GreaterThanOrEqual(ci_utils.PxOperatorVer23_5_1) {
+						logrus.Warnf("PX Operator upgraded from [%s] to [%s], before upgrade PX Operator version was less than 23.5.1, will need to delete PX pods due to known Telemetry port issue, will perform workaround..", lastHopVersion.String(), currentHopVersion.String())
+						// If error is Telemetry related, bounce PX pods
+						logrus.Info("Deleting portworx pods..")
+						err = coreops.Instance().DeletePodsByLabels(cluster.Namespace, map[string]string{"name": "portworx"}, 120*time.Second)
+						require.NoError(t, err)
+
+						// Validate StorageCluster again
+						logrus.Info("Re-validating PX components..")
+						err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+						require.NoError(t, err)
+					} else {
+						logrus.Warnf("Previous PX Operator version before upgrade [%s] should have not caused Telemetry issue when upgrading to PX Operator [%s]", lastHopVersion.String(), currentHopVersion.String())
+						require.NoError(t, fmt.Errorf("Telemetry error is not expected here, Err: %v", actualTelemetryErr))
+					}
+				}
+			}
 			lastHopImage = hopImage
 		}
 
