@@ -133,7 +133,7 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
 	check = strings.TrimSpace(strings.ToLower(check))
 	if !ok || check == "skip" {
-		setClusterCondition(corev1.ClusterConditionStatusDisabled, "pre-flight: aborted...")
+		setClusterCondition(corev1.ClusterConditionStatusDisabled, "pre-flight: skipped...")
 		logrus.Infof(condition.Message)
 		deletePreflight()
 		return nil
@@ -174,7 +174,9 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 			deletePreflight()
 			return err
 		}
-		setClusterCondition(corev1.ClusterConditionStatusInProgress, "pre-flight: in progress...")
+		setClusterCondition(corev1.ClusterConditionStatusInProgress,
+			fmt.Sprintf("pre-flight: Operation still in progress: Completed [%v] In Progress [%v] Total [%v]",
+				completed, inProgress, total))
 		logrus.Infof(condition.Message)
 		return nil
 	}

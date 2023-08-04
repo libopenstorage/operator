@@ -434,7 +434,7 @@ func isPreflightComplete(cluster *corev1.StorageCluster) bool {
 	return false
 }
 
-func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) (corev1.ClusterConditionStatus, error) {
+func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) (*corev1.ClusterCondition, error) {
 	storageNodes := &corev1.StorageNodeList{}
 	serr := c.client.List(context.TODO(), storageNodes,
 		&client.ListOptions{Namespace: toUpdate.Namespace})
@@ -457,21 +457,28 @@ func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) (corev1.Clu
 		}
 	}
 
-	conditionStatus := corev1.ClusterConditionStatusInProgress // Default condition status
+	defCondition := &corev1.ClusterCondition{ // set default InProgress condition
+		Source:  pxutil.PortworxComponentName,
+		Type:    corev1.ClusterConditionTypePreflight,
+		Message: "pre-flight: In progress",
+		Status:  corev1.ClusterConditionStatusInProgress,
+	}
 
 	// Run driver specific pre-flights
 	err := c.Driver.Validate(toUpdate)
 	if err != nil {
-		logrus.WithError(err).Errorf("pre-flight validate failed")
-		conditionStatus = corev1.ClusterConditionStatusFailed // Condition status is set in Validate(), but set a default to be safe
+		defCondition.Status = corev1.ClusterConditionStatusFailed // Update default condition on errror
+		defCondition.Message = "pre-flight: validate failed"
+		logrus.WithError(err).Errorf(defCondition.Message)
 	}
 
+	// Get condition set from Validate()
 	condition := util.GetStorageClusterCondition(toUpdate, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
-	if condition != nil { // Get condition status set in Validate()
-		conditionStatus = condition.Status
+	if condition == nil { // Set condition status set if was not in Validate()
+		condition = defCondition
 	}
 
-	if conditionStatus != corev1.ClusterConditionStatusInProgress { // Status not in progress must be done or an issue occurred
+	if condition.Status != corev1.ClusterConditionStatusInProgress { // Status not in progress must be done or an issue occurred
 		// Delete StorageNodes created for c.Driver.Validate() checks.
 		storageNodes = &corev1.StorageNodeList{}
 		serr = c.client.List(context.TODO(), storageNodes,
@@ -489,7 +496,7 @@ func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) (corev1.Clu
 		}
 	}
 
-	return conditionStatus, err
+	return condition, err
 }
 
 func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
@@ -511,18 +518,27 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 
 	// Only do the preflight check on demand once a time
 
-	var err error
+	var (
+		condition *corev1.ClusterCondition
+		err       error
+	)
 
-	conditionStatus := corev1.ClusterConditionStatusInProgress
+	defCondition := &corev1.ClusterCondition{ // set default InProgress condition
+		Source:  pxutil.PortworxComponentName,
+		Type:    corev1.ClusterConditionTypePreflight,
+		Message: "pre-flight: In progress",
+		Status:  corev1.ClusterConditionStatusInProgress,
+	}
 
 	// Do the preflight check for eks only for now to check the cloud drive permission
 	if preflight.IsEKS() {
 		//  Only executed once in 1st pre-flight loop cycle.  If preflight condition is not set its 1st time through  pre-flight loop
-		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+		condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
 		if condition == nil {
 			if err = preflight.Instance().CheckCloudDrivePermission(cluster); err != nil {
-				logrus.WithError(err).Errorf("permission check for eks cloud drive failed")
-				conditionStatus = corev1.ClusterConditionStatusFailed
+				defCondition.Status = corev1.ClusterConditionStatusFailed
+				defCondition.Message = "permission check for eks cloud drive failed"
+				logrus.WithError(err).Errorf(defCondition.Message)
 			}
 		}
 	}
@@ -533,24 +549,19 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 
 	// Skip over driver Validate() if an error has occurred
 	if err == nil {
-		conditionStatus, err = c.driverValidate(toUpdate)
+		condition, err = c.driverValidate(toUpdate)
 	}
 
-	condition := &corev1.ClusterCondition{
-		Source: pxutil.PortworxComponentName,
-		Type:   corev1.ClusterConditionTypePreflight,
-		Status: conditionStatus,
+	if condition == nil {
+		condition = defCondition
 	}
 
 	if err != nil {
 		logrus.Errorf("storage cluster preflight check failed")
 		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
-		condition.Message = err.Error()
 	} else {
-		condition.Message = "pre-flight: in progress..."
-		if conditionStatus != corev1.ClusterConditionStatusInProgress {
+		if condition.Status != corev1.ClusterConditionStatusInProgress {
 			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
-			condition.Message = "pre-flight: done..."
 		}
 	}
 
