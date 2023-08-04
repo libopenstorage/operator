@@ -467,8 +467,8 @@ func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) (*corev1.Cl
 	// Run driver specific pre-flights
 	err := c.Driver.Validate(toUpdate)
 	if err != nil {
-		defCondition.Status = corev1.ClusterConditionStatusFailed // Update default condition on errror
-		defCondition.Message = "pre-flight: validate failed"
+		defCondition.Status = corev1.ClusterConditionStatusFailed // Update default condition on error
+		defCondition.Message = fmt.Sprintf("pre-flight: validate failed %v", err)
 		logrus.WithError(err).Errorf(defCondition.Message)
 	}
 
@@ -536,9 +536,10 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
 		if condition == nil {
 			if err = preflight.Instance().CheckCloudDrivePermission(cluster); err != nil {
-				defCondition.Status = corev1.ClusterConditionStatusFailed
-				defCondition.Message = "permission check for eks cloud drive failed"
-				logrus.WithError(err).Errorf(defCondition.Message)
+				condition = defCondition
+				condition.Status = corev1.ClusterConditionStatusFailed
+				condition.Message = "permission check for eks cloud drive failed"
+				logrus.WithError(err).Errorf(condition.Message)
 			}
 		}
 	}
