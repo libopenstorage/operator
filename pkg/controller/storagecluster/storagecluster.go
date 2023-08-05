@@ -510,9 +510,9 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		return nil
 	} else if check == "false" {
 		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
-		if condition != nil && condition.Status == corev1.ClusterConditionStatusFailed {
+		if condition != nil && (condition.Status == corev1.ClusterConditionStatusFailed || condition.Status == corev1.ClusterConditionStatusTimeout) {
 			return fmt.Errorf("FATAL: preflight checks have failed on your cluster.  " +
-				"Check events and contact support to help make sure your cluster meets all prerequisites")
+				"Check events, logs and contact support to help make sure your cluster meets all prerequisites")
 		}
 		// preflight passed or not required
 		logrus.Infof("preflight check not required")

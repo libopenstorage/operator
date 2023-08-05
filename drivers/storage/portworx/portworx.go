@@ -172,6 +172,7 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		if age >= preFlightTimeOut {
 			err = fmt.Errorf("pre-flight: pre-flight check timed out")
 			setClusterCondition(corev1.ClusterConditionStatusTimeout, err.Error())
+			k8sutil.WarningEvent(p.recorder, cluster, util.FailedPreFlight, err.Error())
 			deletePreflight()
 			return err
 		}
