@@ -9101,7 +9101,8 @@ func TestEKSPreflightCheck(t *testing.T) {
 	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
 
 	// TestCase: without the permission fixed, preflight check should return error directly
-	errMsg = "please make sure your cluster meet all prerequisites and rerun preflight check"
+	errMsg = "FATAL: preflight checks have failed on your cluster.  " +
+		"Check events, logs and contact support to help make sure your cluster meets all prerequisites"
 	err = controller.runPreflightCheck(cluster)
 	require.Error(t, err)
 	require.Contains(t, errMsg, err.Error())

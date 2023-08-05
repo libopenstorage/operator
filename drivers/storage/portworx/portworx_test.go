@@ -492,6 +492,9 @@ func TestValidateVsphere(t *testing.T) {
 		},
 	}
 
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sClient := testutil.FakeK8sClient(preflightDS)
 
 	err := k8sClient.Create(context.TODO(), preFlightPod1)
