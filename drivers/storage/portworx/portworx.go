@@ -165,7 +165,8 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
-	logrus.Infof("pre-flight: Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total)
+	progressStr := fmt.Sprintf("Completed [%v] In Progress [%v] Total [%v]", completed, inProgress, total)
+	logrus.Infof("pre-flight: %s", progressStr)
 	if total != 0 && completed == total {
 		logrus.Infof("pre-flight: checks completed...")
 	} else {
@@ -177,8 +178,7 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 			return err
 		}
 		setClusterCondition(corev1.ClusterConditionStatusInProgress,
-			fmt.Sprintf("pre-flight: Operation still in progress: Completed [%v] In Progress [%v] Total [%v]",
-				completed, inProgress, total))
+			fmt.Sprintf("pre-flight: Operation still in progress: %s", progressStr))
 		logrus.Infof(condition.Message)
 		return nil
 	}
