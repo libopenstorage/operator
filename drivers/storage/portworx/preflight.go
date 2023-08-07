@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
@@ -41,8 +42,9 @@ type PreFlightPortworx interface {
 	// RunPreFlight runs the pre-flight  daemonset
 	RunPreFlight() error
 	// GetPreFlightStatus returns the status of the pre-flight daemonset
-	// returns the no. of completed, in progress and total pods
-	GetPreFlightStatus() (int32, int32, int32, error)
+	// returns the no. of completed, in progress and total pods, plus how
+	// long the daemonset  has been running.
+	GetPreFlightStatus() (int32, int32, int32, time.Duration, error)
 	// GetPreFlightPods returns the pods of the pre-flight daemonset
 	GetPreFlightPods() ([]*v1.Pod, error)
 	// ProcessPreFlightResults process StorageNode status checks
@@ -75,7 +77,7 @@ func NewPreFlighter(
 	}
 }
 
-func getPreFlightPodsFromNamespace(k8sClient client.Client, namespace string) (*appsv1.DaemonSet, []*v1.Pod, error) {
+func GetPreFlightPodsFromNamespace(k8sClient client.Client, namespace string) (*appsv1.DaemonSet, []*v1.Pod, error) {
 	ds := &appsv1.DaemonSet{}
 	err := k8sClient.Get(
 		context.TODO(),
@@ -225,14 +227,14 @@ func (u *preFlightPortworx) CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerR
 
 // GetPreFlightPods returns the pods of the pre-flight daemonset
 func (u *preFlightPortworx) GetPreFlightPods() ([]*v1.Pod, error) {
-	_, pods, err := getPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
+	_, pods, err := GetPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
 	return pods, err
 }
 
-func (u *preFlightPortworx) GetPreFlightStatus() (int32, int32, int32, error) {
-	ds, pods, err := getPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
+func (u *preFlightPortworx) GetPreFlightStatus() (int32, int32, int32, time.Duration, error) {
+	ds, pods, err := GetPreFlightPodsFromNamespace(u.k8sClient, u.cluster.Namespace)
 	if err != nil {
-		return -1, -1, -1, err
+		return -1, -1, -1, 0, err
 	}
 	totalPods := ds.Status.DesiredNumberScheduled
 	completedPods := 0
@@ -245,8 +247,11 @@ func (u *preFlightPortworx) GetPreFlightStatus() (int32, int32, int32, error) {
 			}
 		}
 	}
+
+	statusAge := time.Since(ds.CreationTimestamp.Time)
+	logrus.Infof("Pre-flight status running time: %v", statusAge)
 	logrus.Infof("Pre-flight Status: Completed [%v] InProgress [%v] Total Pods [%v]", completedPods, totalPods-int32(completedPods), totalPods)
-	return int32(completedPods), totalPods - int32(completedPods), totalPods, nil
+	return int32(completedPods), totalPods - int32(completedPods), totalPods, statusAge, nil
 }
 
 func (u *preFlightPortworx) RunPreFlight() error {
@@ -286,7 +291,11 @@ func (u *preFlightPortworx) RunPreFlight() error {
 
 	err = u.k8sClient.Create(context.TODO(), preflightDS)
 	if err != nil {
-		logrus.Errorf("runPreFlight: error creating: %v", err)
+		if errors.IsAlreadyExists(err) {
+			logrus.Infof("runPreFlight: daemonset already exists")
+		} else {
+			logrus.Errorf("RunPreFlight: error creating: %v", err)
+		}
 	}
 
 	return err
