@@ -508,7 +508,7 @@ func (t *template) portworxContainer(cluster *corev1.StorageCluster) v1.Containe
 		sc.Privileged = boolPtr(false)
 		sc.Capabilities = &v1.Capabilities{
 			Add: []v1.Capability{
-				"SYS_ADMIN", "SYS_PTRACE", "SYS_RAWIO", "SYS_MODULE", "LINUX_IMMUTABLE",
+				"SYS_ADMIN", "SYS_CHROOT", "SYS_PTRACE", "SYS_RAWIO", "SYS_MODULE", "LINUX_IMMUTABLE",
 			},
 		}
 	}
