@@ -9101,7 +9101,8 @@ func TestEKSPreflightCheck(t *testing.T) {
 	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
 
 	// TestCase: without the permission fixed, preflight check should return error directly
-	errMsg = "please make sure your cluster meet all prerequisites and rerun preflight check"
+	errMsg = "FATAL: preflight checks have failed on your cluster.  " +
+		"Check events, logs and contact support to help make sure your cluster meets all prerequisites"
 	err = controller.runPreflightCheck(cluster)
 	require.Error(t, err)
 	require.Contains(t, errMsg, err.Error())
@@ -9114,15 +9115,21 @@ func TestEKSPreflightCheck(t *testing.T) {
 
 	// TestCase: fix the permission then rerun preflight
 	cluster.Annotations[pxutil.AnnotationPreflightCheck] = "true"
+	// Cloud drive permission check will only be checked once when the status condition is not set.
+	cluster.Status.Conditions = []corev1.ClusterCondition{}
 	preflightOps.EXPECT().CheckCloudDrivePermission(cluster).Return(nil)
 	err = controller.runPreflightCheck(cluster)
 	require.NoError(t, err)
 
+	// Pre-flight checks now contain DMthin checks which will not be executed unless cloud permission checks passes.
+	// Since the DMthin checks will not be  executed the condition returned will be 'ClusterConditionStatusInProgress'.
+	// This is good enough to determine if cloud permission is working. If it had failed DMthin would not be run and
+	// the condition would have been ClusterConditionStatusFailed.
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
 	require.NotNil(t, condition)
-	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
+	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
 }
 
 func TestStorageClusterStateDuringValidation(t *testing.T) {

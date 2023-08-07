@@ -106,6 +106,18 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 		cluster.Annotations["portworx.io/is-oke"] = "true"
 	}
 
+	// Add custom annotations
+	if len(PxCustomAnnotations) != 0 {
+		if cluster.Annotations == nil {
+			cluster.Annotations = make(map[string]string)
+		}
+		annotations := strings.Split(PxCustomAnnotations, ",")
+		for _, annotation := range annotations {
+			keyvalue := strings.Split(annotation, ":")
+			cluster.Annotations[keyvalue[0]] = strings.TrimSpace(keyvalue[1])
+		}
+	}
+
 	// Populate cloud storage
 	if len(PxDeviceSpecs) != 0 {
 		pxDeviceSpecs := strings.Split(PxDeviceSpecs, ";")

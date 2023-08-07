@@ -453,7 +453,36 @@ func TestGetPortworxVersion(t *testing.T) {
 	logrus.Infof("PX_RELEASE_MANIFEST_URL Env version check without oci-mage...")
 	cluster.Spec.Image = ""
 	assert.True(t, GetPortworxVersion(cluster).Equal(pxVer30))
+}
 
+func TestIsPrivileged(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "px-cluster",
+			Namespace:   "kube-system",
+			Annotations: map[string]string{},
+		},
+		Spec: corev1.StorageClusterSpec{},
+	}
+
+	assert.True(t, IsPrivileged(cluster))
+
+	data := []struct {
+		privileged string
+		expect     bool
+	}{
+		{"", true},
+		{"foo", true},
+		{"true", true},
+		{"false", false},
+		{"0", false},
+	}
+
+	for i, td := range data {
+		cluster.ObjectMeta.Annotations[AnnotationIsPrivileged] = td.privileged
+		got := IsPrivileged(cluster)
+		assert.Equal(t, td.expect, got, "Failed expectations for #%d/%#v", i, td)
+	}
 }
 
 func createClusterWithAuth() *corev1.StorageCluster {

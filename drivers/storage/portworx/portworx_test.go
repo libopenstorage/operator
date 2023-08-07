@@ -91,6 +91,9 @@ func TestValidate(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPreflightCheck: "true",
+			},
 		},
 	}
 
@@ -151,6 +154,7 @@ func TestValidate(t *testing.T) {
 		},
 	}
 
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sClient := testutil.FakeK8sClient(preflightDS)
 
 	err := k8sClient.Create(context.TODO(), preFlightPod1)
@@ -222,6 +226,9 @@ func TestValidateCheckFailure(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPreflightCheck: "true",
+			},
 		},
 	}
 
@@ -287,6 +294,7 @@ func TestValidateCheckFailure(t *testing.T) {
 		},
 	}
 
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sClient := testutil.FakeK8sClient(preflightDS)
 
 	err := k8sClient.Create(context.TODO(), preFlightPod1)
@@ -323,6 +331,9 @@ func TestValidateMissingRequiredCheck(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPreflightCheck: "true",
+			},
 		},
 	}
 
@@ -379,6 +390,7 @@ func TestValidateMissingRequiredCheck(t *testing.T) {
 		},
 	}
 
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sClient := testutil.FakeK8sClient(preflightDS)
 
 	err := k8sClient.Create(context.TODO(), preFlightPod1)
@@ -480,6 +492,9 @@ func TestValidateVsphere(t *testing.T) {
 		},
 	}
 
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sClient := testutil.FakeK8sClient(preflightDS)
 
 	err := k8sClient.Create(context.TODO(), preFlightPod1)
