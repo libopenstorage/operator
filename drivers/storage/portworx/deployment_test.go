@@ -2286,7 +2286,7 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 		Privileged: boolPtr(false),
 		Capabilities: &v1.Capabilities{
 			Add: []v1.Capability{
-				"SYS_ADMIN", "SYS_PTRACE", "SYS_RAWIO", "SYS_MODULE", "LINUX_IMMUTABLE",
+				"SYS_ADMIN", "SYS_CHROOT", "SYS_PTRACE", "SYS_RAWIO", "SYS_MODULE", "LINUX_IMMUTABLE",
 			},
 		},
 	}
@@ -2408,7 +2408,7 @@ func TestPodSpecForBottleRocketAMI(t *testing.T) {
 
 	// double-check permissions
 	expectedCapabilities := []v1.Capability{
-		"SYS_ADMIN", "SYS_PTRACE", "SYS_RAWIO", "SYS_MODULE", "LINUX_IMMUTABLE",
+		"SYS_ADMIN", "SYS_CHROOT", "SYS_PTRACE", "SYS_RAWIO", "SYS_MODULE", "LINUX_IMMUTABLE",
 	}
 	require.NotNil(t, actual.Containers[0].SecurityContext.Privileged)
 	assert.False(t, *actual.Containers[0].SecurityContext.Privileged)
