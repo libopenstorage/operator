@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"crypto/tls"
 	"io"
 	"net/http"
 	"net/url"
@@ -44,6 +45,9 @@ func getManifestFromURL(manifestURL string, proxy string) ([]byte, error) {
 
 		client := &http.Client{
 			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
 				Proxy: http.ProxyURL(proxyURL),
 			},
 		}
