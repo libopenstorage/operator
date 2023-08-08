@@ -318,18 +318,24 @@ func (c *csi) createClusterRole(
 				Verbs:     []string{"*"},
 			},
 			{
-				APIGroups:     []string{"security.openshift.io"},
-				Resources:     []string{"securitycontextconstraints"},
-				ResourceNames: []string{PxRestrictedSCCName},
-				Verbs:         []string{"use"},
-			},
-			{
 				APIGroups:     []string{"policy"},
 				Resources:     []string{"podsecuritypolicies"},
 				ResourceNames: []string{constants.PrivilegedPSPName},
 				Verbs:         []string{"use"},
 			},
 		},
+	}
+
+	if !pxutil.IsPrivileged(cluster) {
+		clusterRole.Rules = append(
+			clusterRole.Rules,
+			rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				ResourceNames: []string{PxRestrictedSCCName},
+				Verbs:         []string{"use"},
+			},
+		)
 	}
 
 	k8sVer1_14, err := version.NewVersion("1.14")
