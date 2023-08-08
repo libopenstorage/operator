@@ -132,7 +132,7 @@ spec:
             - name: dbusmount
               mountPath: /var/run/dbus
         - name: csi-node-driver-registrar
-          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.2
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.8.0
           imagePullPolicy: Always
           args:
             - "--v=5"
@@ -363,7 +363,7 @@ spec:
             - name: socket-dir
               mountPath: /csi
         - name: csi-resizer
-          image: registry.k8s.io/sig-storage/csi-resizer:v1.6.0
+          image: registry.k8s.io/sig-storage/csi-resizer:v1.8.0
           imagePullPolicy: Always
           args:
             - "--v=3"
