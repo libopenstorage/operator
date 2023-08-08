@@ -80,8 +80,8 @@ BUNDLE_DIR         := $(BASE_DIR)/deploy/olm-catalog/portworx
 RELEASE_BUNDLE_DIR := $(BUNDLE_DIR)/$(RELEASE_VER)
 BUNDLE_VERSIONS    := $(shell find $(BUNDLE_DIR) -mindepth 1 -maxdepth 1 -type d )
 
-LDFLAGS += "-s -w -X github.com/libopenstorage/operator/pkg/version.Version=$(VERSION)"
-BUILD_OPTIONS := -ldflags=$(LDFLAGS)
+FLAGS += "-s -w -X github.com/libopenstorage/operator/pkg/version.Version=$(VERSION)"
+BUILD_OPTIONS := -ldflags=$(FLAGS)
 
 .DEFAULT_GOAL=all
 .PHONY: operator deploy clean vendor vendor-update test

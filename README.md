@@ -30,7 +30,7 @@ If you get errors like
 
 try to switch to go 1.19. 
 
-Make sure not only $GOPATH but also $GOPATH/bin are in your system $PATH, otherwise `staticcheck` would fail.
+Make sure not only $GOPATH but also $GOPATH/bin are in your system $PATH, otherwise "staticcheck" would fail.
 
 ## Build operator container
 
@@ -45,3 +45,4 @@ export DOCKER_HUB_REPO=<eg. mybuildx>
 ```sh
 make container deploy
 ```
+

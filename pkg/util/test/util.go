@@ -487,7 +487,7 @@ func validateStorageNodes(pxImageList map[string]string, cluster *corev1.Storage
 			for _, env := range cluster.Spec.Env {
 				if env.Name == PxReleaseManifestURLEnvVarName {
 					// Looking for clear PX version before /version in the URL
-					ver := regexp.MustCompile(`\S+\/(\d.\S+)\/version`).FindStringSubmatch(env.Value)
+					ver := regexp.MustCompile("\\S+\\/(\\d.\\S+)\\/version").FindStringSubmatch(env.Value)
 					if ver != nil {
 						expectedPxVersion = ver[1]
 					} else {

@@ -97,7 +97,7 @@ var (
 	}
 
 	// hostnameWithDomainRe regex matches hostname with a DNS domain
-	hostnameWithDomainRe = regexp.MustCompile(`^(?i)[a-z0-9-]+(\.[a-z0-9-]+)+\.?$`)
+	hostnameWithDomainRe = regexp.MustCompile("^(?i)[a-z0-9-]+(\\.[a-z0-9-]+)+\\.?$")
 )
 
 // AddDefaultRegistryToImage adds default registry to image.
