@@ -14,15 +14,6 @@ spec:
         app: px-csi-driver
     spec:
       serviceAccountName: px-csi
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: kubernetes.io/os
-                    operator: In
-                    values:
-                      - linux
       containers:
         - name: csi-external-provisioner
           imagePullPolicy: Always

@@ -172,8 +172,8 @@ func (w *windows) getDesiredNodeRegistrarImage(cluster *corev1.StorageCluster) s
 func (w *windows) getDesiredLivenessImage(cluster *corev1.StorageCluster) string {
 	imageName := k8s.DefaultK8SRegistryPath + "/sig-storage/livenessprobe:v2.7.0"
 
-	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.LivenessProbe != "" {
-		imageName = cluster.Status.DesiredImages.LivenessProbe
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.CsiLivenessProbe != "" {
+		imageName = cluster.Status.DesiredImages.CsiLivenessProbe
 	}
 	imageName = util.GetImageURN(cluster, imageName)
 	return imageName

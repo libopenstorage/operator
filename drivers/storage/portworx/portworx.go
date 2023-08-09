@@ -546,6 +546,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 					autoUpdateComponents(toUpdate)) {
 				toUpdate.Status.DesiredImages.CSISnapshotController = release.Components.CSISnapshotController
 			}
+			toUpdate.Status.DesiredImages.CsiLivenessProbe = release.Components.CsiLivenessProbe
+
 		}
 
 		if toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Prometheus != nil {
@@ -586,7 +588,6 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			{&toUpdate.Status.DesiredImages.KubeControllerManager, release.Components.KubeControllerManager},
 			{&toUpdate.Status.DesiredImages.KubeScheduler, release.Components.KubeScheduler},
 			{&toUpdate.Status.DesiredImages.Pause, release.Components.Pause},
-			{&toUpdate.Status.DesiredImages.LivenessProbe, release.Components.LivenessProbe},
 		}
 		for _, v := range imagesData {
 			if *v.desiredImage == "" {
