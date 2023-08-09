@@ -1953,9 +1953,6 @@ func verifyPVCControllerInstall(
 	require.NoError(t, err)
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Empty(t, actualCR.OwnerReferences)
-	fmt.Println(len(expectedCR.Rules))
-	fmt.Println(len(actualCR.Rules))
-
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
 
 	// PVC Controller ClusterRoleBinding
