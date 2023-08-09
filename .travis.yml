@@ -14,8 +14,8 @@ script:
       export DOCKER_HUB_OPERATOR_TAG=23.7.0-dev
       export DOCKER_HUB_OPERATOR_TEST_TAG=23.7.0-dev
     else
-      export DOCKER_HUB_OPERATOR_TAG="git rev-parse --short HEAD"
-      export DOCKER_HUB_OPERATOR_TEST_TAG="git rev-parse --short HEAD"
+      export DOCKER_HUB_OPERATOR_TAG=$(git rev-parse --short HEAD)
+      export DOCKER_HUB_OPERATOR_TEST_TAG=$(git rev-parse --short HEAD)
     fi
     make vendor-update all test verify-bundle-dir container integration-test integration-test-container &&
     if [ "${TRAVIS_PULL_REQUEST}" == "false" ]; then
