@@ -90,7 +90,7 @@ func (c *lighthouse) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createClusterRole(); err != nil {
+	if err := c.createClusterRole(cluster); err != nil {
 		return err
 	}
 	if err := c.createClusterRoleBinding(cluster.Namespace); err != nil {
@@ -147,75 +147,79 @@ func (c *lighthouse) createServiceAccount(
 	)
 }
 
-func (c *lighthouse) createClusterRole() error {
-	return k8sutil.CreateOrUpdateClusterRole(
-		c.k8sClient,
-		&rbacv1.ClusterRole{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: LhClusterRoleName,
+func (c *lighthouse) createClusterRole(cluster *corev1.StorageCluster) error {
+	sccName := PxSCCName
+	if !pxutil.IsPrivileged(cluster) {
+		sccName = PxRestrictedSCCName
+	}
+
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: LhClusterRoleName,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list"},
 			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups: []string{""},
-					Resources: []string{"pods"},
-					Verbs:     []string{"get", "list"},
+			{
+				APIGroups: []string{"extensions", "apps"},
+				Resources: []string{"deployments"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "create", "update"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "create", "update"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"nodes"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"services"},
+				Verbs:     []string{"get", "list", "watch", "create"},
+			},
+			{
+				APIGroups: []string{"stork.libopenstorage.org"},
+				Resources: []string{"*"},
+				Verbs:     []string{"get", "list", "create", "delete", "update"},
+			},
+			{
+				APIGroups: []string{"monitoring.coreos.com"},
+				Resources: []string{
+					"alertmanagers",
+					"prometheuses",
+					"prometheuses/finalizers",
+					"servicemonitors",
+					"prometheusrules",
 				},
-				{
-					APIGroups: []string{"extensions", "apps"},
-					Resources: []string{"deployments"},
-					Verbs:     []string{"get", "list"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"secrets"},
-					Verbs:     []string{"get", "create", "update"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"configmaps"},
-					Verbs:     []string{"get", "create", "update"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"nodes"},
-					Verbs:     []string{"get", "list", "watch"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"services"},
-					Verbs:     []string{"get", "list", "watch", "create"},
-				},
-				{
-					APIGroups: []string{"stork.libopenstorage.org"},
-					Resources: []string{"*"},
-					Verbs:     []string{"get", "list", "create", "delete", "update"},
-				},
-				{
-					APIGroups: []string{"monitoring.coreos.com"},
-					Resources: []string{
-						"alertmanagers",
-						"prometheuses",
-						"prometheuses/finalizers",
-						"servicemonitors",
-						"prometheusrules",
-					},
-					Verbs: []string{"*"},
-				},
-				{
-					APIGroups:     []string{"security.openshift.io"},
-					Resources:     []string{"securitycontextconstraints"},
-					ResourceNames: []string{PxRestrictedSCCName, "anyuid"},
-					Verbs:         []string{"use"},
-				},
-				{
-					APIGroups:     []string{"policy"},
-					Resources:     []string{"podsecuritypolicies"},
-					ResourceNames: []string{constants.PrivilegedPSPName},
-					Verbs:         []string{"use"},
-				},
+				Verbs: []string{"*"},
+			},
+			{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				ResourceNames: []string{sccName, "anyuid"},
+				Verbs:         []string{"use"},
+			},
+			{
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				ResourceNames: []string{constants.PrivilegedPSPName},
+				Verbs:         []string{"use"},
 			},
 		},
-	)
+	}
+
+	return k8sutil.CreateOrUpdateClusterRole(c.k8sClient, clusterRole)
 }
 
 func (c *lighthouse) createClusterRoleBinding(
