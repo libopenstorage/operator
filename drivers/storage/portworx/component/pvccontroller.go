@@ -163,6 +163,11 @@ func (c *pvcController) createServiceAccount(
 }
 
 func (c *pvcController) createClusterRole(cluster *corev1.StorageCluster) error {
+	sccName := PxSCCName
+	if !pxutil.IsPrivileged(cluster) {
+		sccName = PxRestrictedSCCName
+	}
+
 	clusterRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: PVCClusterRoleName,
@@ -234,6 +239,12 @@ func (c *pvcController) createClusterRole(cluster *corev1.StorageCluster) error 
 				Verbs:     []string{"get", "list", "watch", "create", "update"},
 			},
 			{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				ResourceNames: []string{sccName},
+				Verbs:         []string{"use"},
+			},
+			{
 				APIGroups:     []string{"policy"},
 				Resources:     []string{"podsecuritypolicies"},
 				ResourceNames: []string{constants.PrivilegedPSPName},
@@ -245,18 +256,6 @@ func (c *pvcController) createClusterRole(cluster *corev1.StorageCluster) error 
 				Verbs:     []string{"*"},
 			},
 		},
-	}
-
-	if pxutil.IsPrivileged(cluster) {
-		clusterRole.Rules = append(
-			clusterRole.Rules,
-			rbacv1.PolicyRule{
-				APIGroups:     []string{"security.openshift.io"},
-				Resources:     []string{"securitycontextconstraints"},
-				ResourceNames: []string{PxRestrictedSCCName},
-				Verbs:         []string{"use"},
-			},
-		)
 	}
 
 	return k8sutil.CreateOrUpdateClusterRole(c.k8sClient, clusterRole)
