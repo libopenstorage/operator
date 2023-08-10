@@ -17,6 +17,7 @@ const (
 	DiagStatusFailed         = "Failed"
 	DiagStatusCompleted      = "Completed"
 	DiagStatusPartialFailure = "PartiallyFailed"
+	DiagStatusDeleting       = "Deleting"
 	DiagStatusUnknown        = "Unknown"
 
 	// Labels
