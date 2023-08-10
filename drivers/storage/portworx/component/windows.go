@@ -91,11 +91,23 @@ func (w *windows) Reconcile(cluster *corev1.StorageCluster) error {
 }
 
 func (w *windows) Delete(cluster *corev1.StorageCluster) error {
+	var errList []string
 
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	if err := k8s.DeleteDaemonSet(w.client, WindowsDaemonSetName, core.NamespaceSystem, *ownerRef); err != nil {
-		return err
+		errList = append(errList, err.Error())
 	}
+
+	if cluster.DeletionTimestamp != nil &&
+		cluster.Spec.DeleteStrategy != nil && cluster.Spec.DeleteStrategy.Type != "" {
+		if err := k8s.DeleteStorageClass(w.client, WindowsStorageClass); err != nil {
+			errList = append(errList, err.Error())
+		}
+	}
+	if len(errList) > 0 {
+		return commonerrors.New(strings.Join(errList, " , "))
+	}
+
 	w.MarkDeleted()
 	return nil
 }
@@ -121,13 +133,12 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 
 	daemonSet.Name = WindowsDaemonSetName
 	daemonSet.Namespace = core.NamespaceSystem
-	daemonSet.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	for i, container := range daemonSet.Spec.Template.Spec.Containers {
 		var image string
 		if container.Name == "node-driver-registrar" {
 			image = w.getDesiredNodeRegistrarImage(cluster)
-
 		}
+
 		if container.Name == "liveness-probe" {
 			image = w.getDesiredLivenessImage(cluster)
 		}
@@ -147,11 +158,34 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 		return getErr
 	}
 
-	pxutil.ApplyStorageClusterSettingsToWindowsPodSpec(cluster, &daemonSet.Spec.Template.Spec)
+	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &daemonSet.Spec.Template.Spec)
+
+	nodeSelectorTerm := v1.NodeSelectorTerm{
+
+		MatchExpressions: []v1.NodeSelectorRequirement{
+			{
+				Key:      "kubernetes.io/os",
+				Operator: v1.NodeSelectorOpIn,
+				Values:   []string{"windows"},
+			},
+		},
+	}
+
+	daemonSet.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms =
+		append(daemonSet.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms, nodeSelectorTerm)
+
+	toleration := v1.Toleration{
+		Key:      "os",
+		Value:    "Windows",
+		Operator: v1.TolerationOpEqual,
+		Effect:   v1.TaintEffectNoSchedule,
+	}
+
+	daemonSet.Spec.Template.Spec.Tolerations = append(daemonSet.Spec.Template.Spec.Tolerations, toleration)
 
 	equal, _ := util.DeepEqualPodTemplate(&daemonSet.Spec.Template, &existingDaemonSet.Spec.Template)
 	if !equal || !w.isCreated {
-		if err := k8s.CreateOrUpdateDaemonSet(w.client, daemonSet, ownerRef); err != nil {
+		if err := k8s.CreateOrUpdateDaemonSet(w.client, daemonSet, nil); err != nil {
 			return err
 		}
 	}
@@ -160,7 +194,7 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 }
 
 func (w *windows) getDesiredNodeRegistrarImage(cluster *corev1.StorageCluster) string {
-	imageName := k8s.DefaultK8SRegistryPath + "/sig-storage/csi-node-driver-registrar:v2.6.2"
+	var imageName string
 
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {
 		imageName = cluster.Status.DesiredImages.CSINodeDriverRegistrar
@@ -170,8 +204,7 @@ func (w *windows) getDesiredNodeRegistrarImage(cluster *corev1.StorageCluster) s
 }
 
 func (w *windows) getDesiredLivenessImage(cluster *corev1.StorageCluster) string {
-	imageName := k8s.DefaultK8SRegistryPath + "/sig-storage/livenessprobe:v2.7.0"
-
+	var imageName string
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.CsiLivenessProbe != "" {
 		imageName = cluster.Status.DesiredImages.CsiLivenessProbe
 	}

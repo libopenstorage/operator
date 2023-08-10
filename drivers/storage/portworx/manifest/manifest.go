@@ -294,7 +294,7 @@ func fillCSIDefaults(
 	rel.Components.CSISnapshotter = csiImages.Snapshotter
 	rel.Components.CSISnapshotController = csiImages.SnapshotController
 	rel.Components.CSIHealthMonitorController = csiImages.HealthMonitorController
-	rel.Components.CsiLivenessProbe = k8sutil.DefaultK8SRegistryPath + "/sig-storage/livenessprobe:v2.7.0"
+	rel.Components.CsiLivenessProbe = csiImages.LivenessProbe
 }
 
 func fillPrometheusDefaults(

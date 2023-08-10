@@ -1203,60 +1203,6 @@ func ApplyStorageClusterSettingsToPodSpec(cluster *corev1.StorageCluster, podSpe
 	}
 }
 
-// ApplyStorageClusterSettingsToWindowsPodSpec applies settings from StorageCluster to pod spec of any component for windows node
-// Which includes:
-//   - custom image registry for images
-//   - ImagePullPolicy
-//   - ImagePullSecret
-//   - affinity to schedule on windows node
-func ApplyStorageClusterSettingsToWindowsPodSpec(cluster *corev1.StorageCluster, podSpec *v1.PodSpec) {
-	var containers []*v1.Container
-	for i := 0; i < len(podSpec.Containers); i++ {
-		containers = append(containers, &podSpec.Containers[i])
-	}
-	for i := 0; i < len(podSpec.InitContainers); i++ {
-		containers = append(containers, &podSpec.InitContainers[i])
-	}
-	for _, container := range containers {
-		// Change image to custom repository if it has not been done
-		if !strings.HasPrefix(container.Image, strings.TrimSuffix(cluster.Spec.CustomImageRegistry, "/")) {
-			container.Image = util.GetImageURN(cluster, container.Image)
-		}
-		container.ImagePullPolicy = ImagePullPolicy(cluster)
-	}
-
-	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
-		podSpec.ImagePullSecrets = append(
-			[]v1.LocalObjectReference{},
-			v1.LocalObjectReference{
-				Name: *cluster.Spec.ImagePullSecret,
-			},
-		)
-	}
-
-	if cluster.Spec.Placement != nil {
-		if cluster.Spec.Placement.NodeAffinity != nil {
-			podSpec.Affinity = &v1.Affinity{
-				NodeAffinity: &v1.NodeAffinity{
-					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-						NodeSelectorTerms: []v1.NodeSelectorTerm{
-							{
-								MatchExpressions: []v1.NodeSelectorRequirement{
-									{
-										Key:      "kubernetes.io/os",
-										Operator: v1.NodeSelectorOpIn,
-										Values:   []string{"windows"},
-									},
-								},
-							},
-						},
-					},
-				},
-			}
-		}
-	}
-}
-
 // GetClusterID returns portworx instance cluster ID
 func GetClusterID(cluster *corev1.StorageCluster) string {
 	if cluster.Annotations[AnnotationClusterID] != "" {
