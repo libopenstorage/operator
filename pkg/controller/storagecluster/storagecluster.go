@@ -742,12 +742,11 @@ func (c *Controller) syncStorageCluster(
 			return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
 		}
 	} else {
-		if _, exists := cluster.Annotations[pxutil.AnnotationPreflightCheck]; !exists {
-			if cluster.Annotations == nil {
-				cluster.Annotations = make(map[string]string)
-			}
-			cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+		// Always disable preflight if not supported.
+		if cluster.Annotations == nil {
+			cluster.Annotations = make(map[string]string)
 		}
+		cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 	}
 
 	if err := c.miscCleanUp(cluster); err != nil {
