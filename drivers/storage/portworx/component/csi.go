@@ -226,6 +226,11 @@ func (c *csi) createClusterRole(
 	cluster *corev1.StorageCluster,
 	csiConfig *pxutil.CSIConfiguration,
 ) error {
+	sccName := PxSCCName
+	if !pxutil.IsPrivileged(cluster) {
+		sccName = PxRestrictedSCCName
+	}
+
 	clusterRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: CSIClusterRoleName,
@@ -320,7 +325,7 @@ func (c *csi) createClusterRole(
 			{
 				APIGroups:     []string{"security.openshift.io"},
 				Resources:     []string{"securitycontextconstraints"},
-				ResourceNames: []string{PxRestrictedSCCName},
+				ResourceNames: []string{sccName},
 				Verbs:         []string{"use"},
 			},
 			{

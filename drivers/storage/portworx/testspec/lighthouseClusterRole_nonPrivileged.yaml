@@ -30,7 +30,7 @@ rules:
     verbs: ["*"]
   - apiGroups: ["security.openshift.io"]
     resources: ["securitycontextconstraints"]
-    resourceNames: ["portworx", "anyuid"]
+    resourceNames: ["portworx-restricted", "anyuid"]
     verbs: ["use"]
   - apiGroups: ["policy"]
     resources: ["podsecuritypolicies"]

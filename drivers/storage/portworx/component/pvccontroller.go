@@ -111,7 +111,7 @@ func (c *pvcController) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createClusterRole(); err != nil {
+	if err := c.createClusterRole(cluster); err != nil {
 		return err
 	}
 	if err := c.createClusterRoleBinding(cluster.Namespace); err != nil {
@@ -162,99 +162,103 @@ func (c *pvcController) createServiceAccount(
 	)
 }
 
-func (c *pvcController) createClusterRole() error {
-	return k8sutil.CreateOrUpdateClusterRole(
-		c.k8sClient,
-		&rbacv1.ClusterRole{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: PVCClusterRoleName,
+func (c *pvcController) createClusterRole(cluster *corev1.StorageCluster) error {
+	sccName := PxSCCName
+	if !pxutil.IsPrivileged(cluster) {
+		sccName = PxRestrictedSCCName
+	}
+
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: PVCClusterRoleName,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"persistentvolumes"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete", "update"},
 			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups: []string{""},
-					Resources: []string{"persistentvolumes"},
-					Verbs:     []string{"get", "list", "watch", "create", "delete", "update"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"persistentvolumes/status"},
-					Verbs:     []string{"update"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"persistentvolumeclaims"},
-					Verbs:     []string{"get", "list", "watch", "update"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"persistentvolumeclaims/status"},
-					Verbs:     []string{"update"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"pods"},
-					Verbs:     []string{"get", "list", "watch", "create", "delete"},
-				},
-				{
-					APIGroups: []string{"storage.k8s.io"},
-					Resources: []string{"storageclasses"},
-					Verbs:     []string{"get", "list", "watch"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"endpoints", "services"},
-					Verbs:     []string{"get", "create", "delete", "update"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"secrets"},
-					Verbs:     []string{"get", "list"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"nodes"},
-					Verbs:     []string{"get", "list", "watch"},
-				},
-				{
-					APIGroups: []string{"", "events.k8s.io"},
-					Resources: []string{"events"},
-					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"serviceaccounts"},
-					Verbs:     []string{"get", "create"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"serviceaccounts/token"},
-					Verbs:     []string{"create"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"configmaps"},
-					Verbs:     []string{"get", "list", "watch", "create", "update"},
-				},
-				{
-					APIGroups:     []string{"security.openshift.io"},
-					Resources:     []string{"securitycontextconstraints"},
-					ResourceNames: []string{PxRestrictedSCCName},
-					Verbs:         []string{"use"},
-				},
-				{
-					APIGroups:     []string{"policy"},
-					Resources:     []string{"podsecuritypolicies"},
-					ResourceNames: []string{constants.PrivilegedPSPName},
-					Verbs:         []string{"use"},
-				},
-				{
-					APIGroups: []string{"coordination.k8s.io"},
-					Resources: []string{"leases"},
-					Verbs:     []string{"*"},
-				},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"persistentvolumes/status"},
+				Verbs:     []string{"update"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"persistentvolumeclaims"},
+				Verbs:     []string{"get", "list", "watch", "update"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"persistentvolumeclaims/status"},
+				Verbs:     []string{"update"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete"},
+			},
+			{
+				APIGroups: []string{"storage.k8s.io"},
+				Resources: []string{"storageclasses"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"endpoints", "services"},
+				Verbs:     []string{"get", "create", "delete", "update"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"nodes"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"", "events.k8s.io"},
+				Resources: []string{"events"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"serviceaccounts"},
+				Verbs:     []string{"get", "create"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"serviceaccounts/token"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "list", "watch", "create", "update"},
+			},
+			{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				ResourceNames: []string{sccName},
+				Verbs:         []string{"use"},
+			},
+			{
+				APIGroups:     []string{"policy"},
+				Resources:     []string{"podsecuritypolicies"},
+				ResourceNames: []string{constants.PrivilegedPSPName},
+				Verbs:         []string{"use"},
+			},
+			{
+				APIGroups: []string{"coordination.k8s.io"},
+				Resources: []string{"leases"},
+				Verbs:     []string{"*"},
 			},
 		},
-	)
+	}
+
+	return k8sutil.CreateOrUpdateClusterRole(c.k8sClient, clusterRole)
 }
 
 func (c *pvcController) createClusterRoleBinding(
