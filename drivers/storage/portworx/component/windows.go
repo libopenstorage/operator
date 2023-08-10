@@ -28,6 +28,7 @@ const (
 	WindowsDaemonSetName     = "px-csi-node-win"
 	WindowsStorageClass      = "px-csi-win-shared"
 	WindowsDaemonSetFileName = "win.yaml"
+	WindowsOsName            = "windows"
 )
 
 type windows struct {
@@ -207,7 +208,7 @@ func isWindowsNode(nodeList *v1.NodeList) bool {
 	for _, node := range nodeList.Items {
 		nodeName := node.Name
 		_, exists := node.Labels[v1.LabelOSStable]
-		if exists && node.Labels[v1.LabelOSStable] == "windows" {
+		if exists && node.Labels[v1.LabelOSStable] == WindowsOsName {
 			logrus.Debugf("Node %s is running Windows\n", nodeName)
 			return true
 		} else {
