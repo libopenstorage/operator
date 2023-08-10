@@ -363,8 +363,13 @@ func TestParsePxProxyURL(t *testing.T) {
 	require.Equal(t, "1234", port)
 	require.Equal(t, "", authHeader)
 
-	// The only valid format for HTTPS proxy
 	host, port, authHeader, err = ParsePxProxyURL("https://user:password@http.proxy.address:1234")
+	require.NoError(t, err)
+	require.Equal(t, "http.proxy.address", host)
+	require.Equal(t, "1234", port)
+	require.Equal(t, "Basic dXNlcjpwYXNzd29yZA==", authHeader)
+
+	host, port, authHeader, err = ParsePxProxyURL("http://user:password@http.proxy.address:1234")
 	require.NoError(t, err)
 	require.Equal(t, "http.proxy.address", host)
 	require.Equal(t, "1234", port)
