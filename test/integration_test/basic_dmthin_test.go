@@ -10,9 +10,12 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
+	"github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -119,6 +122,38 @@ func generateTestCases(opt OptionsArr, idx uint) []types.TestCase {
 	return retVal
 }
 
+var testDmthinCases = []types.TestCase{
+	{
+		TestName:        "BasicUpgradeStorageClusterDmthinWithAllComponents",
+		TestrailCaseIDs: []string{"C50241"},
+		TestSpec: func(t *testing.T) interface{} {
+			objects, err := ci_utils.ParseSpecs("storagecluster/storagecluster-with-all-components.yaml")
+			provider := cloud_provider.GetCloudProvider()
+			require.NoError(t, err)
+			cluster, ok := objects[0].(*corev1.StorageCluster)
+			require.True(t, ok)
+			cluster.Name = "test-stc"
+			cluster.Namespace = "kube-system"
+			cloudSpec := &corev1.CloudStorageSpec{}
+			cloudSpec.DeviceSpecs = provider.GetDefaultDataDrives()
+			cloudSpec.SystemMdDeviceSpec = provider.GetDefaultMetadataDrive()
+			cluster.Spec.CloudStorage = cloudSpec
+			cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled = false
+			return cluster
+		},
+		ShouldSkip: func(tc *types.TestCase) bool {
+			if len(ci_utils.PxUpgradeHopsURLList) == 0 {
+				logrus.Info("--px-upgrade-hops-url-list is empty, cannot run BasicUpgradeStorageClusterDmthinWithAllComponents test")
+				return true
+			}
+			k8sVersion, _ := k8sutil.GetVersion()
+			pxVersion := ci_utils.GetPxVersionFromSpecGenURL(ci_utils.PxUpgradeHopsURLList[0])
+			return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) && pxVersion.LessThan(pxVer2_9)
+		},
+		TestFunc: BasicUpgradeStorageClusterDmthin,
+	},
+}
+
 func TestStorageClusterDmthinWithoutPxStoreV2Option(t *testing.T) {
 	opt := OptionsArr{}
 	basicInstallTestCases := generateTestCases(opt, 1)
@@ -132,6 +167,12 @@ func TestStorageClusterDmthinWithPxStoreV2Option(t *testing.T) {
 	opt[PxStoreV2Present] = true
 	basicInstallTestCases := generateTestCases(opt, 1)
 	for _, testCase := range basicInstallTestCases {
+		testCase.RunTest(t)
+	}
+}
+
+func TestStorageClusterDMthinUpgrade(t *testing.T) {
+	for _, testCase := range testDmthinCases {
 		testCase.RunTest(t)
 	}
 }
@@ -276,5 +317,48 @@ func BasicInstallDmthin(tc *types.TestCase) func(*testing.T) {
 		isKvdbDiskPresent := isKvdbPresent(t)
 		require.False(t, isKvdbDiskPresent, "KVDB device found in a dmthin setup")
 		UninstallPX(t, cluster)
+	}
+}
+
+// PxUpgradeHopsURLList is interpreted differently in this test as compared to the original intent
+// Each member of the hop list serves as the base PX version to upgrade from to the latest release version.
+func BasicUpgradeStorageClusterDmthin(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		for _, hopURL := range ci_utils.PxUpgradeHopsURLList {
+			pxVersion := ci_utils.GetPxVersionFromSpecGenURL(ci_utils.PxUpgradeHopsURLList[0])
+			lessThanOrEqualV3_0_0 := pxVersion.LessThanOrEqual(pxVer3_0_0)
+			require.True(t, lessThanOrEqualV3_0_0, "Update this test for hop URL > 3.0.0")
+			// Get versions from URL
+			specImages, err := test.GetImagesFromVersionURL(hopURL, ci_utils.K8sVersion)
+			require.NoError(t, err)
+
+			logrus.Infof("Installing PX version %v", specImages)
+			cluster := installAndValidate(t, tc, hopURL, specImages)
+			pxStoreV2 := isPxStoreV2(t, cluster)
+			require.False(t, pxStoreV2)
+
+			// Get live StorageCluster
+			cluster, err = operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+			require.NoError(t, err)
+
+			logrus.Infof("Upgrading PX to %v", ci_utils.PxSpecImages)
+			err = ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
+			require.NoError(t, err)
+
+			// Set defaults
+			k8sVersion, _ := version.NewVersion(ci_utils.K8sVersion)
+			portworx.SetPortworxDefaults(cluster, k8sVersion)
+
+			// Update live StorageCluster
+			cluster, err = ci_utils.UpdateStorageCluster(cluster)
+			require.NoError(t, err)
+			logrus.Infof("Validate upgraded StorageCluster %s", cluster.Name)
+			err = test.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateUpgradeTimeout, ci_utils.DefaultValidateUpgradeRetryInterval, true, "")
+			require.NoError(t, err)
+
+			pxStoreV2 = isPxStoreV2(t, cluster)
+			require.False(t, pxStoreV2)
+			UninstallPX(t, cluster)
+		}
 	}
 }
