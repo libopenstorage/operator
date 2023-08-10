@@ -3429,7 +3429,7 @@ func IsCCMGoSupported(pxVersion *version.Version) bool {
 func ParsePxProxyURL(proxy string) (string, string, string, error) {
 	var authHeader string
 
-	if strings.HasPrefix(proxy, HttpsProtocolPrefix) && strings.Contains(proxy, "@") {
+	if strings.Contains(proxy, "@") {
 		proxyUrl, err := url.Parse(proxy)
 		if err != nil {
 			return "", "", "", fmt.Errorf("failed to parse px proxy url [%s]", proxy)
