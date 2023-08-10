@@ -1462,15 +1462,6 @@ func TestStorkNodeAffinityChange(t *testing.T) {
 						},
 					},
 				},
-				{
-					MatchExpressions: []v1.NodeSelectorRequirement{
-						{
-							Key:      "kubernetes.io/os",
-							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"linux"},
-						},
-					},
-				},
 			},
 		},
 	}
@@ -1532,10 +1523,6 @@ func TestStorkNodeAffinityChange(t *testing.T) {
 		MatchExpressions[0].
 		Key = "px/disabled"
 
-	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
-		NodeSelectorTerms[1].
-		MatchExpressions[0].
-		Key = "kubernetes.io/os"
 	cluster.Spec.Placement.NodeAffinity = nodeAffinity
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)

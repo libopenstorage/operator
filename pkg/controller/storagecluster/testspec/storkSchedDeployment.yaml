@@ -63,13 +63,5 @@ spec:
                     values:
                     - stork-scheduler
               topologyKey: "kubernetes.io/hostname"
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: kubernetes.io/os
-                    operator: In
-                    values:
-                      - linux
       hostPID: false
       serviceAccountName: stork-scheduler

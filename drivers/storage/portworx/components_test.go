@@ -16195,6 +16195,26 @@ func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-system",
 		},
+		Spec: corev1.StorageClusterSpec{
+
+			Placement: &corev1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "kubernetes.io/os",
+										Operator: v1.NodeSelectorOpIn,
+										Values:   []string{"linux"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	err = driver.PreInstall(cluster)
@@ -16202,10 +16222,11 @@ func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 
 	// test creation of px-csi-win daemonset
 	expectedWinCsiDs := testutil.GetExpectedDaemonSet(t, "win.yaml")
-	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &expectedWinCsiDs.Spec.Template.Spec)
+	pxutil.ApplyStorageClusterSettingsToWindowsPodSpec(cluster, &expectedWinCsiDs.Spec.Template.Spec)
 	actualWinCsiDs := &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, actualWinCsiDs, component.WindowsDaemonSetName, "kube-system")
 	require.NoError(t, err)
+
 	require.Equal(t, expectedWinCsiDs.Name, actualWinCsiDs.Name)
 	require.Equal(t, expectedWinCsiDs.Spec, actualWinCsiDs.Spec)
 
