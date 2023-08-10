@@ -16220,7 +16220,7 @@ func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// test creation of px-csi-win daemonset
+	// test creation of px-csi-win-shared daemonset
 	expectedWinCsiDs := testutil.GetExpectedDaemonSet(t, "win.yaml")
 	pxutil.ApplyStorageClusterSettingsToWindowsPodSpec(cluster, &expectedWinCsiDs.Spec.Template.Spec)
 	actualWinCsiDs := &appsv1.DaemonSet{}

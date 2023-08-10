@@ -1,8 +1,6 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  annotations:
-    deprecated.daemonset.template.generation: '1'
   name: "px-csi-node-win"
   namespace: "kube-system"
 spec:

@@ -3,7 +3,6 @@ package component
 import (
 	"context"
 	commonerrors "errors"
-	"fmt"
 	"strings"
 
 	version "github.com/hashicorp/go-version"
@@ -20,15 +19,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	WindowsComponentName     = "Windows Node"
 	WindowsDaemonSetName     = "px-csi-node-win"
-	WindowsStorageClass      = "px-csi-win"
+	WindowsStorageClass      = "px-csi-win-shared"
 	WindowsDaemonSetFileName = "win.yaml"
-	kubeSystemNameSpace      = "kube-system"
 )
 
 type windows struct {
@@ -93,7 +92,7 @@ func (w *windows) Reconcile(cluster *corev1.StorageCluster) error {
 func (w *windows) Delete(cluster *corev1.StorageCluster) error {
 
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	if err := k8s.DeleteDaemonSet(w.client, WindowsDaemonSetName, kubeSystemNameSpace, *ownerRef); err != nil {
+	if err := k8s.DeleteDaemonSet(w.client, WindowsDaemonSetName, core.NamespaceSystem, *ownerRef); err != nil {
 		return err
 	}
 	w.MarkDeleted()
@@ -120,7 +119,7 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 	}
 
 	daemonSet.Name = WindowsDaemonSetName
-	daemonSet.Namespace = kubeSystemNameSpace
+	daemonSet.Namespace = core.NamespaceSystem
 	daemonSet.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	for i, container := range daemonSet.Spec.Template.Spec.Containers {
 		var image string
@@ -139,7 +138,7 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 		context.TODO(),
 		types.NamespacedName{
 			Name:      WindowsDaemonSetName,
-			Namespace: kubeSystemNameSpace,
+			Namespace: core.NamespaceSystem,
 		},
 		existingDaemonSet,
 	)
@@ -150,7 +149,7 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 	pxutil.ApplyStorageClusterSettingsToWindowsPodSpec(cluster, &daemonSet.Spec.Template.Spec)
 
 	equal, _ := util.DeepEqualPodTemplate(&daemonSet.Spec.Template, &existingDaemonSet.Spec.Template)
-	if !equal && !w.isCreated {
+	if !equal || !w.isCreated {
 		if err := k8s.CreateOrUpdateDaemonSet(w.client, daemonSet, ownerRef); err != nil {
 			return err
 		}
@@ -207,12 +206,12 @@ func isWindowsNode(nodeList *v1.NodeList) bool {
 	// Check if the node has the label indicating it is running Windows
 	for _, node := range nodeList.Items {
 		nodeName := node.Name
-		_, exists := node.Labels["kubernetes.io/os"]
-		if exists && node.Labels["kubernetes.io/os"] == "windows" {
-			fmt.Printf("Node %s is running Windows\n", nodeName)
+		_, exists := node.Labels[v1.LabelOSStable]
+		if exists && node.Labels[v1.LabelOSStable] == "windows" {
+			logrus.Debugf("Node %s is running Windows\n", nodeName)
 			return true
 		} else {
-			fmt.Printf("Node %s is not running Windows\n", nodeName)
+			logrus.Debugf("Node %s is not running Windows\n", nodeName)
 		}
 	}
 	return false
