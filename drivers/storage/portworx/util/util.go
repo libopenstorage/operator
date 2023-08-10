@@ -672,7 +672,7 @@ var (
 
 // ParsePxProxy trims protocol prefix then splits the proxy address of the form "host:port" with possible basic authentication credential
 func ParsePxProxyURL(proxy string) (string, string, string, error) {
-	if strings.HasPrefix(proxy, HttpsProtocolPrefix) && strings.Contains(proxy, "@") {
+	if strings.Contains(proxy, "@") {
 		proxyUrl, err := url.Parse(proxy)
 		if err != nil {
 			return "", "", "", fmt.Errorf("failed to parse px proxy url %s", proxy)
