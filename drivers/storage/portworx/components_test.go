@@ -1554,7 +1554,32 @@ func TestPVCControllerInstall(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
+	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
+}
+func TestPVCControllerInstallWithNonPriviliged(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+				pxutil.AnnotationIsPrivileged:  "false",
+			},
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole_nonPrivileged.yaml")
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 }
 
@@ -1591,7 +1616,7 @@ func TestPVCControllerInstallWithK8s1_24(t *testing.T) {
 	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, expectedDeployment)
 }
 
@@ -1629,7 +1654,7 @@ func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
 	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, expectedDeployment)
 
 	// TestCase: Add both port and secure port annotations
@@ -1640,7 +1665,7 @@ func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
 	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, expectedDeployment)
 
 	// TestCase: Simple install on AKS
@@ -1653,7 +1678,7 @@ func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
 	expectedDeployment.Spec.Template.Spec.Containers[0] = expectedContainer
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, expectedDeployment)
 }
 
@@ -1815,7 +1840,7 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 
 	// Despite invalid pvc controller annotation, install for PKS
@@ -1824,7 +1849,7 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 }
 
@@ -1849,7 +1874,7 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 
 	// Despite invalid pvc controller annotation, install for EKS
@@ -1858,7 +1883,7 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 }
 
@@ -1883,7 +1908,7 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 
 	// Despite invalid pvc controller annotation, install for GKE
@@ -1892,7 +1917,7 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 }
 
@@ -1917,7 +1942,7 @@ func TestPVCControllerInstallForOKE(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 
 	// Despite invalid pvc controller annotation, install for OKE
@@ -1926,7 +1951,7 @@ func TestPVCControllerInstallForOKE(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 }
 
@@ -1951,7 +1976,7 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 
 	specFileName := "pvcControllerDeployment.yaml"
 	pvcControllerDeployment := testutil.GetExpectedDeployment(t, specFileName)
@@ -1969,7 +1994,7 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	verifyPVCControllerInstall(t, cluster, k8sClient)
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, pvcControllerDeployment)
 }
 
@@ -2065,6 +2090,7 @@ func verifyPVCControllerInstall(
 	t *testing.T,
 	cluster *corev1.StorageCluster,
 	k8sClient client.Client,
+	clusterRoleFileName string,
 ) {
 	// PVC Controller ServiceAccount
 	serviceAccountList := &v1.ServiceAccountList{}
@@ -2086,7 +2112,7 @@ func verifyPVCControllerInstall(
 	require.NoError(t, err)
 	require.Len(t, clusterRoleList.Items, 2)
 
-	expectedCR := testutil.GetExpectedClusterRole(t, "pvcControllerClusterRole.yaml")
+	expectedCR := testutil.GetExpectedClusterRole(t, clusterRoleFileName)
 	actualCR := &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, actualCR, component.PVCClusterRoleName, "")
 	require.NoError(t, err)
@@ -2529,10 +2555,51 @@ func TestLighthouseInstall(t *testing.T) {
 	err = driver.PreInstall(cluster)
 
 	require.NoError(t, err)
+	verifyLightHouseInstall(t, cluster, k8sClient, "lighthouseClusterRole.yaml")
 
+}
+
+func TestLighthouseInstallWithNonPrivileged(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+				pxutil.AnnotationIsPrivileged:  "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			UserInterface: &corev1.UserInterfaceSpec{
+				Enabled: true,
+				Image:   "docker.io/portworx/px-lighthouse:2.1.1",
+			},
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+
+	require.NoError(t, err)
+	verifyLightHouseInstall(t, cluster, k8sClient, "lighthouseClusterRole_nonPrivileged.yaml")
+
+}
+
+func verifyLightHouseInstall(
+	t *testing.T,
+	cluster *corev1.StorageCluster,
+	k8sClient client.Client,
+	clusterRoleFileName string,
+) {
 	// Lighthouse ServiceAccount
 	serviceAccountList := &v1.ServiceAccountList{}
-	err = testutil.List(k8sClient, serviceAccountList)
+	err := testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
 	require.Len(t, serviceAccountList.Items, 3)
 
@@ -2550,7 +2617,7 @@ func TestLighthouseInstall(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, clusterRoleList.Items, 3)
 
-	expectedCR := testutil.GetExpectedClusterRole(t, "lighthouseClusterRole.yaml")
+	expectedCR := testutil.GetExpectedClusterRole(t, clusterRoleFileName)
 	actualCR := &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, actualCR, component.LhClusterRoleName, "")
 	require.NoError(t, err)
@@ -5352,9 +5419,74 @@ func TestCSIInstall(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
+	verifyCsiInstall(t, cluster, k8sClient, "csiClusterRole_k8s_1.11.yaml")
+}
+
+func TestCSIInstallNonPrivileged(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.11.4",
+	}
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "false",
+				pxutil.AnnotationIsPrivileged:  "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.1.2",
+			Placement: &corev1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+		},
+	}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	verifyCsiInstall(t, cluster, k8sClient, "csiClusterRole_nonPrivileged.yaml")
+}
+
+func verifyCsiInstall(
+	t *testing.T,
+	cluster *corev1.StorageCluster,
+	k8sClient client.Client,
+	clusterRoleFileName string,
+) {
 	// CSI ServiceAccount
 	serviceAccountList := &v1.ServiceAccountList{}
-	err = testutil.List(k8sClient, serviceAccountList)
+	err := testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
 	require.Len(t, serviceAccountList.Items, 2)
 
@@ -5372,7 +5504,7 @@ func TestCSIInstall(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, clusterRoleList.Items, 2)
 
-	expectedCR := testutil.GetExpectedClusterRole(t, "csiClusterRole_k8s_1.11.yaml")
+	expectedCR := testutil.GetExpectedClusterRole(t, clusterRoleFileName)
 	actualCR := &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, actualCR, component.CSIClusterRoleName, "")
 	require.NoError(t, err)
@@ -5434,6 +5566,7 @@ func TestCSIInstall(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 	err = testutil.Get(k8sClient, csiDriver, pxutil.DeprecatedCSIDriverName, "")
 	require.True(t, errors.IsNotFound(err))
+
 }
 
 func TestCSIInstallWithk8s1_13(t *testing.T) {
