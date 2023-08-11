@@ -242,6 +242,11 @@ func TestBasicComponentsInstall(t *testing.T) {
 										Values:   []string{"false"},
 									},
 									{
+										Key:      "kubernetes.io/os",
+										Operator: v1.NodeSelectorOpIn,
+										Values:   []string{"linux"},
+									},
+									{
 										Key:      "node-role.kubernetes.io/master",
 										Operator: v1.NodeSelectorOpDoesNotExist,
 									},
@@ -5434,6 +5439,11 @@ func TestCSIInstall(t *testing.T) {
 										Values:   []string{"false"},
 									},
 									{
+										Key:      "kubernetes.io/os",
+										Operator: v1.NodeSelectorOpIn,
+										Values:   []string{"linux"},
+									},
+									{
 										Key:      "node-role.kubernetes.io/master",
 										Operator: v1.NodeSelectorOpDoesNotExist,
 									},
@@ -5574,6 +5584,11 @@ func TestCSIInstallWithk8s1_13(t *testing.T) {
 										Values:   []string{"false"},
 									},
 									{
+										Key:      "kubernetes.io/os",
+										Operator: v1.NodeSelectorOpIn,
+										Values:   []string{"linux"},
+									},
+									{
 										Key:      "node-role.kubernetes.io/master",
 										Operator: v1.NodeSelectorOpDoesNotExist,
 									},
@@ -5689,6 +5704,11 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 										Values:   []string{"false"},
 									},
 									{
+										Key:      "kubernetes.io/os",
+										Operator: v1.NodeSelectorOpIn,
+										Values:   []string{"linux"},
+									},
+									{
 										Key:      "node-role.kubernetes.io/master",
 										Operator: v1.NodeSelectorOpDoesNotExist,
 									},
@@ -5700,6 +5720,11 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 										Key:      "px/enabled",
 										Operator: v1.NodeSelectorOpNotIn,
 										Values:   []string{"false"},
+									},
+									{
+										Key:      "kubernetes.io/os",
+										Operator: v1.NodeSelectorOpIn,
+										Values:   []string{"linux"},
 									},
 									{
 										Key:      "node-role.kubernetes.io/master",
@@ -5969,6 +5994,11 @@ func TestCSIInstallWithPKS(t *testing.T) {
 										Values:   []string{"false"},
 									},
 									{
+										Key:      "kubernetes.io/os",
+										Operator: v1.NodeSelectorOpIn,
+										Values:   []string{"linux"},
+									},
+									{
 										Key:      "node-role.kubernetes.io/master",
 										Operator: v1.NodeSelectorOpDoesNotExist,
 									},
@@ -6218,6 +6248,11 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 										Key:      "px/enabled",
 										Operator: v1.NodeSelectorOpNotIn,
 										Values:   []string{"false"},
+									},
+									{
+										Key:      "kubernetes.io/os",
+										Operator: v1.NodeSelectorOpIn,
+										Values:   []string{"linux"},
 									},
 									{
 										Key:      "node-role.kubernetes.io/master",
@@ -11956,6 +11991,9 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 	require.Equal(t, expectedPrometheusRule.Namespace, prometheusRule.Namespace)
 	require.Len(t, prometheusRule.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, prometheusRule.OwnerReferences[0].Name)
+	fmt.Println(expectedPrometheusRule.Spec)
+	fmt.Println(prometheusRule.Spec)
+
 	require.Equal(t, expectedPrometheusRule.Spec, prometheusRule.Spec)
 
 	// ServiceMonitor with internal kvdb
@@ -13478,6 +13516,8 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	// Revise unrelated fields so we can compare.
 	expectedDeployment.Spec.Template.Spec.DeprecatedServiceAccount = ""
 	deployment.ResourceVersion = ""
+	fmt.Println(expectedDeployment.Spec.Template.Spec.Affinity)
+	fmt.Println(deployment.Spec.Template.Spec.Affinity)
 	require.Equal(t, expectedDeployment, deployment)
 
 	secret := v1.Secret{}

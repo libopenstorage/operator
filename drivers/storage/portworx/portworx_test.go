@@ -203,7 +203,7 @@ func TestValidate(t *testing.T) {
 	preFlighter := NewPreFlighter(cluster, k8sClient, podSpec)
 	require.NotNil(t, preFlighter)
 
-	/// Create preflighter podSpec
+	// / Create preflighter podSpec
 	preflightDSCheck, err := preFlighter.CreatePreFlightDaemonsetSpec(clusterRef)
 	require.NoError(t, err)
 	require.NotNil(t, preflightDSCheck)
@@ -650,6 +650,11 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpDoesNotExist,
 							},
@@ -661,6 +666,11 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 								Key:      "px/enabled",
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"false"},
+							},
+							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
 							},
 							{
 								Key:      "node-role.kubernetes.io/master",
@@ -965,6 +975,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpDoesNotExist,
 							},
@@ -976,6 +991,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Key:      "px/enabled",
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"false"},
+							},
+							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
 							},
 							{
 								Key:      "node-role.kubernetes.io/master",
@@ -1008,6 +1028,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpDoesNotExist,
 							},
@@ -1025,6 +1050,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpExists,
 							},
@@ -1040,6 +1070,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Key:      "px/enabled",
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"false"},
+							},
+							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
 							},
 							{
 								Key:      "node-role.kubernetes.io/control-plane",
@@ -2854,6 +2889,11 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/infra",
 								Operator: v1.NodeSelectorOpDoesNotExist,
 							},
@@ -2869,6 +2909,11 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 								Key:      "px/enabled",
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"false"},
+							},
+							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
 							},
 							{
 								Key:      "node-role.kubernetes.io/infra",
