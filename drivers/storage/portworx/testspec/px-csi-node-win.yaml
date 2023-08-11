@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: "px-csi-node-win"
+  name: "px-csi-node-win-shared"
   namespace: "kube-system"
 spec:
   selector:

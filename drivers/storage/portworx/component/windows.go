@@ -24,16 +24,19 @@ import (
 )
 
 const (
-	WindowsComponentName     = "Windows Node"
-	WindowsDaemonSetName     = "px-csi-node-win"
-	WindowsStorageClass      = "px-csi-win-shared"
-	WindowsDaemonSetFileName = "win.yaml"
+	WindowsComponentName              = "Windows Node"
+	WindowsCsiDaemonsetName           = "px-csi-node-win-shared"
+	WindowsInstallerDaemonsetName     = "px-installer-node-win"
+	WindowsStorageClass               = "px-csi-win-shared"
+	WindowsCsiDaemonsetFileName       = "px-csi-node-win.yaml"
+	WindowsInstallerDaemonsetFileName = "px-installer-node-win.yaml"
 )
 
 type windows struct {
-	client        client.Client
-	isCreated     bool
-	isWindowsNode bool
+	client             client.Client
+	isCsiCreated       bool
+	isInstallerCreated bool
+	isWindowsNode      bool
 }
 
 func (w *windows) Initialize(
@@ -69,12 +72,16 @@ func (w *windows) IsEnabled(cluster *corev1.StorageCluster) bool {
 }
 
 func (w *windows) Reconcile(cluster *corev1.StorageCluster) error {
-	ownRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
 	var errList []string
 
-	if err := w.createDaemonSet(WindowsDaemonSetFileName, ownRef, cluster); err != nil {
-		logrus.Errorf("error during creating %s daemonset %s ", WindowsDaemonSetName, err)
+	if err := w.createDaemonSet(WindowsCsiDaemonsetFileName, WindowsCsiDaemonsetName, core.NamespaceSystem, cluster); err != nil {
+		logrus.Errorf("error during creating %s daemonset %s ", WindowsCsiDaemonsetName, err)
+		errList = append(errList, err.Error())
+	}
+
+	if err := w.createDaemonSet(WindowsInstallerDaemonsetFileName, WindowsInstallerDaemonsetName, cluster.Namespace, cluster); err != nil {
+		logrus.Errorf("error during creating %s daemonset %s ", WindowsInstallerDaemonsetName, err)
 		errList = append(errList, err.Error())
 	}
 
@@ -92,8 +99,11 @@ func (w *windows) Reconcile(cluster *corev1.StorageCluster) error {
 func (w *windows) Delete(cluster *corev1.StorageCluster) error {
 	var errList []string
 
-	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
-	if err := k8s.DeleteDaemonSet(w.client, WindowsDaemonSetName, core.NamespaceSystem, *ownerRef); err != nil {
+	if err := k8s.DeleteDaemonSet(w.client, WindowsCsiDaemonsetName, core.NamespaceSystem); err != nil {
+		errList = append(errList, err.Error())
+	}
+
+	if err := k8s.DeleteDaemonSet(w.client, WindowsInstallerDaemonsetName, cluster.Namespace); err != nil {
 		errList = append(errList, err.Error())
 	}
 
@@ -112,7 +122,8 @@ func (w *windows) Delete(cluster *corev1.StorageCluster) error {
 }
 
 func (w *windows) MarkDeleted() {
-	w.isCreated = false
+	w.isCsiCreated = false
+	w.isInstallerCreated = false
 }
 
 // RegisterPortworxPluginComponent registers the PortworxPlugin component
@@ -124,14 +135,14 @@ func init() {
 	RegisterWindowsComponent()
 }
 
-func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReference, cluster *corev1.StorageCluster) error {
+func (w *windows) createDaemonSet(filename, daemonsetName, nameSpace string, cluster *corev1.StorageCluster) error {
 	daemonSet, err := k8s.GetDaemonSetFromFile(filename, pxutil.SpecsBaseDir())
 	if err != nil {
 		return err
 	}
 
-	daemonSet.Name = WindowsDaemonSetName
-	daemonSet.Namespace = core.NamespaceSystem
+	daemonSet.Name = daemonsetName
+	daemonSet.Namespace = nameSpace
 	for i, container := range daemonSet.Spec.Template.Spec.Containers {
 		var image string
 		if container.Name == "node-driver-registrar" {
@@ -141,6 +152,11 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 		if container.Name == "liveness-probe" {
 			image = w.getDesiredLivenessImage(cluster)
 		}
+
+		if container.Name == "windowsinstaller" {
+			image = w.getDesiredInstallerImage(cluster)
+		}
+
 		daemonSet.Spec.Template.Spec.Containers[i].Image = image
 	}
 
@@ -148,8 +164,8 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 	getErr := w.client.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      WindowsDaemonSetName,
-			Namespace: core.NamespaceSystem,
+			Name:      daemonsetName,
+			Namespace: nameSpace,
 		},
 		existingDaemonSet,
 	)
@@ -161,12 +177,21 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 	pxutil.ApplyWindowsSettingsToPodSpec(&daemonSet.Spec.Template.Spec)
 
 	equal, _ := util.DeepEqualPodTemplate(&daemonSet.Spec.Template, &existingDaemonSet.Spec.Template)
-	if !equal || !w.isCreated {
+	if (!w.isCsiCreated && daemonSet.Name == WindowsCsiDaemonsetName) ||
+		(!w.isInstallerCreated && daemonSet.Name == WindowsInstallerDaemonsetName) ||
+		!equal {
 		if err := k8s.CreateOrUpdateDaemonSet(w.client, daemonSet, nil); err != nil {
 			return err
 		}
 	}
-	w.isCreated = true
+
+	if daemonSet.Name == WindowsCsiDaemonsetName {
+		w.isCsiCreated = true
+	}
+	if daemonSet.Name == WindowsInstallerDaemonsetName {
+		w.isInstallerCreated = true
+	}
+
 	return nil
 }
 
@@ -177,7 +202,7 @@ func (w *windows) getDesiredNodeRegistrarImage(cluster *corev1.StorageCluster) s
 		imageName = cluster.Status.DesiredImages.CSINodeDriverRegistrar
 	}
 	imageName = util.GetImageURN(cluster, imageName)
-	return imageName
+	return "registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.2"
 }
 
 func (w *windows) getDesiredLivenessImage(cluster *corev1.StorageCluster) string {
@@ -186,7 +211,11 @@ func (w *windows) getDesiredLivenessImage(cluster *corev1.StorageCluster) string
 		imageName = cluster.Status.DesiredImages.CsiLivenessProbe
 	}
 	imageName = util.GetImageURN(cluster, imageName)
-	return imageName
+	return "registry.k8s.io/sig-storage/livenessprobe:v2.7.0"
+}
+
+func (w *windows) getDesiredInstallerImage(cluster *corev1.StorageCluster) string {
+	return "docker.io/cnbuautomation800/pxwincsidriver:v0.1"
 }
 
 func (w *windows) createStorageClass() error {

@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: px-installer-node-win
+  labels:
+    app: px-installer-node-win
+spec:
+  selector:
+    matchLabels:
+      app: px-installer-node-win
+  template:
+    metadata:
+      labels:
+        app: px-installer-node-win
+    spec:
+      serviceAccountName: portworx
+      containers:
+        - name: windowsinstaller
+          image: docker.io/cnbuautomation800/pxwincsidriver:v0.1
+          imagePullPolicy: Always
+          securityContext:
+            windowsOptions:
+              hostProcess: true
+              runAsUserName: "NT AUTHORITY\\SYSTEM"
+          command:
+            - powershell.exe
+            - -command
+            - csidriver\\pxinstall.ps1
+      hostNetwork: true
