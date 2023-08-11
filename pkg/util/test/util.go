@@ -3484,14 +3484,8 @@ func CanAccessArcusRegisterEndpoint(
 
 	client := &http.Client{}
 	if proxy != "" {
-		if strings.Contains(strings.ToLower(proxy), "@") {
-			if !strings.HasPrefix(strings.ToLower(proxy), "https://") {
-				proxy = "https://" + proxy
-			}
-		} else {
-			if !strings.HasPrefix(strings.ToLower(proxy), "http://") {
-				proxy = "http://" + proxy
-			}
+		if !strings.HasPrefix(strings.ToLower(proxy), "http://") {
+			proxy = "http://" + proxy
 		}
 		proxyURL, err := url.Parse(proxy)
 		if err != nil {
@@ -3553,12 +3547,6 @@ func GetPxProxyEnvVarValue(cluster *corev1.StorageCluster) (string, string) {
 	for _, env := range cluster.Spec.Env {
 		key, val := env.Name, env.Value
 		if key == EnvKeyPortworxHTTPSProxy {
-			// If http proxy is specified in https env var, treat it as a http proxy endpoint
-			if strings.HasPrefix(val, "http://") {
-				logrus.Warnf("Using endpoint [%s] from environment variable [%s] as a http proxy endpoint instead",
-					val, EnvKeyPortworxHTTPSProxy)
-				return EnvKeyPortworxHTTPProxy, val
-			}
 			return EnvKeyPortworxHTTPSProxy, val
 		} else if key == EnvKeyPortworxHTTPProxy {
 			httpProxy = val
