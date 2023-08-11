@@ -1216,8 +1216,8 @@ func readConfigMapDataFromFile(
 func GetCCMListeningPort(cluster *corev1.StorageCluster) int {
 	defCCMPort := defaultCCMListeningPort
 
-	pxVer30, _ := version.NewVersion("3.0")
-	if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer30) {
+	pxVer2138, _ := version.NewVersion("2.13.8")
+	if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer2138) {
 		defCCMPort = defaultCCMListeningPortForPXge30
 	}
 
