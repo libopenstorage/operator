@@ -493,17 +493,19 @@ func testImageMigration(t *testing.T, dsImages, expectedStcImages ImageConfig, a
 			Namespace: ds.Namespace,
 		},
 		Spec: monitoringv1.PrometheusSpec{
+			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
+				Image: &dsImages.Components.Prometheus,
+				ServiceMonitorSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"name": serviceMonitorName,
+					},
+				},
+			},
 			RuleSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"prometheus": "portworx",
 				},
 			},
-			ServiceMonitorSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"name": serviceMonitorName,
-				},
-			},
-			Image: &dsImages.Components.Prometheus,
 		},
 	}
 
@@ -1675,15 +1677,17 @@ func TestStorageClusterSpecWithComponents(t *testing.T) {
 			Namespace: ds.Namespace,
 		},
 		Spec: monitoringv1.PrometheusSpec{
-			Image: &prometheusImage,
+			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
+				Image: &prometheusImage,
+				ServiceMonitorSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"name": serviceMonitorName,
+					},
+				},
+			},
 			RuleSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"prometheus": "portworx",
-				},
-			},
-			ServiceMonitorSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"name": serviceMonitorName,
 				},
 			},
 		},
@@ -1882,14 +1886,16 @@ func TestStorageClusterSpecWithPVCControllerInKubeSystem(t *testing.T) {
 			Namespace: ds.Namespace,
 		},
 		Spec: monitoringv1.PrometheusSpec{
+			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
+				ServiceMonitorSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"name": serviceMonitorName,
+					},
+				},
+			},
 			RuleSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"prometheus": "portworx",
-				},
-			},
-			ServiceMonitorSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"name": serviceMonitorName,
 				},
 			},
 		},
