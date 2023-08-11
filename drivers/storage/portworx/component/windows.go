@@ -28,7 +28,6 @@ const (
 	WindowsDaemonSetName     = "px-csi-node-win"
 	WindowsStorageClass      = "px-csi-win-shared"
 	WindowsDaemonSetFileName = "win.yaml"
-	WindowsOsName            = "windows"
 )
 
 type windows struct {
@@ -159,29 +158,7 @@ func (w *windows) createDaemonSet(filename string, ownerRef *metav1.OwnerReferen
 	}
 
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &daemonSet.Spec.Template.Spec)
-
-	nodeSelectorTerm := v1.NodeSelectorTerm{
-
-		MatchExpressions: []v1.NodeSelectorRequirement{
-			{
-				Key:      "kubernetes.io/os",
-				Operator: v1.NodeSelectorOpIn,
-				Values:   []string{"windows"},
-			},
-		},
-	}
-
-	daemonSet.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms =
-		append(daemonSet.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms, nodeSelectorTerm)
-
-	toleration := v1.Toleration{
-		Key:      "os",
-		Value:    "Windows",
-		Operator: v1.TolerationOpEqual,
-		Effect:   v1.TaintEffectNoSchedule,
-	}
-
-	daemonSet.Spec.Template.Spec.Tolerations = append(daemonSet.Spec.Template.Spec.Tolerations, toleration)
+	pxutil.ApplyWindowsSettingsToPodSpec(&daemonSet.Spec.Template.Spec)
 
 	equal, _ := util.DeepEqualPodTemplate(&daemonSet.Spec.Template, &existingDaemonSet.Spec.Template)
 	if !equal || !w.isCreated {
@@ -241,7 +218,7 @@ func isWindowsNode(nodeList *v1.NodeList) bool {
 	for _, node := range nodeList.Items {
 		nodeName := node.Name
 		_, exists := node.Labels[v1.LabelOSStable]
-		if exists && node.Labels[v1.LabelOSStable] == WindowsOsName {
+		if exists && node.Labels[v1.LabelOSStable] == pxutil.WindowsOsName {
 			logrus.Debugf("Node %s is running Windows\n", nodeName)
 			return true
 		} else {

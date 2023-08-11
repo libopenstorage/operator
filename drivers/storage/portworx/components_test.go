@@ -16223,6 +16223,7 @@ func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 	// test creation of px-csi-win-shared daemonset
 	expectedWinCsiDs := testutil.GetExpectedDaemonSet(t, "win.yaml")
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &expectedWinCsiDs.Spec.Template.Spec)
+	pxutil.ApplyWindowsSettingsToPodSpec(&expectedWinCsiDs.Spec.Template.Spec)
 	actualWinCsiDs := &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, actualWinCsiDs, component.WindowsDaemonSetName, "kube-system")
 	require.NoError(t, err)
