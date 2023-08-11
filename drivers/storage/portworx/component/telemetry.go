@@ -1059,14 +1059,8 @@ func CanAccessArcusRegisterEndpoint(
 	}
 	client := &http.Client{}
 	if proxy != "" {
-		if strings.Contains(strings.ToLower(proxy), "@") {
-			if !strings.HasPrefix(strings.ToLower(proxy), "https://") {
-				proxy = "https://" + proxy
-			}
-		} else {
-			if !strings.HasPrefix(strings.ToLower(proxy), "http://") {
-				proxy = "http://" + proxy
-			}
+		if !strings.HasPrefix(strings.ToLower(proxy), "http://") {
+			proxy = "http://" + proxy
 		}
 		proxyURL, err := url.Parse(proxy)
 		if err != nil {
