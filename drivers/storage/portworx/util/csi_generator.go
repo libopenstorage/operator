@@ -77,6 +77,7 @@ type CSIImages struct {
 	SnapshotController      string
 	HealthMonitorController string
 	LivenessProbe           string
+	CsiDriverInstaller      string
 }
 
 // CSIGenerator contains information needed to generate CSI side car versions
@@ -296,6 +297,7 @@ func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
 		SnapshotController:      snapshotControllerImage,
 		HealthMonitorController: k8sutil.DefaultK8SRegistryPath + "/sig-storage/csi-external-health-monitor-controller:v0.7.0",
 		LivenessProbe:           k8sutil.DefaultK8SRegistryPath + "/sig-storage/livenessprobe:v2.7.0",
+		CsiDriverInstaller:      "docker.io/portworx/pxwincsidriver:v0.1",
 	}
 }
 

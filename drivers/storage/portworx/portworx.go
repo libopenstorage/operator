@@ -540,6 +540,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
 				toUpdate.Status.DesiredImages.CSIHealthMonitorController = release.Components.CSIHealthMonitorController
 				toUpdate.Status.DesiredImages.CsiLivenessProbe = release.Components.CsiLivenessProbe
+				toUpdate.Status.DesiredImages.CsiDriverWinInstaller = release.Components.CsiDriverWinInstaller
 			}
 			if autoUpdateCSISnapshotController(toUpdate) &&
 				(toUpdate.Status.DesiredImages.CSISnapshotController == "" ||
@@ -547,7 +548,6 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 					autoUpdateComponents(toUpdate)) {
 				toUpdate.Status.DesiredImages.CSISnapshotController = release.Components.CSISnapshotController
 			}
-
 		}
 
 		if toUpdate.Spec.Monitoring != nil && toUpdate.Spec.Monitoring.Prometheus != nil {

@@ -202,7 +202,7 @@ func (w *windows) getDesiredNodeRegistrarImage(cluster *corev1.StorageCluster) s
 		imageName = cluster.Status.DesiredImages.CSINodeDriverRegistrar
 	}
 	imageName = util.GetImageURN(cluster, imageName)
-	return "registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.2"
+	return imageName
 }
 
 func (w *windows) getDesiredLivenessImage(cluster *corev1.StorageCluster) string {
@@ -211,11 +211,16 @@ func (w *windows) getDesiredLivenessImage(cluster *corev1.StorageCluster) string
 		imageName = cluster.Status.DesiredImages.CsiLivenessProbe
 	}
 	imageName = util.GetImageURN(cluster, imageName)
-	return "registry.k8s.io/sig-storage/livenessprobe:v2.7.0"
+	return imageName
 }
 
 func (w *windows) getDesiredInstallerImage(cluster *corev1.StorageCluster) string {
-	return "docker.io/cnbuautomation800/pxwincsidriver:v0.1"
+	var imageName string
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.CsiDriverWinInstaller != "" {
+		imageName = cluster.Status.DesiredImages.CsiDriverWinInstaller
+	}
+	imageName = util.GetImageURN(cluster, imageName)
+	return imageName
 }
 
 func (w *windows) createStorageClass() error {
