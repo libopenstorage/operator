@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: px-installer-node-win
+  name: px-csi-win-driver
   labels:
-    app: px-installer-node-win
+    app: px-csi-win-driver
 spec:
   selector:
     matchLabels:
-      app: px-installer-node-win
+      app: px-csi-win-driver
   template:
     metadata:
       labels:
-        app: px-installer-node-win
+        app: px-csi-win-driver
     spec:
       serviceAccountName: portworx
       containers:

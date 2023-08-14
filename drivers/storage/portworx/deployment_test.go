@@ -2841,9 +2841,6 @@ func TestPodSpecForK3s(t *testing.T) {
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-
-	fmt.Println(expected.Affinity)
-	fmt.Println(actual.Affinity)
 	assertPodSpecEqual(t, expected, &actual)
 
 	// retry w/ RKE2 version identifier0 -- should also default to K3s distro tweaks

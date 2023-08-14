@@ -97,7 +97,7 @@ type Release struct {
 	DynamicPlugin              string `yaml:"dynamicPlugin,omitempty"`
 	DynamicPluginProxy         string `yaml:"dynamicPluginProxy,omitempty"`
 	CsiLivenessProbe           string `yaml:"csiLivenessProbe,omitempty"`
-	CsiDriverWinInstaller      string `yaml:"csiDriverWinInstaller,omitempty"`
+	CsiWinInstaller            string `yaml:"csiWinInstaller,omitempty"`
 }
 
 // Version is the response structure from a versions source
@@ -296,7 +296,7 @@ func fillCSIDefaults(
 	rel.Components.CSISnapshotController = csiImages.SnapshotController
 	rel.Components.CSIHealthMonitorController = csiImages.HealthMonitorController
 	rel.Components.CsiLivenessProbe = csiImages.LivenessProbe
-	rel.Components.CsiDriverWinInstaller = csiImages.CsiDriverInstaller
+	rel.Components.CsiWinInstaller = csiImages.CsiDriverInstaller
 }
 
 func fillPrometheusDefaults(

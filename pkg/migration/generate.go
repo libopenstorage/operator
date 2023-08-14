@@ -1277,7 +1277,7 @@ func (h *Handler) handleCustomImageRegistry(cluster *corev1.StorageCluster) erro
 		DynamicPlugin:              h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.DynamicPlugin),
 		DynamicPluginProxy:         h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.DynamicPluginProxy),
 		CsiLivenessProbe:           h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CsiLivenessProbe),
-		CsiDriverWinInstaller:      h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CsiDriverWinInstaller),
+		CsiWinInstaller:            h.removeCustomImageRegistry(cluster.Spec.CustomImageRegistry, cluster.Status.DesiredImages.CsiWinInstaller),
 	}
 	cluster.Status.Version = pxutil.GetImageTag(cluster.Spec.Image)
 	return nil
@@ -1340,7 +1340,7 @@ func (h *Handler) createManifestConfigMap(cluster *corev1.StorageCluster) error 
 			DynamicPlugin:              cluster.Status.DesiredImages.DynamicPlugin,
 			DynamicPluginProxy:         cluster.Status.DesiredImages.DynamicPluginProxy,
 			CsiLivenessProbe:           cluster.Status.DesiredImages.CsiLivenessProbe,
-			CsiDriverWinInstaller:      cluster.Status.DesiredImages.CsiDriverWinInstaller,
+			CsiWinInstaller:            cluster.Status.DesiredImages.CsiWinInstaller,
 		},
 	}
 
