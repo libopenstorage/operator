@@ -297,7 +297,7 @@ func UpdateAndValidateMonitoring(cluster *corev1.StorageCluster, f func(*corev1.
 	latestLiveCluster, err := UpdateStorageCluster(newCluster)
 	require.NoError(t, err)
 
-	err = testutil.ValidateMonitoring(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
+	err = testutil.ValidateMonitoring(pxSpecImages, latestLiveCluster, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
 	require.NoError(t, err)
 
 	return latestLiveCluster
