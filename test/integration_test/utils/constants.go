@@ -49,6 +49,9 @@ var (
 	// PxEnvVars is a string of comma separated ENV vars
 	PxEnvVars string
 
+	// PxCustomAnnotations is a string of comma separated annotations
+	PxCustomAnnotations string
+
 	// CloudProvider is a cloud provider name
 	CloudProvider string
 

@@ -1,6 +1,8 @@
 package test
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	cryptoTls "crypto/tls"
@@ -39,6 +41,8 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	certv1 "k8s.io/api/certificates/v1"
@@ -153,6 +157,9 @@ const (
 
 	defaultRunCmdInPxPodTimeout  = 25 * time.Second
 	defaultRunCmdInPxPodInterval = 5 * time.Second
+
+	etcHostsFile       = "/etc/hosts"
+	tempEtcHostsMarker = "### px-operator unit-test"
 )
 
 // TestSpecPath is the path for all test specs. Due to currently functional test and
@@ -168,6 +175,9 @@ var (
 	opVer23_5_1, _                    = version.NewVersion("23.5.1-")
 	opVer23_7, _                      = version.NewVersion("23.7.0-")
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
+
+	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
+	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
 
 	pxVer3_0, _ = version.NewVersion("3.0")
 
@@ -1392,13 +1402,8 @@ func IsK3sCluster() bool {
 }
 
 func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
-	k8sVersion, err := GetK8SVersion()
-	if err != nil {
-		return err
-	}
-
 	// Validate PVC Controller components and images
-	if err := ValidatePvcController(pxImageList, cluster, k8sVersion, timeout, interval); err != nil {
+	if err := ValidatePvcController(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
@@ -1418,23 +1423,157 @@ func validateComponents(pxImageList map[string]string, cluster *corev1.StorageCl
 	}
 
 	// Validate Monitoring
-	if err = ValidateMonitoring(pxImageList, cluster, timeout, interval); err != nil {
+	if err := ValidateMonitoring(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
 	// Validate PortworxProxy
-	if err = ValidatePortworxProxy(cluster, timeout, interval); err != nil {
+	if err := ValidatePortworxProxy(cluster, timeout, interval); err != nil {
 		return err
 	}
 
 	// Validate Security
 	previouslyEnabled := false // NOTE: This is set to false by default as we are not expecting Security to be previously enabled here
-	if err = ValidateSecurity(cluster, previouslyEnabled, timeout, interval); err != nil {
+	if err := ValidateSecurity(cluster, previouslyEnabled, timeout, interval); err != nil {
+		return err
+	}
+
+	// Validate OCP Dynamic Plugin
+	if err := ValidateOpenshiftDynamicPlugin(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
 
 	// Validate KVDB
-	if err = ValidateKvdb(pxImageList, cluster, timeout, interval); err != nil {
+	if err := ValidateKvdb(pxImageList, cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateOpenshiftDynamicPlugin validates OCP Dynamic Plugin components
+func ValidateOpenshiftDynamicPlugin(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validate Openshift Dynamic Plugin components")
+	logrus.Info("Check OCP and PX Operator versions to determine whether Openshift Dynamic Plugin should be deployed..")
+	pxVersion := GetPortworxVersion(cluster)
+	logrus.Infof("PX Version: [%s]", pxVersion.String())
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return err
+	}
+	logrus.Infof("PX Operator version: [%s]", opVersion.String())
+
+	// Get k8s version
+	kbVer, err := GetK8SVersion()
+	if err != nil {
+		return err
+	}
+	k8sVersion, _ := version.NewVersion(kbVer)
+
+	// Validate Dynamic plugin only if PX Operator 23.5.0+ and OCP 4.12+ (k8s v1.25+)
+	if opVersion.GreaterThanOrEqual(opVer23_5) && isOpenshift(cluster) && k8sVersion.GreaterThanOrEqual(minK8sVersionForDynamicPlugin) {
+		logrus.Info("Openshift Dynamic Plugin should be deployed")
+		if err := ValidateOpenshiftDynamicPluginEnabled(pxImageList, cluster, timeout, interval); err != nil {
+			return fmt.Errorf("failed to validate Openshift Dynamic Plugin components, Err: %v", err)
+		}
+		logrus.Info("Successfully validated all Openshift Dynamic Plugin components")
+		return nil
+	}
+
+	logrus.Info("Openshift Dynamic Plugin is not supported, will skip validation")
+	return nil
+}
+
+// ValidateOpenshiftDynamicPluginEnabled validates that all Openshift Dynamic Plugin components are enabled/created
+func ValidateOpenshiftDynamicPluginEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	t := func() (interface{}, bool, error) {
+		// Validate px-plugin Deployment and pods
+		pxPluginDeployment, err := appops.Instance().GetDeployment("px-plugin", cluster.Namespace)
+		if err != nil {
+			return nil, true, err
+		}
+
+		if err := validateDeployment(pxPluginDeployment, timeout, interval); err != nil {
+			return nil, true, err
+		}
+
+		pxPluginPods, err := appops.Instance().GetDeploymentPods(pxPluginDeployment)
+		if err != nil {
+			return nil, true, err
+		}
+
+		// Validate image inside px-plugin pods
+		if image, ok := pxImageList["dynamicPlugin"]; ok {
+			if err := validateContainerImageInsidePods(cluster, image, "px-plugin", &v1.PodList{Items: pxPluginPods}); err != nil {
+				return nil, true, err
+			}
+		} else {
+			logrus.Warn("Did not find [dynamicPlugin] in the list of images in the version manifest, skipping image validation")
+		}
+
+		// Validate px-plugin-proxy Deployment and pods
+		pxPluginProxyDeployment, err := appops.Instance().GetDeployment("px-plugin-proxy", cluster.Namespace)
+		if err != nil {
+			return nil, true, err
+		}
+
+		if err := validateDeployment(pxPluginProxyDeployment, timeout, interval); err != nil {
+			return nil, true, err
+		}
+
+		pxPluginProxyPods, err := appops.Instance().GetDeploymentPods(pxPluginProxyDeployment)
+		if err != nil {
+			return nil, true, err
+		}
+
+		// Validate image inside px-plugin-proxy pods
+		if image, ok := pxImageList["dynamicPluginProxy"]; ok {
+			if err := validateContainerImageInsidePods(cluster, image, "nginx", &v1.PodList{Items: pxPluginProxyPods}); err != nil {
+				return nil, true, err
+			}
+		} else {
+			logrus.Warn("Did not find [dynamicPluginProxy] in the list of images in the version manifest, skipping image validation")
+		}
+
+		// Validate px-plugin Service
+		_, err = coreops.Instance().GetService("px-plugin", cluster.Namespace)
+		if errors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("failed to validate Service [px-plugin], Err: %v", err)
+		}
+
+		// Validate px-plugin-proxy Service
+		_, err = coreops.Instance().GetService("px-plugin-proxy", cluster.Namespace)
+		if errors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("failed to validate Service [px-plugin-proxy], Err: %v", err)
+		}
+
+		// Validate px-plugin ConfigMap
+		_, err = coreops.Instance().GetConfigMap("px-plugin", cluster.Namespace)
+		if errors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("failed to validate Configmap [px-plugin], Err: %v", err)
+		}
+
+		// Validate px-plugin-proxy-conf ConfigMap
+		_, err = coreops.Instance().GetConfigMap("px-plugin-proxy-conf", cluster.Namespace)
+		if errors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("failed to validate Configmap [px-plugin-proxy-conf], Err: %v", err)
+		}
+
+		// Validate px-plugin-cer Secret
+		_, err = coreops.Instance().GetSecret("px-plugin-cert", cluster.Namespace)
+		if errors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("failed to validate Secret [px-plugin-cert], Err: %v", err)
+		}
+
+		// Validate px-plugin-proxy Secret
+		_, err = coreops.Instance().GetSecret("px-plugin-proxy", cluster.Namespace)
+		if errors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("failed to validate Secret [px-plugin-proxy], Err: %v", err)
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
 		return err
 	}
 
@@ -1542,7 +1681,7 @@ func ValidateInternalKvdbDisabled(cluster *corev1.StorageCluster, timeout, inter
 }
 
 // ValidatePvcController validates PVC Controller components and images
-func ValidatePvcController(pxImageList map[string]string, cluster *corev1.StorageCluster, k8sVersion string, timeout, interval time.Duration) error {
+func ValidatePvcController(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate PVC Controller components")
 
 	pvcControllerDp := &appsv1.Deployment{
@@ -1554,14 +1693,19 @@ func ValidatePvcController(pxImageList map[string]string, cluster *corev1.Storag
 
 	// Check if PVC Controller is enabled or disabled
 	if isPVCControllerEnabled(cluster) {
-		return ValidatePvcControllerEnabled(pvcControllerDp, cluster, k8sVersion, timeout, interval)
+		return ValidatePvcControllerEnabled(pvcControllerDp, cluster, timeout, interval)
 	}
 	return ValidatePvcControllerDisabled(pvcControllerDp, timeout, interval)
 }
 
 // ValidatePvcControllerEnabled validates that all PVC Controller components are enabled/created
-func ValidatePvcControllerEnabled(pvcControllerDp *appsv1.Deployment, cluster *corev1.StorageCluster, k8sVersion string, timeout, interval time.Duration) error {
+func ValidatePvcControllerEnabled(pvcControllerDp *appsv1.Deployment, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("PVC Controller should be enabled")
+
+	k8sVersion, err := GetK8SVersion()
+	if err != nil {
+		return err
+	}
 
 	t := func() (interface{}, bool, error) {
 		if err := appops.Instance().ValidateDeployment(pvcControllerDp, timeout, interval); err != nil {
@@ -2927,6 +3071,7 @@ func ValidateMonitoring(pxImageList map[string]string, cluster *corev1.StorageCl
 	if err := ValidateAlertManager(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
+
 	if err := ValidateGrafana(pxImageList, cluster); err != nil {
 		return err
 	}
@@ -3163,16 +3308,41 @@ func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageClu
 	}
 
 	if pxVersion.GreaterThanOrEqual(minimumPxVersionCCMGO) && opVersion.GreaterThanOrEqual(opVer1_10) {
-		if shouldTelemetryBeEnabled(cluster) {
-			return ValidateTelemetryV2Enabled(pxImageList, cluster, timeout, interval)
-		}
-		return ValidateTelemetryV2Disabled(cluster, timeout, interval)
-	} else {
-		if shouldTelemetryBeEnabled(cluster) {
-			return ValidateTelemetryV1Enabled(pxImageList, cluster, timeout, interval)
-		}
-		return ValidateTelemetryV1Disabled(cluster, timeout, interval)
+		return ValidateTelemetryV2(pxImageList, cluster, timeout, interval)
 	}
+	return ValidateTelemetryV1(pxImageList, cluster, timeout, interval)
+}
+
+// ValidateTelemetryV1 validates old version of ccm-java telemetry
+func ValidateTelemetryV1(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validating Telemetry (ccm-java)")
+	if shouldTelemetryBeEnabled(cluster) {
+		if err := ValidateTelemetryV1Enabled(pxImageList, cluster, timeout, interval); err != nil {
+			return fmt.Errorf("failed to validate Telemetry enabled, Err: %v", err)
+		}
+		return nil
+	}
+
+	if err := ValidateTelemetryV1Disabled(cluster, timeout, interval); err != nil {
+		return fmt.Errorf("failed to validate Telemetry disabled, Err: %v", err)
+	}
+	return nil
+}
+
+// ValidateTelemetryV2 validates new version of ccm-go telemetry
+func ValidateTelemetryV2(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validating Telemetry (ccm-go)")
+	if shouldTelemetryBeEnabled(cluster) {
+		if err := ValidateTelemetryV2Enabled(pxImageList, cluster, timeout, interval); err != nil {
+			return fmt.Errorf("failed to validate Telemetry enabled, Err: %v", err)
+		}
+		return nil
+	}
+
+	if err := ValidateTelemetryV2Disabled(cluster, timeout, interval); err != nil {
+		return fmt.Errorf("failed to validate Telemetry disabled, Err: %v", err)
+	}
+	return nil
 }
 
 // shouldTelemetryBeEnabled validates if Telemetry should be auto enabled/disabled by default
@@ -3259,7 +3429,7 @@ func IsCCMGoSupported(pxVersion *version.Version) bool {
 func ParsePxProxyURL(proxy string) (string, string, string, error) {
 	var authHeader string
 
-	if strings.HasPrefix(proxy, HttpsProtocolPrefix) && strings.Contains(proxy, "@") {
+	if strings.Contains(proxy, "@") {
 		proxyUrl, err := url.Parse(proxy)
 		if err != nil {
 			return "", "", "", fmt.Errorf("failed to parse px proxy url [%s]", proxy)
@@ -3314,14 +3484,8 @@ func CanAccessArcusRegisterEndpoint(
 
 	client := &http.Client{}
 	if proxy != "" {
-		if strings.Contains(strings.ToLower(proxy), "@") {
-			if !strings.HasPrefix(strings.ToLower(proxy), "https://") {
-				proxy = "https://" + proxy
-			}
-		} else {
-			if !strings.HasPrefix(strings.ToLower(proxy), "http://") {
-				proxy = "http://" + proxy
-			}
+		if !strings.HasPrefix(strings.ToLower(proxy), "http://") {
+			proxy = "http://" + proxy
 		}
 		proxyURL, err := url.Parse(proxy)
 		if err != nil {
@@ -3383,12 +3547,6 @@ func GetPxProxyEnvVarValue(cluster *corev1.StorageCluster) (string, string) {
 	for _, env := range cluster.Spec.Env {
 		key, val := env.Name, env.Value
 		if key == EnvKeyPortworxHTTPSProxy {
-			// If http proxy is specified in https env var, treat it as a http proxy endpoint
-			if strings.HasPrefix(val, "http://") {
-				logrus.Warnf("Using endpoint [%s] from environment variable [%s] as a http proxy endpoint instead",
-					val, EnvKeyPortworxHTTPSProxy)
-				return EnvKeyPortworxHTTPProxy, val
-			}
 			return EnvKeyPortworxHTTPSProxy, val
 		} else if key == EnvKeyPortworxHTTPProxy {
 			httpProxy = val
@@ -3896,7 +4054,7 @@ func validatePxTelemetryPhonehomeV2(pxImageList map[string]string, cluster *core
 	// Validate px-telemetry-phonehome daemonset, pods and container images
 	logrus.Info("Validate px-telemetry-phonehome daemonset and images")
 	if err := appops.Instance().ValidateDaemonSet("px-telemetry-phonehome", cluster.Namespace, timeout); err != nil {
-		return err
+		return fmt.Errorf("failed to validate [px-telemetry-phonehome] daemonset in [%s] namespace, Err: %v", cluster.Namespace, err)
 	}
 
 	telemetryPhonehomeDs, err := appops.Instance().GetDaemonSet("px-telemetry-phonehome", cluster.Namespace)
@@ -3949,7 +4107,7 @@ func validatePxTelemetryMetricsCollectorV2(pxImageList map[string]string, cluste
 		},
 	}
 	if err := appops.Instance().ValidateDeployment(metricsCollectorDep, timeout, interval); err != nil {
-		return err
+		return fmt.Errorf("failed to validate [%s] deployment in [%s] namespace, Err: %v", metricsCollectorDep.Name, metricsCollectorDep.Namespace, err)
 	}
 
 	pods, err := appops.Instance().GetDeploymentPods(metricsCollectorDep)
@@ -3997,7 +4155,7 @@ func validatePxTelemetryRegistrationV2(pxImageList map[string]string, cluster *c
 		},
 	}
 	if err := appops.Instance().ValidateDeployment(registrationServiceDep, timeout, interval); err != nil {
-		return err
+		return fmt.Errorf("failed to validate [%s] deployment in [%s] namespace, Err: %v", registrationServiceDep.Name, registrationServiceDep.Namespace, err)
 	}
 
 	pods, err := appops.Instance().GetDeploymentPods(registrationServiceDep)
@@ -4142,7 +4300,7 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 				},
 			}
 			if err := appops.Instance().ValidateDeployment(&dep, timeout, interval); err != nil {
-				return nil, true, err
+				return nil, true, fmt.Errorf("failed to validate [%s] deployment in [%s] namespace, Err: %v", dep.Name, dep.Namespace, err)
 			}
 
 			deployment, err := appops.Instance().GetDeployment(dep.Name, dep.Namespace)
@@ -4648,4 +4806,93 @@ func CreateClusterWithTLS(caCertFileName, serverCertFileName, serverKeyFileName 
 // BoolPtr returns a pointer to provided bool value
 func BoolPtr(val bool) *bool {
 	return &val
+}
+
+// setupEtcHosts sets up given ip/hosts in `/etc/hosts` file for "local" DNS resolution  (i.e. emulate K8s DNS)
+// - you will need to be a root-user to run this
+// - also, make sure your `/etc/nsswitch.conf` file contains `hosts: files ...` as a first entry
+// - hostnames should be in `<service>.<namespace>` format
+func SetupEtcHosts(t *testing.T, ip string, hostnames ...string) {
+	if len(hostnames) <= 0 {
+		return
+	}
+	if err := unix.Access(etcHostsFile, unix.W_OK); err != nil {
+		t.Skipf("This test requires ROOT user  (writeable /etc/hosts): %s", err)
+	}
+
+	// read original content
+	content, err := os.ReadFile("/etc/hosts")
+	require.NoError(t, err)
+
+	if ip == "" {
+		ip = "127.0.0.1"
+	}
+
+	// update content
+	bb := bytes.NewBuffer(content)
+	bb.WriteString(tempEtcHostsMarker)
+	bb.WriteRune('\n')
+	for _, hn := range hostnames {
+		bb.WriteString(ip)
+		bb.WriteRune('\t')
+		bb.WriteString(hn)
+		bb.WriteRune('\t')
+		bb.WriteString(hn)
+		bb.WriteString(".svc.cluster.local")
+		bb.WriteRune('\n')
+	}
+
+	// overwrite /etc/hosts
+	fd, err := os.OpenFile(etcHostsFile, os.O_WRONLY|os.O_TRUNC, 0666)
+	require.NoError(t, err)
+
+	n, err := fd.Write(bb.Bytes())
+	require.NoError(t, err)
+	assert.Equal(t, bb.Len(), n, "short write")
+	fd.Close()
+
+	// waiting for dns can be resolved
+	for i := 0; i < 60; i++ {
+		var ips []net.IP
+		ips, err = net.LookupIP(hostnames[0])
+		if err != nil || !strings.Contains(fmt.Sprintf("%v", ips), ip) {
+			logrus.WithFields(logrus.Fields{
+				"error": err,
+				"ips":   ips,
+				"ip":    ip,
+				"hosts": hostnames,
+			}).Warnf("failed to set /etc/hosts, retrying")
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		break
+	}
+	require.NoError(t, err)
+}
+
+func RestoreEtcHosts(t *testing.T) {
+	fd, err := os.Open(etcHostsFile)
+	require.NoError(t, err)
+	var bb bytes.Buffer
+	scan := bufio.NewScanner(fd)
+	for scan.Scan() {
+		line := scan.Text()
+		if line == tempEtcHostsMarker {
+			// skip copying everything below `tempEtcHostsMarker`
+			break
+		}
+		bb.WriteString(line)
+		bb.WriteRune('\n')
+	}
+	fd.Close()
+
+	// overwrite /etc/hosts
+	require.True(t, bb.Len() > 0)
+	fd, err = os.OpenFile(etcHostsFile, os.O_WRONLY|os.O_TRUNC, 0666)
+	require.NoError(t, err)
+
+	n, err := fd.Write(bb.Bytes())
+	require.NoError(t, err)
+	assert.Equal(t, bb.Len(), n, "short write")
+	fd.Close()
 }

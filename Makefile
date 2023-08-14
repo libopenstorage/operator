@@ -290,7 +290,7 @@ get-release-manifest: clean-release-manifest
 	wget -q --no-check-certificate '$(PX_INSTALLER_HOST)/versions' -O manifests/portworx-releases-local.yaml
 
 mockgen: $(GOPATH)/bin/mockgen
-	$(GOPATH)/bin/mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer,OpenStorageNodeClient
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer,OpenStorageNodeClient,OpenStorageVolumeServer
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/storagedriver.mock.go -package=mock github.com/libopenstorage/operator/drivers/storage Driver
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controllermanager.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/manager Manager
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controller.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/controller Controller

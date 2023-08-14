@@ -88,10 +88,13 @@ const (
 var _ reconcile.Reconciler = &Controller{}
 
 var (
-	controllerKind       = corev1.SchemeGroupVersion.WithKind("StorageCluster")
-	crdBaseDir           = getCRDBasePath
-	deprecatedCRDBaseDir = getDeprecatedCRDBasePath
-	dmThinRexp           = regexp.MustCompile(`-T *dmthin`)
+	controllerKind        = corev1.SchemeGroupVersion.WithKind("StorageCluster")
+	crdBaseDir            = getCRDBasePath
+	deprecatedCRDBaseDir  = getDeprecatedCRDBasePath
+	dmThinRexp            = regexp.MustCompile(`-T *dmthin`)
+	containersAppArmorOff = map[string]bool{
+		"portworx": true,
+	}
 )
 
 // Controller reconciles a StorageCluster object
@@ -415,57 +418,73 @@ func (c *Controller) validateCloudStorageLabelKey(cluster *corev1.StorageCluster
 	return nil
 }
 
-func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
+func isPreflightComplete(cluster *corev1.StorageCluster) bool {
+	// Check pre-check status
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
 	check = strings.TrimSpace(strings.ToLower(check))
 	if !ok || check == "skip" {
-		return nil
+		return true
 	} else if check == "false" {
 		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
-		if condition != nil && condition.Status == corev1.ClusterConditionStatusFailed {
-			return fmt.Errorf("please make sure your cluster meet all prerequisites and rerun preflight check")
-		}
-		// preflight passed or not required
-		logrus.Infof("preflight check not required")
-		return nil
-	}
-
-	toUpdate := cluster.DeepCopy()
-	var err error
-
-	// Do the preflight check for eks only for now to check the cloud drive permission
-	if preflight.IsEKS() {
-		if err = preflight.Instance().CheckCloudDrivePermission(cluster); err != nil {
-			logrus.WithError(err).Errorf("permission check for eks cloud drive failed")
+		if condition != nil {
+			if condition.Status == corev1.ClusterConditionStatusCompleted {
+				return true
+			}
+		} else {
+			return true
 		}
 	}
-	// TODO: validate cloud permission for other providers as well
+	return false
+}
 
-	// Skip of over driver Validate() if an error has occurred
-	if err == nil {
-		// Create StorageNodes to return pre-flight checks used by c.Driver.Validate()
+func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) (*corev1.ClusterCondition, error) {
+	storageNodes := &corev1.StorageNodeList{}
+	serr := c.client.List(context.TODO(), storageNodes,
+		&client.ListOptions{Namespace: toUpdate.Namespace})
+	if serr == nil && len(storageNodes.Items) == 0 { // Only do if storageNodes don't exist
 		k8sNodeList := &v1.NodeList{}
-		err = c.client.List(context.TODO(), k8sNodeList)
+		err := c.client.List(context.TODO(), k8sNodeList)
 		if err == nil {
+			// Create StorageNodes to return pre-flight checks used by c.Driver.Validate().
 			for _, node := range k8sNodeList.Items {
 				if !coreops.Instance().IsNodeMaster(node) {
 					logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
-					c.createStorageNode(cluster, node.Name)
+					c.createStorageNode(toUpdate, node.Name)
+				} else {
+					logrus.Infof("Skipping pre-flight storage node entry for master node: %s", node.Name)
 				}
 			}
 		} else {
 			logrus.WithError(err).Errorf("Failed to get cluster nodes")
+			// *** Should we just return an error on pre-flight here? ***
 		}
+	}
 
-		// Run driver specific pre-flights
-		err = c.Driver.Validate(toUpdate)
-		if err != nil {
-			logrus.WithError(err).Errorf("pre-flight validate failed")
-		}
+	defCondition := &corev1.ClusterCondition{ // set default InProgress condition
+		Source:  pxutil.PortworxComponentName,
+		Type:    corev1.ClusterConditionTypePreflight,
+		Message: "pre-flight: In progress",
+		Status:  corev1.ClusterConditionStatusInProgress,
+	}
 
+	// Run driver specific pre-flights
+	err := c.Driver.Validate(toUpdate)
+	if err != nil {
+		defCondition.Status = corev1.ClusterConditionStatusFailed // Update default condition on error
+		defCondition.Message = fmt.Sprintf("pre-flight: validate failed %v", err)
+		logrus.WithError(err).Errorf(defCondition.Message)
+	}
+
+	// Get condition set from Validate()
+	condition := util.GetStorageClusterCondition(toUpdate, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+	if condition == nil { // Set condition status set if was not in Validate()
+		condition = defCondition
+	}
+
+	if condition.Status != corev1.ClusterConditionStatusInProgress { // Status not in progress must be done or an issue occurred
 		// Delete StorageNodes created for c.Driver.Validate() checks.
-		storageNodes := &corev1.StorageNodeList{}
-		serr := c.client.List(context.TODO(), storageNodes,
+		storageNodes = &corev1.StorageNodeList{}
+		serr = c.client.List(context.TODO(), storageNodes,
 			&client.ListOptions{Namespace: toUpdate.Namespace})
 		if serr == nil {
 			for _, storageNode := range storageNodes.Items {
@@ -480,22 +499,76 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		}
 	}
 
-	// Only do the preflight check once
-	toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+	return condition, err
+}
 
-	condition := &corev1.ClusterCondition{
-		Source: pxutil.PortworxComponentName,
-		Type:   corev1.ClusterConditionTypePreflight,
+func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
+	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	check = strings.TrimSpace(strings.ToLower(check))
+	if !ok || check == "skip" {
+		_ = c.Driver.Validate(cluster.DeepCopy())
+		return nil
+	} else if check == "false" {
+		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+		if condition != nil && (condition.Status == corev1.ClusterConditionStatusFailed || condition.Status == corev1.ClusterConditionStatusTimeout) {
+			return fmt.Errorf("FATAL: preflight checks have failed on your cluster.  " +
+				"Check events, logs and contact support to help make sure your cluster meets all prerequisites")
+		}
+		// preflight passed or not required
+		logrus.Infof("preflight check not required")
+		return nil
+	}
+
+	// Only do the preflight check on demand once a time
+
+	var (
+		condition *corev1.ClusterCondition
+		err       error
+	)
+
+	defCondition := &corev1.ClusterCondition{ // set default InProgress condition
+		Source:  pxutil.PortworxComponentName,
+		Type:    corev1.ClusterConditionTypePreflight,
+		Message: "pre-flight: In progress",
+		Status:  corev1.ClusterConditionStatusInProgress,
+	}
+
+	// Do the preflight check for eks only for now to check the cloud drive permission
+	if preflight.IsEKS() {
+		//  Only executed once in 1st pre-flight loop cycle.  If preflight condition is not set its 1st time through  pre-flight loop
+		condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+		if condition == nil {
+			if err = preflight.Instance().CheckCloudDrivePermission(cluster); err != nil {
+				condition = defCondition
+				condition.Status = corev1.ClusterConditionStatusFailed
+				condition.Message = "permission check for eks cloud drive failed"
+				logrus.WithError(err).Errorf(condition.Message)
+			}
+		}
+	}
+
+	// TODO: validate cloud permission for other providers as well
+
+	toUpdate := cluster.DeepCopy()
+
+	// Skip over driver Validate() if an error has occurred
+	if err == nil {
+		condition, err = c.driverValidate(toUpdate)
+	}
+
+	if condition == nil {
+		condition = defCondition
 	}
 
 	if err != nil {
 		logrus.Errorf("storage cluster preflight check failed")
-		condition.Status = corev1.ClusterConditionStatusFailed
-		condition.Message = err.Error()
+		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 	} else {
-		logrus.Infof("storage cluster preflight check passed")
-		condition.Status = corev1.ClusterConditionStatusCompleted
+		if condition.Status != corev1.ClusterConditionStatusInProgress {
+			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+		}
 	}
+
 	util.UpdateStorageClusterCondition(toUpdate, condition)
 
 	// Update the cluster only if anything has changed
@@ -507,7 +580,12 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 
 		cluster.Status = *toUpdate.Status.DeepCopy()
 		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
-			return fmt.Errorf("UpdateStorageClusterStatus failure, %v", err)
+			logrus.Errorf("preflight updateStorageClusterStatus failed trying again...")
+			if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
+				k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
+					"preflight check failed to update storage cluster status. Need to rerun preflight or skip it")
+				return fmt.Errorf("UpdateStorageClusterStatus failure, %v", err)
+			}
 		}
 	}
 	return err
@@ -670,17 +748,19 @@ func (c *Controller) syncStorageCluster(
 			return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
 		}
 	} else {
-		if _, exists := cluster.Annotations[pxutil.AnnotationPreflightCheck]; !exists {
-			if cluster.Annotations == nil {
-				cluster.Annotations = make(map[string]string)
-			}
-			cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+		// Always disable preflight if not supported.
+		if cluster.Annotations == nil {
+			cluster.Annotations = make(map[string]string)
 		}
+		cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 	}
 
-	// General clean cause by previous issues
 	if err := c.miscCleanUp(cluster); err != nil {
 		return err
+	}
+
+	if !isPreflightComplete(cluster) {
+		return nil // not ready yet, continue
 	}
 
 	// Ensure Stork is deployed with right configuration
@@ -1263,10 +1343,20 @@ func (c *Controller) CreatePodTemplate(
 	podSpec.NodeName = node.Name
 	newTemplate := v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: cluster.Namespace,
-			Labels:    c.StorageClusterSelectorLabels(cluster),
+			Namespace:   cluster.Namespace,
+			Labels:      c.StorageClusterSelectorLabels(cluster),
+			Annotations: make(map[string]string),
 		},
 		Spec: podSpec,
+	}
+
+	if !pxutil.IsPrivileged(cluster) {
+		// turn off AppArmor?
+		for _, c := range newTemplate.Spec.Containers {
+			if containersAppArmorOff[c.Name] {
+				newTemplate.Annotations[pxutil.AnnotationAppArmorPrefix+c.Name] = "unconfined"
+			}
+		}
 	}
 
 	if len(node.Labels) > 0 {
@@ -1274,15 +1364,15 @@ func (c *Controller) CreatePodTemplate(
 		if err != nil {
 			return v1.PodTemplateSpec{}, fmt.Errorf("failed to encode node labels")
 		}
-		newTemplate.Annotations = map[string]string{constants.AnnotationNodeLabels: string(encodedNodeLabels)}
+		newTemplate.Annotations[constants.AnnotationNodeLabels] = string(encodedNodeLabels)
 	}
 	if customAnnotations := util.GetCustomAnnotations(cluster, k8s.Pod, ComponentName); customAnnotations != nil {
-		if newTemplate.Annotations == nil {
-			newTemplate.Annotations = make(map[string]string)
-		}
 		for k, v := range customAnnotations {
 			newTemplate.Annotations[k] = v
 		}
+	}
+	if len(newTemplate.Annotations) <= 0 {
+		newTemplate.Annotations = nil
 	}
 	if len(hash) > 0 {
 		newTemplate.Labels[util.DefaultStorageClusterUniqueLabelKey] = hash

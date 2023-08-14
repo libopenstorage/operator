@@ -152,6 +152,10 @@ const (
 	AnnotationSCCPriority = pxAnnotationPrefix + "/scc-priority"
 	// AnnotationFACDTopology is added when FACD topology was successfully installed on a *new* cluster (it's blocked for existing clusters)
 	AnnotationFACDTopology = pxAnnotationPrefix + "/facd-topology"
+	// AnnotationIsPrivileged [=false] used to remove privileged containers requirement
+	AnnotationIsPrivileged = pxAnnotationPrefix + "/privileged"
+	// AnnotationAppArmorPrefix controls which AppArmor profile will be used per container.
+	AnnotationAppArmorPrefix = "container.apparmor.security.beta.kubernetes.io/"
 	// AnnotationServerTLSMinVersion sets up TLS-servers w/ requested TLS as minimal version
 	AnnotationServerTLSMinVersion = pxAnnotationPrefix + "/tls-min-version"
 	// AnnotationServerTLSCipherSuites sets up TLS-servers w/ requested cipher suites
@@ -367,6 +371,12 @@ func IsVsphere(cluster *corev1.StorageCluster) bool {
 		}
 	}
 	return false
+}
+
+// IsPrivileged returns true "privileged" annotation is MISSING, or NOT set to FALSE
+func IsPrivileged(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsPrivileged])
+	return err != nil || enabled
 }
 
 // GetCloudProvider returns the cloud provider string
@@ -701,12 +711,6 @@ func GetPxProxyEnvVarValue(cluster *corev1.StorageCluster) (string, string) {
 	for _, env := range cluster.Spec.Env {
 		key, val := env.Name, env.Value
 		if key == EnvKeyPortworxHTTPSProxy {
-			// If http proxy is specified in https env var, treat it as a http proxy endpoint
-			if strings.HasPrefix(val, "http://") {
-				logrus.Warnf("using endpoint %s from environment variable %s as a http proxy endpoint instead",
-					val, EnvKeyPortworxHTTPSProxy)
-				return EnvKeyPortworxHTTPProxy, val
-			}
 			return EnvKeyPortworxHTTPSProxy, val
 		} else if key == EnvKeyPortworxHTTPProxy {
 			httpProxy = val
@@ -724,7 +728,7 @@ var (
 
 // ParsePxProxy trims protocol prefix then splits the proxy address of the form "host:port" with possible basic authentication credential
 func ParsePxProxyURL(proxy string) (string, string, string, error) {
-	if strings.HasPrefix(proxy, HttpsProtocolPrefix) && strings.Contains(proxy, "@") {
+	if strings.Contains(proxy, "@") {
 		proxyUrl, err := url.Parse(proxy)
 		if err != nil {
 			return "", "", "", fmt.Errorf("failed to parse px proxy url %s", proxy)

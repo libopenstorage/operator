@@ -445,7 +445,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	rel = m.GetVersions(cluster, true)
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease(k8sVersion).Components, rel.Components)
-	require.Equal(t, "registry.k8s.io/sig-storage/csi-provisioner:v3.3.0", rel.Components.CSIProvisioner)
+	require.Equal(t, "registry.k8s.io/sig-storage/csi-provisioner:v3.5.0", rel.Components.CSIProvisioner)
 
 	// TestCase: No components at all, without k8s version
 	expected.Components = Release{}

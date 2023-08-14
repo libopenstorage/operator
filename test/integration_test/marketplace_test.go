@@ -14,6 +14,7 @@ import (
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
@@ -159,8 +160,34 @@ func BasicUpgradeOperatorViaOcpMarketplace(tc *types.TestCase) func(*testing.T) 
 			time.Sleep(15 * time.Second)
 
 			// Validate StorageCluster
+			telemetryErr := "failed to validate Telemetry"
 			err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
-			require.NoError(t, err)
+			actualTelemetryErr := err
+
+			// NOTE: This is a workaround for a known Telemetry port issue, where restart of PX pods is required for them to set port from 9024 to new expected port 9029
+			if actualTelemetryErr != nil {
+				if strings.Contains(actualTelemetryErr.Error(), telemetryErr) {
+					logrus.Warnf("Got Telemetry error: %v", actualTelemetryErr)
+					logrus.Info("Checking if Telemetry error is exected and needs a workaround to get it to work after the upgrade of PX Operator..")
+					pxOperatorVersionAfterUpgrade, err := ci_utils.GetPXOperatorVersion(opDep)
+					require.NoError(t, err)
+					if pxOperatorVersionAfterUpgrade.LessThanOrEqual(ci_utils.PxOperatorVer23_5_1) && pxOperatorCurrentVersion.GreaterThanOrEqual(ci_utils.PxOperatorVer23_5_1) {
+						logrus.Warnf("PX Operator upgraded from [%s] to [%s], before upgrade version was less than 23.5.1, will need to delete PX pods due to known Telemetry port issue, will perform workaround..", pxOperatorCurrentVersion.String(), pxOperatorVersionAfterUpgrade.String())
+						// If error is Telemetry related, bounce PX pods
+						logrus.Info("Deleting portworx pods..")
+						err = coreops.Instance().DeletePodsByLabels(cluster.Namespace, map[string]string{"name": "portworx"}, 120*time.Second)
+						require.NoError(t, err)
+
+						// Validate StorageCluster again
+						logrus.Info("Re-validating PX components..")
+						err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+						require.NoError(t, err)
+					} else {
+						logrus.Warnf("Previous PX Operator version before upgrade [%s] should have not caused Telemetry issue when upgrading to PX Operator [%s]", pxOperatorCurrentVersion.String(), pxOperatorVersionAfterUpgrade.String())
+						require.NoError(t, fmt.Errorf("Telemetry error is not expected here, Err: %v", actualTelemetryErr))
+					}
+				}
+			}
 		}
 
 		// Delete and validate StorageCluster deletion

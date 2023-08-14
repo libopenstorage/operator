@@ -106,6 +106,18 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 		cluster.Annotations["portworx.io/is-oke"] = "true"
 	}
 
+	// Add custom annotations
+	if len(PxCustomAnnotations) != 0 {
+		if cluster.Annotations == nil {
+			cluster.Annotations = make(map[string]string)
+		}
+		annotations := strings.Split(PxCustomAnnotations, ",")
+		for _, annotation := range annotations {
+			keyvalue := strings.Split(annotation, ":")
+			cluster.Annotations[keyvalue[0]] = strings.TrimSpace(keyvalue[1])
+		}
+	}
+
 	// Populate cloud storage
 	if len(PxDeviceSpecs) != 0 {
 		pxDeviceSpecs := strings.Split(PxDeviceSpecs, ";")
@@ -228,7 +240,7 @@ func UpdateAndValidateStorageCluster(cluster *corev1.StorageCluster, f func(*cor
 }
 
 // UpdateAndValidatePvcController update StorageCluster, validates PVC Controller components only and return latest version of live StorageCluster
-func UpdateAndValidatePvcController(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, k8sVersion string, t *testing.T) *corev1.StorageCluster {
+func UpdateAndValidatePvcController(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
 	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -237,7 +249,7 @@ func UpdateAndValidatePvcController(cluster *corev1.StorageCluster, f func(*core
 	latestLiveCluster, err := UpdateStorageCluster(newCluster)
 	require.NoError(t, err)
 
-	err = testutil.ValidatePvcController(pxSpecImages, latestLiveCluster, k8sVersion, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
+	err = testutil.ValidatePvcController(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
 	require.NoError(t, err)
 
 	return latestLiveCluster
