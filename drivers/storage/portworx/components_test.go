@@ -5468,6 +5468,11 @@ func TestCSIInstallNonPrivileged(t *testing.T) {
 										Values:   []string{"false"},
 									},
 									{
+										Key:      "kubernetes.io/os",
+										Operator: v1.NodeSelectorOpIn,
+										Values:   []string{"linux"},
+									},
+									{
 										Key:      "node-role.kubernetes.io/master",
 										Operator: v1.NodeSelectorOpDoesNotExist,
 									},
