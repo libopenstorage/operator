@@ -16301,7 +16301,7 @@ func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 	require.NoError(t, err)
 
 	// test creation of px-csi-win-shared daemonset
-	expectedWinCsiDs := testutil.GetExpectedDaemonSet(t, "px-csi-node-win.yaml")
+	expectedWinCsiDs := testutil.GetExpectedDaemonSet(t, "px-csi-node-win-shared.yaml")
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &expectedWinCsiDs.Spec.Template.Spec)
 	pxutil.ApplyWindowsSettingsToPodSpec(&expectedWinCsiDs.Spec.Template.Spec)
 	actualWinCsiDs := &appsv1.DaemonSet{}
@@ -16311,11 +16311,11 @@ func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 	require.Equal(t, expectedWinCsiDs.Spec, actualWinCsiDs.Spec)
 
 	// test creation of px-installer-win-shared daemonset
-	expectedWinInstallerDs := testutil.GetExpectedDaemonSet(t, "px-installer-node-win.yaml")
+	expectedWinInstallerDs := testutil.GetExpectedDaemonSet(t, "px-csi-win-driver.yaml")
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &expectedWinInstallerDs.Spec.Template.Spec)
 	pxutil.ApplyWindowsSettingsToPodSpec(&expectedWinInstallerDs.Spec.Template.Spec)
 	actualWinInstallerDs := &appsv1.DaemonSet{}
-	err = testutil.Get(k8sClient, actualWinInstallerDs, component.WindowsInstallerDaemonsetName, cluster.Namespace)
+	err = testutil.Get(k8sClient, actualWinInstallerDs, component.WindowsDriverDaemonsetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedWinInstallerDs.Name, actualWinInstallerDs.Name)
 	require.Equal(t, expectedWinInstallerDs.Spec, actualWinInstallerDs.Spec)

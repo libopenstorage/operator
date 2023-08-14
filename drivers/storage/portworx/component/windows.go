@@ -24,12 +24,12 @@ import (
 )
 
 const (
-	WindowsComponentName              = "Windows Node"
-	WindowsCsiDaemonsetName           = "px-csi-node-win-shared"
-	WindowsInstallerDaemonsetName     = "px-csi-win-driver"
-	WindowsStorageClass               = "px-csi-win-shared"
-	WindowsCsiDaemonsetFileName       = "px-csi-node-win.yaml"
-	WindowsInstallerDaemonsetFileName = "px-installer-node-win.yaml"
+	WindowsComponentName           = "Windows Node"
+	WindowsCsiDaemonsetName        = "px-csi-node-win-shared"
+	WindowsDriverDaemonsetName     = "px-csi-win-driver"
+	WindowsStorageClass            = "px-csi-win-shared"
+	WindowsCsiDaemonsetFileName    = "px-csi-node-win-shared.yaml"
+	WindowsDriverDaemonsetFileName = "px-csi-win-driver.yaml"
 )
 
 type windows struct {
@@ -81,8 +81,8 @@ func (w *windows) Reconcile(cluster *corev1.StorageCluster) error {
 		errList = append(errList, err.Error())
 	}
 
-	if err := w.createDaemonSet(WindowsInstallerDaemonsetFileName, WindowsInstallerDaemonsetName, cluster.Namespace, cluster, ownRef); err != nil {
-		logrus.Errorf("error during creating %s daemonset %s ", WindowsInstallerDaemonsetName, err)
+	if err := w.createDaemonSet(WindowsDriverDaemonsetFileName, WindowsDriverDaemonsetName, cluster.Namespace, cluster, ownRef); err != nil {
+		logrus.Errorf("error during creating %s daemonset %s ", WindowsDriverDaemonsetName, err)
 		errList = append(errList, err.Error())
 	}
 
@@ -104,7 +104,7 @@ func (w *windows) Delete(cluster *corev1.StorageCluster) error {
 		errList = append(errList, err.Error())
 	}
 
-	if err := k8s.DeleteDaemonSet(w.client, WindowsInstallerDaemonsetName, cluster.Namespace); err != nil {
+	if err := k8s.DeleteDaemonSet(w.client, WindowsDriverDaemonsetName, cluster.Namespace); err != nil {
 		errList = append(errList, err.Error())
 	}
 
@@ -184,7 +184,7 @@ func (w *windows) createDaemonSet(filename, daemonsetName, nameSpace string, clu
 
 	equal, _ := util.DeepEqualPodTemplate(&daemonSet.Spec.Template, &existingDaemonSet.Spec.Template)
 	if (!w.isCsiCreated && daemonSet.Name == WindowsCsiDaemonsetName) ||
-		(!w.isInstallerCreated && daemonSet.Name == WindowsInstallerDaemonsetName) ||
+		(!w.isInstallerCreated && daemonSet.Name == WindowsDriverDaemonsetName) ||
 		!equal {
 		if err := k8s.CreateOrUpdateDaemonSet(w.client, daemonSet, ownerRef); err != nil {
 			return err
@@ -194,7 +194,7 @@ func (w *windows) createDaemonSet(filename, daemonsetName, nameSpace string, clu
 	if daemonSet.Name == WindowsCsiDaemonsetName {
 		w.isCsiCreated = true
 	}
-	if daemonSet.Name == WindowsInstallerDaemonsetName {
+	if daemonSet.Name == WindowsDriverDaemonsetName {
 		w.isInstallerCreated = true
 	}
 
