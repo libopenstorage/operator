@@ -1055,14 +1055,12 @@ func CanAccessArcusRegisterEndpoint(
 	}
 	client := &http.Client{}
 	if proxy != "" {
-		if strings.Contains(strings.ToLower(proxy), "@") {
-			if !strings.HasPrefix(strings.ToLower(proxy), "https://") {
-				proxy = "https://" + proxy
-			}
-		} else {
-			if !strings.HasPrefix(strings.ToLower(proxy), "http://") {
-				proxy = "http://" + proxy
-			}
+		if strings.HasPrefix(strings.ToLower(proxy), "https://") {
+			logrus.WithError(fmt.Errorf("can't use SSL enabled proxy for now")).Errorf("https proxy %s using SSL is not supported", proxy)
+			return false
+		}
+		if !strings.HasPrefix(strings.ToLower(proxy), "http://") {
+			proxy = "http://" + proxy
 		}
 		proxyURL, err := url.Parse(proxy)
 		if err != nil {
