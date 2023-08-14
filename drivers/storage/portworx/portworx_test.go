@@ -2567,6 +2567,27 @@ func TestStorageClusterDefaultsForPlugin(t *testing.T) {
 	require.Equal(t, cluster.Status.DesiredImages.DynamicPluginProxy, "nginxinc/nginx-unprivileged:1.23")
 }
 
+func TestStorageClusterDefaultsForWindows(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.10.0",
+		},
+	}
+
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, cluster.Status.DesiredImages.CsiDriverWinInstaller, "docker.io/portworx/pxwincsidriver:v0.1")
+	require.Equal(t, cluster.Status.DesiredImages.CsiLivenessProbe, "registry.k8s.io/sig-storage/livenessprobe:v2.7.0")
+	require.Equal(t, cluster.Status.DesiredImages.CSIDriverRegistrar, "quay.io/k8scsi/driver-registrar:v1.2.3")
+
+}
+
 func assertDefaultSecuritySpec(t *testing.T, cluster *corev1.StorageCluster, expectAuthDefaults bool) {
 	s, _ := json.MarshalIndent(cluster.Spec.Security, "", "\t")
 	t.Logf("Security spec under validation = \n, %v", string(s))
@@ -10401,6 +10422,8 @@ func (m *fakeManifest) GetVersions(
 			PxRepo:                     "portworx/px-repo:" + compVersion,
 			DynamicPlugin:              "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:         "nginxinc/nginx-unprivileged:1.23",
+			CsiLivenessProbe:           "registry.k8s.io/sig-storage/livenessprobe:v2.7.0",
+			CsiDriverWinInstaller:      "docker.io/portworx/pxwincsidriver:v0.1",
 		},
 	}
 	if m.k8sVersion != nil && m.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {

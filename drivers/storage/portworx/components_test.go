@@ -16231,7 +16231,10 @@ func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 			Namespace: "kube-system",
 		},
 		Spec: corev1.StorageClusterSpec{
-
+			Image: "px/image:2.10.0",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
+			},
 			Placement: &corev1.PlacementSpec{
 				NodeAffinity: &v1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
@@ -16251,6 +16254,9 @@ func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 			},
 		},
 	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
