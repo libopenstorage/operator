@@ -588,7 +588,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				toUpdate.Status.DesiredImages.CSISnapshotter = release.Components.CSISnapshotter
 				toUpdate.Status.DesiredImages.CSIHealthMonitorController = release.Components.CSIHealthMonitorController
 				toUpdate.Status.DesiredImages.CsiLivenessProbe = release.Components.CsiLivenessProbe
-				toUpdate.Status.DesiredImages.CsiWinInstaller = release.Components.CsiWinInstaller
+				toUpdate.Status.DesiredImages.CsiWinDriver = release.Components.CsiWinDriver
 			}
 			if autoUpdateCSISnapshotController(toUpdate) &&
 				(toUpdate.Status.DesiredImages.CSISnapshotController == "" ||

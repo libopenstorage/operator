@@ -207,7 +207,7 @@ func TestValidate(t *testing.T) {
 	preFlighter := NewPreFlighter(cluster, k8sClient, podSpec)
 	require.NotNil(t, preFlighter)
 
-	// / Create preflighter podSpec
+	/// Create preflighter podSpec
 	preflightDSCheck, err := preFlighter.CreatePreFlightDaemonsetSpec(clusterRef)
 	require.NoError(t, err)
 	require.NotNil(t, preflightDSCheck)
@@ -2597,7 +2597,7 @@ func TestStorageClusterDefaultsForWindows(t *testing.T) {
 
 	err := driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Equal(t, cluster.Status.DesiredImages.CsiWinInstaller, "docker.io/portworx/pxwincsidriver:v0.1")
+	require.Equal(t, cluster.Status.DesiredImages.CsiWinDriver, "docker.io/portworx/pxwincsidriver:v0.1")
 	require.Equal(t, cluster.Status.DesiredImages.CsiLivenessProbe, "registry.k8s.io/sig-storage/livenessprobe:v2.7.0")
 	require.Equal(t, cluster.Status.DesiredImages.CSIDriverRegistrar, "quay.io/k8scsi/driver-registrar:v1.2.3")
 
@@ -10438,7 +10438,7 @@ func (m *fakeManifest) GetVersions(
 			DynamicPlugin:              "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:         "nginxinc/nginx-unprivileged:1.23",
 			CsiLivenessProbe:           "registry.k8s.io/sig-storage/livenessprobe:v2.7.0",
-			CsiWinInstaller:            "docker.io/portworx/pxwincsidriver:v0.1",
+			CsiWinDriver:               "docker.io/portworx/pxwincsidriver:v0.1",
 		},
 	}
 	if m.k8sVersion != nil && m.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {

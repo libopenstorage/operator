@@ -675,7 +675,7 @@ type ComponentImages struct {
 	DynamicPlugin              string `json:"dynamicPlugin,omitempty"`
 	DynamicPluginProxy         string `json:"dynamicPluginProxy,omitempty"`
 	CsiLivenessProbe           string `json:"csiLivenessProbe,omitempty"`
-	CsiWinInstaller            string `json:"csiWinInstaller,omitempty"`
+	CsiWinDriver               string `json:"csiWinDriver,omitempty"`
 }
 
 // Storage represents cluster storage details
