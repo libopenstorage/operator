@@ -55,7 +55,8 @@ func defaultDmthinSpec(t *testing.T, addDmthinOption bool) *corev1.StorageCluste
 }
 
 func getTestName(opt OptionsArr) string {
-	testName := "BasicInstallDmthinWith"
+	baseName := "BasicInstallDmthinWith"
+	testName := baseName
 	if opt[PxStoreV2Present] {
 		testName += "PxStoreV2"
 	}
@@ -69,6 +70,10 @@ func getTestName(opt OptionsArr) string {
 		testName += "Journal"
 	} else if opt[AutoJournalPresent] {
 		testName += "AutoJournal"
+	}
+	if baseName == testName {
+		// If none of the options were picked, add "Nothing" in the name for completion
+		testName += "Nothing"
 	}
 	return testName
 }
@@ -103,19 +108,25 @@ func generateSingleTestCase(o OptionsArr) types.TestCase {
 	return testCase
 }
 
-func generateTestCases(opt OptionsArr, idx uint) []types.TestCase {
-	var retVal []types.TestCase
+// This function generates a permutation of all possible test cases based on the input array. `idx` argument helps determine the index from which to generate the permutations.
+// In addition, this will remove duplicate test cases which might get generated in a permutation.
+func generateTestCases(opt OptionsArr, idx uint) map[string]types.TestCase {
+	var retVal map[string]types.TestCase
+
 	if idx == uint(len(opt)) {
 		singleTestCase := generateSingleTestCase(opt)
-		retVal = append(retVal, singleTestCase)
+		retVal[singleTestCase.TestName] = singleTestCase
 		return retVal
 	}
-	without := generateTestCases(opt, idx+1)
-	retVal = append(retVal, without...)
+	retVal = generateTestCases(opt, idx+1)
 
 	opt[idx] = true
 	with := generateTestCases(opt, idx+1)
-	retVal = append(retVal, with...)
+	for s, testCase := range with {
+		if _, ok := retVal[s]; !ok {
+			retVal[s] = testCase
+		}
+	}
 	return retVal
 }
 
