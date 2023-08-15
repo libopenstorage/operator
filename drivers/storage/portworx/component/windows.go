@@ -25,10 +25,10 @@ import (
 
 const (
 	WindowsComponentName           = "Windows Node"
-	WindowsCsiDaemonsetName        = "px-csi-node-win-shared"
+	WindowsCsiDaemonsetName        = "px-csi-node-win"
 	WindowsDriverDaemonsetName     = "px-csi-win-driver"
 	WindowsStorageClass            = "px-csi-win-shared"
-	WindowsCsiDaemonsetFileName    = "px-csi-node-win-shared.yaml"
+	WindowsCsiDaemonsetFileName    = "px-csi-node-win.yaml"
 	WindowsDriverDaemonsetFileName = "px-csi-win-driver.yaml"
 )
 
