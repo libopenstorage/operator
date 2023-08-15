@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/go-version"
 	v1 "k8s.io/api/core/v1"
@@ -110,6 +111,7 @@ func RunPxCmdRetry(command ...string) (string, string, error) {
 		if err == nil || strings.Contains(err.Error(), "command terminated") {
 			break
 		}
+		time.Sleep(2 * time.Second)
 	}
 	return out, stderr, err
 }

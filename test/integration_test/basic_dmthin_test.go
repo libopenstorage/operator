@@ -108,7 +108,8 @@ func generateSingleTestCase(o OptionsArr) types.TestCase {
 	return testCase
 }
 
-// This function generates a permutation of all possible test cases based on the input array. `idx` argument helps determine the index from which to generate the permutations.
+// This function generates a permutation of all possible test cases based on the input array.
+// `idx` argument helps determine the index from which to generate the permutations.
 // In addition, this will remove duplicate test cases which might get generated in a permutation.
 func generateTestCases(opt OptionsArr, idx uint) map[string]types.TestCase {
 	retVal := make(map[string]types.TestCase)
