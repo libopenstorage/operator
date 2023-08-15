@@ -3825,6 +3825,12 @@ spec:
                   csiNodeDriverRegistrar:
                     type: string
                     description: Desired image for CSI node driver registrar.
+                  csiLivenessProbe:
+                    type: string
+                    description: Desired image for Liveness probe.
+                  csiDriverWin:
+                    type: string
+                    description: Desired image for csi driver for windows.
                   csiDriverRegistrar:
                     type: string
                     description: Desired image for CSI driver registrar.

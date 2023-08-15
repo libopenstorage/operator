@@ -74,6 +74,8 @@ const (
 	EssentialsOSBEndpointKey = "px-osb-endpoint"
 	// EnvKeyKubeletDir env var to set custom kubelet directory
 	EnvKeyKubeletDir = "KUBELET_DIR"
+	// OS name for windows node
+	WindowsOsName = "windows"
 
 	// AnnotationIsPKS annotation indicating whether it is a PKS cluster
 	AnnotationIsPKS = pxAnnotationPrefix + "/is-pks"
@@ -1018,6 +1020,23 @@ func ApplyStorageClusterSettingsToPodSpec(cluster *corev1.StorageCluster, podSpe
 			}
 		}
 	}
+}
+
+func ApplyWindowsSettingsToPodSpec(podSpec *v1.PodSpec) {
+	for _, nodeselector := range podSpec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms {
+		for i := range nodeselector.MatchExpressions {
+			if nodeselector.MatchExpressions[i].Key == v1.LabelOSStable {
+				nodeselector.MatchExpressions[i].Values = []string{WindowsOsName}
+			}
+		}
+	}
+
+	toleration := v1.Toleration{
+		Key:   "os",
+		Value: WindowsOsName,
+	}
+
+	podSpec.Tolerations = append(podSpec.Tolerations, toleration)
 }
 
 // GetClusterID returns portworx instance cluster ID

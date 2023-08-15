@@ -22,6 +22,10 @@ spec:
                 operator: NotIn
                 values:
                 - "false"
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - "linux"
               - key: node-role.kubernetes.io/master
                 operator: DoesNotExist
             - matchExpressions:
@@ -29,6 +33,10 @@ spec:
                 operator: NotIn
                 values:
                   - "false"
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - "linux"
               - key: node-role.kubernetes.io/master
                 operator: Exists
               - key: node-role.kubernetes.io/worker
