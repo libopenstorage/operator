@@ -686,6 +686,11 @@ func (t *template) getSelectorTerms(k8sVersion *version.Version) []v1.NodeSelect
 			Operator: v1.NodeSelectorOpNotIn,
 			Values:   []string{"false"},
 		},
+		{
+			Key:      "kubernetes.io/os",
+			Operator: v1.NodeSelectorOpIn,
+			Values:   []string{"linux"},
+		},
 	}
 
 	if t.runOnMaster {

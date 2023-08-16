@@ -29,6 +29,10 @@ spec:
                 operator: NotIn
                 values:
                 - "false"
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                  - "linux"
       hostNetwork: true
       hostPID: false
       containers:
