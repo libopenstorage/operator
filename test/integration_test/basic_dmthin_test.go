@@ -160,9 +160,9 @@ var testDmthinCases = []types.TestCase{
 			}
 			k8sVersion, _ := k8sutil.GetVersion()
 			pxVersion := ci_utils.GetPxVersionFromSpecGenURL(ci_utils.PxUpgradeHopsURLList[0])
-			return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) && pxVersion.LessThan(pxVer2_9)
+			return k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) && pxVersion.LessThan(pxVer3_0_0)
 		},
-		TestFunc: BasicUpgradeStorageClusterDmthin,
+		TestFunc: BasicUpgradeStorageClusterNoDmthin,
 	},
 }
 
@@ -334,7 +334,9 @@ func BasicInstallDmthin(tc *types.TestCase) func(*testing.T) {
 
 // PxUpgradeHopsURLList is interpreted differently in this test as compared to the original intent
 // Each member of the hop list serves as the base PX version to upgrade from to the latest release version.
-func BasicUpgradeStorageClusterDmthin(tc *types.TestCase) func(*testing.T) {
+// The intention of this test will be to upgrade PX from a version where dmthin is not supported and expect that he upgrade
+// continues to have btrfs and not create dmthin datastores.
+func BasicUpgradeStorageClusterNoDmthin(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		for _, hopURL := range ci_utils.PxUpgradeHopsURLList {
 			pxVersion := ci_utils.GetPxVersionFromSpecGenURL(ci_utils.PxUpgradeHopsURLList[0])
@@ -368,6 +370,7 @@ func BasicUpgradeStorageClusterDmthin(tc *types.TestCase) func(*testing.T) {
 			err = test.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateUpgradeTimeout, ci_utils.DefaultValidateUpgradeRetryInterval, true, "")
 			require.NoError(t, err)
 
+			// After upgrade, PX should continue to have btrfs
 			pxStoreV2 = isPxStoreV2(t, cluster)
 			require.False(t, pxStoreV2)
 			UninstallPX(t, cluster)
