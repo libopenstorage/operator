@@ -55,7 +55,6 @@ var (
 	pxVer2_8, _    = version.NewVersion("2.8")
 	pxVer2_9_1, _  = version.NewVersion("2.9.1")
 	pxVer2_13_8, _ = version.NewVersion("2.13.8")
-	pxVer3_0, _    = version.NewVersion("3.0")
 	pxVer3_0_1, _  = version.NewVersion("3.0.1")
 )
 
