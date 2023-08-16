@@ -49,13 +49,13 @@ const (
 )
 
 var (
-	pxVer2_3_2, _ = version.NewVersion("2.3.2")
-	pxVer2_5_5, _ = version.NewVersion("2.5.5")
-	pxVer2_6, _   = version.NewVersion("2.6")
-	pxVer2_8, _   = version.NewVersion("2.8")
-	pxVer2_9_1, _ = version.NewVersion("2.9.1")
-	pxVer3_0, _   = version.NewVersion("3.0")
-	pxVer3_0_1, _ = version.NewVersion("3.0.1")
+	pxVer2_3_2, _  = version.NewVersion("2.3.2")
+	pxVer2_5_5, _  = version.NewVersion("2.5.5")
+	pxVer2_6, _    = version.NewVersion("2.6")
+	pxVer2_8, _    = version.NewVersion("2.8")
+	pxVer2_9_1, _  = version.NewVersion("2.9.1")
+	pxVer2_13_8, _ = version.NewVersion("2.13.8")
+	pxVer3_0_1, _  = version.NewVersion("3.0.1")
 )
 
 type volumeInfo struct {
@@ -1320,7 +1320,7 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 	if t.cluster.Annotations != nil {
 		preFltCheck = strings.TrimSpace(strings.ToLower(t.cluster.Annotations[pxutil.AnnotationPreflightCheck]))
 	}
-	if t.pxVersion.GreaterThanOrEqual(pxVer3_0) && preFltCheck != "true" {
+	if t.pxVersion.GreaterThanOrEqual(pxVer2_13_8) && preFltCheck != "true" {
 		extensions = append(extensions, t.getTelemetryPhoneHomeVolumeInfoList)
 	}
 	for _, fn := range extensions {
@@ -1406,7 +1406,7 @@ func (t *template) getVolumes() []v1.Volume {
 	if t.cluster.Annotations != nil {
 		preFltCheck = strings.TrimSpace(strings.ToLower(t.cluster.Annotations[pxutil.AnnotationPreflightCheck]))
 	}
-	if t.pxVersion.GreaterThanOrEqual(pxVer3_0) && preFltCheck != "true" {
+	if t.pxVersion.GreaterThanOrEqual(pxVer2_13_8) && preFltCheck != "true" {
 		extensions = append(extensions, t.getTelemetryPhoneHomeVolumeInfoList)
 	}
 
