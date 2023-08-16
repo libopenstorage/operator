@@ -2592,7 +2592,7 @@ func TestPodWithTelemetryCCMVolume(t *testing.T) {
 			Namespace: "kube-system",
 		},
 		Spec: corev1.StorageClusterSpec{
-			Image: "portworx/oci-monitor:2.8.0",
+			Image: "portworx/oci-monitor:2.13.7",
 			Monitoring: &corev1.MonitoringSpec{
 				Telemetry: &corev1.TelemetrySpec{
 					Enabled: true,
@@ -2633,7 +2633,7 @@ func TestPodWithTelemetryCCMVolume(t *testing.T) {
 	assert.False(t, hasCCMVol || hasCCMVolMount)
 
 	// Then upgrade the cluster to 3.0 and obtain the new pod spec
-	cluster.Spec.Image = "portworx/oci-monitor:3.0.0"
+	cluster.Spec.Image = "portworx/oci-monitor:2.13.8"
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
