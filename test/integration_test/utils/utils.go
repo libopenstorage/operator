@@ -107,7 +107,7 @@ func RunPxCmdRetry(command ...string) (string, string, error) {
 	var err error
 	for i := 0; i < 4; i++ {
 		out, stderr, err = RunPxCmd(command...)
-		// Occassionally, commands are terminated due to bad connections. Let's retry them.
+		// Occasionally, commands are terminated due to bad connections. Let's retry them.
 		if err == nil || strings.Contains(err.Error(), "command terminated") {
 			break
 		}
