@@ -25,7 +25,7 @@ spec:
               value: 'unix://C:\\csi\\csi.sock'
           imagePullPolicy: IfNotPresent
           name: liveness-probe
-          image: registry.k8s.io/sig-storage/livenessprobe:v2.7.0
+          image: registry.k8s.io/sig-storage/livenessprobe:v2.10.0
           resources:
             limits:
               memory: 100Mi
