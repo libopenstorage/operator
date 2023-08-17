@@ -52,7 +52,7 @@ var (
 	pxVer2_8, _    = version.NewVersion("2.8")
 	pxVer2_9_1, _  = version.NewVersion("2.9.1")
 	pxVer2_13_8, _ = version.NewVersion("2.13.8")
-	pxVer3_0_1, _  = version.NewVersion("3.0.1")
+	pxVer3_0, _    = version.NewVersion("3.0")
 )
 
 type volumeInfo struct {
@@ -277,9 +277,9 @@ func (p *portworx) GetStoragePodSpec(
 	}
 
 	if _, has := t.cluster.Annotations[pxutil.AnnotationIsPrivileged]; has {
-		if pxutil.GetPortworxVersion(cluster).LessThan(pxVer3_0_1) {
-			err = fmt.Errorf("failed to create pod spec: need portworx %s or higher to use annotation '%s'",
-				pxVer3_0_1, pxutil.AnnotationIsPrivileged)
+		if pxutil.GetPortworxVersion(cluster).LessThanOrEqual(pxVer3_0) {
+			err = fmt.Errorf("failed to create pod spec: need portworx higher than %s to use annotation '%s'",
+				pxVer3_0, pxutil.AnnotationIsPrivileged)
 			return v1.PodSpec{}, err
 		}
 	}
@@ -975,7 +975,7 @@ func (t *template) getArguments() []string {
 		args = append(args, "--log", t.cluster.Annotations[pxutil.AnnotationLogFile])
 	}
 	// for non-privileged and PKS, add shared mounts via parameters
-	if t.pxVersion.GreaterThanOrEqual(pxVer3_0_1) &&
+	if t.pxVersion.GreaterThan(pxVer3_0) &&
 		(!pxutil.IsPrivileged(t.cluster) || pxutil.IsPKS(t.cluster)) {
 		args = append(args,
 			"-v", "/var/lib/osd/pxns:/var/lib/osd/pxns:shared",
@@ -1083,7 +1083,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 
 	if t.isPKS {
 		ev := "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
-		if t.pxVersion.GreaterThanOrEqual(pxVer3_0_1) {
+		if t.pxVersion.GreaterThan(pxVer3_0) {
 			ev = "rm -fr /var/lib/osd/driver"
 		}
 		envMap["PRE-EXEC"] = &v1.EnvVar{
@@ -1712,7 +1712,7 @@ func getDefaultVolumeInfoList(pxVersion *version.Version) []volumeInfo {
 func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
 	list := make([]volumeInfo, 0)
 
-	if pxVersion.GreaterThanOrEqual(pxVer3_0_1) {
+	if pxVersion.GreaterThan(pxVer3_0) {
 		list = append(list, volumeInfo{
 			name:             "varlibosd",
 			hostPath:         "/var/lib/osd",
