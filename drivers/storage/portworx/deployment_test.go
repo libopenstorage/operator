@@ -2778,7 +2778,7 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "need portworx 3.0.1 or higher to use annotation '"+
+	assert.Contains(t, err.Error(), "need portworx higher than 3.0.0 to use annotation '"+
 		pxutil.AnnotationIsPrivileged+"'")
 
 	cluster.Spec.Image = "portworx/oci-monitor:3.0.1"
@@ -2808,6 +2808,15 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 	for _, v := range actual.Containers[0].VolumeMounts {
 		assert.Nil(t, v.MountPropagation, "Wrong propagation on %v", v)
 	}
+
+	// PWX-32825 tweak the 3.0.1 version slightly -- should still evaluate the same
+	cluster.Spec.Image = "portworx/oci-monitor:3.0.1-ubuntu1604"
+	expected_3_0_1.Containers[0].Image = "docker.io/" + cluster.Spec.Image
+
+	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+
+	assertPodSpecEqual(t, expected_3_0_1, &actual)
 }
 
 func TestPodSpecForK3s(t *testing.T) {
