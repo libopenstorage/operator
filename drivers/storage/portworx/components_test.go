@@ -15453,9 +15453,13 @@ func TestPluginInstallAndUninstall(t *testing.T) {
 }
 
 // test if install can be enabled on windows and non-windows node clusters
+// test on only linux node cluster with k8s version 1.25.0 that install should be disabled
 func TestWindowsComponentEnabled(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.0",
+	}
 
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -15467,7 +15471,6 @@ func TestWindowsComponentEnabled(t *testing.T) {
 	cluster := &corev1.StorageCluster{}
 	windowsComponent, _ := component.Get(component.WindowsComponentName)
 
-	// test on only linux node cluster that install should be disabled
 	node1 := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
@@ -15482,21 +15485,77 @@ func TestWindowsComponentEnabled(t *testing.T) {
 
 	enabled := windowsComponent.IsEnabled(cluster)
 	require.Equal(t, false, enabled)
+}
 
-	// test that on windows node install should be enabled
-	node2 := &v1.Node{
+// test that on windows node with k8s version 1.24.0 install should be disabled
+func TestWindowsComponentEnabledOnWindowsNodeWithK8s124(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.24.0",
+	}
+
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	cluster := &corev1.StorageCluster{}
+	windowsComponent, _ := component.Get(component.WindowsComponentName)
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "node2",
+			Name: "node",
 			Labels: map[string]string{
 				"kubernetes.io/os": "windows",
 			},
 		},
 	}
 
-	err = k8sClient.Create(context.TODO(), node2)
+	err = k8sClient.Create(context.TODO(), node)
 	require.NoError(t, err)
 
-	enabled = windowsComponent.IsEnabled(cluster)
+	enabled := windowsComponent.IsEnabled(cluster)
+	require.Equal(t, false, enabled)
+}
+
+// test that on windows node with k8s version 1.25.0 install should be disabled
+func TestWindowsComponentEnabledOnWindowsNodeWithK8s125(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.0",
+	}
+
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	cluster := &corev1.StorageCluster{}
+	windowsComponent, _ := component.Get(component.WindowsComponentName)
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.0",
+	}
+
+	node := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node",
+			Labels: map[string]string{
+				"kubernetes.io/os": "windows",
+			},
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), node)
+	require.NoError(t, err)
+
+	enabled := windowsComponent.IsEnabled(cluster)
 	require.Equal(t, true, enabled)
 }
 
@@ -15504,6 +15563,9 @@ func TestWindowsComponentEnabled(t *testing.T) {
 func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.0",
+	}
 
 	reregisterComponents()
 	node := &v1.Node{
