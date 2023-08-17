@@ -194,7 +194,7 @@ container:
 	@echo "Building operator image $(OPERATOR_IMG)"
 	docker build --pull --tag $(OPERATOR_IMG) -f build/Dockerfile .
 
-DOCK_BUILD_CNT	:= golang:1.19
+DOCK_BUILD_CNT	:= golang:1.20
 
 docker-build:
 	@echo "Building using docker"
