@@ -103,20 +103,24 @@ $(GOPATH)/bin/mockgen:
 	env GOFLAGS="" go install github.com/golang/mock/mockgen@latest
 
 $(GOPATH)/bin/golangci-lint:
-	env GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.51.0
+	env GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.1
 
 $(GOPATH)/bin/errcheck:
 	env GOFLAGS="" go install github.com/kisielk/errcheck@latest
 
 $(GOPATH)/bin/staticcheck:
-	env GOFLAGS="" go install honnef.co/go/tools/cmd/staticcheck@v0.3.3
+	env GOFLAGS="" go install honnef.co/go/tools/cmd/staticcheck@v0.4.3
 
 # Static checks
 
 vendor-tidy:
 	go mod tidy
 
-lint: $(GOPATH)/bin/golangci-lint
+lint-version-check: $(GOPATH)/bin/golangci-lint
+	# golint version-check ...  (rm $< if fails)
+	@$(GOPATH)/bin/golangci-lint version | grep -q go1\.20\.
+
+lint: $(GOPATH)/bin/golangci-lint lint-version-check
 	# golint check ...
 	@$(GOPATH)/bin/golangci-lint run --timeout=5m ./...
 
