@@ -34,6 +34,7 @@ const (
 
 type windows struct {
 	client             client.Client
+	k8sVersion         *version.Version
 	isCsiCreated       bool
 	isInstallerCreated bool
 	isWindowsNode      bool
@@ -41,11 +42,12 @@ type windows struct {
 
 func (w *windows) Initialize(
 	k8sClient client.Client,
-	_ version.Version,
+	k8sVersion version.Version,
 	scheme *runtime.Scheme,
 	recorder record.EventRecorder,
 ) {
 	w.client = k8sClient
+	w.k8sVersion = &k8sVersion
 }
 
 func (w *windows) Name() string {
@@ -68,7 +70,7 @@ func (w *windows) IsEnabled(cluster *corev1.StorageCluster) bool {
 	}
 
 	w.isWindowsNode = isWindowsNode(nodeList)
-	return w.isWindowsNode
+	return w.isWindowsNode && w.k8sVersion.GreaterThanOrEqual(k8s.K8sVer1_25)
 }
 
 func (w *windows) Reconcile(cluster *corev1.StorageCluster) error {
