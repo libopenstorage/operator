@@ -216,10 +216,14 @@ spec:
                         operator: In
                         values:
                         - portworx-operator
-                      - key: kubernetes.io/os
-                        operator: In
-                        values:
-                          - "linux"
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                      - matchExpressions:
+                          - key: kubernetes.io/os
+                            operator: In
+                            values:
+                              - "linux"
                     topologyKey: kubernetes.io/hostname
               containers:
               - name: portworx-operator
