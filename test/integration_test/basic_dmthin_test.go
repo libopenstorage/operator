@@ -4,16 +4,17 @@
 package integrationtest
 
 import (
-	"github.com/libopenstorage/operator/pkg/util/test"
-	"github.com/libopenstorage/operator/test/integration_test/cloud_provider"
 	"strings"
 	"testing"
+
+	"github.com/libopenstorage/operator/pkg/util/test"
+	"github.com/libopenstorage/operator/test/integration_test/cloud_provider"
 
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/libopenstorage/operator/test/integration_test/types"
+	types "github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
 	"github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
@@ -81,7 +82,7 @@ func getTestName(opt OptionsArr) string {
 	return testName
 }
 
-func generateSingleTestCase(o OptionsArr) types.TestCase {
+func generateSingleTestCase(o OptionsArr, testfuncname func(tc *types.TestCase) func(*testing.T)) types.TestCase {
 	testCase := types.TestCase{}
 	testCase.TestName = getTestName(o)
 
@@ -107,25 +108,26 @@ func generateSingleTestCase(o OptionsArr) types.TestCase {
 		cluster.Spec.CloudStorage = cloudSpec
 		return cluster
 	}
-	testCase.TestFunc = BasicInstallDmthin
+	// testCase.TestFunc = BasicInstallDmthin
+	testCase.TestFunc = testfuncname
 	return testCase
 }
 
 // This function generates a permutation of all possible test cases based on the input array.
 // `idx` argument helps determine the index from which to generate the permutations.
 // In addition, this will remove duplicate test cases which might get generated in a permutation.
-func generateTestCases(opt OptionsArr, idx uint) map[string]types.TestCase {
+func generateTestCases(opt OptionsArr, idx uint, testfuncname func(tc *types.TestCase) func(*testing.T)) map[string]types.TestCase {
 	retVal := make(map[string]types.TestCase)
 
 	if idx == uint(len(opt)) {
-		singleTestCase := generateSingleTestCase(opt)
+		singleTestCase := generateSingleTestCase(opt, testfuncname)
 		retVal[singleTestCase.TestName] = singleTestCase
 		return retVal
 	}
-	retVal = generateTestCases(opt, idx+1)
+	retVal = generateTestCases(opt, idx+1, testfuncname)
 
 	opt[idx] = true
-	with := generateTestCases(opt, idx+1)
+	with := generateTestCases(opt, idx+1, testfuncname)
 	for s, testCase := range with {
 		if _, ok := retVal[s]; !ok {
 			retVal[s] = testCase
@@ -168,7 +170,15 @@ var testDmthinCases = []types.TestCase{
 
 func TestStorageClusterDmthinWithoutPxStoreV2Option(t *testing.T) {
 	opt := OptionsArr{}
-	basicInstallTestCases := generateTestCases(opt, 1)
+	basicInstallTestCases := generateTestCases(opt, 1, BasicInstallDmthin)
+	for _, testCase := range basicInstallTestCases {
+		testCase.RunTest(t)
+	}
+}
+
+func TestStorageClusterDmthinWithoutPxStoreV2OptionInstallFailed(t *testing.T) {
+	opt := OptionsArr{}
+	basicInstallTestCases := generateTestCases(opt, 1, BasicInstallDmthinFailed)
 	for _, testCase := range basicInstallTestCases {
 		testCase.RunTest(t)
 	}
@@ -177,7 +187,7 @@ func TestStorageClusterDmthinWithoutPxStoreV2Option(t *testing.T) {
 func TestStorageClusterDmthinWithPxStoreV2Option(t *testing.T) {
 	opt := OptionsArr{}
 	opt[PxStoreV2Present] = true
-	basicInstallTestCases := generateTestCases(opt, 1)
+	basicInstallTestCases := generateTestCases(opt, 1, BasicInstallDmthin)
 	for _, testCase := range basicInstallTestCases {
 		testCase.RunTest(t)
 	}
@@ -328,6 +338,15 @@ func BasicInstallDmthin(tc *types.TestCase) func(*testing.T) {
 		require.False(t, isJournalPresent, "Journal device found in a dmthin setup")
 		isKvdbDiskPresent := isKvdbPresent(t)
 		require.False(t, isKvdbDiskPresent, "KVDB device found in a dmthin setup")
+		UninstallPX(t, cluster)
+	}
+}
+
+func BasicInstallDmthinFailed(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		cluster := installAndValidate(t, tc, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
+		pxStoreV2 := isPxStoreV2(t, cluster)
+		require.False(t, pxStoreV2, "Expecting btrfs to be installed")
 		UninstallPX(t, cluster)
 	}
 }
