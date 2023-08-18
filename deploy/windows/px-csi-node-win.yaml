@@ -79,23 +79,11 @@ spec:
               name: registration-dir
       dnsPolicy: ClusterFirst
       hostNetwork: true
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: kubernetes.io/os
-                    operator: In
-                    values:
-                      - windows
       priorityClassName: system-node-critical
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext: {}
       terminationGracePeriodSeconds: 30
-      tolerations:
-      - key: os
-        value: Windows
       volumes:
         - hostPath:
             path: 'C:\var\lib\kubelet\plugins_registry\'
