@@ -3,9 +3,6 @@ package utils
 import (
 	"bytes"
 	"fmt"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/require"
 	"os"
 	"regexp"
 	"strings"
@@ -13,6 +10,9 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -57,32 +57,29 @@ func GetPxVersionFromSpecGenURL(url string) *version.Version {
 }
 
 func addDefaultEnvVars(origEnvVarList []v1.EnvVar, specGenURL string) ([]v1.EnvVar, error) {
-	var envVarList []v1.EnvVar
+	var additionalEnvVars []v1.EnvVar
 
-	// Set release manifest URL and Docker credentials in case of edge-install.portworx.com
-	if strings.Contains(specGenURL, "edge") {
-		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(specGenURL)
-		if err != nil {
-			return nil, err
-		}
-
-		// Add release manifest URL to Env Vars
-		envVarList = append(envVarList, v1.EnvVar{Name: testutil.PxReleaseManifestURLEnvVarName, Value: releaseManifestURL})
+	// Add or remove Release Manifest URL incase of edge or none edge spec
+	envVarsList, err := configurePxReleaseManifestEnvVars(origEnvVarList, specGenURL)
+	if err != nil {
+		return nil, err
 	}
 
 	// Add Portworx image properties, if specified
 	if PxDockerUsername != "" && PxDockerPassword != "" {
-		envVarList = append(envVarList,
+		additionalEnvVars = append(additionalEnvVars,
 			[]v1.EnvVar{
 				{Name: testutil.PxRegistryUserEnvVarName, Value: PxDockerUsername},
 				{Name: testutil.PxRegistryPasswordEnvVarName, Value: PxDockerPassword},
 			}...)
 	}
+
+	// Override PX image
 	if PxImageOverride != "" {
-		envVarList = append(envVarList, v1.EnvVar{Name: testutil.PxImageEnvVarName, Value: PxImageOverride})
+		additionalEnvVars = append(additionalEnvVars, v1.EnvVar{Name: testutil.PxImageEnvVarName, Value: PxImageOverride})
 	}
 
-	return mergeEnvVars(origEnvVarList, envVarList), nil
+	return mergeEnvVars(envVarsList, additionalEnvVars), nil
 }
 
 // mergeEnvVars will overwrite existing or add new env variables
@@ -99,6 +96,33 @@ func mergeEnvVars(origList, newList []v1.EnvVar) []v1.EnvVar {
 		mergedList = append(mergedList, *(env.DeepCopy()))
 	}
 	return mergedList
+}
+
+// configurePxReleaseManifestEnvVars configures PX Release Manifest URL for edge and production PX versions, if needed
+func configurePxReleaseManifestEnvVars(origEnvVarList []v1.EnvVar, specGenURL string) ([]v1.EnvVar, error) {
+	var newEnvVarList []v1.EnvVar
+
+	// Remove release manifest URLs from Env Vars, if any exist
+	for _, env := range origEnvVarList {
+		if env.Name == testutil.PxReleaseManifestURLEnvVarName {
+			continue
+		}
+		newEnvVarList = append(newEnvVarList, env)
+	}
+
+	// Set release manifest URL in case of edge
+	if strings.Contains(specGenURL, "edge") {
+		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(specGenURL)
+		if err != nil {
+			return nil, err
+		}
+		logrus.Debugf("Adding [%s] as a [%s] to the env vars, since its an edge endpoint", testutil.PxReleaseManifestURLEnvVarName, releaseManifestURL)
+
+		// Add release manifest URL to Env Vars
+		newEnvVarList = append(newEnvVarList, v1.EnvVar{Name: testutil.PxReleaseManifestURLEnvVarName, Value: releaseManifestURL})
+	}
+
+	return newEnvVarList, nil
 }
 
 func RunPxCmdRetry(command ...string) (string, string, error) {
