@@ -3828,7 +3828,7 @@ spec:
                   csiLivenessProbe:
                     type: string
                     description: Desired image for Liveness probe.
-                  csiDriverWin:
+                  csiWindowsDriver:
                     type: string
                     description: Desired image for csi driver for windows.
                   csiDriverRegistrar:
