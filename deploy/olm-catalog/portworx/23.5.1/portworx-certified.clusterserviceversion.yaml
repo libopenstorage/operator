@@ -218,6 +218,14 @@ spec:
                         values:
                         - portworx-operator
                     topologyKey: kubernetes.io/hostname
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                  - labelSelector:
+                      matchExpressions:
+                      - key: kubernetes.io/os
+                        operator: In
+                        values:
+                          - linux
               containers:
               - name: portworx-operator
                 image: registry.connect.redhat.com/portworx/openstorage-operator@sha256:7e2f45ec7d10dd8b9c7e122b0d3dfd4db617e01db9e010e49a39f84acc1615cf
