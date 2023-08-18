@@ -447,11 +447,19 @@ func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) (*corev1.Cl
 		if err == nil {
 			// Create StorageNodes to return pre-flight checks used by c.Driver.Validate().
 			for _, node := range k8sNodeList.Items {
-				if !coreops.Instance().IsNodeMaster(node) {
+				pxDisabled := false
+				if val, ok := node.Labels["px/enabled"]; ok && val == "false" {
+					pxDisabled = true
+				}
+				if !coreops.Instance().IsNodeMaster(node) && !pxDisabled {
 					logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
 					c.createStorageNode(toUpdate, node.Name)
 				} else {
-					logrus.Infof("Skipping pre-flight storage node entry for master node: %s", node.Name)
+					nstr := "master"
+					if pxDisabled {
+						nstr = "px disabled"
+					}
+					logrus.Infof("Skipping pre-flight storage node entry for %s node: %s", nstr, node.Name)
 				}
 			}
 		} else {
