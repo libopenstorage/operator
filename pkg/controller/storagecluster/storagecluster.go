@@ -63,7 +63,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
-	coreops "github.com/portworx/sched-ops/k8s/core"
 )
 
 const (
@@ -447,19 +446,16 @@ func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) (*corev1.Cl
 		if err == nil {
 			// Create StorageNodes to return pre-flight checks used by c.Driver.Validate().
 			for _, node := range k8sNodeList.Items {
-				pxDisabled := false
-				if val, ok := node.Labels["px/enabled"]; ok && val == "false" {
-					pxDisabled = true
-				}
-				if !coreops.Instance().IsNodeMaster(node) && !pxDisabled {
-					logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
-					c.createStorageNode(toUpdate, node.Name)
-				} else {
-					nstr := "master"
-					if pxDisabled {
-						nstr = "px disabled"
+				shouldRun, _, err := c.nodeShouldRunStoragePod(&node, toUpdate)
+				if err == nil {
+					if shouldRun {
+						logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
+						c.createStorageNode(toUpdate, node.Name)
+					} else {
+						logrus.Infof("Skipping pre-flight storage node entry for node: %s", node.Name)
 					}
-					logrus.Infof("Skipping pre-flight storage node entry for %s node: %s", nstr, node.Name)
+				} else {
+					logrus.Infof("Skipping pre-flight storage node entry for %s node. Error: %v", node.Name, err)
 				}
 			}
 		} else {
