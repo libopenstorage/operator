@@ -14,7 +14,7 @@ import (
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	types "github.com/libopenstorage/operator/test/integration_test/types"
+	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
 	"github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
@@ -82,7 +82,7 @@ func getTestName(opt OptionsArr) string {
 	return testName
 }
 
-func generateSingleTestCase(o OptionsArr, testfuncname func(tc *types.TestCase) func(*testing.T)) types.TestCase {
+func generateSingleTestCase(o OptionsArr) types.TestCase {
 	testCase := types.TestCase{}
 	testCase.TestName = getTestName(o)
 
@@ -108,26 +108,25 @@ func generateSingleTestCase(o OptionsArr, testfuncname func(tc *types.TestCase) 
 		cluster.Spec.CloudStorage = cloudSpec
 		return cluster
 	}
-	// testCase.TestFunc = BasicInstallDmthin
-	testCase.TestFunc = testfuncname
+	testCase.TestFunc = BasicInstallDmthin
 	return testCase
 }
 
 // This function generates a permutation of all possible test cases based on the input array.
 // `idx` argument helps determine the index from which to generate the permutations.
 // In addition, this will remove duplicate test cases which might get generated in a permutation.
-func generateTestCases(opt OptionsArr, idx uint, testfuncname func(tc *types.TestCase) func(*testing.T)) map[string]types.TestCase {
+func generateTestCases(opt OptionsArr, idx uint) map[string]types.TestCase {
 	retVal := make(map[string]types.TestCase)
 
 	if idx == uint(len(opt)) {
-		singleTestCase := generateSingleTestCase(opt, testfuncname)
+		singleTestCase := generateSingleTestCase(opt)
 		retVal[singleTestCase.TestName] = singleTestCase
 		return retVal
 	}
-	retVal = generateTestCases(opt, idx+1, testfuncname)
+	retVal = generateTestCases(opt, idx+1)
 
 	opt[idx] = true
-	with := generateTestCases(opt, idx+1, testfuncname)
+	with := generateTestCases(opt, idx+1)
 	for s, testCase := range with {
 		if _, ok := retVal[s]; !ok {
 			retVal[s] = testCase
@@ -168,18 +167,31 @@ var testDmthinCases = []types.TestCase{
 	},
 }
 
+var testDmthinInstallFailedCases = []types.TestCase{
+	{
+		TestName: "TestStorageClusterDmthinWithoutPxStoreV2OptionInstallFailed",
+		TestSpec: func(t *testing.T) interface{} {
+			provider := cloud_provider.GetCloudProvider()
+			cluster := defaultDmthinSpec(t, o[PxStoreV2Present])
+			cloudSpec := &corev1.CloudStorageSpec{}
+			cloudSpec.DeviceSpecs = provider.GetDefaultDataDrives()
+			cluster.Spec.CloudStorage = cloudSpec
+			return cluster
+		},
+		TestFunc: BasicInstallDmthinFailed,
+	},
+}
+
 func TestStorageClusterDmthinWithoutPxStoreV2Option(t *testing.T) {
 	opt := OptionsArr{}
-	basicInstallTestCases := generateTestCases(opt, 1, BasicInstallDmthin)
+	basicInstallTestCases := generateTestCases(opt, 1)
 	for _, testCase := range basicInstallTestCases {
 		testCase.RunTest(t)
 	}
 }
 
 func TestStorageClusterDmthinWithoutPxStoreV2OptionInstallFailed(t *testing.T) {
-	opt := OptionsArr{}
-	basicInstallTestCases := generateTestCases(opt, 1, BasicInstallDmthinFailed)
-	for _, testCase := range basicInstallTestCases {
+	for _, testCase := range testDmthinInstallFailedCases {
 		testCase.RunTest(t)
 	}
 }
@@ -187,7 +199,7 @@ func TestStorageClusterDmthinWithoutPxStoreV2OptionInstallFailed(t *testing.T) {
 func TestStorageClusterDmthinWithPxStoreV2Option(t *testing.T) {
 	opt := OptionsArr{}
 	opt[PxStoreV2Present] = true
-	basicInstallTestCases := generateTestCases(opt, 1, BasicInstallDmthin)
+	basicInstallTestCases := generateTestCases(opt, 1)
 	for _, testCase := range basicInstallTestCases {
 		testCase.RunTest(t)
 	}
