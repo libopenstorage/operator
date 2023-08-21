@@ -143,15 +143,17 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 	if err != nil {
 		return err
 	}
-	envVarList = append(envVarList, env...)
+	envVarList = mergeEnvVars(envVarList, env)
 
 	// Populate extra ENV vars, if any were passed
+	var additionalPxEnvVarList []v1.EnvVar
 	if len(PxEnvVars) != 0 {
 		vars := strings.Split(PxEnvVars, ",")
 		for _, v := range vars {
 			keyvalue := strings.Split(v, "=")
-			envVarList = append(envVarList, v1.EnvVar{Name: keyvalue[0], Value: keyvalue[1]})
+			additionalPxEnvVarList = append(additionalPxEnvVarList, v1.EnvVar{Name: keyvalue[0], Value: keyvalue[1]})
 		}
+		envVarList = mergeEnvVars(envVarList, additionalPxEnvVarList)
 	}
 	cluster.Spec.Env = envVarList
 
