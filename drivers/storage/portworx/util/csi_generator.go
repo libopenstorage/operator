@@ -296,8 +296,8 @@ func (g *CSIGenerator) getSidecarContainerVersionsV1_0() *CSIImages {
 		Resizer:                 k8sutil.DefaultK8SRegistryPath + "/sig-storage/csi-resizer:v1.8.0",
 		SnapshotController:      snapshotControllerImage,
 		HealthMonitorController: k8sutil.DefaultK8SRegistryPath + "/sig-storage/csi-external-health-monitor-controller:v0.7.0",
-		LivenessProbe:           k8sutil.DefaultK8SRegistryPath + "/sig-storage/livenessprobe:v2.7.0",
-		CsiDriverInstaller:      "docker.io/portworx/pxwincsidriver:v0.1",
+		LivenessProbe:           k8sutil.DefaultK8SRegistryPath + "/sig-storage/livenessprobe:v2.10.0",
+		CsiDriverInstaller:      "docker.io/portworx/px-windows-csi-driver:v0.1",
 	}
 }
 

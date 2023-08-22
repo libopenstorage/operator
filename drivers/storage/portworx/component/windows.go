@@ -224,8 +224,8 @@ func (w *windows) getDesiredLivenessImage(cluster *corev1.StorageCluster) string
 
 func (w *windows) getDesiredInstallerImage(cluster *corev1.StorageCluster) string {
 	var imageName string
-	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.CsiWinDriver != "" {
-		imageName = cluster.Status.DesiredImages.CsiWinDriver
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.CsiWindowsDriver != "" {
+		imageName = cluster.Status.DesiredImages.CsiWindowsDriver
 	}
 	imageName = util.GetImageURN(cluster, imageName)
 	return imageName
