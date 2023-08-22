@@ -1033,7 +1033,7 @@ func ApplyWindowsSettingsToPodSpec(podSpec *v1.PodSpec) {
 
 	toleration := v1.Toleration{
 		Key:   "os",
-		Value: WindowsOsName,
+		Value: "Windows",
 	}
 
 	podSpec.Tolerations = append(podSpec.Tolerations, toleration)

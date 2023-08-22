@@ -2191,8 +2191,8 @@ func TestStorageClusterDefaultsForWindows(t *testing.T) {
 
 	err := driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Equal(t, cluster.Status.DesiredImages.CsiWinDriver, "docker.io/portworx/pxwincsidriver:v0.1")
-	require.Equal(t, cluster.Status.DesiredImages.CsiLivenessProbe, "registry.k8s.io/sig-storage/livenessprobe:v2.7.0")
+	require.Equal(t, cluster.Status.DesiredImages.CsiWindowsDriver, "docker.io/portworx/px-windows-csi-driver:v0.1")
+	require.Equal(t, cluster.Status.DesiredImages.CsiLivenessProbe, "registry.k8s.io/sig-storage/livenessprobe:v2.10.0")
 	require.Equal(t, cluster.Status.DesiredImages.CSIDriverRegistrar, "quay.io/k8scsi/driver-registrar:v1.2.3")
 
 }
@@ -8554,8 +8554,8 @@ func (m *fakeManifest) GetVersions(
 			TelemetryProxy:             "purestorage/envoy:1.2.3",
 			DynamicPlugin:              "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:         "nginxinc/nginx-unprivileged:1.23",
-			CsiLivenessProbe:           "registry.k8s.io/sig-storage/livenessprobe:v2.7.0",
-			CsiWinDriver:               "docker.io/portworx/pxwincsidriver:v0.1",
+			CsiLivenessProbe:           "registry.k8s.io/sig-storage/livenessprobe:v2.10.0",
+			CsiWindowsDriver:           "docker.io/portworx/px-windows-csi-driver:v0.1",
 		},
 	}
 	if m.k8sVersion != nil && m.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
