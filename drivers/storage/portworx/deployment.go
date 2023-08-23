@@ -1358,8 +1358,7 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 
 	for _, v := range t.cluster.Spec.Volumes {
 		if _, ok := mountPathSet[v.MountPath]; ok {
-			logrus.Warnf("Found mountPath conflict for volume %s at %s, volume will be ignored", v.Name, v.MountPath)
-			continue
+			logrus.Warnf("Found mountPath conflict for volume %s at %s", v.Name, v.MountPath)
 		}
 		volumeMounts = append(volumeMounts, v1.VolumeMount{
 			Name:             pxutil.UserVolumeName(v.Name),
