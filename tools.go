@@ -10,6 +10,4 @@ import (
 	_ "sigs.k8s.io/controller-tools/cmd/controller-gen"
 	// Needed because of https://github.com/golang/mock/tree/v1.6.0#reflect-vendoring-error
 	_ "github.com/golang/mock/mockgen/model"
-	// Go linter
-	_ "github.com/golangci/golangci-lint/cmd/golangci-lint"
 )
