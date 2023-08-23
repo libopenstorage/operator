@@ -447,7 +447,7 @@ func (c *Controller) createPreFlightStorageNodes(toUpdate *corev1.StorageCluster
 	for _, node := range k8sNodeList.Items {
 		shouldRun, _, err := c.nodeShouldRunStoragePod(&node, toUpdate)
 		if err != nil {
-			logrus.Infof("Skipping pre-flight storage node entry for %s node. Error: %v", node.Name, err)
+			logrus.Warnf("Skipping pre-flight storage node entry for %s node. Error: %v", node.Name, err)
 			continue
 		}
 
@@ -455,7 +455,7 @@ func (c *Controller) createPreFlightStorageNodes(toUpdate *corev1.StorageCluster
 			logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
 			c.createStorageNode(toUpdate, node.Name)
 		} else {
-			logrus.Infof("Skipping pre-flight storage node entry for node: %s", node.Name)
+			logrus.Warnf("Skipping pre-flight storage node entry for node: %s", node.Name)
 		}
 	}
 	return nil
