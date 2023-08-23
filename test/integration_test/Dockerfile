@@ -1,4 +1,4 @@
-FROM golang:1.16.10
+FROM golang:1.20
 
 # Install dependancies
 RUN apt-get update && \ 
