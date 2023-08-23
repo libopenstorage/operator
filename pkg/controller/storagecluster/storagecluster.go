@@ -436,31 +436,57 @@ func isPreflightComplete(cluster *corev1.StorageCluster) bool {
 	return false
 }
 
+func (c *Controller) createPreFlightStorageNodes(toUpdate *corev1.StorageCluster) error {
+	k8sNodeList := &v1.NodeList{}
+	err := c.client.List(context.TODO(), k8sNodeList)
+	if err != nil {
+		return fmt.Errorf("failed to get cluster nodes for preflight storag node creation: %v", err)
+	}
+
+	// Create StorageNodes to return pre-flight checks used by c.Driver.Validate().
+	for _, node := range k8sNodeList.Items {
+		shouldRun, _, err := c.nodeShouldRunStoragePod(&node, toUpdate)
+		if err != nil {
+			logrus.Infof("Skipping pre-flight storage node entry for %s node. Error: %v", node.Name, err)
+			continue
+		}
+
+		if shouldRun {
+			logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
+			c.createStorageNode(toUpdate, node.Name)
+		} else {
+			logrus.Infof("Skipping pre-flight storage node entry for node: %s", node.Name)
+		}
+	}
+	return nil
+}
+
+func (c *Controller) deletePreFlightStorageNodes(toUpdate *corev1.StorageCluster) error {
+	storageNodes := &corev1.StorageNodeList{}
+	err := c.client.List(context.TODO(), storageNodes,
+		&client.ListOptions{Namespace: toUpdate.Namespace})
+	if err != nil {
+		return fmt.Errorf("failed to get StorageNodes used for preflight validation: %v", err)
+	}
+
+	for _, storageNode := range storageNodes.Items {
+		logrus.Infof("Delete validate() storage node entry for node: %s", storageNode.Name)
+		err = c.client.Delete(context.TODO(), storageNode.DeepCopy())
+		if err != nil {
+			logrus.WithError(err).Errorf("failed to delete storage node entry %s: %v", storageNode.Name, err)
+		}
+	}
+	return nil
+}
+
 func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) (*corev1.ClusterCondition, error) {
 	storageNodes := &corev1.StorageNodeList{}
 	serr := c.client.List(context.TODO(), storageNodes,
 		&client.ListOptions{Namespace: toUpdate.Namespace})
 	if serr == nil && len(storageNodes.Items) == 0 { // Only do if storageNodes don't exist
-		k8sNodeList := &v1.NodeList{}
-		err := c.client.List(context.TODO(), k8sNodeList)
-		if err == nil {
-			// Create StorageNodes to return pre-flight checks used by c.Driver.Validate().
-			for _, node := range k8sNodeList.Items {
-				shouldRun, _, err := c.nodeShouldRunStoragePod(&node, toUpdate)
-				if err == nil {
-					if shouldRun {
-						logrus.Infof("Create pre-flight storage node entry for node: %s", node.Name)
-						c.createStorageNode(toUpdate, node.Name)
-					} else {
-						logrus.Infof("Skipping pre-flight storage node entry for node: %s", node.Name)
-					}
-				} else {
-					logrus.Infof("Skipping pre-flight storage node entry for %s node. Error: %v", node.Name, err)
-				}
-			}
-		} else {
-			logrus.WithError(err).Errorf("Failed to get cluster nodes")
-			// *** Should we just return an error on pre-flight here? ***
+		serr = c.createPreFlightStorageNodes(toUpdate)
+		if serr != nil {
+			logrus.WithError(serr).Errorf("Failed to create preflight storage nodes")
 		}
 	}
 
@@ -487,18 +513,8 @@ func (c *Controller) driverValidate(toUpdate *corev1.StorageCluster) (*corev1.Cl
 
 	if condition.Status != corev1.ClusterConditionStatusInProgress { // Status not in progress must be done or an issue occurred
 		// Delete StorageNodes created for c.Driver.Validate() checks.
-		storageNodes = &corev1.StorageNodeList{}
-		serr = c.client.List(context.TODO(), storageNodes,
-			&client.ListOptions{Namespace: toUpdate.Namespace})
-		if serr == nil {
-			for _, storageNode := range storageNodes.Items {
-				logrus.Infof("Delete validate() storage node entry for node: %s", storageNode.Name)
-				serr = c.client.Delete(context.TODO(), storageNode.DeepCopy())
-				if serr != nil {
-					logrus.WithError(serr).Errorf("failed to delete storage node entry %s: %v", storageNode.Name, serr)
-				}
-			}
-		} else {
+		serr = c.deletePreFlightStorageNodes(toUpdate)
+		if serr != nil {
 			logrus.WithError(serr).Errorf("Failed to get StorageNodes used for validate.")
 		}
 	}
