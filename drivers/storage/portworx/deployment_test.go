@@ -540,7 +540,7 @@ func TestVarLibOsdMountForPxVersion2_9_1(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
-func TestExtraVolumeMountPathWithConflictShouldBeIgnored(t *testing.T) {
+func TestExtraVolumeUnique(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"
 
@@ -548,10 +548,10 @@ func TestExtraVolumeMountPathWithConflictShouldBeIgnored(t *testing.T) {
 		Name: "volume1",
 		VolumeSource: v1.VolumeSource{
 			HostPath: &v1.HostPathVolumeSource{
-				Path: "/path1",
+				Path: "/path123",
 			},
 		},
-		MountPath: "/var/log",
+		MountPath: "/mnt/uniq123",
 	}
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -568,17 +568,86 @@ func TestExtraVolumeMountPathWithConflictShouldBeIgnored(t *testing.T) {
 	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
-	volume := v1.Volume{
-		Name:         pxutil.UserVolumeName(volumeSpec.Name),
-		VolumeSource: volumeSpec.VolumeSource,
+
+	// custom `-v /path123:/mnt/uniq123` should be the last volume in the POD-spec
+	customVolumeName := pxutil.UserVolumeName(volumeSpec.Name)
+	lastActualVol := actual.Volumes[len(actual.Volumes)-1]
+	assert.Equal(t, customVolumeName, lastActualVol.Name)
+	assert.Equal(t, "/path123", lastActualVol.HostPath.Path)
+
+	lastContainerVol := actual.Containers[0].VolumeMounts[len(actual.Containers[0].VolumeMounts)-1]
+	assert.Equal(t, customVolumeName, lastContainerVol.Name)
+	assert.Equal(t, volumeSpec.MountPath, lastContainerVol.MountPath)
+
+	// make sure it's unique
+	cnt := 0
+	for _, v := range actual.Volumes {
+		if v.Name == customVolumeName {
+			cnt++
+		}
 	}
-	volumeMount := v1.VolumeMount{
-		Name:      volumeSpec.Name,
-		MountPath: volumeSpec.MountPath,
+	assert.Equal(t, 1, cnt)
+
+	cnt = 0
+	for _, v := range actual.Containers[0].VolumeMounts {
+		if v.Name == customVolumeName {
+			cnt++
+		}
+	}
+	assert.Equal(t, 1, cnt)
+}
+
+func TestExtraVolumeOverrideExisting(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+	hostDir, containerDir := "/mnt/custom/test-cores", "/var/cores"
+
+	volumeSpec := corev1.VolumeSpec{
+		Name: "volume1",
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: hostDir,
+			},
+		},
+		MountPath: containerDir,
+	}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Volumes: []corev1.VolumeSpec{
+				volumeSpec,
+			},
+		},
 	}
 
-	assert.Contains(t, actual.Volumes, volume)
-	assert.NotContains(t, actual.Containers[0].VolumeMounts, volumeMount)
+	driver := portworx{}
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+
+	customVolumeName := pxutil.UserVolumeName(volumeSpec.Name)
+
+	found := false
+	for _, v := range actual.Volumes {
+		if v.Name == customVolumeName {
+			assert.Equal(t, hostDir, v.HostPath.Path)
+			found = true
+		}
+	}
+	assert.True(t, found)
+
+	found = false
+	for _, v := range actual.Containers[0].VolumeMounts {
+		if v.Name == customVolumeName {
+			assert.Equal(t, containerDir, v.MountPath)
+			found = true
+		} else {
+			assert.NotEqual(t, containerDir, v.MountPath)
+		}
+	}
+	assert.True(t, found)
 }
 
 func TestPodSpecWithTLS(t *testing.T) {
