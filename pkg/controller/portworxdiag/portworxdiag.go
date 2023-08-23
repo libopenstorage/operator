@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	"github.com/sirupsen/logrus"
@@ -231,13 +232,81 @@ func getNodeIDToStatusMap(nodeStatuses []diagv1.NodeStatus) map[string]string {
 	return statuses
 }
 
+func (c *Controller) getNodeIDsWithSelectedVolumes(diag *diagv1.PortworxDiag, stc *corev1.StorageCluster) ([]string, error) {
+	if diag == nil || diag.Spec.Portworx == nil || diag.Spec.Portworx.VolumeSelector.IDs == nil || diag.Spec.Portworx.VolumeSelector.Labels == nil {
+		return []string{}, nil
+	}
+
+	nodeIDMap := map[string]bool{}
+
+	volumeClient := api.NewOpenStorageVolumeClient(c.grpcConn)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), stc, c.client)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, id := range diag.Spec.Portworx.VolumeSelector.IDs {
+
+		// Inspect volume to get location of replicas
+		volumeInspectResponse, err := volumeClient.Inspect(
+			ctx,
+			&api.SdkVolumeInspectRequest{
+				VolumeId: id,
+			},
+		)
+		if err != nil {
+			logrus.Warnf("Failed to inspect volume %s: %v", id, err)
+			// Try the next volume
+			continue
+		}
+
+		// Add all nodes that have a replica of this volume
+		for _, rs := range volumeInspectResponse.Volume.ReplicaSets {
+			for _, r := range rs.Nodes {
+				nodeIDMap[r] = true
+			}
+		}
+	}
+
+	// Inspect all volumes by labels
+	if len(diag.Spec.Portworx.VolumeSelector.Labels) > 0 {
+		volumeInspectResponse, err := volumeClient.InspectWithFilters(
+			ctx,
+			&api.SdkVolumeInspectWithFiltersRequest{
+				Labels: diag.Spec.Portworx.VolumeSelector.Labels,
+			},
+		)
+		if err != nil {
+			logrus.Warnf("Failed to inspect volumes with labels %v: %v", diag.Spec.Portworx.VolumeSelector.Labels, err)
+		} else {
+			for _, v := range volumeInspectResponse.Volumes {
+
+				// Add all nodes that have a replica of this volume
+				for _, rs := range v.Volume.ReplicaSets {
+					for _, r := range rs.Nodes {
+						nodeIDMap[r] = true
+					}
+				}
+			}
+		}
+	}
+
+	// Convert to slice
+	nodeIDs := make([]string, 0, len(nodeIDMap))
+	for k := range nodeIDMap {
+		nodeIDs = append(nodeIDs, k)
+	}
+
+	return nodeIDs, nil
+}
+
 type podReconcileStatus struct {
 	podsToDelete         []*v1.Pod
 	nodesToCreatePodsFor []string
 	nodeStatusesToAdd    []*diagv1.NodeStatus
 }
 
-func shouldPodBeOnNode(nodeID string, nodeName string, nodes []v1.Node, diag *diagv1.PortworxDiag) bool {
+func shouldPodBeOnNode(targetNodeID string, targetNodeName string, k8sNodes []v1.Node, nodeIDsWithReplicas []string, diag *diagv1.PortworxDiag) bool {
 	if diag == nil || diag.Spec.Portworx == nil {
 		// Just in case, sanity check
 		return false
@@ -247,6 +316,13 @@ func shouldPodBeOnNode(nodeID string, nodeName string, nodes []v1.Node, diag *di
 	if diag.Spec.Portworx.NodeSelector.All {
 		return true
 	}
+	// Check if this is one of the nodes matching our volume selector
+	for _, id := range nodeIDsWithReplicas {
+		if id == targetNodeID {
+			return true
+		}
+	}
+
 	// If there's no node selector and we're not selecting all nodes, collect none
 	if len(diag.Spec.Portworx.NodeSelector.IDs) == 0 && len(diag.Spec.Portworx.NodeSelector.Labels) == 0 {
 		return false
@@ -255,7 +331,7 @@ func shouldPodBeOnNode(nodeID string, nodeName string, nodes []v1.Node, diag *di
 	// Filter by node ID first since it's the one we already have (save on API calls)
 	// If there's no IDs provided, do nothing and move on to the label match.
 	for _, id := range diag.Spec.Portworx.NodeSelector.IDs {
-		if id == nodeID {
+		if id == targetNodeID {
 			return true
 		}
 	}
@@ -267,8 +343,8 @@ func shouldPodBeOnNode(nodeID string, nodeName string, nodes []v1.Node, diag *di
 
 	// Find node object in list
 	var node *v1.Node
-	for _, n := range nodes {
-		if strings.EqualFold(n.Name, nodeName) {
+	for _, n := range k8sNodes {
+		if strings.EqualFold(n.Name, targetNodeName) {
 			nTemp := n // To avoid referencing the loop variable
 			node = &nTemp
 			break
@@ -292,9 +368,49 @@ func shouldPodBeOnNode(nodeID string, nodeName string, nodes []v1.Node, diag *di
 	return true // All labels in selector passed
 }
 
+func (c *Controller) getNodesToHavePods(nodes *v1.NodeList, diag *diagv1.PortworxDiag, stc *corev1.StorageCluster, nodeIDToNodeName map[string]string, nodeIDToStatus map[string]string) (map[string]bool, error) {
+	nodesToHavePods := map[string]bool{}
+
+	// If we have node statuses populated already, use that as the master list to avoid recomputing labels
+	// If not, then do the hard work of calculating which nodes should have pods and reconcile based on that
+	if len(nodeIDToStatus) > 0 {
+		for nodeID := range nodeIDToStatus {
+			nodesToHavePods[nodeID] = true
+		}
+		return nodesToHavePods, nil
+	}
+	// If we have no spec to work with, return an empty list, nothing to do
+	if diag.Spec.Portworx == nil {
+		return nil, nil
+	}
+
+	if diag.Spec.Portworx.NodeSelector.All {
+		// If we're selecting all nodes, just add all nodes
+		for nodeID := range nodeIDToNodeName {
+			nodesToHavePods[nodeID] = true
+		}
+		return nodesToHavePods, nil
+	}
+
+	// If we're not selecting all nodes, get the list of nodes with volumes we care about
+	nodeIDsWithReplicas, err := c.getNodeIDsWithSelectedVolumes(diag, stc)
+	if err != nil {
+		return nil, err
+	}
+
+	for nodeID, nodeName := range nodeIDToNodeName {
+		shouldExist := shouldPodBeOnNode(nodeID, nodeName, nodes.Items, nodeIDsWithReplicas, diag)
+		if shouldExist {
+			nodesToHavePods[nodeID] = true
+		}
+	}
+
+	return nodesToHavePods, nil
+}
+
 // getPodsDiff will return the pods that need to be created and deleted, as well as how many pods exist (but are not complete) and
 // how many are complete
-func getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *diagv1.PortworxDiag, nodeIDToNodeName map[string]string) (podReconcileStatus, error) {
+func (c *Controller) getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *diagv1.PortworxDiag, stc *corev1.StorageCluster, nodeIDToNodeName map[string]string) (podReconcileStatus, error) {
 	// Check on all of our storage nodes
 	prs := podReconcileStatus{
 		podsToDelete:         make([]*v1.Pod, 0),
@@ -305,10 +421,15 @@ func getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *diagv1.PortworxDiag
 	nodeToPod := getNodeToPodMap(pods)
 	nodeIDToStatus := getNodeIDToStatusMap(diag.Status.NodeStatuses)
 
+	nodesToHavePods, err := c.getNodesToHavePods(nodes, diag, stc, nodeIDToNodeName, nodeIDToStatus)
+	if err != nil {
+		return prs, err
+	}
+
 	for nodeID, nodeName := range nodeIDToNodeName {
 		existingPod := nodeToPod[nodeName]
 
-		shouldExist := shouldPodBeOnNode(nodeID, nodeName, nodes.Items, diag)
+		_, shouldExist := nodesToHavePods[nodeID]
 
 		status, ok := nodeIDToStatus[nodeID]
 		if !ok && shouldExist {
@@ -608,7 +729,7 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 	}
 
 	// Get what changes we need to make between real and desired
-	prs, err := getPodsDiff(pods, nodes, diag, nodeIDToNodeName)
+	prs, err := c.getPodsDiff(pods, nodes, diag, stc, nodeIDToNodeName)
 	if err != nil {
 		logrus.WithError(err).Error("Failed to check pods for required operations")
 		return err

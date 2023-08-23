@@ -163,9 +163,13 @@ var (
 	opVer1_9_1, _                     = version.NewVersion("1.9.1-")
 	opVer1_10, _                      = version.NewVersion("1.10.0-")
 	opVer23_3, _                      = version.NewVersion("23.3.0-")
+	opVer23_8, _                      = version.NewVersion("23.8.0-")
 	opVer23_5, _                      = version.NewVersion("23.5.0-")
+	opVer23_5_1, _                    = version.NewVersion("23.5.1-")
 	opVer23_7, _                      = version.NewVersion("23.7.0-")
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
+
+	pxVer3_0, _ = version.NewVersion("3.0")
 
 	// minimumPxVersionCCMJAVA minimum PX version to install ccm-java
 	minimumPxVersionCCMJAVA, _ = version.NewVersion("2.8")
@@ -2923,6 +2927,9 @@ func ValidateMonitoring(pxImageList map[string]string, cluster *corev1.StorageCl
 	if err := ValidateAlertManager(pxImageList, cluster, timeout, interval); err != nil {
 		return err
 	}
+	if err := ValidateGrafana(pxImageList, cluster); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -2978,6 +2985,110 @@ func ValidatePrometheus(pxImageList map[string]string, cluster *corev1.StorageCl
 	}
 
 	return nil
+}
+
+func ValidateGrafana(pxImageList map[string]string, cluster *corev1.StorageCluster) error {
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return err
+	}
+	if opVersion.LessThan(opVer23_8) {
+		logrus.Infof("Skipping grafana validation for operation version: [%s]", opVersion.String())
+		return nil
+	}
+
+	shouldBeInstalled := cluster.Spec.Monitoring != nil &&
+		cluster.Spec.Monitoring.Grafana != nil && cluster.Spec.Monitoring.Grafana.Enabled &&
+		cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.Enabled
+	err = ValidateGrafanaDeployment(cluster, shouldBeInstalled, pxImageList)
+	if err != nil {
+		return err
+	}
+	err = ValidateGrafanaService(cluster, shouldBeInstalled)
+	if err != nil {
+		return err
+	}
+	err = ValidateGrafanaConfigmaps(cluster, shouldBeInstalled)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ValidateGrafanaDeployment(cluster *corev1.StorageCluster, shouldBeInstalled bool, pxImageList map[string]string) error {
+
+	// Deployment to validate
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-grafana",
+			Namespace: cluster.Namespace,
+		},
+	}
+	if shouldBeInstalled {
+		if err := appops.Instance().ValidateDeployment(deployment, 2*time.Minute, 10*time.Second); err != nil {
+			return fmt.Errorf("failed to validate deployment %s/%s. should be installed: %v. err: %v",
+				deployment.Namespace, deployment.Name, shouldBeInstalled, err)
+		}
+	} else {
+		if err := appops.Instance().ValidateTerminatedDeployment(deployment, 2*time.Minute, 10*time.Second); err != nil {
+			return fmt.Errorf("failed to validate terminated deployment %s/%s. should be installed: %v. err: %v",
+				deployment.Namespace, deployment.Name, shouldBeInstalled, err)
+		}
+	}
+
+	return nil
+}
+
+func ValidateGrafanaService(cluster *corev1.StorageCluster, shouldBeInstalled bool) error {
+	svcs, err := coreops.Instance().ListServices(cluster.Namespace, metav1.ListOptions{
+		LabelSelector: "app=grafana",
+	})
+	if err != nil {
+		return err
+	}
+
+	if shouldBeInstalled {
+		if len(svcs.Items) > 0 && svcs.Items[0].Spec.Ports[0].Port == 3000 {
+			return nil
+		} else {
+			return fmt.Errorf("grafana is not installed when it should be")
+		}
+	} else {
+		if len(svcs.Items) < 1 {
+			return nil
+		} else {
+			return fmt.Errorf("grafana svc is installed when it is expected to be uninstalled")
+		}
+	}
+}
+
+func ValidateGrafanaConfigmaps(cluster *corev1.StorageCluster, shouldBeInstalled bool) error {
+	cms, err := coreops.Instance().ListConfigMap(cluster.Namespace, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	var grafanaConfigmaps []v1.ConfigMap
+	for _, cm := range cms.Items {
+		if strings.Contains(cm.Name, "px-grafana-") {
+			grafanaConfigmaps = append(grafanaConfigmaps, cm)
+		}
+	}
+
+	if shouldBeInstalled {
+		if len(grafanaConfigmaps) == 3 {
+			return nil
+		} else {
+			return fmt.Errorf("grafana is not installed when it should be")
+		}
+	} else {
+		if len(grafanaConfigmaps) < 3 {
+			return nil
+		} else {
+			return fmt.Errorf("grafana configmaps are installed when it is expected to be uninstalled")
+		}
+	}
 }
 
 // ValidateTelemetryV1Disabled validates telemetry components are uninstalled as expected
@@ -3045,6 +3156,11 @@ func ValidateTelemetry(pxImageList map[string]string, cluster *corev1.StorageClu
 		return err
 	}
 	logrus.Infof("PX Operator version: [%s]", opVersion.String())
+
+	if pxVersion.GreaterThanOrEqual(pxVer3_0) && opVersion.LessThan(opVer23_5_1) {
+		logrus.Warnf("Skipping Telemetry validation as it is not support for PX Operator version less than [23.5.1] and PX version [3.0.0] or greater")
+		return nil
+	}
 
 	if pxVersion.GreaterThanOrEqual(minimumPxVersionCCMGO) && opVersion.GreaterThanOrEqual(opVer1_10) {
 		if shouldTelemetryBeEnabled(cluster) {
