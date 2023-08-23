@@ -172,7 +172,7 @@ var testDmthinInstallFailedCases = []types.TestCase{
 		TestName: "TestStorageClusterDmthinWithoutPxStoreV2OptionInstallFailed",
 		TestSpec: func(t *testing.T) interface{} {
 			provider := cloud_provider.GetCloudProvider()
-			cluster := defaultDmthinSpec(t, o[PxStoreV2Present])
+			cluster := defaultDmthinSpec(t, false)
 			cloudSpec := &corev1.CloudStorageSpec{}
 			cloudSpec.DeviceSpecs = provider.GetDefaultDataDrives()
 			cluster.Spec.CloudStorage = cloudSpec
