@@ -190,10 +190,6 @@ func TestStorageClusterDmthinWithoutPxStoreV2Option(t *testing.T) {
 	}
 }
 
-// this test will be used to test cases where the setup will not satisfy any of DMthin requirements like:-
-// 8 core CPU
-// 8GB RAM
-// 4.18 kernel version
 func TestStorageClusterDmthinWithoutPxStoreV2OptionInstallFailed(t *testing.T) {
 	for _, testCase := range testDmthinInstallFailedCases {
 		testCase.RunTest(t)
@@ -358,6 +354,10 @@ func BasicInstallDmthin(tc *types.TestCase) func(*testing.T) {
 	}
 }
 
+// This test will be used to test cases where the setup will not satisfy any of DMthin requirements like:-
+// 8 core CPU
+// 8GB RAM
+// 4.18 kernel version
 func BasicInstallDmthinFailed(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		cluster := installAndValidate(t, tc, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
