@@ -520,6 +520,11 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpDoesNotExist,
 							},
@@ -531,6 +536,11 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 								Key:      "px/enabled",
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"false"},
+							},
+							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
 							},
 							{
 								Key:      "node-role.kubernetes.io/master",
@@ -822,6 +832,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpDoesNotExist,
 							},
@@ -833,6 +848,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Key:      "px/enabled",
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"false"},
+							},
+							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
 							},
 							{
 								Key:      "node-role.kubernetes.io/master",
@@ -865,6 +885,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpDoesNotExist,
 							},
@@ -882,6 +907,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpExists,
 							},
@@ -897,6 +927,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Key:      "px/enabled",
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"false"},
+							},
+							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
 							},
 							{
 								Key:      "node-role.kubernetes.io/control-plane",
@@ -2141,6 +2176,27 @@ func TestStorageClusterDefaultsForPlugin(t *testing.T) {
 	require.Equal(t, cluster.Status.DesiredImages.DynamicPluginProxy, "nginxinc/nginx-unprivileged:1.23")
 }
 
+func TestStorageClusterDefaultsForWindows(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.10.0",
+		},
+	}
+
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, cluster.Status.DesiredImages.CsiWindowsDriver, "docker.io/portworx/px-windows-csi-driver:v0.1")
+	require.Equal(t, cluster.Status.DesiredImages.CsiLivenessProbe, "registry.k8s.io/sig-storage/livenessprobe:v2.10.0")
+	require.Equal(t, cluster.Status.DesiredImages.CSIDriverRegistrar, "quay.io/k8scsi/driver-registrar:v1.2.3")
+
+}
+
 func assertDefaultSecuritySpec(t *testing.T, cluster *corev1.StorageCluster) {
 	require.NotNil(t, cluster.Spec.Security)
 	require.Equal(t, true, cluster.Spec.Security.Enabled)
@@ -2295,6 +2351,11 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/infra",
 								Operator: v1.NodeSelectorOpDoesNotExist,
 							},
@@ -2310,6 +2371,11 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 								Key:      "px/enabled",
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"false"},
+							},
+							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
 							},
 							{
 								Key:      "node-role.kubernetes.io/infra",
@@ -8488,6 +8554,8 @@ func (m *fakeManifest) GetVersions(
 			TelemetryProxy:             "purestorage/envoy:1.2.3",
 			DynamicPlugin:              "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:         "nginxinc/nginx-unprivileged:1.23",
+			CsiLivenessProbe:           "registry.k8s.io/sig-storage/livenessprobe:v2.10.0",
+			CsiWindowsDriver:           "docker.io/portworx/px-windows-csi-driver:v0.1",
 		},
 	}
 	if m.k8sVersion != nil && m.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {

@@ -1507,6 +1507,7 @@ func TestStorkNodeAffinityChange(t *testing.T) {
 		NodeSelectorTerms[0].
 		MatchExpressions[0].
 		Key = "px/disabled"
+
 	cluster.Spec.Placement.NodeAffinity = nodeAffinity
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)

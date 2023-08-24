@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: "px-csi-node-win"
+  namespace: "kube-system"
+spec:
+  selector:
+    matchLabels:
+      app: px-csi-node-win
+  template:
+    metadata:
+      labels:
+        app: px-csi-node-win
+    spec:
+      containers:
+        - args:
+            - '--csi-address=$(CSI_ENDPOINT)'
+            - '--probe-timeout=3s'
+            - '--health-port=29643'
+            - '--v=2'
+          command:
+            - /livenessprobe.exe
+          env:
+            - name: CSI_ENDPOINT
+              value: 'unix://C:\\csi\\csi.sock'
+          imagePullPolicy: IfNotPresent
+          name: liveness-probe
+          image: registry.k8s.io/sig-storage/livenessprobe:v2.10.0
+          resources:
+            limits:
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 40Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: 'C:\csi'
+              name: plugin-dir
+        - args:
+            - '--v=2'
+            - '--csi-address=$(CSI_ENDPOINT)'
+            - '--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)'
+          command:
+            - /csi-node-driver-registrar.exe
+          env:
+            - name: CSI_ENDPOINT
+              value: 'unix://C:\\csi\\csi.sock'
+            - name: DRIVER_REG_SOCK_PATH
+              value: 'C:\\var\\lib\\kubelet\\plugins\\pxd.portworx.com\\csi.sock'
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            exec:
+              command:
+                - /csi-node-driver-registrar.exe
+                - '--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)'
+                - '--mode=kubelet-registration-probe'
+            failureThreshold: 3
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+          name: node-driver-registrar
+          image: quay.io/k8scsi/csi-node-driver-registrar:v1.2.3
+          resources:
+            limits:
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 40Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: 'C:\var\lib\kubelet'
+              name: kubelet-dir
+            - mountPath: 'C:\csi'
+              name: plugin-dir
+            - mountPath: 'C:\registration'
+              name: registration-dir
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - windows
+      priorityClassName: system-node-critical
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - hostPath:
+            path: 'C:\var\lib\kubelet\plugins_registry\'
+            type: Directory
+          name: registration-dir
+        - hostPath:
+            path: 'C:\var\lib\kubelet\'
+            type: Directory
+          name: kubelet-dir
+        - hostPath:
+            path: 'C:\var\lib\kubelet\plugins\pxd.portworx.com\'
+            type: DirectoryOrCreate
+          name: plugin-dir
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
