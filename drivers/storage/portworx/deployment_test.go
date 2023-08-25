@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"testing"
 
@@ -648,6 +649,151 @@ func TestExtraVolumeOverrideExisting(t *testing.T) {
 		}
 	}
 	assert.True(t, found)
+}
+
+func TestStcMountsAndOverrides(t *testing.T) {
+	const propNil = v1.MountPropagationMode("")
+
+	mk := func(name, src, dest string, isRO bool, prop v1.MountPropagationMode) volumeInfo {
+		pprop := &prop
+		if prop == propNil {
+			pprop = nil
+		}
+		return volumeInfo{
+			name:             name,
+			hostPath:         src,
+			mountPath:        dest,
+			readOnly:         isRO,
+			mountPropagation: pprop,
+		}
+	}
+
+	_2vs := func(vi []volumeInfo) []corev1.VolumeSpec {
+		ret := make([]corev1.VolumeSpec, len(vi))
+		for i, v := range vi {
+			ret[i] = corev1.VolumeSpec{
+				Name: v.name,
+				VolumeSource: v1.VolumeSource{
+					HostPath: &v1.HostPathVolumeSource{
+						Path: v.hostPath,
+					},
+				},
+				ReadOnly:         v.readOnly,
+				MountPath:        v.mountPath,
+				MountPropagation: v.mountPropagation,
+			}
+		}
+		return ret
+	}
+
+	_2vm := func(vi []volumeInfo) []v1.VolumeMount {
+		ret := make([]v1.VolumeMount, len(vi))
+		for i, v := range vi {
+			ret[i] = v1.VolumeMount{
+				Name:             v.name,
+				MountPath:        v.mountPath,
+				MountPropagation: v.mountPropagation,
+				ReadOnly:         v.readOnly,
+			}
+		}
+		return ret
+	}
+
+	_copy := func(vi []volumeInfo, add ...volumeInfo) []volumeInfo {
+		ret := make([]volumeInfo, 0, len(vi)+len(add))
+		ret = append(ret, vi...)
+		return append(ret, add...)
+	}
+
+	_without := func(vi []volumeInfo, remove ...string) []volumeInfo {
+		ret := make([]volumeInfo, 0, len(vi))
+		for _, v := range vi {
+			found := false
+			for _, toRm := range remove {
+				if v.name == toRm {
+					found = true
+					break
+				}
+			}
+			if !found {
+				ret = append(ret, v)
+			}
+		}
+		return ret
+	}
+
+	expectCommonVolumes := []volumeInfo{
+		mk("pxlogs", "", "", false, propNil),
+		mk("varlibosd", "/var/lib/osd", "/var/lib/osd", false, v1.MountPropagationBidirectional),
+		mk("diagsdump", "/var/cores", "/var/cores", false, propNil),
+		mk("etcpwx", "/etc/pwx", "/etc/pwx", false, propNil),
+		mk("journalmount1", "/var/run/log", "/var/run/log", true, propNil),
+		mk("journalmount2", "/var/log", "/var/log", true, propNil),
+	}
+
+	testVols := getCommonVolumeList(pxutil.MinimumPxVersionAutoTLS)
+	for i := range testVols {
+		testVols[i].pks = nil
+	}
+	assert.Equal(t, expectCommonVolumes, testVols)
+	// note, removing "PKS-specific" `pxlogs`
+	expectCommonVolumes = expectCommonVolumes[1:]
+
+	testData := []struct {
+		stcVols    []volumeInfo
+		expectVols []volumeInfo
+	}{
+		// baseline - no extra vols
+		{nil, expectCommonVolumes},
+		// add 1 custom volume
+		{
+			[]volumeInfo{mk("test0", "/mnt/test0", "/mnt/test0", false, propNil)},
+			_copy(
+				_without(expectCommonVolumes, ""),
+				mk("user-test0", "/mnt/test0", "/mnt/test0", false, propNil),
+			),
+		},
+		// override existing
+		{
+			[]volumeInfo{mk("diagsdump", "/mnt/test0", "/var/cores", false, propNil)},
+			_copy(
+				_without(expectCommonVolumes, "diagsdump"),
+				mk("user-diagsdump", "/mnt/test0", "/var/cores", false, propNil),
+			),
+		},
+		// new + override existing
+		{
+			[]volumeInfo{
+				mk("test1", "/mnt/test1", "/mnt/test1", false, v1.MountPropagationBidirectional),
+				mk("diagsdump", "/mnt/test0", "/var/cores", false, propNil),
+			},
+			_copy(
+				_without(expectCommonVolumes, "diagsdump"),
+				mk("user-test1", "/mnt/test1", "/mnt/test1", false, v1.MountPropagationBidirectional),
+				mk("user-diagsdump", "/mnt/test0", "/var/cores", false, propNil),
+			),
+		},
+	}
+
+	for i, td := range testData {
+		tr := &template{
+			cluster: &corev1.StorageCluster{
+				Spec: corev1.StorageClusterSpec{
+					Volumes: _2vs(td.stcVols),
+				},
+			},
+		}
+
+		expected := _2vm(td.expectVols)
+		got := tr.mountsFromVolInfo(expectCommonVolumes)
+
+		// volumes order is not important.. so let's re-sort
+		sort.SliceStable(expected, func(i, j int) bool { return expected[i].Name > expected[j].Name })
+		sort.SliceStable(got, func(i, j int) bool { return got[i].Name > got[j].Name })
+
+		assert.Equal(t, expected, got,
+			"Expectation failed for test #%d / %v", i+1, td.stcVols)
+	}
 }
 
 func TestPodSpecWithTLS(t *testing.T) {
