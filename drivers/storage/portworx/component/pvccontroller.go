@@ -537,6 +537,7 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 	if len(topologySpreadConstraints) != 0 {
 		deployment.Spec.Template.Spec.TopologySpreadConstraints = topologySpreadConstraints
 	}
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	return deployment
 }

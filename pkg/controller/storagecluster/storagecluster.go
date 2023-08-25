@@ -1369,6 +1369,7 @@ func (c *Controller) CreatePodTemplate(
 		},
 		Spec: podSpec,
 	}
+	newTemplate.Labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
 
 	if !pxutil.IsPrivileged(cluster) {
 		// turn off AppArmor?

@@ -414,6 +414,7 @@ func (t *telemetry) getCollectorDeployment(
 			},
 		},
 	}
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	deployment.Namespace = cluster.Namespace
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)

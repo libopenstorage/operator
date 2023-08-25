@@ -153,6 +153,7 @@ func (w *windows) createDaemonSet(filename, daemonsetName, nameSpace string, clu
 	if ownerRef != nil {
 		daemonSet.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	}
+	daemonSet.Spec.Template.ObjectMeta = k8s.AddManagedByOperatorLabel(daemonSet.Spec.Template.ObjectMeta)
 
 	for i, container := range daemonSet.Spec.Template.Spec.Containers {
 		var image string

@@ -3,8 +3,9 @@ package component
 import (
 	"context"
 	commonerrors "errors"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	"strings"
+
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 
 	version "github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -235,6 +236,7 @@ func (p *plugin) createDeployment(filename, deploymentName string, ownerRef *met
 	if deployment.Name == NginxDeploymentName {
 		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPluginProxyImage(cluster)
 	}
+	deployment.Spec.Template.ObjectMeta = k8s.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	existingDeployment := &appsv1.Deployment{}
 	getErr := p.client.Get(
