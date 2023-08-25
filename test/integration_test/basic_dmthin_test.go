@@ -4,10 +4,11 @@
 package integrationtest
 
 import (
-	"github.com/libopenstorage/operator/pkg/util/test"
-	"github.com/libopenstorage/operator/test/integration_test/cloud_provider"
 	"strings"
 	"testing"
+
+	"github.com/libopenstorage/operator/pkg/util/test"
+	"github.com/libopenstorage/operator/test/integration_test/cloud_provider"
 
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
@@ -166,10 +167,31 @@ var testDmthinCases = []types.TestCase{
 	},
 }
 
+var testDmthinInstallFailedCases = []types.TestCase{
+	{
+		TestName: "TestStorageClusterDmthinWithoutPxStoreV2OptionInstallFailed",
+		TestSpec: func(t *testing.T) interface{} {
+			provider := cloud_provider.GetCloudProvider()
+			cluster := defaultDmthinSpec(t, false)
+			cloudSpec := &corev1.CloudStorageSpec{}
+			cloudSpec.DeviceSpecs = provider.GetDefaultDataDrives()
+			cluster.Spec.CloudStorage = cloudSpec
+			return cluster
+		},
+		TestFunc: BasicInstallDmthinFailed,
+	},
+}
+
 func TestStorageClusterDmthinWithoutPxStoreV2Option(t *testing.T) {
 	opt := OptionsArr{}
 	basicInstallTestCases := generateTestCases(opt, 1)
 	for _, testCase := range basicInstallTestCases {
+		testCase.RunTest(t)
+	}
+}
+
+func TestStorageClusterDmthinWithoutPxStoreV2OptionInstallFailed(t *testing.T) {
+	for _, testCase := range testDmthinInstallFailedCases {
 		testCase.RunTest(t)
 	}
 }
@@ -328,6 +350,19 @@ func BasicInstallDmthin(tc *types.TestCase) func(*testing.T) {
 		require.False(t, isJournalPresent, "Journal device found in a dmthin setup")
 		isKvdbDiskPresent := isKvdbPresent(t)
 		require.False(t, isKvdbDiskPresent, "KVDB device found in a dmthin setup")
+		UninstallPX(t, cluster)
+	}
+}
+
+// This test will be used to test cases where the setup will not satisfy any of DMthin requirements like:-
+// 8 core CPU
+// 8GB RAM
+// 4.18 kernel version
+func BasicInstallDmthinFailed(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		cluster := installAndValidate(t, tc, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
+		pxStoreV2 := isPxStoreV2(t, cluster)
+		require.False(t, pxStoreV2, "Expecting btrfs to be installed")
 		UninstallPX(t, cluster)
 	}
 }
