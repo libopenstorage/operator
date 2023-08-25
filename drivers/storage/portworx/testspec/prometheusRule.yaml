@@ -104,7 +104,7 @@ spec:
     - alert: PortworxStorageWillFill
       annotations:
         description: Portworx storage on {{$labels.instance}} is over 70% full
-          and has been predicted to fill within 2 weeks.
+          and is predicted to fill within 2 weeks.
         summary: Portworx storage on {{$labels.instance}} is over 70% full and
           is predicted to fill within 2 weeks.
       expr: (100 * (1 - (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)))
@@ -121,45 +121,44 @@ spec:
         scrape_target_name: "{{$labels.node}}"
     - alert: PortworxStorageNodeDown
       annotations:
-        description: Portworx Storage Node has been offline for more than 5 minutes.
-        summary: Portworx Storage Node is Offline.
-      expr: max(px_cluster_status_nodes_storage_down) > 0
+        description: '{{ $value | printf "%.0f" }} Portworx node(s) are in StorageDown state for more than 5 minutes.'
+        summary: One or more Portworx nodes are in StorageDown state.
+      expr: max by(cluster, clusterUUID) (px_cluster_status_nodes_storage_down) > 0
       for: 5m
       labels:
         issue: Portworx Storage Node is Offline.
         severity: critical
         resource_type: portworx-cluster
         resource_name: "{{$labels.cluster}}"
-        scrape_target_type: portworx-node
-        scrape_target_name: "{{$labels.node}}"
+        scrape_target_type: portworx-cluster
+        scrape_target_name: "{{$labels.cluster}}"
     - alert: PortworxQuorumUnhealthy
       annotations:
         description: Portworx cluster Quorum Unhealthy for more than 5 minutes.
         summary: Portworx Quorum Unhealthy.
-      expr: max(px_cluster_status_cluster_quorum) > 1
+      expr: max by(cluster, clusterUUID) (px_cluster_status_cluster_quorum) > 1
       for: 5m
       labels:
         issue: Portworx Quorum Unhealthy.
         severity: critical
         resource_type: portworx-cluster
         resource_name: "{{$labels.cluster}}"
-        scrape_target_type: portworx-node
-        scrape_target_name: "{{$labels.node}}"
+        scrape_target_type: portworx-cluster
+        scrape_target_name: "{{$labels.cluster}}"
     - alert: PortworxMemberDown
       annotations:
-        description: Portworx cluster member(s) has(have) been down for more than
-          5 minutes.
-        summary: Portworx cluster member(s) is(are) down.
-      expr: (max(px_cluster_status_size) - max(px_cluster_status_nodes_online))
+        description: '{{ $value | printf "%.0f" }} Portworx cluster member(s) have been down for more than 5 minutes.'
+        summary: One or more Portworx cluster members are down.
+      expr: (max by(cluster, clusterUUID) (px_cluster_status_size) - max by(cluster, clusterUUID) (px_cluster_status_nodes_online))
         > 0
       for: 5m
       labels:
-        issue: Portworx cluster member(s) is(are) down.
+        issue: One or more Portworx cluster members are down.
         severity: critical
         resource_type: portworx-cluster
         resource_name: "{{$labels.cluster}}"
-        scrape_target_type: portworx-node
-        scrape_target_name: "{{$labels.node}}"
+        scrape_target_type: portworx-cluster
+        scrape_target_name: "{{$labels.cluster}}"
     - alert: PXBackupError
       annotations:
         description: Failed to take backup for volume {{$labels.volumename}} with error {{$labels.error_string}}.
