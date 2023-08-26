@@ -780,7 +780,7 @@ func (h *Handler) addCSISpec(cluster *corev1.StorageCluster, ds *appsv1.DaemonSe
 	csiEnabled := false
 	for _, c := range ds.Spec.Template.Spec.Containers {
 		switch c.Name {
-		case pxutil.CSIRegistrarContainerName:
+		case pxutil.CSINodeDriverRegistrarContainerName:
 			csiEnabled = true
 			cluster.Status.DesiredImages.CSINodeDriverRegistrar = c.Image
 		}

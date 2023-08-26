@@ -24,6 +24,7 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
+	"github.com/libopenstorage/operator/pkg/depresolver"
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -325,6 +326,23 @@ func (p *portworx) GetStoragePodSpec(
 	if pxutil.IsCSIEnabled(t.cluster) {
 		csiRegistrar := t.csiRegistrarContainer()
 		if csiRegistrar != nil {
+			p.depresolver = depresolver.New(
+				cluster.Spec.Kvdb.Endpoints,
+				"",
+				func(nodeName string) bool {
+					pods := &v1.PodList{}
+					err = p.k8sClient.List(context.Background(), pods, client.InNamespace(cluster.Namespace), client.HasLabels{
+						"name=portworx",
+					})
+					if nil != err {
+						logrus.Errorf("failed to get dependent portworx pods, err: %s", err)
+						return false
+					}
+					return pods.Size() == 0
+				})
+
+			go p.depresolver.Run()
+
 			podSpec.Containers = append(podSpec.Containers, *csiRegistrar)
 		}
 	}
@@ -615,7 +633,7 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 	}
 
 	if t.cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {
-		container.Name = pxutil.CSIRegistrarContainerName
+		container.Name = pxutil.CSINodeDriverRegistrarContainerName
 		container.Image = util.GetImageURN(
 			t.cluster,
 			t.cluster.Status.DesiredImages.CSINodeDriverRegistrar,
@@ -626,7 +644,7 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", t.csiConfig.DriverBasePath()),
 		}
 	} else if t.cluster.Status.DesiredImages.CSIDriverRegistrar != "" {
-		container.Name = "csi-driver-registrar"
+		container.Name = pxutil.CSIDriverRegistrarContainerName
 		container.Image = util.GetImageURN(
 			t.cluster,
 			t.cluster.Status.DesiredImages.CSIDriverRegistrar,

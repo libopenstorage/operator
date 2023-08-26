@@ -29,6 +29,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/cloudstorage"
+	"github.com/libopenstorage/operator/pkg/depresolver"
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -62,6 +63,7 @@ type portworx struct {
 	scheme             *runtime.Scheme
 	recorder           record.EventRecorder
 	sdkConn            *grpc.ClientConn
+	depresolver        depresolver.IGraph
 	zoneToInstancesMap map[string]uint64
 	cloudProvider      string
 }

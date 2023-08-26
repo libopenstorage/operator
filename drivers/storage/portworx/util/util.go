@@ -60,7 +60,9 @@ const (
 	// PortworxKVDBServiceName name of the Portworx KVDB Kubernetes service
 	PortworxKVDBServiceName = "portworx-kvdb-service"
 	// CSIRegistrarContainerName name of the Portworx CSI node driver registrar container
-	CSIRegistrarContainerName = "csi-node-driver-registrar"
+	CSINodeDriverRegistrarContainerName = "csi-node-driver-registrar"
+	// CSIDriverRegistrarContainerName name of the CSI driver registrar container
+	CSIDriverRegistrarContainerName = "csi-driver-registrar"
 	// TelemetryContainerName name of the Portworx telemetry container
 	TelemetryContainerName = "telemetry"
 	// PortworxRESTPortName name of the Portworx API port
