@@ -8,6 +8,7 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -21,12 +22,12 @@ type Node struct {
 }
 
 type IGraph interface {
-	IsResolved(nodeName string) bool
-	SetResolved(nodeName string)
+	IsResolved(obj client.Object, graphNodeName string) bool
+	SetResolved(obj client.Object, graphNodeName string)
 	Run()
 }
 
-type WildCardFunc func(namespace, nodeName string) bool
+type WildCardFunc func(obj client.Object, graphNodeName string) bool
 
 type Graph struct {
 	k8sClientset *kubernetes.Clientset
@@ -85,10 +86,10 @@ func (g *Graph) parse(adjList string) (err error) {
 	return
 }
 
-func (g *Graph) IsResolved(nodeName string) bool {
-	node, ok := g.graph[nodeName]
+func (g *Graph) IsResolved(obj client.Object, graphNodeName string) bool {
+	node, ok := g.graph[graphNodeName]
 	if !ok {
-		g.graph[nodeName] = &Node{
+		g.graph[graphNodeName] = &Node{
 			Dependencies: []string{},
 			Resolved:     true,
 			ResolvedAt:   time.Now(),
@@ -98,9 +99,9 @@ func (g *Graph) IsResolved(nodeName string) bool {
 
 	for _, depName := range node.Dependencies {
 		if depName == wildcardToken {
-			return g.wildcard(nodeName)
+			return g.wildcard(obj, graphNodeName)
 		}
-		if !g.IsResolved(depName) {
+		if !g.IsResolved(obj, graphNodeName) {
 			return false
 		}
 	}
@@ -110,14 +111,14 @@ func (g *Graph) IsResolved(nodeName string) bool {
 	return node.Resolved
 }
 
-func (g *Graph) SetResolved(nodeName string) {
-	node, ok := g.graph[nodeName]
+func (g *Graph) SetResolved(obj client.Object, graphNodeName string) {
+	node, ok := g.graph[graphNodeName]
 	if !ok {
 		node = &Node{
 			Dependencies: []string{},
 		}
 
-		g.graph[nodeName] = node
+		g.graph[graphNodeName] = node
 	}
 	node.Resolved = true
 	node.ResolvedAt = time.Now()

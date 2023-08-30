@@ -19,6 +19,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/depresolver"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	_ "github.com/libopenstorage/operator/pkg/log"
 	"github.com/libopenstorage/operator/pkg/migration"
 	"github.com/libopenstorage/operator/pkg/operator-sdk/metrics"
@@ -36,6 +37,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
@@ -213,17 +215,51 @@ func run(c *cli.Context) {
 
 	depresolverController := depresolver.New(
 		"",
-		func(ns, nodeName string) bool {
+		func(obj client.Object, graphNodeName string) bool {
+			reqPod := obj.(*v1.Pod)
 
 			k8sClient, err := k8sutil.NewK8sClient(mgr.GetScheme())
 			if err == nil {
 				logrus.Fatalf("unable to start depresovler controller: %s", err)
 				return false
 			}
+			node := &v1.Node{}
+			node.SetName(reqPod.Spec.NodeName)
+			node.SetNamespace(reqPod.Namespace)
+
+			err = k8sClient.Get(context.Background(), client.ObjectKeyFromObject(node), node)
+			if nil != err {
+				logrus.Errorf("failed to get dependent portworx pods, err: %s", err)
+				return false
+			}
+
+			cluster := &corev1.StorageCluster{}
+			err = k8sClient.Get(context.TODO(), types.NamespacedName{}, cluster)
+			if nil != err {
+				logrus.Errorf("failed to get dependent portworx pods, err: %s", err)
+				return false
+			}
+
+			for i := range node.Status.Conditions {
+				if !storagecluster.DeleteFinalizerExists(cluster) &&
+					(node.Status.Conditions[i].Type == v1.NodeReady &&
+						node.Status.Conditions[i].Status == v1.ConditionTrue) {
+					return true
+				}
+			}
+
 			pods := &v1.PodList{}
-			err = k8sClient.List(context.Background(), pods, client.InNamespace(ns), client.HasLabels{
-				"name=portworx",
-			})
+			err = k8sClient.List(
+				context.Background(),
+				pods,
+				client.InNamespace(node.Namespace),
+				client.HasLabels{
+					"name=portworx",
+				},
+				client.MatchingFields{
+					"spec.nodeName": node.Name,
+				},
+			)
 			if nil != err {
 				logrus.Errorf("failed to get dependent portworx pods, err: %s", err)
 				return false

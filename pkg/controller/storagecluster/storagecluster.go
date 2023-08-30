@@ -843,7 +843,7 @@ func (c *Controller) deleteStorageCluster(
 		return err
 	}
 
-	if deleteFinalizerExists(cluster) {
+	if DeleteFinalizerExists(cluster) {
 		toDelete := cluster.DeepCopy()
 		deleteCondition, driverErr := c.Driver.DeleteStorage(toDelete)
 		if driverErr != nil {

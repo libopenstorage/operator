@@ -29,7 +29,7 @@ func (g *Graph) Run() {
 				return
 			}
 
-			if label, ok := pod.Labels["app"]; ok && g.IsResolved(label) {
+			if label, ok := pod.Labels["app"]; ok && g.IsResolved(pod, label) {
 				err := g.k8sClientset.CoreV1().Pods(pod.Namespace).Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
 				if nil != err {
 					logrus.Errorf("depresolver failed to delete pod %s: %s", pod.Name, err)
@@ -86,7 +86,7 @@ func (g *Graph) Run() {
 			}
 
 			if label, ok := pod.Labels["app"]; ok {
-				if !g.IsResolved(label) {
+				if !g.IsResolved(pod, label) {
 					queue.Add(pod)
 					return
 				}

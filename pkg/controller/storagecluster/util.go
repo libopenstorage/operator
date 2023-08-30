@@ -51,7 +51,7 @@ func historyName(clusterName, hash string) string {
 	return clusterName + "-" + hash
 }
 
-func deleteFinalizerExists(cluster *corev1.StorageCluster) bool {
+func DeleteFinalizerExists(cluster *corev1.StorageCluster) bool {
 	for _, finalizerName := range cluster.Finalizers {
 		if finalizerName == deleteFinalizerName {
 			return true
