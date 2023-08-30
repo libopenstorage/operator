@@ -26,7 +26,7 @@ type IGraph interface {
 	Run()
 }
 
-type WildCardFunc func(nodeName string) bool
+type WildCardFunc func(namespace, nodeName string) bool
 
 type Graph struct {
 	k8sClientset *kubernetes.Clientset
@@ -39,7 +39,7 @@ type Graph struct {
 // Takes in yaml representation of the adjList in a json,
 // Failure to read the adjList or it's absence would resort to default adjacency list
 // The default adjacency list can also be treasted as an example for building your custom tree
-func New(endpoints []string, adjList string, wildcard WildCardFunc) IGraph {
+func New(adjList string, wildcard WildCardFunc) IGraph {
 	restConfig, err := rest.InClusterConfig()
 	if err != nil {
 		log.Fatalf("error getting cluster config: %v", err)
@@ -49,7 +49,7 @@ func New(endpoints []string, adjList string, wildcard WildCardFunc) IGraph {
 	if err != nil {
 		log.Fatalf("error getting rest cluster config: %v", err)
 	}
-	
+
 	g := &Graph{
 		k8sClientset: k8sClientset,
 		lock:         &sync.Mutex{},

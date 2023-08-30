@@ -16,6 +16,9 @@ import (
 	"github.com/libopenstorage/operator/pkg/controller/portworxdiag"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/controller/storagenode"
+	"github.com/libopenstorage/operator/pkg/depresolver"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+
 	_ "github.com/libopenstorage/operator/pkg/log"
 	"github.com/libopenstorage/operator/pkg/migration"
 	"github.com/libopenstorage/operator/pkg/operator-sdk/metrics"
@@ -24,6 +27,7 @@ import (
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	consolev1 "github.com/openshift/api/console/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	appsv1 "k8s.io/api/apps/v1"
@@ -206,6 +210,28 @@ func run(c *cli.Context) {
 	if err != nil {
 		log.Fatalf("Failed to create controller manager: %v", err)
 	}
+
+	depresolverController := depresolver.New(
+		"",
+		func(ns, nodeName string) bool {
+
+			k8sClient, err := k8sutil.NewK8sClient(mgr.GetScheme())
+			if err == nil {
+				logrus.Fatalf("unable to start depresovler controller: %s", err)
+				return false
+			}
+			pods := &v1.PodList{}
+			err = k8sClient.List(context.Background(), pods, client.InNamespace(ns), client.HasLabels{
+				"name=portworx",
+			})
+			if nil != err {
+				logrus.Errorf("failed to get dependent portworx pods, err: %s", err)
+				return false
+			}
+			return pods.Size() == 0
+		})
+
+	go depresolverController.Run()
 
 	// Add custom resources to scheme
 	// TODO: AddToScheme should strictly follow createManager, after CRDs are registered. See comment above
