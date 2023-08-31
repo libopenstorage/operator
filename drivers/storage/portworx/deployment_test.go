@@ -2,6 +2,7 @@ package portworx
 
 import (
 	"os"
+	"sort"
 	"strings"
 	"testing"
 
@@ -493,7 +494,7 @@ func TestVarLibOsdMountForPxVersion2_9_1(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
-func TestExtraVolumeMountPathWithConflictShouldBeIgnored(t *testing.T) {
+func TestExtraVolumeUnique(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	nodeName := "testNode"
 
@@ -501,10 +502,10 @@ func TestExtraVolumeMountPathWithConflictShouldBeIgnored(t *testing.T) {
 		Name: "volume1",
 		VolumeSource: v1.VolumeSource{
 			HostPath: &v1.HostPathVolumeSource{
-				Path: "/path1",
+				Path: "/path123",
 			},
 		},
-		MountPath: "/var/log",
+		MountPath: "/mnt/uniq123",
 	}
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -521,17 +522,231 @@ func TestExtraVolumeMountPathWithConflictShouldBeIgnored(t *testing.T) {
 	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
-	volume := v1.Volume{
-		Name:         pxutil.UserVolumeName(volumeSpec.Name),
-		VolumeSource: volumeSpec.VolumeSource,
+
+	// custom `-v /path123:/mnt/uniq123` should be the last volume in the POD-spec
+	customVolumeName := pxutil.UserVolumeName(volumeSpec.Name)
+	lastActualVol := actual.Volumes[len(actual.Volumes)-1]
+	assert.Equal(t, customVolumeName, lastActualVol.Name)
+	assert.Equal(t, "/path123", lastActualVol.HostPath.Path)
+
+	lastContainerVol := actual.Containers[0].VolumeMounts[len(actual.Containers[0].VolumeMounts)-1]
+	assert.Equal(t, customVolumeName, lastContainerVol.Name)
+	assert.Equal(t, volumeSpec.MountPath, lastContainerVol.MountPath)
+
+	// make sure it's unique
+	cnt := 0
+	for _, v := range actual.Volumes {
+		if v.Name == customVolumeName {
+			cnt++
+		}
 	}
-	volumeMount := v1.VolumeMount{
-		Name:      volumeSpec.Name,
-		MountPath: volumeSpec.MountPath,
+	assert.Equal(t, 1, cnt)
+
+	cnt = 0
+	for _, v := range actual.Containers[0].VolumeMounts {
+		if v.Name == customVolumeName {
+			cnt++
+		}
+	}
+	assert.Equal(t, 1, cnt)
+}
+
+func TestExtraVolumeOverrideExisting(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+	hostDir, containerDir := "/mnt/custom/test-cores", "/var/cores"
+
+	volumeSpec := corev1.VolumeSpec{
+		Name: "volume1",
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: hostDir,
+			},
+		},
+		MountPath: containerDir,
+	}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Volumes: []corev1.VolumeSpec{
+				volumeSpec,
+			},
+		},
 	}
 
-	assert.Contains(t, actual.Volumes, volume)
-	assert.NotContains(t, actual.Containers[0].VolumeMounts, volumeMount)
+	driver := portworx{}
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+
+	customVolumeName := pxutil.UserVolumeName(volumeSpec.Name)
+
+	found := false
+	for _, v := range actual.Volumes {
+		if v.Name == customVolumeName {
+			assert.Equal(t, hostDir, v.HostPath.Path)
+			found = true
+		}
+	}
+	assert.True(t, found)
+
+	found = false
+	for _, v := range actual.Containers[0].VolumeMounts {
+		if v.Name == customVolumeName {
+			assert.Equal(t, containerDir, v.MountPath)
+			found = true
+		} else {
+			assert.NotEqual(t, containerDir, v.MountPath)
+		}
+	}
+	assert.True(t, found)
+}
+
+func TestStcMountsAndOverrides(t *testing.T) {
+	const propNil = v1.MountPropagationMode("")
+
+	mk := func(name, src, dest string, isRO bool, prop v1.MountPropagationMode) volumeInfo {
+		pprop := &prop
+		if prop == propNil {
+			pprop = nil
+		}
+		return volumeInfo{
+			name:             name,
+			hostPath:         src,
+			mountPath:        dest,
+			readOnly:         isRO,
+			mountPropagation: pprop,
+		}
+	}
+
+	_2vs := func(vi []volumeInfo) []corev1.VolumeSpec {
+		ret := make([]corev1.VolumeSpec, len(vi))
+		for i, v := range vi {
+			ret[i] = corev1.VolumeSpec{
+				Name: v.name,
+				VolumeSource: v1.VolumeSource{
+					HostPath: &v1.HostPathVolumeSource{
+						Path: v.hostPath,
+					},
+				},
+				ReadOnly:         v.readOnly,
+				MountPath:        v.mountPath,
+				MountPropagation: v.mountPropagation,
+			}
+		}
+		return ret
+	}
+
+	_2vm := func(vi []volumeInfo) []v1.VolumeMount {
+		ret := make([]v1.VolumeMount, len(vi))
+		for i, v := range vi {
+			ret[i] = v1.VolumeMount{
+				Name:             v.name,
+				MountPath:        v.mountPath,
+				MountPropagation: v.mountPropagation,
+				ReadOnly:         v.readOnly,
+			}
+		}
+		return ret
+	}
+
+	_copy := func(vi []volumeInfo, add ...volumeInfo) []volumeInfo {
+		ret := make([]volumeInfo, 0, len(vi)+len(add))
+		ret = append(ret, vi...)
+		return append(ret, add...)
+	}
+
+	_without := func(vi []volumeInfo, remove ...string) []volumeInfo {
+		ret := make([]volumeInfo, 0, len(vi))
+		for _, v := range vi {
+			found := false
+			for _, toRm := range remove {
+				if v.name == toRm {
+					found = true
+					break
+				}
+			}
+			if !found {
+				ret = append(ret, v)
+			}
+		}
+		return ret
+	}
+
+	expectCommonVolumes := []volumeInfo{
+		mk("pxlogs", "", "", false, propNil),
+		mk("varlibosd", "/var/lib/osd", "/var/lib/osd", false, v1.MountPropagationBidirectional),
+		mk("diagsdump", "/var/cores", "/var/cores", false, propNil),
+		mk("etcpwx", "/etc/pwx", "/etc/pwx", false, propNil),
+		mk("journalmount1", "/var/run/log", "/var/run/log", true, propNil),
+		mk("journalmount2", "/var/log", "/var/log", true, propNil),
+	}
+
+	testVols := getCommonVolumeList(pxutil.MinimumPxVersionAutoTLS)
+	for i := range testVols {
+		testVols[i].pks = nil
+	}
+	assert.Equal(t, expectCommonVolumes, testVols)
+	// note, removing "PKS-specific" `pxlogs`
+	expectCommonVolumes = expectCommonVolumes[1:]
+
+	testData := []struct {
+		stcVols    []volumeInfo
+		expectVols []volumeInfo
+	}{
+		// baseline - no extra vols
+		{nil, expectCommonVolumes},
+		// add 1 custom volume
+		{
+			[]volumeInfo{mk("test0", "/mnt/test0", "/mnt/test0", false, propNil)},
+			_copy(
+				_without(expectCommonVolumes, ""),
+				mk("user-test0", "/mnt/test0", "/mnt/test0", false, propNil),
+			),
+		},
+		// override existing
+		{
+			[]volumeInfo{mk("diagsdump", "/mnt/test0", "/var/cores", false, propNil)},
+			_copy(
+				_without(expectCommonVolumes, "diagsdump"),
+				mk("user-diagsdump", "/mnt/test0", "/var/cores", false, propNil),
+			),
+		},
+		// new + override existing
+		{
+			[]volumeInfo{
+				mk("test1", "/mnt/test1", "/mnt/test1", false, v1.MountPropagationBidirectional),
+				mk("diagsdump", "/mnt/test0", "/var/cores", false, propNil),
+			},
+			_copy(
+				_without(expectCommonVolumes, "diagsdump"),
+				mk("user-test1", "/mnt/test1", "/mnt/test1", false, v1.MountPropagationBidirectional),
+				mk("user-diagsdump", "/mnt/test0", "/var/cores", false, propNil),
+			),
+		},
+	}
+
+	for i, td := range testData {
+		tr := &template{
+			cluster: &corev1.StorageCluster{
+				Spec: corev1.StorageClusterSpec{
+					Volumes: _2vs(td.stcVols),
+				},
+			},
+		}
+
+		expected := _2vm(td.expectVols)
+		got := tr.mountsFromVolInfo(expectCommonVolumes)
+
+		// volumes order is not important.. so let's re-sort
+		sort.SliceStable(expected, func(i, j int) bool { return expected[i].Name > expected[j].Name })
+		sort.SliceStable(got, func(i, j int) bool { return got[i].Name > got[j].Name })
+
+		assert.Equal(t, expected, got,
+			"Expectation failed for test #%d / %v", i+1, td.stcVols)
+	}
 }
 
 func TestPodSpecWithKvdbSpec(t *testing.T) {
