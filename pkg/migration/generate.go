@@ -729,7 +729,7 @@ func getVolumeSpecs(
 			logrus.WithFields(logrus.Fields{
 				"name":      m.Name,
 				"mountPath": m.MountPath,
-			}).Warningf("found mountPath conflict when constructing StorageCluster from DaemonSet, volume will be ignored")
+			}).Warnf("found mountPath conflict when constructing StorageCluster from DaemonSet, volume will be ignored")
 			continue
 		}
 		volumeSpecMap[m.Name] = &corev1.VolumeSpec{
