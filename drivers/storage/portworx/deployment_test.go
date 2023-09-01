@@ -2195,27 +2195,27 @@ func TestPKSPodSpec(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assertPodSpecEqual(t, expected_2_9_1, &actual)
 
-	// check PKS when using px-3.0.1
+	// check PKS when using px-3.0.2
 
-	cluster.Spec.Image = "portworx/oci-monitor:3.0.1"
-	expected_3_0_1 := expected_2_9_1.DeepCopy()
-	expected_3_0_1.Containers[0].Image = "docker.io/" + cluster.Spec.Image
-	expected_3_0_1.Containers[0].Args = append(expected_3_0_1.Containers[0].Args,
+	cluster.Spec.Image = "portworx/oci-monitor:3.0.2"
+	expected_3_0_2 := expected_2_9_1.DeepCopy()
+	expected_3_0_2.Containers[0].Image = "docker.io/" + cluster.Spec.Image
+	expected_3_0_2.Containers[0].Args = append(expected_3_0_2.Containers[0].Args,
 		"-v", "/var/lib/osd/pxns:/var/lib/osd/pxns:shared",
 		"-v", "/var/lib/osd/mounts:/var/lib/osd/mounts:shared",
 	)
-	podSpecRemoveMount(expected_3_0_1, "varlibosd")
-	podSpecRemoveMount(expected_3_0_1, "pxlogs")
-	podSpecAddMount(expected_3_0_1, "varlibosd", "/var/vcap/store/lib/osd:/var/lib/osd")
-	podSpecRemoveEnv(expected_3_0_1, "PRE-EXEC")
-	expected_3_0_1.Containers[0].Env = append(expected_3_0_1.Containers[0].Env, v1.EnvVar{
+	podSpecRemoveMount(expected_3_0_2, "varlibosd")
+	podSpecRemoveMount(expected_3_0_2, "pxlogs")
+	podSpecAddMount(expected_3_0_2, "varlibosd", "/var/vcap/store/lib/osd:/var/lib/osd")
+	podSpecRemoveEnv(expected_3_0_2, "PRE-EXEC")
+	expected_3_0_2.Containers[0].Env = append(expected_3_0_2.Containers[0].Env, v1.EnvVar{
 		Name: "PRE-EXEC", Value: "rm -fr /var/lib/osd/driver",
 	})
 
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
-	assertPodSpecEqual(t, expected_3_0_1, &actual)
+	assertPodSpecEqual(t, expected_3_0_2, &actual)
 }
 
 func TestOpenshiftRuncPodSpec(t *testing.T) {
@@ -2287,17 +2287,17 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "need portworx higher than 3.0.0 to use annotation '"+
+	assert.Contains(t, err.Error(), "need portworx higher than 3.0.1 to use annotation '"+
 		pxutil.AnnotationIsPrivileged+"'")
 
-	cluster.Spec.Image = "portworx/oci-monitor:3.0.1"
-	expected_3_0_1 := expected.DeepCopy()
-	expected_3_0_1.Containers[0].Image = "docker.io/" + cluster.Spec.Image
-	expected_3_0_1.Containers[0].Args = append(expected_3_0_1.Containers[0].Args,
+	cluster.Spec.Image = "portworx/oci-monitor:3.0.2"
+	expected_3_0_2 := expected.DeepCopy()
+	expected_3_0_2.Containers[0].Image = "docker.io/" + cluster.Spec.Image
+	expected_3_0_2.Containers[0].Args = append(expected_3_0_2.Containers[0].Args,
 		"-v", "/var/lib/osd/pxns:/var/lib/osd/pxns:shared",
 		"-v", "/var/lib/osd/mounts:/var/lib/osd/mounts:shared",
 	)
-	expected_3_0_1.Containers[0].SecurityContext = &v1.SecurityContext{
+	expected_3_0_2.Containers[0].SecurityContext = &v1.SecurityContext{
 		Privileged: boolPtr(false),
 		Capabilities: &v1.Capabilities{
 			Add: []v1.Capability{
@@ -2305,27 +2305,27 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 			},
 		},
 	}
-	podSpecAddMount(expected_3_0_1, "varlibosd", "/var/lib/osd:/var/lib/osd")
-	podSpecRemoveEnv(expected_3_0_1, "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS")
+	podSpecAddMount(expected_3_0_2, "varlibosd", "/var/lib/osd:/var/lib/osd")
+	podSpecRemoveEnv(expected_3_0_2, "AUTO_NODE_RECOVERY_TIMEOUT_IN_SECS")
 
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
 
-	assertPodSpecEqual(t, expected_3_0_1, &actual)
+	assertPodSpecEqual(t, expected_3_0_2, &actual)
 
 	require.Equal(t, 1, len(actual.Containers))
 	for _, v := range actual.Containers[0].VolumeMounts {
 		assert.Nil(t, v.MountPropagation, "Wrong propagation on %v", v)
 	}
 
-	// PWX-32825 tweak the 3.0.1 version slightly -- should still evaluate the same
-	cluster.Spec.Image = "portworx/oci-monitor:3.0.1-ubuntu1604"
-	expected_3_0_1.Containers[0].Image = "docker.io/" + cluster.Spec.Image
+	// PWX-32825 tweak the 3.0.2 version slightly -- should still evaluate the same
+	cluster.Spec.Image = "portworx/oci-monitor:3.0.2-ubuntu1604"
+	expected_3_0_2.Containers[0].Image = "docker.io/" + cluster.Spec.Image
 
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
 
-	assertPodSpecEqual(t, expected_3_0_1, &actual)
+	assertPodSpecEqual(t, expected_3_0_2, &actual)
 }
 
 func TestPodSpecForK3s(t *testing.T) {
