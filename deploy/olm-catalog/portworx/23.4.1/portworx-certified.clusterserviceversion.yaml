@@ -9,7 +9,7 @@ metadata:
     description: Cloud native storage solution for production workloads
     containerImage: registry.connect.redhat.com/portworx/openstorage-operator@sha256:93f49fc7420040ff137485b3e040955be97842a39b7be1f5271323d93a184ccb
     repository: https://github.com/libopenstorage/operator
-    createdAt: 2023-09-01T08:21:45Z
+    createdAt: 2023-09-01T09:02:44Z
     support: Portworx, Inc
     certified: "true"
     operatorframework.io/initialization-resource: |-
