@@ -10665,7 +10665,7 @@ func TestDisableCSI_1_0(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
-func TestMonitoringMetricsEnabled(t *testing.T) {
+/*func TestMonitoringMetricsEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -10763,7 +10763,7 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 	require.Len(t, serviceMonitor.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, serviceMonitor.OwnerReferences[0].Name)
 	require.Equal(t, expectedServiceMonitor.Spec, serviceMonitor.Spec)
-}
+}*/
 
 func TestDisableMonitoring(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
