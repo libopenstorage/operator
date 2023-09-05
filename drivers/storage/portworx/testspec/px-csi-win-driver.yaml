@@ -16,7 +16,7 @@ spec:
       serviceAccountName: portworx
       containers:
         - name: windowsinstaller
-          image: docker.io/portworx/px-windows-csi-driver:v0.1
+          image: docker.io/portworx/px-windows-csi-driver:23.8.0
           imagePullPolicy: Always
           securityContext:
             windowsOptions:

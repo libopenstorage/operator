@@ -2191,7 +2191,7 @@ func TestStorageClusterDefaultsForWindows(t *testing.T) {
 
 	err := driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	require.Equal(t, cluster.Status.DesiredImages.CsiWindowsDriver, "docker.io/portworx/px-windows-csi-driver:v0.1")
+	require.Equal(t, cluster.Status.DesiredImages.CsiWindowsDriver, "docker.io/portworx/px-windows-csi-driver:23.8.0")
 	require.Equal(t, cluster.Status.DesiredImages.CsiLivenessProbe, "docker.io/portworx/livenessprobe:v2.10.0-windows")
 	require.Equal(t, cluster.Status.DesiredImages.CsiWindowsNodeRegistrar, "docker.io/portworx/csi-node-driver-registrar:v2.8.0-windows")
 
@@ -2485,6 +2485,11 @@ func TestValidationsForFACDTopology(t *testing.T) {
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				pxutil.AnnotationFACDTopology: "true",
+			},
+		},
 		Spec: corev1.StorageClusterSpec{
 			CommonConfig: corev1.CommonConfig{
 				Env: []v1.EnvVar{
@@ -8555,7 +8560,7 @@ func (m *fakeManifest) GetVersions(
 			DynamicPlugin:              "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:         "nginxinc/nginx-unprivileged:1.23",
 			CsiLivenessProbe:           "docker.io/portworx/livenessprobe:v2.10.0-windows",
-			CsiWindowsDriver:           "docker.io/portworx/px-windows-csi-driver:v0.1",
+			CsiWindowsDriver:           "docker.io/portworx/px-windows-csi-driver:23.8.0",
 			CsiWindowsNodeRegistrar:    "docker.io/portworx/csi-node-driver-registrar:v2.8.0-windows",
 		},
 	}
