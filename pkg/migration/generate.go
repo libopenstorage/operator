@@ -1334,9 +1334,6 @@ func (h *Handler) createManifestConfigMap(cluster *corev1.StorageCluster) error 
 			Pause:                      cluster.Status.DesiredImages.Pause,
 			DynamicPlugin:              cluster.Status.DesiredImages.DynamicPlugin,
 			DynamicPluginProxy:         cluster.Status.DesiredImages.DynamicPluginProxy,
-			CsiLivenessProbe:           cluster.Status.DesiredImages.CsiLivenessProbe,
-			CsiWindowsDriver:           cluster.Status.DesiredImages.CsiWindowsDriver,
-			CsiWindowsNodeRegistrar:    cluster.Status.DesiredImages.CsiWindowsNodeRegistrar,
 		},
 	}
 
