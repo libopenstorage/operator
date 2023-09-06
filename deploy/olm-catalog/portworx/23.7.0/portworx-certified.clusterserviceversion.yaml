@@ -210,21 +210,13 @@ spec:
               affinity:
                 podAntiAffinity:
                   requiredDuringSchedulingIgnoredDuringExecution:
-                    - labelSelector:
-                        matchExpressions:
-                          - key: name
-                            operator: In
-                            values:
-                              - portworx-operator
-                      topologyKey: kubernetes.io/hostname
-                nodeAffinity:
-                  requiredDuringSchedulingIgnoredDuringExecution:
-                    nodeSelectorTerms:
-                      - matchExpressions:
-                          - key: kubernetes.io/os
-                            operator: In
-                            values:
-                              - linux
+                  - labelSelector:
+                      matchExpressions:
+                      - key: name
+                        operator: In
+                        values:
+                        - portworx-operator
+                    topologyKey: kubernetes.io/hostname
               containers:
               - name: portworx-operator
                 image: docker.io/portworx/px-operator:23.7.0-dev
