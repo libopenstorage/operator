@@ -210,17 +210,17 @@ spec:
               affinity:
                 podAntiAffinity:
                   requiredDuringSchedulingIgnoredDuringExecution:
-                    - labelSelector:
-                        matchExpressions:
-                          - key: name
-                            operator: In
-                            values:
-                              - portworx-operator
-                      topologyKey: kubernetes.io/hostname
+                  - labelSelector:
+                      matchExpressions:
+                      - key: name
+                        operator: In
+                        values:
+                        - portworx-operator
+                    topologyKey: kubernetes.io/hostname
                 nodeAffinity:
                   requiredDuringSchedulingIgnoredDuringExecution:
-                    nodeSelectorTerms:
-                      - matchExpressions:
+                    - labelSelector:
+                        matchExpressions:
                           - key: kubernetes.io/os
                             operator: In
                             values:
