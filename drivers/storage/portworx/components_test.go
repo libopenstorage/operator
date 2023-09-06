@@ -74,7 +74,7 @@ func TestOrderOfComponents(t *testing.T) {
 	for i, comp := range components {
 		componentNames[i] = comp.Name()
 	}
-	require.Len(t, components, 19)
+	require.Len(t, components, 18)
 	// Higher priority components come first
 	require.ElementsMatch(t,
 		[]string{
@@ -101,7 +101,6 @@ func TestOrderOfComponents(t *testing.T) {
 			component.PVCControllerComponentName,
 			component.AlertManagerComponentName,
 			component.PluginComponentName,
-			component.WindowsComponentName,
 		},
 		componentNames[3:],
 	)
@@ -143,11 +142,6 @@ func TestBasicComponentsInstall(t *testing.T) {
 										Key:      "px/enabled",
 										Operator: v1.NodeSelectorOpNotIn,
 										Values:   []string{"false"},
-									},
-									{
-										Key:      "kubernetes.io/os",
-										Operator: v1.NodeSelectorOpIn,
-										Values:   []string{"linux"},
 									},
 									{
 										Key:      "node-role.kubernetes.io/master",
@@ -4624,11 +4618,6 @@ func TestCSIInstall(t *testing.T) {
 										Values:   []string{"false"},
 									},
 									{
-										Key:      "kubernetes.io/os",
-										Operator: v1.NodeSelectorOpIn,
-										Values:   []string{"linux"},
-									},
-									{
 										Key:      "node-role.kubernetes.io/master",
 										Operator: v1.NodeSelectorOpDoesNotExist,
 									},
@@ -4683,11 +4672,6 @@ func TestCSIInstallNonPrivileged(t *testing.T) {
 										Key:      "px/enabled",
 										Operator: v1.NodeSelectorOpNotIn,
 										Values:   []string{"false"},
-									},
-									{
-										Key:      "kubernetes.io/os",
-										Operator: v1.NodeSelectorOpIn,
-										Values:   []string{"linux"},
 									},
 									{
 										Key:      "node-role.kubernetes.io/master",
@@ -4840,11 +4824,6 @@ func TestCSIInstallWithk8s1_13(t *testing.T) {
 										Values:   []string{"false"},
 									},
 									{
-										Key:      "kubernetes.io/os",
-										Operator: v1.NodeSelectorOpIn,
-										Values:   []string{"linux"},
-									},
-									{
 										Key:      "node-role.kubernetes.io/master",
 										Operator: v1.NodeSelectorOpDoesNotExist,
 									},
@@ -4960,11 +4939,6 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 										Values:   []string{"false"},
 									},
 									{
-										Key:      "kubernetes.io/os",
-										Operator: v1.NodeSelectorOpIn,
-										Values:   []string{"linux"},
-									},
-									{
 										Key:      "node-role.kubernetes.io/master",
 										Operator: v1.NodeSelectorOpDoesNotExist,
 									},
@@ -4976,11 +4950,6 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 										Key:      "px/enabled",
 										Operator: v1.NodeSelectorOpNotIn,
 										Values:   []string{"false"},
-									},
-									{
-										Key:      "kubernetes.io/os",
-										Operator: v1.NodeSelectorOpIn,
-										Values:   []string{"linux"},
 									},
 									{
 										Key:      "node-role.kubernetes.io/master",
@@ -5196,11 +5165,6 @@ func TestCSIInstallWithPKS(t *testing.T) {
 										Key:      "px/enabled",
 										Operator: v1.NodeSelectorOpNotIn,
 										Values:   []string{"false"},
-									},
-									{
-										Key:      "kubernetes.io/os",
-										Operator: v1.NodeSelectorOpIn,
-										Values:   []string{"linux"},
 									},
 									{
 										Key:      "node-role.kubernetes.io/master",
@@ -5452,11 +5416,6 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 										Key:      "px/enabled",
 										Operator: v1.NodeSelectorOpNotIn,
 										Values:   []string{"false"},
-									},
-									{
-										Key:      "kubernetes.io/os",
-										Operator: v1.NodeSelectorOpIn,
-										Values:   []string{"linux"},
 									},
 									{
 										Key:      "node-role.kubernetes.io/master",
@@ -15452,211 +15411,6 @@ func TestPluginInstallAndUninstall(t *testing.T) {
 
 }
 
-// test if install can be enabled on windows and non-windows node clusters
-// test on only linux node cluster with k8s version 1.25.0 that install should be disabled
-func TestWindowsComponentEnabled(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.25.0",
-	}
-
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-
-	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
-
-	cluster := &corev1.StorageCluster{}
-	windowsComponent, _ := component.Get(component.WindowsComponentName)
-
-	node1 := &v1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "node1",
-			Labels: map[string]string{
-				"kubernetes.io/os": "linux",
-			},
-		},
-	}
-
-	err = k8sClient.Create(context.TODO(), node1)
-	require.NoError(t, err)
-
-	enabled := windowsComponent.IsEnabled(cluster)
-	require.Equal(t, false, enabled)
-}
-
-// test that on windows node with k8s version 1.24.0 install should be disabled
-func TestWindowsComponentEnabledOnWindowsNodeWithK8s124(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.24.0",
-	}
-
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-
-	cluster := &corev1.StorageCluster{}
-	windowsComponent, _ := component.Get(component.WindowsComponentName)
-
-	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
-
-	node := &v1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "node",
-			Labels: map[string]string{
-				"kubernetes.io/os": "windows",
-			},
-		},
-	}
-
-	err = k8sClient.Create(context.TODO(), node)
-	require.NoError(t, err)
-
-	enabled := windowsComponent.IsEnabled(cluster)
-	require.Equal(t, false, enabled)
-}
-
-// test that on windows node with k8s version 1.25.0 install should be disabled
-func TestWindowsComponentEnabledOnWindowsNodeWithK8s125(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.25.0",
-	}
-
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-
-	cluster := &corev1.StorageCluster{}
-	windowsComponent, _ := component.Get(component.WindowsComponentName)
-
-	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
-
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.25.0",
-	}
-
-	node := &v1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "node",
-			Labels: map[string]string{
-				"kubernetes.io/os": "windows",
-			},
-		},
-	}
-
-	err = k8sClient.Create(context.TODO(), node)
-	require.NoError(t, err)
-
-	enabled := windowsComponent.IsEnabled(cluster)
-	require.Equal(t, true, enabled)
-}
-
-// test installation of daemonset and storageclass, and uninstall
-func TestWindowsComponentInstallAndUninstall(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.25.0",
-	}
-
-	reregisterComponents()
-	node := &v1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "node1",
-			Labels: map[string]string{
-				"kubernetes.io/os": "windows",
-			},
-		},
-	}
-
-	k8sClient := testutil.FakeK8sClient()
-	err := k8sClient.Create(context.TODO(), node)
-	require.NoError(t, err)
-
-	driver := portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-system",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Image: "px/image:2.10.0",
-			CSI: &corev1.CSISpec{
-				Enabled: true,
-			},
-			Placement: &corev1.PlacementSpec{
-				NodeAffinity: &v1.NodeAffinity{
-					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-						NodeSelectorTerms: []v1.NodeSelectorTerm{
-							{
-								MatchExpressions: []v1.NodeSelectorRequirement{
-									{
-										Key:      "kubernetes.io/os",
-										Operator: v1.NodeSelectorOpIn,
-										Values:   []string{"linux"},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	// test creation of px-csi-win-shared daemonset
-	expectedWinCsiDs := testutil.GetExpectedDaemonSet(t, "px-csi-node-win.yaml")
-	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &expectedWinCsiDs.Spec.Template.Spec)
-	pxutil.ApplyWindowsSettingsToPodSpec(&expectedWinCsiDs.Spec.Template.Spec)
-	actualWinCsiDs := &appsv1.DaemonSet{}
-	err = testutil.Get(k8sClient, actualWinCsiDs, component.WindowsCsiDaemonsetName, "kube-system")
-	require.NoError(t, err)
-	require.Equal(t, expectedWinCsiDs.Name, actualWinCsiDs.Name)
-	require.Equal(t, expectedWinCsiDs.Spec, actualWinCsiDs.Spec)
-
-	// test creation of px-installer-win-shared daemonset
-	expectedWinInstallerDs := testutil.GetExpectedDaemonSet(t, "px-csi-win-driver.yaml")
-	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &expectedWinInstallerDs.Spec.Template.Spec)
-	pxutil.ApplyWindowsSettingsToPodSpec(&expectedWinInstallerDs.Spec.Template.Spec)
-	actualWinInstallerDs := &appsv1.DaemonSet{}
-	err = testutil.Get(k8sClient, actualWinInstallerDs, component.WindowsDriverDaemonsetName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, expectedWinInstallerDs.Name, actualWinInstallerDs.Name)
-	require.Equal(t, expectedWinInstallerDs.Spec, actualWinInstallerDs.Spec)
-
-	// test creation od storageclass
-	expectedSC := testutil.GetExpectedStorageClass(t, "px-csi-win-storageclass.yaml")
-	actualSc := &storagev1.StorageClass{}
-	err = testutil.Get(k8sClient, actualSc, component.WindowsStorageClass, "")
-	require.NoError(t, err)
-	require.Equal(t, expectedSC.Name, actualSc.Name)
-	require.Equal(t, expectedSC.Parameters, actualSc.Parameters)
-	require.Equal(t, expectedSC.Provisioner, actualSc.Provisioner)
-	require.Equal(t, expectedSC.ReclaimPolicy, actualSc.ReclaimPolicy)
-	require.Equal(t, expectedSC.VolumeBindingMode, actualSc.VolumeBindingMode)
-
-	// test deletion
-	pluginComponent, _ := component.Get(component.WindowsComponentName)
-	err = pluginComponent.Delete(cluster)
-	require.NoError(t, err)
-}
-
 func reregisterComponents() {
 	// Skipping registering of some components to avoid blocking
 	// other tests. Skipped components: PortworxCRD, DisruptionBudget
@@ -15677,7 +15431,6 @@ func reregisterComponents() {
 	component.RegisterTelemetryComponent()
 	component.RegisterSCCComponent()
 	component.RegisterPortworxPluginComponent()
-	component.RegisterWindowsComponent()
 	pxutil.SpecsBaseDir = func() string {
 		return "../../../bin/configs"
 	}
