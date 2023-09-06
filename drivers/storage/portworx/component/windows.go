@@ -206,8 +206,8 @@ func (w *windows) createDaemonSet(filename, daemonsetName, nameSpace string, clu
 func (w *windows) getDesiredNodeRegistrarImage(cluster *corev1.StorageCluster) string {
 	var imageName string
 
-	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.CsiWindowsNodeRegistrar != "" {
-		imageName = cluster.Status.DesiredImages.CsiWindowsNodeRegistrar
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {
+		imageName = cluster.Status.DesiredImages.CSINodeDriverRegistrar
 	}
 	imageName = util.GetImageURN(cluster, imageName)
 	return imageName
