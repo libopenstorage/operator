@@ -107,7 +107,8 @@ type template struct {
 
 func newTemplate(
 	cluster *corev1.StorageCluster,
-	nodeName string) (*template, error) {
+	nodeName string,
+) (*template, error) {
 	if cluster == nil {
 		return nil, fmt.Errorf("storage cluster cannot be empty")
 	}
@@ -1062,6 +1063,9 @@ func (t *template) getArguments() []string {
 		}
 	}
 	if len(rtOpts) > 0 {
+		sort.SliceStable(rtOpts, func(i, j int) bool {
+			return strings.Compare(rtOpts[i], rtOpts[j]) < 0
+		})
 		args = append(args, "-rt_opts", strings.Join(rtOpts, ","))
 	}
 
