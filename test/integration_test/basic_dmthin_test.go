@@ -169,7 +169,7 @@ var testDmthinCases = []types.TestCase{
 
 var testDmthinInstallFailedCases = []types.TestCase{
 	{
-		TestName: "TestStorageClusterDmthinWithoutPxStoreV2OptionInstallFailed",
+		TestName: "TestStorageClusterIncompatibleNodeDmthin",
 		TestSpec: func(t *testing.T) interface{} {
 			provider := cloud_provider.GetCloudProvider()
 			cluster := defaultDmthinSpec(t, false)
@@ -190,7 +190,7 @@ func TestStorageClusterDmthinWithoutPxStoreV2Option(t *testing.T) {
 	}
 }
 
-func TestStorageClusterDmthinWithoutPxStoreV2OptionInstallFailed(t *testing.T) {
+func TestStorageClusterIncompatibleNodeDmthin(t *testing.T) {
 	for _, testCase := range testDmthinInstallFailedCases {
 		testCase.RunTest(t)
 	}
