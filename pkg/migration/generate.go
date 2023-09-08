@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -78,6 +79,42 @@ var (
 		pxutil.EnvKeyPortworxNamespace: true,
 	}
 )
+
+type volumeArgsSorter struct {
+	pxVols map[string]interface{}
+	vols   []string
+}
+
+func (v *volumeArgsSorter) Init() {
+	v.vols = []string{}
+	v.pxVols = map[string]interface{}{
+		"/var/cache":              nil,
+		"/opt/pwx":                nil,
+		"/var/cores":              nil,
+		"/var/vcap/store/cores":   nil,
+		"/etc/pwx":                nil,
+		"/var/vcap/store/etc/pwx": nil,
+		"/var/run/log":            nil,
+		"/var/log":                nil,
+	}
+}
+
+func (v *volumeArgsSorter) Len() int {
+	return len(v.vols)
+}
+
+func (v *volumeArgsSorter) Less(i, j int) bool {
+	_, isPxVol := v.pxVols[v.vols[i]]
+	return isPxVol
+}
+
+func (v *volumeArgsSorter) Swap(i, j int) {
+	v.vols[i], v.vols[j] = v.vols[j], v.vols[i]
+}
+
+func (v *volumeArgsSorter) Args() string {
+	return "-v " + strings.Join(v.vols, " -v ")
+}
 
 func (h *Handler) createStorageCluster(
 	ds *appsv1.DaemonSet,
@@ -194,6 +231,9 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) (*corev1.Storage
 		userpwd  string
 	}{}
 	miscArgs := ""
+	volumeArgs := &volumeArgsSorter{}
+	volumeArgs.Init()
+
 	autoJournalEnabled := false
 
 	for i := 0; i < len(c.Args); i++ {
@@ -413,9 +453,19 @@ func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) (*corev1.Storage
 		} else if arg == "--log" {
 			cluster.Annotations[pxutil.AnnotationLogFile] = c.Args[i+1]
 			i++
+		} else if arg == "-v" {
+			volumeArgs.vols = append(volumeArgs.vols, c.Args[i+1])
+			sort.Sort(volumeArgs)
+			logrus.Infof(`volumeArgs args: "%s" vols: [%+v] `, volumeArgs.Args(), volumeArgs.vols)
+			i++
 		} else {
 			miscArgs += arg + " "
 		}
+	}
+
+	if len(volumeArgs.vols) > 0 {
+		sort.Sort(volumeArgs)
+		miscArgs += volumeArgs.Args()
 	}
 
 	if autoJournalEnabled {

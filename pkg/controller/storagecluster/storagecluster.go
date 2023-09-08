@@ -725,6 +725,72 @@ func (c *Controller) createOrUpdateDeprecatedCRD() error {
 	return nil
 }
 
+type volumeArgsSorter struct {
+	pxVols map[string]interface{}
+	vols   []string
+}
+
+func (v *volumeArgsSorter) Init() {
+	v.vols = []string{}
+	v.pxVols = map[string]interface{}{
+		"/var/cache":              nil,
+		"/opt/pwx":                nil,
+		"/var/cores":              nil,
+		"/var/vcap/store/cores":   nil,
+		"/etc/pwx":                nil,
+		"/var/vcap/store/etc/pwx": nil,
+		"/var/run/log":            nil,
+		"/var/log":                nil,
+	}
+}
+
+func (v *volumeArgsSorter) Len() int {
+	return len(v.vols)
+}
+
+func (v *volumeArgsSorter) Less(i, j int) bool {
+	path := strings.Split(v.vols[i], ":")[0]
+	_, isPxVol := v.pxVols[path]
+	return isPxVol
+}
+
+func (v *volumeArgsSorter) Swap(i, j int) {
+	v.vols[i], v.vols[j] = v.vols[j], v.vols[i]
+}
+
+func (v *volumeArgsSorter) Args() string {
+	return "-v " + strings.Join(v.vols, " -v ")
+}
+func (c *Controller) sortVolumeOrderInMiscArgs(cluster *corev1.StorageCluster) {
+	volumeArgs := &volumeArgsSorter{}
+	volumeArgs.Init()
+
+	r := regexp.MustCompile(`\"[^\"]+\"|\S+`)
+
+	args := r.FindAllString(cluster.Annotations[pxutil.AnnotationMiscArgs], -1)
+	if args == nil {
+		return
+	}
+
+	newMiscArgs := ""
+
+	for i := 0; i < len(args); i++ {
+		if args[i] == "-v" {
+			i++
+			volumeArgs.vols = append(volumeArgs.vols, args[i])
+		} else {
+			newMiscArgs += args[i] + " "
+		}
+	}
+
+	if len(volumeArgs.vols) > 0 {
+		sort.Sort(volumeArgs)
+		cluster.Annotations[pxutil.AnnotationMiscArgs] = newMiscArgs + volumeArgs.Args()
+	}
+	logrus.Infof("Updated misc args with sorted volume: %s", cluster.Annotations[pxutil.AnnotationMiscArgs])
+
+}
+
 func (c *Controller) miscCleanUp(cluster *corev1.StorageCluster) error {
 	// cleanup  depricated -T dmthin
 	if _, miscExists := cluster.Annotations[pxutil.AnnotationMiscArgs]; miscExists {
@@ -774,6 +840,8 @@ func (c *Controller) syncStorageCluster(
 		}
 		cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 	}
+
+	c.sortVolumeOrderInMiscArgs(cluster)
 
 	if err := c.miscCleanUp(cluster); err != nil {
 		return err
