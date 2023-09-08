@@ -16263,7 +16263,53 @@ func TestWindowsComponentEnabledOnWindowsNodeWithK8s124(t *testing.T) {
 	require.Equal(t, false, enabled)
 }
 
-// test that on windows node with k8s version 1.25.0 install should be disabled
+// test that on windows node with k8s version 1.25.0 and CSI disabled install should be disabled
+func TestWindowsComponentEnabledWhenCsiDisabled(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.0",
+	}
+
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.10.0",
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+		},
+	}
+
+	windowsComponent, _ := component.Get(component.WindowsComponentName)
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	node := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node",
+			Labels: map[string]string{
+				"kubernetes.io/os": "windows",
+			},
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), node)
+	require.NoError(t, err)
+
+	enabled := windowsComponent.IsEnabled(cluster)
+	require.Equal(t, false, enabled)
+}
+
+// test that on windows node with k8s version 1.25.0 and CSI enabled install should be enabled
 func TestWindowsComponentEnabledOnWindowsNodeWithK8s125(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
@@ -16274,16 +16320,24 @@ func TestWindowsComponentEnabledOnWindowsNodeWithK8s125(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 
-	cluster := &corev1.StorageCluster{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.10.0",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
+			},
+		},
+	}
+
 	windowsComponent, _ := component.Get(component.WindowsComponentName)
 
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
-
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.25.0",
-	}
 
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
