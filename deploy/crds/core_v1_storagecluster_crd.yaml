@@ -3938,6 +3938,9 @@ spec:
                   csiDriverWin:
                     type: string
                     description: Desired image for csi driver for windows.
+                  csiWindowsNodeRegistrar:
+                    type: string
+                    description: Desired image for csi driver for windows.
                   csiDriverRegistrar:
                     type: string
                     description: Desired image for CSI driver registrar.
