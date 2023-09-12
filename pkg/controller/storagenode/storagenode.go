@@ -376,9 +376,12 @@ func (c *Controller) syncStorage(
 				}
 			}
 
-			value, present := podCopy.Annotations[constants.OperatorLabelManagedByKey]
+			value, present := podCopy.Labels[constants.OperatorLabelManagedByKey]
 			if !present || value != constants.OperatorLabelManagedByValue {
-				podCopy.Annotations[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
+				if podCopy.Labels == nil {
+					podCopy.Labels = make(map[string]string)
+				}
+				podCopy.Labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
 				updateNeeded = true
 			}
 

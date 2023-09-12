@@ -1063,6 +1063,7 @@ func (c *Controller) syncNodes(
 			go func(idx int) {
 				defer createWait.Done()
 				nodeName := nodesNeedingStoragePods[idx]
+				podTemplates[idx].Labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
 				err := c.podControl.CreatePods(
 					context.TODO(),
 					cluster.Namespace,
@@ -1248,6 +1249,7 @@ func (c *Controller) createPodTemplateForNodeGroup(
 		if err != nil {
 			return err
 		}
+
 		*nodesNeedingStoragePods = append(*nodesNeedingStoragePods, node.Name)
 		*podTemplates = append(*podTemplates, podTemplate.DeepCopy())
 		delete(remainingNodes, node.Name)
@@ -1369,7 +1371,6 @@ func (c *Controller) CreatePodTemplate(
 		},
 		Spec: podSpec,
 	}
-	newTemplate.Labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
 
 	if !pxutil.IsPrivileged(cluster) {
 		// turn off AppArmor?

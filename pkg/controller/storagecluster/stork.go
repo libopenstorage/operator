@@ -85,6 +85,11 @@ var (
 		"component": "scheduler",
 		"name":      storkSchedDeploymentName,
 	}
+	storkSchedulerDeploymentPodLabels = map[string]string{
+		"tier":      "control-plane",
+		"component": "scheduler",
+		"name":      storkSchedDeploymentName,
+	}
 	storkSchedulerDeploymentSelectorLabels = map[string]string{
 		"tier":      "control-plane",
 		"component": "scheduler",
@@ -1047,7 +1052,7 @@ func getStorkSchedDeploymentSpec(
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   storkSchedDeploymentName,
-					Labels: storkSchedulerDeploymentLabels,
+					Labels: storkSchedulerDeploymentPodLabels,
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: storkSchedServiceAccountName,

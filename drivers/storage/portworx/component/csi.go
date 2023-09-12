@@ -522,10 +522,9 @@ func (c *csi) createDeployment(
 		util.HasSchedulerStateChanged(cluster, existingDeployment.Spec.Template.Spec.SchedulerName) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations) ||
 		util.HaveTopologySpreadConstraintsChanged(updatedTopologySpreadConstraints,
-			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints)
-	hasCSITopologyChanged(cluster, existingDeployment)
+			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints) ||
+		hasCSITopologyChanged(cluster, existingDeployment)
 	if !c.isCreated || modified {
-
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}

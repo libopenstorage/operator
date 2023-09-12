@@ -55,6 +55,10 @@ var (
 		"name": PVCDeploymentName,
 		"tier": "control-plane",
 	}
+	pvcControllerDeploymentSelectorLabels = map[string]string{
+		"name": PVCDeploymentName,
+		"tier": "control-plane",
+	}
 )
 
 type pvcController struct {
@@ -369,7 +373,7 @@ func (c *pvcController) createDeployment(
 		}
 	}
 
-	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.k8sClient, pvcControllerDeploymentTemplateLabels)
+	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.k8sClient, pvcControllerDeploymentSelectorLabels)
 	if err != nil {
 		return err
 	}
@@ -437,7 +441,7 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
-				MatchLabels: pvcControllerDeploymentTemplateLabels,
+				MatchLabels: pvcControllerDeploymentSelectorLabels,
 			},
 			Replicas: &replicas,
 			Strategy: appsv1.DeploymentStrategy{
