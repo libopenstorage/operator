@@ -1400,7 +1400,7 @@ func CleanupObject(obj client.Object) {
 
 // IsFreshInstall checks whether it's a fresh Portworx install
 func IsFreshInstall(cluster *corev1.StorageCluster) bool {
-	// To handle failures during fresh install e.g. validation falures,
+	// To handle failures during fresh install e.g. validation failures,
 	// extra check for px runtime states is added here to avoid unexpected behaviors
 	return cluster.Status.Phase == "" ||
 		cluster.Status.Phase == string(corev1.ClusterStateInit) ||
