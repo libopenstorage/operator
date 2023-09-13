@@ -34,7 +34,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/record"
-	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -355,7 +355,7 @@ func (d *DryRun) installAllComponents() error {
 
 	// We need to reconcile all components again with portworx enabled.
 	// Although it's done in controller reconcile, portworx was disabled to avoid calling to portworx SDKs,
-	//and many components are disabled when portworx is disabled.
+	// and many components are disabled when portworx is disabled.
 	d.cluster.Annotations[constants.AnnotationDisableStorage] = "false"
 
 	for _, comp := range component.GetAll() {
@@ -505,8 +505,8 @@ func (d *DryRun) validateObjects(dsObjs, operatorObjs []client.Object, h *migrat
 				opObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Env = nil
 			} else if name == "portworx-pvc-controller" {
 				// On IKS, pvc controller container will not have these two arguments after migration: leader-elect-resource-name=portworx-pvc-controller and --secure-port=9031
-				//WARN[0023] command is different: before-migration [kube-controller-manager --leader-elect=true --secure-port=9031 --controllers=persistentvolume-binder,persistentvolume-expander --use-service-account-credentials=true --leader-elect-resource-lock=configmaps --leader-elect-resource-name=portworx-pvc-controller], after-migration [kube-controller-manager --leader-elect=true --controllers=persistentvolume-binder,persistentvolume-expander --use-service-account-credentials=true --leader-elect-resource-lock=configmaps]
-				//WARN[0023] Containers are different: container portworx-pvc-controller-manager is different
+				// WARN[0023] command is different: before-migration [kube-controller-manager --leader-elect=true --secure-port=9031 --controllers=persistentvolume-binder,persistentvolume-expander --use-service-account-credentials=true --leader-elect-resource-lock=configmaps --leader-elect-resource-name=portworx-pvc-controller], after-migration [kube-controller-manager --leader-elect=true --controllers=persistentvolume-binder,persistentvolume-expander --use-service-account-credentials=true --leader-elect-resource-lock=configmaps]
+				// WARN[0023] Containers are different: container portworx-pvc-controller-manager is different
 				dsObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
 				opObj.(*appsv1.Deployment).Spec.Template.Spec.Containers[0].Command = nil
 			} else if name == "autopilot" {
