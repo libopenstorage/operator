@@ -3,7 +3,7 @@ module github.com/libopenstorage/operator
 go 1.19
 
 require (
-	github.com/aws/aws-sdk-go v1.40.39
+	github.com/aws/aws-sdk-go v1.44.116
 	github.com/go-logr/logr v1.2.3
 	github.com/golang-jwt/jwt/v4 v4.3.0
 	github.com/golang/mock v1.6.0
@@ -16,7 +16,7 @@ require (
 	github.com/operator-framework/api v0.17.1
 	github.com/pborman/uuid v1.2.1
 	github.com/portworx/kvdb v0.0.0-20230326003017-21a38cf82d4b
-	github.com/portworx/sched-ops k8s_126
+	github.com/portworx/sched-ops v1.20.4-rc1.0.20230911091219-c91123f557ed
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.63.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
 	github.com/sirupsen/logrus v1.9.0
@@ -32,11 +32,11 @@ require (
 	k8s.io/code-generator v0.26.1
 	k8s.io/component-base v0.26.1
 	k8s.io/component-helpers v0.26.1
+	k8s.io/dynamic-resource-allocation v0.26.1
 	k8s.io/klog v1.0.0
 	k8s.io/kube-scheduler v0.0.0
 	k8s.io/kubernetes v1.26.1
 	k8s.io/utils v0.0.0-20230313181309-38a27ef9d749
-	k8s.io/dynamic-resource-allocation v0.26.1
 	sigs.k8s.io/cluster-api v0.2.11
 	sigs.k8s.io/controller-runtime v0.14.5
 	sigs.k8s.io/controller-tools v0.11.3
@@ -128,16 +128,15 @@ require (
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiserver v0.26.1 // indirect
-	k8s.io/gengo v0.0.0-20211129171323-c02415ce4185 // indirect
+	k8s.io/gengo v0.0.0-20220902162205-c0856e24416d // indirect
 	k8s.io/klog/v2 v2.90.1 // indirect
-	k8s.io/dynamic-resource-allocation v0.26.1
 	k8s.io/kube-openapi v0.0.0-20221012153701-172d655c2280 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
 
 replace (
-	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage k8s_126
+	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v1.8.1-0.20230908101825-dbe02a9bb23f
 	github.com/libopenstorage/openstorage => github.com/libopenstorage/openstorage v1.0.1-0.20230511212757-41751b27d69f
 	golang.org/x/tools => golang.org/x/tools v0.1.11
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
@@ -160,6 +159,8 @@ replace (
 	k8s.io/controller-manager => k8s.io/controller-manager v0.26.1
 	k8s.io/cri-api => k8s.io/cri-api v0.26.1
 	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.26.1
+	k8s.io/dynamic-resource-allocation => k8s.io/dynamic-resource-allocation v0.26.1
+	k8s.io/kms => k8s.io/kms v0.26.1
 	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.26.1
 	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.26.1
 	k8s.io/kube-proxy => k8s.io/kube-proxy v0.26.1
