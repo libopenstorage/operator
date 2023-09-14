@@ -54,7 +54,7 @@ const (
 
 	// default dynamic plugin images
 	DefaultDynamicPluginImage      = "portworx/portworx-dynamic-plugin:1.1.0"
-	DefaultDynamicPluginProxyImage = "nginxinc/nginx-unprivileged:1.23"
+	DefaultDynamicPluginProxyImage = "nginxinc/nginx-unprivileged:1.25"
 
 	defaultManifestRefreshInterval = 3 * time.Hour
 )
