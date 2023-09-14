@@ -40,7 +40,7 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
-			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
+			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -79,7 +79,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.0",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
-			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
+			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
 		},
 	}
 
@@ -170,7 +170,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
-			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
+			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -261,7 +261,7 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			LogUploader:               "purestorage/log-upload:1.0.0",
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
-			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
+			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -342,7 +342,7 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			MetricsCollector:          "purestorage/realtime-metrics:1.0.1",
 			MetricsCollectorProxy:     "envoyproxy/envoy:v1.21.4",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
-			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.23",
+			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
 		},
 	}
 	cluster := &corev1.StorageCluster{

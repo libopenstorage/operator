@@ -21,7 +21,7 @@ spec:
             secretName: px-plugin-proxy
       containers:
         - name: nginx
-          image: docker.io/nginxinc/nginx-unprivileged:1.23
+          image: docker.io/nginxinc/nginx-unprivileged:1.25
           ports:
             - name: http
               containerPort: 8080
