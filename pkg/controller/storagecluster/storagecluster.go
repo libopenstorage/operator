@@ -157,7 +157,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 func (c *Controller) StartWatch() error {
 
 	err := c.ctrl.Watch(
-		&source.Kind{Type: &corev1.StorageCluster{}},
+		source.Kind(nil, &corev1.StorageCluster{}),
 		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
@@ -166,11 +166,8 @@ func (c *Controller) StartWatch() error {
 
 	// Watch for changes to Pods that belong to StorageCluster object
 	err = c.ctrl.Watch(
-		&source.Kind{Type: &v1.Pod{}},
-		&handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &corev1.StorageCluster{},
-		},
+		source.Kind(nil, &v1.Pod{}),
+		handler.EnqueueRequestForOwner(nil, nil, &corev1.StorageCluster{}),
 	)
 	if err != nil {
 		return err
@@ -178,11 +175,8 @@ func (c *Controller) StartWatch() error {
 
 	// Watch for changes to ControllerRevisions that belong to StorageCluster object
 	err = c.ctrl.Watch(
-		&source.Kind{Type: &apps.ControllerRevision{}},
-		&handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &corev1.StorageCluster{},
-		},
+		source.Kind(nil, &apps.ControllerRevision{}),
+		handler.EnqueueRequestForOwner(nil, nil, &corev1.StorageCluster{}),
 	)
 	if err != nil {
 		return err

@@ -188,7 +188,7 @@ replace (
 	// depends on k8s.io/kubernetes. See https://github.com/kubernetes/kubernetes/issues/79384#issuecomment-505725449
 	k8s.io/api => k8s.io/api v0.26.1
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.26.1
-	k8s.io/apimachinery => k8s.io/apimachinery v0.26.1
+	k8s.io/apimachinery => k8s.io/apimachinery v0.27.2
 	k8s.io/apiserver => k8s.io/apiserver v0.26.1
 	k8s.io/cli-runtime => k8s.io/cli-runtime v0.26.1
 	k8s.io/client-go => k8s.io/client-go v0.26.1
@@ -216,5 +216,5 @@ replace (
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.26.1
 	sigs.k8s.io/cluster-api => sigs.k8s.io/cluster-api v1.5.1
 
-	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.13.0
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.15.1
 )

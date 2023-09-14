@@ -79,7 +79,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 // StartWatch starts the watch on the StorageNode
 func (c *Controller) StartWatch() error {
 	err := c.ctrl.Watch(
-		&source.Kind{Type: &corev1.StorageNode{}},
+		source.Kind(nil, &corev1.StorageNode{}),
 		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
