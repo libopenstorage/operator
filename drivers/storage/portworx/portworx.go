@@ -91,6 +91,22 @@ func (p *portworx) Init(
 	return nil
 }
 
+func createSecurityContextForValidate(recorder record.EventRecorder, cluster *corev1.StorageCluster) error {
+	if secComp, exists := component.Get(component.SCCComponentName); exists {
+		if secComp.IsEnabled(cluster) {
+			err := secComp.Reconcile(cluster)
+			if ce, ok := err.(*component.Error); ok &&
+				ce.Code() == component.ErrCritical {
+				return fmt.Errorf("pre-flight: %s component setup failed: %v", secComp.Name(), err)
+			} else if err != nil {
+				msg := fmt.Sprintf("pre-flight: failed to setup %s. %v", secComp.Name(), err)
+				k8sutil.WarningEvent(recorder, cluster, util.FailedComponentReason, msg)
+			}
+		}
+	}
+	return nil
+}
+
 func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 
 	condition := &corev1.ClusterCondition{
@@ -131,6 +147,12 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		logrus.Infof(condition.Message)
 		deletePreflight()
 		return nil
+	}
+
+	if err := createSecurityContextForValidate(p.recorder, cluster); err != nil {
+		setClusterCondition(corev1.ClusterConditionStatusFailed, err.Error())
+		deletePreflight()
+		return err
 	}
 
 	// Start the pre-flight container. The pre-flight checks at this time are specific to enabling DMthin
