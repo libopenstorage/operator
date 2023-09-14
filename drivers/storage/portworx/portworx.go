@@ -53,8 +53,7 @@ const (
 )
 
 var (
-	ErrNodeListEmpty  = stderr.New("no nodes were available for px installation")
-	installSecContext = true
+	ErrNodeListEmpty = stderr.New("no nodes were available for px installation")
 )
 
 type portworx struct {
@@ -117,12 +116,6 @@ func EnableSecurityContextForValidate(recorder record.EventRecorder, cluster *co
 
 func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 
-	if installSecContext {
-		if err := EnableSecurityContextForValidate(p.recorder, cluster); err == nil {
-			installSecContext = false // if no err, done enabling
-		}
-	}
-
 	condition := &corev1.ClusterCondition{
 		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypePreflight,
@@ -161,6 +154,12 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		logrus.Infof(condition.Message)
 		deletePreflight()
 		return nil
+	}
+
+	if err := EnableSecurityContextForValidate(p.recorder, cluster); err != nil {
+		setClusterCondition(corev1.ClusterConditionStatusFailed, err.Error())
+		deletePreflight()
+		return err
 	}
 
 	// Start the pre-flight container. The pre-flight checks at this time are specific to enabling DMthin
