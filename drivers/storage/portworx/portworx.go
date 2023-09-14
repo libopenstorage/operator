@@ -53,7 +53,8 @@ const (
 )
 
 var (
-	ErrNodeListEmpty = stderr.New("no nodes were available for px installation")
+	ErrNodeListEmpty  = stderr.New("no nodes were available for px installation")
+	installSecContext = true
 )
 
 type portworx struct {
@@ -98,7 +99,29 @@ func (p *portworx) Init(
 	return nil
 }
 
+func EnableSecurityContextForValidate(recorder record.EventRecorder, cluster *corev1.StorageCluster) error {
+	if secComp, exists := component.Get(component.SCCComponentName); exists {
+		if secComp.IsEnabled(cluster) {
+			err := secComp.Reconcile(cluster)
+			if ce, ok := err.(*component.Error); ok &&
+				ce.Code() == component.ErrCritical {
+				return fmt.Errorf("pre-flight: %s component setup failed: %v", secComp.Name(), err)
+			} else if err != nil {
+				msg := fmt.Sprintf("pre-flight: failed to setup %s. %v", secComp.Name(), err)
+				k8sutil.WarningEvent(recorder, cluster, util.FailedComponentReason, msg)
+			}
+		}
+	}
+	return nil
+}
+
 func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
+
+	if installSecContext {
+		if err := EnableSecurityContextForValidate(p.recorder, cluster); err == nil {
+			installSecContext = false // if no err, done enabling
+		}
+	}
 
 	condition := &corev1.ClusterCondition{
 		Source: pxutil.PortworxComponentName,
