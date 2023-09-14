@@ -98,7 +98,7 @@ func (p *portworx) Init(
 	return nil
 }
 
-func EnableSecurityContextForValidate(recorder record.EventRecorder, cluster *corev1.StorageCluster) error {
+func createSecurityContextForValidate(recorder record.EventRecorder, cluster *corev1.StorageCluster) error {
 	if secComp, exists := component.Get(component.SCCComponentName); exists {
 		if secComp.IsEnabled(cluster) {
 			err := secComp.Reconcile(cluster)
@@ -156,7 +156,7 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		return nil
 	}
 
-	if err := EnableSecurityContextForValidate(p.recorder, cluster); err != nil {
+	if err := createSecurityContextForValidate(p.recorder, cluster); err != nil {
 		setClusterCondition(corev1.ClusterConditionStatusFailed, err.Error())
 		deletePreflight()
 		return err

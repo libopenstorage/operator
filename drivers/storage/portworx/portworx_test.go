@@ -236,7 +236,7 @@ func TestValidate(t *testing.T) {
 	err = k8sClient.Create(context.TODO(), crd)
 	require.NoError(t, err)
 
-	err = EnableSecurityContextForValidate(recorder, cluster)
+	err = createSecurityContextForValidate(recorder, cluster)
 	require.NoError(t, err)
 
 	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
