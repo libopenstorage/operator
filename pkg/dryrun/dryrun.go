@@ -163,7 +163,7 @@ func (d *DryRun) Init(kubeconfig, outputFolder, storageClusterFile string) error
 		Host:    "127.0.0.1",
 		APIPath: "fake",
 	}).AnyTimes()
-	d.mockControllerMgr.EXPECT().SetFields(gomock.Any()).Return(nil).AnyTimes()
+	d.mockControllerMgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 	d.mockControllerMgr.EXPECT().GetCache().Return(mockCache).AnyTimes()
 	d.mockControllerMgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 	d.mockControllerMgr.EXPECT().GetLogger().Return(log.Log.WithName("test")).AnyTimes()
