@@ -731,7 +731,7 @@ func TestStcMountsAndOverrides(t *testing.T) {
 		mk("journalmount2", "/var/log", "/var/log", true, propNil),
 	}
 
-	testVols := getCommonVolumeList(pxutil.MinimumPxVersionAutoTLS)
+	testVols := getCommonVolumeList(pxVer2_13_8)
 	for i := range testVols {
 		testVols[i].pks = nil
 	}
