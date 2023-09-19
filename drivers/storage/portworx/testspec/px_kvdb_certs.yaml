@@ -12,6 +12,7 @@ spec:
   template:
     metadata:
       labels:
+        operator.libopenstorage.org/managed-by: portworx
         name: portworx
     spec:
       hostNetwork: true

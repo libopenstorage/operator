@@ -11,6 +11,7 @@ spec:
   template:
     metadata:
       labels:
+        operator.libopenstorage.org/managed-by: portworx
         app: px-csi-driver
     spec:
       affinity:

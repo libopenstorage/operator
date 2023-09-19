@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	version "github.com/hashicorp/go-version"
+	ocp_secv1 "github.com/openshift/api/security/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -207,7 +208,7 @@ func TestValidate(t *testing.T) {
 	preFlighter := NewPreFlighter(cluster, k8sClient, podSpec)
 	require.NotNil(t, preFlighter)
 
-	/// Create preflighter podSpec
+	// / Create preflighter podSpec
 	preflightDSCheck, err := preFlighter.CreatePreFlightDaemonsetSpec(clusterRef)
 	require.NoError(t, err)
 	require.NotNil(t, preflightDSCheck)
@@ -218,6 +219,34 @@ func TestValidate(t *testing.T) {
 			require.True(t, volumeMount.Name != "ccm-phonehome-config")
 		}
 	}
+
+	// Check OCP Security component setting function
+	expectedSCC := testutil.GetExpectedSCC(t, "portworxSCC.yaml")
+	scc := &ocp_secv1.SecurityContextConstraints{}
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NotNil(t, err)
+
+	expectedPxRestrictedSCC := testutil.GetExpectedSCC(t, "portworxRestrictedSCC.yaml")
+	pxRestrictedSCC := &ocp_secv1.SecurityContextConstraints{}
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NotNil(t, err)
+
+	// Install with SCC enabled
+	crd := testutil.GetExpectedCRDV1(t, "sccCrd.yaml")
+	err = k8sClient.Create(context.TODO(), crd)
+	require.NoError(t, err)
+
+	err = createSecurityContextForValidate(recorder, cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSCC, scc)
+
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSCC, scc)
+
 }
 
 func TestValidateCheckFailure(t *testing.T) {
@@ -2579,7 +2608,7 @@ func TestStorageClusterDefaultsForPlugin(t *testing.T) {
 	err := driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.Equal(t, cluster.Status.DesiredImages.DynamicPlugin, "portworx/portworx-dynamic-plugin:1.1.0")
-	require.Equal(t, cluster.Status.DesiredImages.DynamicPluginProxy, "nginxinc/nginx-unprivileged:1.23")
+	require.Equal(t, cluster.Status.DesiredImages.DynamicPluginProxy, "nginxinc/nginx-unprivileged:1.25")
 }
 
 func TestStorageClusterDefaultsForWindows(t *testing.T) {
@@ -10436,7 +10465,7 @@ func (m *fakeManifest) GetVersions(
 			TelemetryProxy:             "purestorage/envoy:1.2.3",
 			PxRepo:                     "portworx/px-repo:" + compVersion,
 			DynamicPlugin:              "portworx/portworx-dynamic-plugin:1.1.0",
-			DynamicPluginProxy:         "nginxinc/nginx-unprivileged:1.23",
+			DynamicPluginProxy:         "nginxinc/nginx-unprivileged:1.25",
 			CsiLivenessProbe:           "docker.io/portworx/livenessprobe:v2.10.0-windows",
 			CsiWindowsDriver:           "docker.io/portworx/px-windows-csi-driver:23.8.0",
 			CsiWindowsNodeRegistrar:    "docker.io/portworx/csi-node-driver-registrar:v2.8.0-windows",
