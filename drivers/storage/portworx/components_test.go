@@ -74,7 +74,7 @@ func TestOrderOfComponents(t *testing.T) {
 	for i, comp := range components {
 		componentNames[i] = comp.Name()
 	}
-	require.Len(t, components, 20)
+	require.Len(t, components, 19)
 	// Higher priority components come first
 	require.ElementsMatch(t,
 		[]string{

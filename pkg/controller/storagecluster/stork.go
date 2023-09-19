@@ -72,11 +72,25 @@ var (
 	storkDeploymentLabels = map[string]string{
 		"tier": "control-plane",
 	}
+	storkTemplateSelectorLabels = map[string]string{
+		"name": "stork",
+		"tier": "control-plane",
+	}
 	storkTemplateLabels = map[string]string{
 		"name": "stork",
 		"tier": "control-plane",
 	}
 	storkSchedulerDeploymentLabels = map[string]string{
+		"tier":      "control-plane",
+		"component": "scheduler",
+		"name":      storkSchedDeploymentName,
+	}
+	storkSchedulerDeploymentPodLabels = map[string]string{
+		"tier":      "control-plane",
+		"component": "scheduler",
+		"name":      storkSchedDeploymentName,
+	}
+	storkSchedulerDeploymentSelectorLabels = map[string]string{
 		"tier":      "control-plane",
 		"component": "scheduler",
 		"name":      storkSchedDeploymentName,
@@ -676,7 +690,7 @@ func (c *Controller) createStorkDeployment(
 	existingVolumes := append([]v1.Volume{}, existingDeployment.Spec.Template.Spec.Volumes...)
 	sort.Sort(k8sutil.VolumeByName(existingVolumes))
 
-	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.client, storkTemplateLabels)
+	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.client, storkTemplateSelectorLabels)
 	if err != nil {
 		return err
 	}
@@ -742,7 +756,7 @@ func (c *Controller) getStorkDeploymentSpec(
 				},
 			},
 			Selector: &metav1.LabelSelector{
-				MatchLabels: storkTemplateLabels,
+				MatchLabels: storkTemplateSelectorLabels,
 			},
 			Replicas: &replicas,
 			Template: v1.PodTemplateSpec{
@@ -839,6 +853,7 @@ func (c *Controller) getStorkDeploymentSpec(
 	if cluster.Spec.Stork.Resources != nil {
 		deployment.Spec.Template.Spec.Containers[0].Resources = *cluster.Spec.Stork.Resources
 	}
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	return deployment
 }
@@ -936,7 +951,7 @@ func (c *Controller) createStorkSchedDeployment(
 		}
 	}
 
-	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.client, storkSchedulerDeploymentLabels)
+	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.client, storkSchedulerDeploymentSelectorLabels)
 	if err != nil {
 		return err
 	}
@@ -1032,12 +1047,12 @@ func getStorkSchedDeploymentSpec(
 				},
 			},
 			Selector: &metav1.LabelSelector{
-				MatchLabels: storkSchedulerDeploymentLabels,
+				MatchLabels: storkSchedulerDeploymentSelectorLabels,
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   storkSchedDeploymentName,
-					Labels: storkSchedulerDeploymentLabels,
+					Labels: storkSchedulerDeploymentPodLabels,
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: storkSchedServiceAccountName,
@@ -1135,6 +1150,7 @@ func getStorkSchedDeploymentSpec(
 	if cluster.Spec.Stork.Resources != nil {
 		deployment.Spec.Template.Spec.Containers[0].Resources = *cluster.Spec.Stork.Resources
 	}
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	return deployment
 }

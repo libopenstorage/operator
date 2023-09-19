@@ -14,6 +14,7 @@ spec:
     metadata:
       labels:
         role: px-telemetry-registration
+        operator.libopenstorage.org/managed-by: portworx
     spec:
       affinity:
         nodeAffinity:

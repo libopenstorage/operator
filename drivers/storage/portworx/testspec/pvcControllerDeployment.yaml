@@ -25,6 +25,7 @@ spec:
       labels:
         name: portworx-pvc-controller
         tier: control-plane
+        operator.libopenstorage.org/managed-by: portworx
     spec:
       containers:
       - command:

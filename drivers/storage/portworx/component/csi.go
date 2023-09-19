@@ -64,6 +64,9 @@ var (
 	csiDeploymentTemplateLabels = map[string]string{
 		csiDeploymentAppLabel: "px-csi-driver",
 	}
+	csiDeploymentTemplateSelectorLabels = map[string]string{
+		csiDeploymentAppLabel: "px-csi-driver",
+	}
 )
 
 type csi struct {
@@ -501,11 +504,13 @@ func (c *csi) createDeployment(
 		)
 	}
 
-	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.k8sClient, csiDeploymentTemplateLabels)
+	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.k8sClient, csiDeploymentTemplateSelectorLabels)
 	if err != nil {
 		return err
 	}
 
+	deployment := getCSIDeploymentSpec(cluster, csiConfig, ownerRef, provisionerImage, attacherImage,
+		snapshotterImage, resizerImage, snapshotControllerImage, healthMonitorControllerImage, updatedTopologySpreadConstraints)
 	modified := provisionerImage != existingProvisionerImage ||
 		attacherImage != existingAttacherImage ||
 		snapshotterImage != existingSnapshotterImage ||
@@ -520,8 +525,6 @@ func (c *csi) createDeployment(
 			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints) ||
 		hasCSITopologyChanged(cluster, existingDeployment)
 	if !c.isCreated || modified {
-		deployment := getCSIDeploymentSpec(cluster, csiConfig, ownerRef, provisionerImage, attacherImage,
-			snapshotterImage, resizerImage, snapshotControllerImage, healthMonitorControllerImage, updatedTopologySpreadConstraints)
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -539,7 +542,7 @@ func (c *csi) findPreinstalledCSISnapshotController() error {
 	for _, pod := range podList.Items {
 		// Ignore csi pods deployed by operator
 		appLabel, ok := pod.Labels[csiDeploymentAppLabel]
-		if ok && appLabel == csiDeploymentTemplateLabels[csiDeploymentAppLabel] {
+		if ok && appLabel == csiDeploymentTemplateSelectorLabels[csiDeploymentAppLabel] {
 			continue
 		}
 		for _, container := range pod.Spec.Containers {
@@ -632,7 +635,7 @@ func getCSIDeploymentSpec(
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: csiDeploymentTemplateLabels,
+				MatchLabels: csiDeploymentTemplateSelectorLabels,
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
@@ -859,6 +862,7 @@ func getCSIDeploymentSpec(
 	if len(topologySpreadConstraints) != 0 {
 		deployment.Spec.Template.Spec.TopologySpreadConstraints = topologySpreadConstraints
 	}
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	return deployment
 }
@@ -897,6 +901,7 @@ func (c *csi) createStatefulSet(
 		cluster.Status.DesiredImages.CSIAttacher,
 	)
 
+	statefulSet := getCSIStatefulSetSpec(cluster, csiConfig, ownerRef, provisionerImage, attacherImage)
 	modified := provisionerImage != existingProvisionerImage ||
 		attacherImage != existingAttacherImage ||
 		util.HasPullSecretChanged(cluster, existingSS.Spec.Template.Spec.ImagePullSecrets) ||
@@ -904,7 +909,6 @@ func (c *csi) createStatefulSet(
 		util.HaveTolerationsChanged(cluster, existingSS.Spec.Template.Spec.Tolerations)
 
 	if !c.isCreated || modified {
-		statefulSet := getCSIStatefulSetSpec(cluster, csiConfig, ownerRef, provisionerImage, attacherImage)
 		if err = k8sutil.CreateOrUpdateStatefulSet(c.k8sClient, statefulSet, ownerRef); err != nil {
 			return err
 		}

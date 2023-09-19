@@ -2619,7 +2619,7 @@ func TestStorkSchedulerWithMissingLabelsFromSelector(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, schedDeployment.Spec.Selector.MatchLabels, 3)
 	require.Equal(t, storkSchedDeploymentName, schedDeployment.Spec.Selector.MatchLabels["name"])
-	require.Len(t, schedDeployment.Spec.Template.Labels, 3)
+	require.Len(t, schedDeployment.Spec.Template.Labels, 4)
 	require.Equal(t, storkSchedDeploymentName, schedDeployment.Spec.Template.Labels["name"])
 
 	// TestCase: Set selector to empty and check the resource version

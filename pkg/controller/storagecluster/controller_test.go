@@ -1772,8 +1772,9 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test-ns",
 			Labels: map[string]string{
-				constants.LabelKeyClusterName: cluster.Name,
-				constants.LabelKeyDriverName:  driverName,
+				constants.LabelKeyClusterName:       cluster.Name,
+				constants.LabelKeyDriverName:        driverName,
+				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
 			},
 			Annotations: make(map[string]string),
 		},
@@ -1886,8 +1887,9 @@ func TestStoragePodGetsScheduledK8s1_24(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test-ns",
 			Labels: map[string]string{
-				constants.LabelKeyClusterName: cluster.Name,
-				constants.LabelKeyDriverName:  driverName,
+				constants.LabelKeyClusterName:       cluster.Name,
+				constants.LabelKeyDriverName:        driverName,
+				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
 			},
 			Annotations: make(map[string]string),
 		},
@@ -2275,8 +2277,9 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test-ns",
 			Labels: map[string]string{
-				constants.LabelKeyClusterName: cluster.Name,
-				constants.LabelKeyDriverName:  driverName,
+				constants.LabelKeyClusterName:       cluster.Name,
+				constants.LabelKeyDriverName:        driverName,
+				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
 			},
 		},
 		Spec: expectedPodSpec,

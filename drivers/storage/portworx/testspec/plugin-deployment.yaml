@@ -18,6 +18,7 @@ spec:
   template:
     metadata:
       labels:
+        operator.libopenstorage.org/managed-by: portworx
         app: px-plugin
         app.kubernetes.io/name: px-plugin
         app.kubernetes.io/instance: px-plugin

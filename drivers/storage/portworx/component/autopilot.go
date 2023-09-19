@@ -427,7 +427,6 @@ func (c *autopilot) createDeployment(
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
-
 	if !c.isCreated || modified {
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, targetDeployment, ownerRef); err != nil {
 			return err
@@ -452,6 +451,10 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 		"tier": "control-plane",
 	}
 	templateLabels := map[string]string{
+		"name": "autopilot",
+		"tier": "control-plane",
+	}
+	selectorLabels := map[string]string{
 		"name": "autopilot",
 		"tier": "control-plane",
 	}
@@ -480,7 +483,7 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 				},
 			},
 			Selector: &metav1.LabelSelector{
-				MatchLabels: templateLabels,
+				MatchLabels: selectorLabels,
 			},
 			Replicas: &replicas,
 			Template: v1.PodTemplateSpec{
@@ -574,6 +577,7 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	if cluster.Spec.Autopilot.Resources != nil {
 		deployment.Spec.Template.Spec.Containers[0].Resources = *cluster.Spec.Autopilot.Resources
 	}
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	return deployment
 }
