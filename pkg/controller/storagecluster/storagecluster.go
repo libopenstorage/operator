@@ -1063,7 +1063,6 @@ func (c *Controller) syncNodes(
 			go func(idx int) {
 				defer createWait.Done()
 				nodeName := nodesNeedingStoragePods[idx]
-				podTemplates[idx].Labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
 				err := c.podControl.CreatePods(
 					context.TODO(),
 					cluster.Namespace,
@@ -1363,10 +1362,12 @@ func (c *Controller) CreatePodTemplate(
 	k8s.AddOrUpdateStoragePodTolerations(&podSpec)
 
 	podSpec.NodeName = node.Name
+	labels := c.StorageClusterSelectorLabels(cluster)
+	labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
 	newTemplate := v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:   cluster.Namespace,
-			Labels:      c.StorageClusterSelectorLabels(cluster),
+			Labels:      labels,
 			Annotations: make(map[string]string),
 		},
 		Spec: podSpec,
@@ -1586,9 +1587,10 @@ func (c *Controller) createStorageNode(
 
 // StorageClusterSelectorLabels returns the selector labels for child objects of given storagecluster
 func (c *Controller) StorageClusterSelectorLabels(cluster *corev1.StorageCluster) map[string]string {
-	clusterLabels := c.Driver.GetSelectorLabels()
-	if clusterLabels == nil {
-		clusterLabels = make(map[string]string)
+	driverLabels := c.Driver.GetSelectorLabels()
+	clusterLabels := make(map[string]string)
+	for k, v := range driverLabels {
+		clusterLabels[k] = v
 	}
 	clusterLabels[constants.LabelKeyClusterName] = cluster.Name
 	clusterLabels[constants.LabelKeyDriverName] = c.Driver.String()
