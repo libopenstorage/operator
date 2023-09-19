@@ -296,7 +296,10 @@ func (t *telemetry) getCollectorDeployment(
 	}
 
 	replicas := int32(1)
-	labels := map[string]string{
+	selectorLabels := map[string]string{
+		"role": "realtime-metrics-collector",
+	}
+	templateLabels := map[string]string{
 		"role": "realtime-metrics-collector",
 	}
 	runAsUser := int64(1111)
@@ -312,9 +315,9 @@ func (t *telemetry) getCollectorDeployment(
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{MatchLabels: labels},
+			Selector: &metav1.LabelSelector{MatchLabels: selectorLabels},
 			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: labels},
+				ObjectMeta: metav1.ObjectMeta{Labels: templateLabels},
 				Spec: v1.PodSpec{
 					ServiceAccountName: CollectorServiceAccountName,
 					Containers: []v1.Container{
@@ -414,6 +417,7 @@ func (t *telemetry) getCollectorDeployment(
 			},
 		},
 	}
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	deployment.Namespace = cluster.Namespace
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)

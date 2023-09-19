@@ -13,6 +13,7 @@ spec:
     metadata:
       labels:
         name: px-telemetry-phonehome
+        operator.libopenstorage.org/managed-by: portworx
     spec:
       affinity:
         nodeAffinity:

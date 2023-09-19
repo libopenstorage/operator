@@ -14,6 +14,7 @@ spec:
     metadata:
       labels:
         role: realtime-metrics-collector
+        operator.libopenstorage.org/managed-by: portworx
     spec:
       affinity:
         nodeAffinity:

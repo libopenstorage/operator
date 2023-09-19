@@ -17,6 +17,7 @@ spec:
   template:
     metadata:
       labels:
+        operator.libopenstorage.org/managed-by: portworx
         role: realtime-metrics-collector
     spec:
       affinity:

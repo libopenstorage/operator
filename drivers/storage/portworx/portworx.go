@@ -1337,7 +1337,6 @@ func (p *portworx) hasComponentChanged(cluster *corev1.StorageCluster) bool {
 		hasAlertManagerChanged(cluster) ||
 		p.hasPrometheusVersionChanged(cluster) ||
 		p.hasGrafanaVersionChanged(cluster) ||
-		hasPxRepoChanged(cluster) ||
 		p.hasKubernetesVersionChanged(cluster)
 }
 

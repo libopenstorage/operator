@@ -22,6 +22,7 @@ spec:
   template:
     metadata:
       labels:
+        operator.libopenstorage.org/managed-by: portworx
         component: scheduler
         tier: control-plane
         name: stork-scheduler

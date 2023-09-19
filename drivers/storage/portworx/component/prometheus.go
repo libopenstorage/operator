@@ -449,13 +449,13 @@ func (c *prometheus) createOperatorDeployment(
 		cluster.Status.DesiredImages.PrometheusOperator,
 	)
 
+	deployment := getPrometheusOperatorDeploymentSpec(cluster, ownerRef, imageName)
 	modified := existingImageName != imageName ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
 
 	if !c.isOperatorCreated || errors.IsNotFound(getErr) || modified {
-		deployment := getPrometheusOperatorDeploymentSpec(cluster, ownerRef, imageName)
 		if err := k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -473,6 +473,9 @@ func getPrometheusOperatorDeploymentSpec(
 	runAsNonRoot := true
 	runAsUser := int64(defaultRunAsUser)
 	labels := map[string]string{
+		"k8s-app": PrometheusOperatorDeploymentName,
+	}
+	selectorLabels := map[string]string{
 		"k8s-app": PrometheusOperatorDeploymentName,
 	}
 	configReloaderImageName := util.GetImageURN(
@@ -498,11 +501,11 @@ func getPrometheusOperatorDeploymentSpec(
 			Name:            PrometheusOperatorDeploymentName,
 			Namespace:       cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
-			Labels:          labels,
+			Labels:          selectorLabels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: selectorLabels,
 			},
 			Replicas: &replicas,
 			Template: v1.PodTemplateSpec{
@@ -562,6 +565,7 @@ func getPrometheusOperatorDeploymentSpec(
 			}
 		}
 	}
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	return deployment
 }

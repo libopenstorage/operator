@@ -846,6 +846,7 @@ func (t *telemetry) createDeploymentTelemetryRegistration(
 	deployment.Namespace = cluster.Namespace
 	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNameTelemetry
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
 
 	existingDeployment := &appsv1.Deployment{}
@@ -919,6 +920,7 @@ func (t *telemetry) createDaemonSetTelemetryPhonehome(
 	daemonset.Namespace = cluster.Namespace
 	daemonset.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	daemonset.Spec.Template.Spec.ServiceAccountName = ServiceAccountNameTelemetry
+	daemonset.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(daemonset.Spec.Template.ObjectMeta)
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &daemonset.Spec.Template.Spec)
 
 	if restart {
@@ -984,6 +986,7 @@ func (t *telemetry) createDeploymentTelemetryCollectorV2(
 	deployment.Namespace = cluster.Namespace
 	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNameTelemetry
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
 
 	existingDeployment := &appsv1.Deployment{}

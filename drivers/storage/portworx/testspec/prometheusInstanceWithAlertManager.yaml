@@ -5,6 +5,9 @@ metadata:
   namespace: kube-test
 spec:
   replicas: 1
+  podMetadata:
+    labels:
+      operator.libopenstorage.org/managed-by: portworx
   logLevel: debug
   serviceAccountName: px-prometheus
   image: quay.io/prometheus/prometheus:v1.2.3
