@@ -258,6 +258,8 @@ var (
 	MinimumPxVersionCCMGO, _ = version.NewVersion("2.12")
 	// MinimumPxVersionMetricsCollector minimum PX version to install metrics collector
 	MinimumPxVersionMetricsCollector, _ = version.NewVersion("2.9.1")
+	// MinimumPxVersionAutoTLS is a minimal PX version that supports "auto-TLS" setup
+	MinimumPxVersionAutoTLS, _ = version.NewVersion("4.0.0")
 
 	// ConfigMapNameRegex regex of configMap.
 	ConfigMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")

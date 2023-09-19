@@ -1237,8 +1237,9 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 
 func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 	volumeMounts := make([]v1.VolumeMount, 0, len(vols))
-	mountPathSet := make(map[string]bool)
+	indexMap := make(map[string]int)
 	runPrivileged := pxutil.IsPrivileged(t.cluster)
+	idx := 0
 	for _, v := range vols {
 		volMount := v1.VolumeMount{
 			Name:             v.name,
@@ -1268,7 +1269,8 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 		}
 		if volMount.MountPath != "" {
 			volumeMounts = append(volumeMounts, volMount)
-			mountPathSet[volMount.MountPath] = true
+			indexMap[volMount.MountPath] = idx
+			idx++
 		}
 	}
 
@@ -1281,16 +1283,24 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 	}
 
 	for _, v := range t.cluster.Spec.Volumes {
-		if _, ok := mountPathSet[v.MountPath]; ok {
-			logrus.Warnf("Found mountPath conflict for volume %s at %s, volume will be ignored", v.Name, v.MountPath)
-			continue
-		}
-		volumeMounts = append(volumeMounts, v1.VolumeMount{
+		userVol := v1.VolumeMount{
 			Name:             pxutil.UserVolumeName(v.Name),
 			MountPath:        v.MountPath,
 			ReadOnly:         v.ReadOnly,
 			MountPropagation: v.MountPropagation,
-		})
+		}
+
+		if i, has := indexMap[v.MountPath]; !has {
+			volumeMounts = append(volumeMounts, userVol)
+			indexMap[v.MountPath] = idx
+			idx++
+		} else if i > len(volumeMounts) || volumeMounts[i].MountPath != v.MountPath {
+			// sanity check failed..
+			logrus.Errorf("INTERNAL ERROR -- invalid volume index (#%d %v)", i, v.MountPath)
+		} else {
+			logrus.Warnf("Replacing mountPath for volume %s at %s with %s", volumeMounts[i].Name, v.MountPath, v.Name)
+			volumeMounts[i] = userVol
+		}
 	}
 
 	return volumeMounts
@@ -1395,6 +1405,7 @@ func (t *template) getVolumes() []v1.Volume {
 		volumes = append(volumes, kvdbVolume)
 	}
 
+	// CHECKME: spec-mounts could override existing mounts, so we purge "dangling" host-mounts
 	for _, v := range t.cluster.Spec.Volumes {
 		volumes = append(volumes, v1.Volume{
 			Name:         pxutil.UserVolumeName(v.Name),
