@@ -18,6 +18,7 @@ spec:
   template:
     metadata:
       labels:
+        operator.libopenstorage.org/managed-by: portworx
         tier: px-web-console
     spec:
       initContainers:

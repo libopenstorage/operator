@@ -10,6 +10,7 @@ spec:
     metadata:
       labels:
         app: px-csi-node-win
+        operator.libopenstorage.org/managed-by: portworx
     spec:
       containers:
         - args:
