@@ -376,6 +376,15 @@ func (c *Controller) syncStorage(
 				}
 			}
 
+			value, present := podCopy.Labels[constants.OperatorLabelManagedByKey]
+			if !present || value != constants.OperatorLabelManagedByValue {
+				if podCopy.Labels == nil {
+					podCopy.Labels = make(map[string]string)
+				}
+				podCopy.Labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
+				updateNeeded = true
+			}
+
 			if updateNeeded {
 				// TODO: get latest pod to update
 				if err := c.client.Update(context.TODO(), podCopy); err != nil {
@@ -413,9 +422,10 @@ func (c *Controller) createKVDBPod(
 
 func (c *Controller) kvdbPodLabels(cluster *corev1.StorageCluster) map[string]string {
 	return map[string]string{
-		constants.LabelKeyClusterName: cluster.Name,
-		constants.LabelKeyDriverName:  c.Driver.String(),
-		constants.LabelKeyKVDBPod:     constants.LabelValueTrue,
+		constants.LabelKeyClusterName:       cluster.Name,
+		constants.LabelKeyDriverName:        c.Driver.String(),
+		constants.LabelKeyKVDBPod:           constants.LabelValueTrue,
+		constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
 	}
 }
 

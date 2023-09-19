@@ -11,7 +11,9 @@ spec:
   template:
     metadata:
       labels:
+        operator.libopenstorage.org/managed-by: portworx
         app: px-csi-win-driver
+        operator.libopenstorage.org/managed-by: portworx
     spec:
       serviceAccountName: portworx
       containers:

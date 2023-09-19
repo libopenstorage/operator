@@ -340,6 +340,7 @@ func (c *lighthouse) createDeployment(
 	configSyncImage = util.GetImageURN(cluster, configSyncImage)
 	storkConnectorImage = util.GetImageURN(cluster, storkConnectorImage)
 
+	deployment := getLighthouseDeploymentSpec(cluster, ownerRef, lhImage, configSyncImage, storkConnectorImage)
 	modified := lhImage != existingLhImage ||
 		configSyncImage != existingConfigInitImage ||
 		configSyncImage != existingConfigSyncImage ||
@@ -347,9 +348,7 @@ func (c *lighthouse) createDeployment(
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
-
 	if !c.isCreated || modified {
-		deployment := getLighthouseDeploymentSpec(cluster, ownerRef, lhImage, configSyncImage, storkConnectorImage)
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
 		}
@@ -366,6 +365,7 @@ func getLighthouseDeploymentSpec(
 	storkConnectorImageName string,
 ) *appsv1.Deployment {
 	labels := getLighthouseLabels()
+	podLabels := getLighthouseLabels()
 	replicas := int32(1)
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromInt(1)
@@ -392,7 +392,7 @@ func getLighthouseDeploymentSpec(
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels: podLabels,
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: LhServiceAccountName,
@@ -500,6 +500,7 @@ func getLighthouseDeploymentSpec(
 			}
 		}
 	}
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	return deployment
 }

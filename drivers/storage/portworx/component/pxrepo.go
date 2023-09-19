@@ -230,6 +230,7 @@ func (p *pxrepo) getPxRepoDeployment(
 			}
 		}
 	}
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	return &deployment
 }

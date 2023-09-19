@@ -13,6 +13,7 @@ spec:
   template:
     metadata:
       labels:
+        operator.libopenstorage.org/managed-by: portworx
         k8s-app: px-prometheus-operator
     spec:
       containers:

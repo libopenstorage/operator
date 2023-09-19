@@ -25,6 +25,7 @@ spec:
       labels:
         name: stork
         tier: control-plane
+        operator.libopenstorage.org/managed-by: portworx
     spec:
       containers:
       - command:
