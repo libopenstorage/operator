@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portworx/sched-ops/task"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -617,7 +618,16 @@ func (h *Handler) getPortworxDaemonSet(ds *appsv1.DaemonSet) (*appsv1.DaemonSet,
 
 func (h *Handler) findPortworxDaemonSet() (*appsv1.DaemonSet, error) {
 	dsList := &appsv1.DaemonSetList{}
-	if err := h.client.List(context.TODO(), dsList, &client.ListOptions{}); err != nil {
+	t := func() (interface{}, bool, error) {
+		err := h.client.List(context.TODO(), dsList, &client.ListOptions{})
+		if err != nil {
+			logrus.WithError(err).Tracef("Error listing DaemonSets")
+			return nil, true, err
+		}
+		return nil, false, nil
+	}
+	_, err := task.DoRetryWithTimeout(t, 30*time.Second, time.Second)
+	if err != nil {
 		return nil, fmt.Errorf("failed to list daemonsets: %v", err)
 	}
 
