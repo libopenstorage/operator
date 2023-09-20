@@ -141,13 +141,12 @@ revive: $(GOPATH)/bin/revive
 	@$(GOPATH)/bin/revive -formatter friendly $(PKGS)
 
 tools-check: $(GOPATH)/bin/mockgen $(GOPATH)/bin/golangci-lint $(GOPATH)/bin/errcheck $(GOPATH)/bin/staticcheck $(GOPATH)/bin/revive
-	# checking compile-versions on $^
+	# checking go-version on $^
 	$(eval VGO := $(shell go version | cut -d" " -f3))
-	@for t in $^; do\
+	@for t in $^; do \
 	  vt=$$(go version $$t | cut -d" " -f2) ; \
 	  if [ $$vt != $(VGO) ]; then \
 	    echo "WARNING: Tool $$t compiled with $$vt	 (you are using $(VGO))"; \
-	    torm="$$torm $$t"; \
 	  fi; \
 	done
 
