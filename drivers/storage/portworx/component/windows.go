@@ -73,6 +73,7 @@ func (w *windows) IsEnabled(cluster *corev1.StorageCluster) bool {
 	// enable if windows node is detected
 	// and k8s version of cluster is > 1.25.0
 	// and CSI is enabled in STC
+	// and portworx.io/enable-windows annotation is set to true in STC
 	return pxutil.IsWindowsEnabled(cluster) && pxutil.IsCSIEnabled(cluster) &&
 		w.isWindowsNode && w.k8sVersion.GreaterThanOrEqual(k8s.K8sVer1_25)
 
