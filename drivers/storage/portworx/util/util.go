@@ -160,6 +160,8 @@ const (
 	AnnotationServerTLSMinVersion = pxAnnotationPrefix + "/tls-min-version"
 	// AnnotationServerTLSCipherSuites sets up TLS-servers w/ requested cipher suites
 	AnnotationServerTLSCipherSuites = pxAnnotationPrefix + "/tls-cipher-suites"
+	// AnnotationEnableWindows annotation indicates whether cluster has windows nodes
+	AnnotationEnableWindows = pxAnnotationPrefix + "/enable-windows"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -377,6 +379,12 @@ func IsVsphere(cluster *corev1.StorageCluster) bool {
 func IsPrivileged(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsPrivileged])
 	return err != nil || enabled
+}
+
+// IsPrivileged returns true "privileged" annotation is MISSING, or NOT set to FALSE
+func IsWindowsEnabled(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationEnableWindows])
+	return err == nil && enabled
 }
 
 // GetCloudProvider returns the cloud provider string

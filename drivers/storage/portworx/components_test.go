@@ -16309,7 +16309,56 @@ func TestWindowsComponentEnabledWhenCsiDisabled(t *testing.T) {
 	require.Equal(t, false, enabled)
 }
 
-// test that on windows node with k8s version 1.25.0 and CSI enabled install should be enabled
+// test that on windows node with k8s version 1.25.0, CSI enabled and enable-windows annotation false, install should be disabled
+func TestWindowsComponentEnabledWhenWindowsAnnotationDisabled(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.0",
+	}
+
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				"portworx.io/enable-windows": "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.10.0",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
+			},
+		},
+	}
+
+	windowsComponent, _ := component.Get(component.WindowsComponentName)
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	node := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node",
+			Labels: map[string]string{
+				"kubernetes.io/os": "windows",
+			},
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), node)
+	require.NoError(t, err)
+
+	enabled := windowsComponent.IsEnabled(cluster)
+	require.Equal(t, false, enabled)
+}
+
+// test that on windows node with k8s version 1.25.0, CSI enabled and windows enabled, install should be enabled
 func TestWindowsComponentEnabledOnWindowsNodeWithK8s125(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
@@ -16324,6 +16373,9 @@ func TestWindowsComponentEnabledOnWindowsNodeWithK8s125(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
+			Annotations: map[string]string{
+				"portworx.io/enable-windows": "true",
+			},
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:2.10.0",
@@ -16369,6 +16421,9 @@ func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 			Name: "node1",
 			Labels: map[string]string{
 				"kubernetes.io/os": "windows",
+			},
+			Annotations: map[string]string{
+				"portworx.io/enable-windows": "true",
 			},
 		},
 	}

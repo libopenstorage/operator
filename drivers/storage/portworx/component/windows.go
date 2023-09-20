@@ -73,7 +73,9 @@ func (w *windows) IsEnabled(cluster *corev1.StorageCluster) bool {
 	// enable if windows node is detected
 	// and k8s version of cluster is > 1.25.0
 	// and CSI is enabled in STC
-	return w.isWindowsNode && w.k8sVersion.GreaterThanOrEqual(k8s.K8sVer1_25) && pxutil.IsCSIEnabled(cluster)
+	return pxutil.IsWindowsEnabled(cluster) && pxutil.IsCSIEnabled(cluster) &&
+		w.isWindowsNode && w.k8sVersion.GreaterThanOrEqual(k8s.K8sVer1_25)
+
 }
 
 func (w *windows) Reconcile(cluster *corev1.StorageCluster) error {
