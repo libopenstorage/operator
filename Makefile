@@ -83,9 +83,9 @@ BUILD_OPTIONS := -ldflags=$(LDFLAGS)
 CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen
 
 .DEFAULT_GOAL=all
-.PHONY: operator deploy clean vendor vendor-update test generate manifests
+.PHONY: operator deploy clean vendor vendor-update test generate manifests tools-check
 
-all: operator pretest downloads
+all: tools-check operator pretest downloads
 
 vendor-update:
 	go mod download
@@ -116,11 +116,7 @@ $(GOPATH)/bin/staticcheck:
 vendor-tidy:
 	go mod tidy
 
-lint-version-check: $(GOPATH)/bin/golangci-lint
-	# golint version-check ...  (rm $< if fails)
-	@$(GOPATH)/bin/golangci-lint version | grep -q go1\.20\.
-
-lint: $(GOPATH)/bin/golangci-lint lint-version-check
+lint: $(GOPATH)/bin/golangci-lint
 	# golint check ...
 	@$(GOPATH)/bin/golangci-lint run --timeout=5m ./...
 
@@ -143,6 +139,17 @@ staticcheck: $(GOPATH)/bin/staticcheck
 revive: $(GOPATH)/bin/revive
 	# revive check ...
 	@$(GOPATH)/bin/revive -formatter friendly $(PKGS)
+
+tools-check: $(GOPATH)/bin/mockgen $(GOPATH)/bin/golangci-lint $(GOPATH)/bin/errcheck $(GOPATH)/bin/staticcheck $(GOPATH)/bin/revive
+	# checking compile-versions on $^
+	$(eval VGO := $(shell go version | cut -d" " -f3))
+	@for t in $^; do\
+	  vt=$$(go version $$t | cut -d" " -f2) ; \
+	  if [ $$vt != $(VGO) ]; then \
+	    echo "WARNING: Tool $$t compiled with $$vt	 (you are using $(VGO))"; \
+	    torm="$$torm $$t"; \
+	  fi; \
+	done
 
 pretest: check-fmt lint vet staticcheck
 
