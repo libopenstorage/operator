@@ -85,7 +85,7 @@ CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen
 .DEFAULT_GOAL=all
 .PHONY: operator deploy clean vendor vendor-update test generate manifests tools-check
 
-all: tools-check operator pretest downloads
+all: operator pretest downloads
 
 vendor-update:
 	go mod download
@@ -150,7 +150,7 @@ tools-check: $(GOPATH)/bin/mockgen $(GOPATH)/bin/golangci-lint $(GOPATH)/bin/err
 	  fi; \
 	done
 
-pretest: check-fmt lint vet staticcheck
+pretest: tools-check check-fmt lint vet staticcheck
 
 test:
 	echo "" > coverage.txt
