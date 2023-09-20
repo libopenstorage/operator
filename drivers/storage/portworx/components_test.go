@@ -16422,9 +16422,6 @@ func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 			Labels: map[string]string{
 				"kubernetes.io/os": "windows",
 			},
-			Annotations: map[string]string{
-				"portworx.io/enable-windows": "true",
-			},
 		},
 	}
 
@@ -16439,6 +16436,9 @@ func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-system",
+			Annotations: map[string]string{
+				"portworx.io/enable-windows": "true",
+			},
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:2.10.0",
