@@ -36,7 +36,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
-	cluster_v1alpha1 "sigs.k8s.io/cluster-api/api/v1alpha4"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -81,7 +81,7 @@ func TestInit(t *testing.T) {
 		Host:    "127.0.0.1",
 		APIPath: "fake",
 	}).AnyTimes()
-	mgr.EXPECT().SetFields(gomock.Any()).Return(nil).AnyTimes()
+	mgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 	mgr.EXPECT().GetCache().Return(mockCache).AnyTimes()
 	mgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 	mgr.EXPECT().GetLogger().Return(log.Log.WithName("test")).AnyTimes()

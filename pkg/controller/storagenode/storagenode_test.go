@@ -53,7 +53,7 @@ func TestInit(t *testing.T) {
 		Host:    "127.0.0.1",
 		APIPath: "fake",
 	}).AnyTimes()
-	mgr.EXPECT().SetFields(gomock.Any()).Return(nil).AnyTimes()
+	mgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 	mgr.EXPECT().GetCache().Return(nil).AnyTimes()
 	mgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 	mgr.EXPECT().GetLogger().Return(log.Log.WithName("test")).AnyTimes()
