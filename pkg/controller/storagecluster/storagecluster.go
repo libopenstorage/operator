@@ -305,6 +305,9 @@ func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	if err := c.validateCloudStorageLabelKey(cluster); err != nil {
 		return err
 	}
+	if err := c.validateStorageSpec(cluster); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -414,6 +417,14 @@ func (c *Controller) validateCloudStorageLabelKey(cluster *corev1.StorageCluster
 		return fmt.Errorf("node pool label key incorrect, expected %s, actual %s", key, cluster.Spec.CloudStorage.NodePoolLabel)
 	}
 
+	return nil
+}
+
+// validateStorageSpec is used to check if both cloudstorage and storage are not present in the spec
+func (c *Controller) validateStorageSpec(cluster *corev1.StorageCluster) error {
+	if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil {
+		return fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+	}
 	return nil
 }
 
