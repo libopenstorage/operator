@@ -9592,7 +9592,7 @@ func guestAccessTypePtr(val corev1.GuestAccessType) *corev1.GuestAccessType {
 }
 
 func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error {
-	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+	return wait.PollUntilContextTimeout(context.TODO(), 1*time.Second, 1*time.Minute, false, func(ctx context.Context) (bool, error) {
 		crd, err := fakeClient.ApiextensionsV1().
 			CustomResourceDefinitions().
 			Get(context.TODO(), crdName, metav1.GetOptions{})
@@ -9617,7 +9617,7 @@ func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error
 }
 
 func keepV1beta1CRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error {
-	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+	return wait.PollUntilContextTimeout(context.TODO(), 1*time.Second, 1*time.Minute, false, func(ctx context.Context) (bool, error) {
 		crd, err := fakeClient.ApiextensionsV1beta1().
 			CustomResourceDefinitions().
 			Get(context.TODO(), crdName, metav1.GetOptions{})

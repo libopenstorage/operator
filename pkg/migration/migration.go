@@ -400,7 +400,7 @@ func (h *Handler) waitForDaemonSetPodTermination(
 	nodeName string,
 	nodeLog *logrus.Entry,
 ) error {
-	return wait.PollImmediate(podWaitInterval, daemonSetPodTerminationTimeoutFunc(), func() (bool, error) {
+	return wait.PollUntilContextTimeout(context.TODO(), 1*time.Second, 1*time.Minute, false, func(ctx context.Context) (bool, error) {
 		node := &v1.Node{}
 		if err := h.client.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node); err != nil {
 			nodeLog.Errorf("Failed to get node. %v", err)
@@ -458,7 +458,7 @@ func (h *Handler) waitForPortworxPod(
 	nodeName string,
 	nodeLog *logrus.Entry,
 ) error {
-	return wait.PollImmediate(podWaitInterval, operatorPodReadyTimeoutFunc(), func() (bool, error) {
+	return wait.PollUntilContextTimeout(context.TODO(), 1*time.Second, 1*time.Minute, false, func(ctx context.Context) (bool, error) {
 		node := &v1.Node{}
 		if err := h.client.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node); err != nil {
 			nodeLog.Errorf("Failed to get node. %v", err)

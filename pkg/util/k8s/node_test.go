@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	cluster_v1alpha1 "sigs.k8s.io/cluster-api/api/v1alpha4"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"

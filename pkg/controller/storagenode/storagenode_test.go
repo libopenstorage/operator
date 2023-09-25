@@ -24,7 +24,7 @@ import (
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	cluster_v1alpha1 "sigs.k8s.io/cluster-api/api/v1alpha4"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -1056,7 +1056,7 @@ func createStoragePod(
 }
 
 func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error {
-	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+	return wait.PollUntilContextTimeout(context.TODO(), 1*time.Second, 1*time.Minute, false, func(ctx context.Context) (bool, error) {
 		crd, err := fakeClient.ApiextensionsV1().
 			CustomResourceDefinitions().
 			Get(context.TODO(), crdName, metav1.GetOptions{})
@@ -1079,7 +1079,7 @@ func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error
 }
 
 func keepV1beta1CRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error {
-	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+	return wait.PollUntilContextTimeout(context.TODO(), 1*time.Second, 1*time.Minute, false, func(ctx context.Context) (bool, error) {
 		crd, err := fakeClient.ApiextensionsV1beta1().
 			CustomResourceDefinitions().
 			Get(context.TODO(), crdName, metav1.GetOptions{})
