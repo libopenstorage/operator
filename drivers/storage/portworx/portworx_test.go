@@ -650,6 +650,11 @@ func TestValidatePure(t *testing.T) {
 	err = driver.Validate(cluster)
 	require.NoError(t, err)
 	require.Contains(t, cluster.Annotations[pxutil.AnnotationMiscArgs], "-T px-storev2")
+
+	actual, err := driver.GetStoragePodSpec(cluster, "testNode")
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider pure")
+
 	require.NotEmpty(t, recorder.Events)
 	<-recorder.Events // Pop first event which is Default telemetry enabled event
 	require.Contains(t, <-recorder.Events,
