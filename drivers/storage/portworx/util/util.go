@@ -373,7 +373,7 @@ func IsVsphere(cluster *corev1.StorageCluster) bool {
 	return false
 }
 
-// IsPure true if VSPHERE_VCENTER is present in the spec
+// IsPure true if PURE_FLASHARRAY_SAN_TYPE is present in the spec
 func IsPure(cluster *corev1.StorageCluster) bool {
 	for _, env := range cluster.Spec.Env {
 		if env.Name == "PURE_FLASHARRAY_SAN_TYPE" && len(env.Value) > 0 {

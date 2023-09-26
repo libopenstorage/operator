@@ -566,12 +566,6 @@ func TestValidatePure(t *testing.T) {
 		"name": pxPreFlightDaemonSetName,
 	}
 
-	// force vsphere
-	env := make([]v1.EnvVar, 1)
-	env[0].Name = "PURE_FLASHARRAY_SAN_TYPE"
-	env[0].Value = "ISCSI"
-	cluster.Spec.Env = env
-
 	clusterRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	preflightDS := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -641,6 +635,14 @@ func TestValidatePure(t *testing.T) {
 	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
+	origCluster := cluster.DeepCopy() // No pure env
+
+	// force pure ISCSI
+	env := make([]v1.EnvVar, 1)
+	env[0].Name = "PURE_FLASHARRAY_SAN_TYPE"
+	env[0].Value = "ISCSI"
+	cluster.Spec.Env = env
+
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
@@ -659,6 +661,27 @@ func TestValidatePure(t *testing.T) {
 	<-recorder.Events // Pop first event which is Default telemetry enabled event
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling PX-StoreV2"))
+
+	// Below just validate that changing the PURE_FLASHARRAY_SAN_TYPE value will still set the
+	// -cloud_provider param correctly.
+
+	cluster = origCluster // Reset Cluster with no pure env
+	// force pure ISCSI
+	env = make([]v1.EnvVar, 1)
+	env[0].Name = "PURE_FLASHARRAY_SAN_TYPE"
+	env[0].Value = "FC"
+	cluster.Spec.Env = env
+
+	actual, err = driver.GetStoragePodSpec(cluster, "testNode")
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.NotContains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider pure")
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	actual, err = driver.GetStoragePodSpec(cluster, "testNode")
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider pure")
 }
 
 func TestGetSelectorLabels(t *testing.T) {
