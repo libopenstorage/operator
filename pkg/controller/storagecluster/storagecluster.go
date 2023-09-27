@@ -425,6 +425,29 @@ func (c *Controller) validateStorageSpec(cluster *corev1.StorageCluster) error {
 	if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil {
 		return fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
 	}
+	//check if any of any of the nodes and cluster storage congifs clash
+	nodeCloudStorage := false
+	nodeStorage := false
+	index := -1
+	for ind, spec := range cluster.Spec.Nodes {
+		if spec.CloudStorage != nil && spec.Storage != nil {
+			return fmt.Errorf("found spec for storage and cloud storage for node %d, ensure only 1 storage type is used", ind)
+		}
+		if spec.CloudStorage != nil {
+			nodeCloudStorage = true
+			index = ind
+		}
+		if spec.Storage != nil {
+			nodeStorage = true
+			index = ind
+		}
+	}
+	if (cluster.Spec.Storage != nil) && (nodeCloudStorage) {
+		return fmt.Errorf("found storage for cluster and cloud storage for node %d in specs, mixing of storage types not allowed", index)
+	}
+	if (cluster.Spec.CloudStorage != nil) && (nodeStorage) {
+		return fmt.Errorf("found cloud storage for cluster and storage for node %d in specs, mixing of storage types not allowed", index)
+	}
 	return nil
 }
 
