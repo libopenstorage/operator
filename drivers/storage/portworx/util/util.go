@@ -373,6 +373,16 @@ func IsVsphere(cluster *corev1.StorageCluster) bool {
 	return false
 }
 
+// IsPure true if PURE_FLASHARRAY_SAN_TYPE is present in the spec
+func IsPure(cluster *corev1.StorageCluster) bool {
+	for _, env := range cluster.Spec.Env {
+		if env.Name == "PURE_FLASHARRAY_SAN_TYPE" && len(env.Value) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // IsPrivileged returns true "privileged" annotation is MISSING, or NOT set to FALSE
 func IsPrivileged(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsPrivileged])
@@ -383,6 +393,10 @@ func IsPrivileged(cluster *corev1.StorageCluster) bool {
 func GetCloudProvider(cluster *corev1.StorageCluster) string {
 	if IsVsphere(cluster) {
 		return cloudops.Vsphere
+	}
+
+	if IsPure(cluster) {
+		return cloudops.Pure
 	}
 
 	if len(preflight.Instance().ProviderName()) > 0 {
