@@ -37,6 +37,8 @@ const (
 	DefCmetaAWS = "type=gp3,size=64"
 	// DefCmetaVsphere default metadata cloud device for DMthin Vsphere
 	DefCmetaVsphere = "type=eagerzeroedthick,size=64"
+	// DefCmetaPure default metadata cloud device for DMthin Pure
+	DefCmetaPure = "size=64"
 )
 
 // PreFlightPortworx provides a set of APIs to uninstall portworx
@@ -367,6 +369,8 @@ func (u *preFlightPortworx) processPassedChecks(recorder record.EventRecorder) {
 		cmetaData := DefCmetaAWS
 		if pxutil.IsVsphere(u.cluster) {
 			cmetaData = DefCmetaVsphere
+		} else if pxutil.IsPure(u.cluster) {
+			cmetaData = DefCmetaPure
 		}
 		u.cluster.Spec.CloudStorage.SystemMdDeviceSpec = &cmetaData
 	}
