@@ -656,11 +656,13 @@ func TestValidatePure(t *testing.T) {
 	actual, err := driver.GetStoragePodSpec(cluster, "testNode")
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider pure")
+	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-metadata "+DefCmetaPure)
 
 	require.NotEmpty(t, recorder.Events)
 	<-recorder.Events // Pop first event which is Default telemetry enabled event
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling PX-StoreV2"))
+	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaPure)
 
 	// Below just validate that changing the PURE_FLASHARRAY_SAN_TYPE value will still set the
 	// -cloud_provider param correctly.
