@@ -420,36 +420,149 @@ func (c *Controller) validateCloudStorageLabelKey(cluster *corev1.StorageCluster
 	return nil
 }
 
-// validateStorageSpec is used to check if both cloudstorage and storage are not present in the spec
 func (c *Controller) validateStorageSpec(cluster *corev1.StorageCluster) error {
-	if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil {
-		return fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+
+	//when cluster has both, no nodes
+	if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil && cluster.Spec.Nodes == nil {
+		return fmt.Errorf("found spec 1 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
 	}
-	//check if any of any of the nodes and cluster storage congifs clash
-	nodeCloudStorage := false
-	nodeStorage := false
-	index := -1
-	for ind, spec := range cluster.Spec.Nodes {
-		if spec.CloudStorage != nil && spec.Storage != nil {
-			return fmt.Errorf("found spec for storage and cloud storage for node %d, ensure only 1 storage type is used", ind)
+
+	if cluster.Spec.Nodes != nil {
+		for node, Nodespec := range cluster.Spec.Nodes {
+
+			//when cluster was none, node has both
+			if cluster.Spec.Storage == nil && cluster.Spec.CloudStorage == nil {
+				if Nodespec.Storage != nil && Nodespec.CloudStorage != nil {
+					return fmt.Errorf("found spec 6 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+				} else {
+					//else needed otherwise it will do other conparisions and refer invalid memory
+					continue
+				}
+
+			}
+
+			//when cluster has both, node only has 1
+			if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil && (Nodespec.Storage == nil || Nodespec.CloudStorage == nil) {
+
+				//trial1
+				// if cluster.Spec.CloudStorage.DeviceSpecs == nil &&
+				// 	(cluster.Spec.CloudStorage.JournalDeviceSpec == nil) &&
+				// 	(cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil) &&
+				// 	(cluster.Spec.CloudStorage.KvdbDeviceSpec == nil) &&
+				// 	(cluster.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil) {
+				// 	continue
+
+				// }
+
+				return fmt.Errorf("found spec 2 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+
+			}
+
+			//when node has both
+			if Nodespec.Storage != nil && Nodespec.CloudStorage != nil {
+
+				//when cluster has only storage
+				if cluster.Spec.CloudStorage == nil {
+					return fmt.Errorf("found spec 3 for storage and cloudstorage on node %d, only 1 type of storage is allowed", node)
+				}
+
+				//when cluster has only cloud, it can be diff from node or just copied to node
+				if cluster.Spec.Storage == nil && !reflect.DeepEqual(cluster.Spec.CloudStorage.CloudStorageCommon, Nodespec.CloudStorage.CloudStorageCommon) {
+					return fmt.Errorf("found spec 4 for storage and cloudstorage on node %d, only 1 type of storage is allowed", node)
+				}
+			}
+			//if both cloud and cluster storage are different
+			if cluster.Spec.CloudStorage != nil && Nodespec.CloudStorage != nil && !reflect.DeepEqual(cluster.Spec.Storage, Nodespec.Storage) {
+				if cluster.Spec.Storage == nil && !reflect.DeepEqual(cluster.Spec.CloudStorage.CloudStorageCommon, Nodespec.CloudStorage.CloudStorageCommon) {
+					return fmt.Errorf("found spec 5 for storage and cloudstorage on node %d, only 1 type of storage is allowed", node)
+				}
+			}
+
 		}
-		if spec.CloudStorage != nil {
-			nodeCloudStorage = true
-			index = ind
-		}
-		if spec.Storage != nil {
-			nodeStorage = true
-			index = ind
-		}
 	}
-	if (cluster.Spec.Storage != nil) && (nodeCloudStorage) {
-		return fmt.Errorf("found storage for cluster and cloud storage for node %d in specs, mixing of storage types not allowed", index)
-	}
-	if (cluster.Spec.CloudStorage != nil) && (nodeStorage) {
-		return fmt.Errorf("found cloud storage for cluster and storage for node %d in specs, mixing of storage types not allowed", index)
-	}
+
 	return nil
 }
+
+// func isCommonCloudSpecsEqual(cluster *corev1.StorageCluster, node corev1.NodeSpec) bool {
+// 	val1 := reflect.DeepEqual(*cluster.Spec.CloudStorage.CloudStorageCommon, *node.CloudStorage.CloudStorageCommon)
+// 	return val1
+// }
+
+// validateStorageSpec is used to check if both cloudstorage and storage are not present in the spec
+// func (c *Controller) validateStorageSpec(cluster *corev1.StorageCluster) error {
+
+// 	//when cluster spec has both and no node config
+// 	if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil && cluster.Spec.Nodes == nil {
+// 		return fmt.Errorf("found spec 1 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+// 	}
+
+// 	if cluster.Spec.Nodes != nil {
+// 		for node, Nodespec := range cluster.Spec.Nodes {
+
+// 			//when cluster has both and node spec has either 1 type
+// 			// if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil && (Nodespec.Storage == nil || Nodespec.CloudStorage == nil) {
+// 			// 	return fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+
+// 			// }
+
+// 			// if Nodespec.Storage != nil && Nodespec.CloudStorage != nil && (cluster.Spec.Storage == nil && cluster.Spec.CloudStorage == nil) {
+// 			// 	return fmt.Errorf("found spec for storage and cloudstorage on node %d, only 1 type of storage is allowed", node)
+
+// 			// }
+// 			//When node has both types, it might not be error
+// 			if Nodespec.Storage != nil && Nodespec.CloudStorage != nil {
+
+// 				//When cluster level cloud and node level storage
+// 				if cluster.Spec.CloudStorage != nil && reflect.DeepEqual(*cluster.Spec.CloudStorage, *Nodespec.CloudStorage) {
+// 					continue
+// 				}
+// 				// if cluster.Spec.CloudStorage != nil && reflect.DeepEqual(*cluster.Spec.CloudStorage.DeviceSpecs, *Nodespec.CloudStorage.DeviceSpecs) &&
+// 				// 	reflect.DeepEqual(*cluster.Spec.CloudStorage.JournalDeviceSpec, *Nodespec.CloudStorage.JournalDeviceSpec) &&
+// 				// 	reflect.DeepEqual(*cluster.Spec.CloudStorage.SystemMdDeviceSpec, *Nodespec.CloudStorage.SystemMdDeviceSpec) &&
+// 				// 	reflect.DeepEqual(*cluster.Spec.CloudStorage.KvdbDeviceSpec, *Nodespec.CloudStorage.KvdbDeviceSpec) &&
+// 				// 	reflect.DeepEqual(*cluster.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup, *Nodespec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup) {
+// 				// 	continue
+// 				// }
+// 				//When node has both but cluster level has only 1
+// 				if cluster.Spec.Storage == nil || cluster.Spec.CloudStorage == nil {
+// 					return fmt.Errorf("found spec 3 for storage and cloudstorage on node %d, only 1 type of storage is allowed", node)
+// 				}
+// 				//When cluster level storage and node level cloud
+// 				if reflect.DeepEqual(*Nodespec.Storage, *cluster.Spec.Storage) && (cluster.Spec.CloudStorage.DeviceSpecs == nil) &&
+// 					(cluster.Spec.CloudStorage.JournalDeviceSpec == nil) &&
+// 					(cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil) &&
+// 					(cluster.Spec.CloudStorage.KvdbDeviceSpec == nil) &&
+// 					(cluster.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil) {
+// 					continue
+// 				}
+
+// 				return fmt.Errorf("found spec 4 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+
+// 			}
+// 		}
+// 	}
+
+// 	return nil
+
+// 	// //check if any of any of the nodes and cluster storage congifs clash
+// 	// nodeCloudStorage := false
+// 	// nodeStorage := false
+// 	// index := -1
+// 	// for ind, spec := range cluster.Spec.Nodes {
+// 	// 	if spec.CloudStorage != nil && spec.Storage != nil {
+// 	// return fmt.Errorf("found spec for storage and cloud storage for node %d, ensure only 1 storage type is used", ind)
+
+// 	// 	}
+// 	// }
+// 	// if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil {
+// 	// 	for ind, spec := range cluster.Spec.Nodes {
+// 	// 		if cluster.Spec.Storage == spec.Storage ||
+// 	// 	}
+// 	// 	return fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+// 	// }
+// 	// return nil
+// }
 
 func isPreflightComplete(cluster *corev1.StorageCluster) bool {
 	// Check pre-check status

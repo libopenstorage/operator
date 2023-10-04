@@ -6774,7 +6774,10 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
-
+	useAllDevices := true
+	cluster.Spec.Storage = &corev1.StorageSpec{
+		UseAll: &useAllDevices,
+	}
 	cluster.Spec.Env = []v1.EnvVar{
 		{
 			Name:  "CLUSTER_ENV",
@@ -9526,6 +9529,47 @@ func TestStorageClusterStateDuringValidation(t *testing.T) {
 	require.Equal(t, string(corev1.ClusterStateDegraded), updatedCluster.Status.Phase)
 	require.False(t, pxutil.IsFreshInstall(updatedCluster))
 }
+
+// func TestStorageSpecValidation(t *testing.T) {
+// 	mockCtrl := gomock.NewController(t)
+// 	cluster := &corev1.StorageCluster{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name:      "cluster",
+// 			Namespace: "ns",
+// 		},
+// 	}
+// 	useAllDevices := true
+// 	cluster.Spec.Storage = &corev1.StorageSpec{
+// 		UseAll: &useAllDevices,
+// 	}
+// 	// cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
+// 	// 	CloudStorageCommon: corev1.CloudStorageCommon{
+// 	// 		DeviceSpecs: stringSlicePtr([]string{"type=dev1"}),
+// 	// 	},
+// 	// }
+// 	// k8sClient := testutil.FakeK8sClient(cluster)
+// 	// recorder := record.NewFakeRecorder(10)
+// 	driver := testutil.MockDriver(mockCtrl)
+// 	// k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+// 	// controller := Controller{
+// 	// 	client:            k8sClient,
+// 	// 	Driver:            driver,
+// 	// 	recorder:          recorder,
+// 	// 	kubernetesVersion: k8sVersion,
+// 	// }
+// 	validationErr := fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+// 	driver.EXPECT().Validate(gomock.Any()).Return(validationErr).AnyTimes()
+// 	//	request := reconcile.Request{
+// 	//		NamespacedName: types.NamespacedName{
+// 	//			Name:      cluster.Name,
+// 	//			Namespace: cluster.Namespace,
+// 	//		},
+// 	//	}
+// 	//
+// 	// result, err := controller.Reconcile(context.TODO(), request)
+// 	// require.Error(t, err)
+// 	// require.Empty(t, result)
+// }
 
 func replaceOldPod(
 	oldPod *v1.Pod,
