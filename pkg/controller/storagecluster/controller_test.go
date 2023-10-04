@@ -7539,7 +7539,10 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
-
+	useAllDevices := true
+	cluster.Spec.Storage = &corev1.StorageSpec{
+		UseAll: &useAllDevices,
+	}
 	cluster.Spec.Env = []v1.EnvVar{
 		{
 			Name:  "CLUSTER_ENV",
@@ -7561,7 +7564,8 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:        maps.MakeSyncMap[string, *k8s.NodeInfo](),
+		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
