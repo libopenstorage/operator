@@ -249,8 +249,9 @@ func (c *Controller) syncKVDB(
 		if p.Spec.NodeName == storageNode.Name {
 			// Let's delete the pod so that a new one will be created.
 			reason := strings.ToLower(p.Status.Reason)
-			if reason == "outofpods" || reason == "evicted" || reason == "terminated" {
-				logrus.Warningf("Found pod with %s status, will delete it: %+v", p.Status.Reason, p)
+			if reason == "outofpods" || reason == "evicted" || reason == "terminated" || reason == "nodeshutdown" {
+				logrus.Warningf("Found pod %s/%s with %s status, will delete it: %+v",
+					p.Namespace, p.Name, p.Status.Reason, p)
 				err = coreops.Instance().DeletePod(p.Name, p.Namespace, false)
 				if err != nil {
 					return err

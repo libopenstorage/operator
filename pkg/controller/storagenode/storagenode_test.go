@@ -765,6 +765,7 @@ func TestReconcileKVDBOddSatusPodCleanup(t *testing.T) {
 		{"kvdb-term1", "Terminated", "Pod was terminated in response to imminent node shutdown."},
 		{"kvdb-evict2", "Evicted", "..."},
 		{"kvdb-out3", "OutOfPods", "..."},
+		{"kvdb-fail4", "NodeShutdown", "Pod Pod was rejected as the node is shutting down."},
 	}
 	for i, td := range testPodsData {
 		_, err := coreops.Instance().CreatePod(&v1.Pod{
@@ -790,7 +791,7 @@ func TestReconcileKVDBOddSatusPodCleanup(t *testing.T) {
 	// verify we got 3 quirky kvdb-pods
 	podList, err := coreops.Instance().GetPods(cluster.Namespace, kvdbPodLabs)
 	require.NoError(t, err)
-	require.Len(t, podList.Items, 3)
+	require.Len(t, podList.Items, len(testPodsData))
 
 	podNode2 := v1.PodSpec{
 		NodeName: testKVDBNode2,
