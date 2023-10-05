@@ -25,6 +25,7 @@ import (
 
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/preflight"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 )
@@ -905,6 +906,11 @@ func TestPodSpecForVsphere(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
 }
 
 func TestPodSpecWithNetworkSpec(t *testing.T) {
