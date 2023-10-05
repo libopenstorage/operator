@@ -66,6 +66,9 @@ var (
 	K8sVer1_24, _ = version.NewVersion("1.24")
 	// K8sVer1_25 k8s 1.25
 	K8sVer1_25, _ = version.NewVersion("1.25")
+
+	// ErrDoSkipUpdate used by update callback functions, to skip the StorageCluster updates
+	ErrDoSkipUpdate = fmt.Errorf("update skipped")
 )
 
 // NewK8sClient returns a new controller runtime Kubernetes client
@@ -1237,11 +1240,69 @@ func UpdateStorageClusterStatus(
 		},
 		existingCluster,
 	); err != nil {
-		return err
+		return fmt.Errorf("error getting %s/%s: %s", cluster.Namespace, cluster.Name, err)
 	}
 
 	cluster.ResourceVersion = existingCluster.ResourceVersion
-	return k8sClient.Status().Update(context.TODO(), cluster)
+	err := k8sClient.Status().Update(context.TODO(), cluster)
+	if err != nil {
+		return fmt.Errorf("error updating status for %s/%s: %s", cluster.Namespace, cluster.Name, err)
+	}
+	return err
+}
+
+// UpdateLiveStorageClusterCB fetches the latest version of StorageCluster object, runs the given update-callback and updates the cluster STATUS
+func UpdateLiveStorageClusterStatusCB(
+	k8sClient client.Client,
+	name, namespace string,
+	updateFn func(liveCluster *corev1.StorageCluster) error,
+) error {
+	liveCluster := &corev1.StorageCluster{}
+	err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, liveCluster)
+	if err != nil {
+		return fmt.Errorf("error getting StorageCluster %s/%s: %s", namespace, name, err)
+	}
+
+	err = updateFn(liveCluster)
+	if err == ErrDoSkipUpdate {
+		logrus.Trace("Callback-func requested to skip the update")
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("error running update function on StorageCluster %s/%s: %s", namespace, name, err)
+	}
+
+	err = k8sClient.Status().Update(context.TODO(), liveCluster)
+	if err != nil {
+		return fmt.Errorf("error updating status for StorageCluster %s/%s: %s", namespace, name, err)
+	}
+	return nil
+}
+
+// UpdateLiveStorageClusterCB fetches the latest version of StorageCluster object, runs the given update-callback and updates the cluster
+func UpdateLiveStorageClusterCB(
+	k8sClient client.Client,
+	name, namespace string,
+	updateFn func(liveCluster *corev1.StorageCluster) error,
+) error {
+	liveCluster := &corev1.StorageCluster{}
+	err := k8sClient.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, liveCluster)
+	if err != nil {
+		return fmt.Errorf("error getting StorageCluster %s/%s: %s", namespace, name, err)
+	}
+
+	err = updateFn(liveCluster)
+	if err == ErrDoSkipUpdate {
+		logrus.Trace("Callback-func requested to skip the update")
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("error running update function on StorageCluster %s/%s: %s", namespace, name, err)
+	}
+
+	err = k8sClient.Update(context.TODO(), liveCluster, &client.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("error updating StorageCluster %s/%s: %s", namespace, name, err)
+	}
+	return nil
 }
 
 // CreateOrUpdateStorageNode creates a StorageNode if not present, else updates it

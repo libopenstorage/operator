@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -41,10 +42,18 @@ func (p *portworx) UpdateStorageClusterStatus(
 	}
 
 	convertDeprecatedClusterStatus(cluster)
-	err := p.updatePortworxRuntimeStatus(cluster)
+
+	// Update runtime status and StorageNodes from SDK server
+	if err := p.updatePortworxRuntimeStatus(cluster); err != nil {
+		return err
+	}
+
+	// Update migration status
+	p.updatePortworxMigrationStatus(cluster)
+
 	newState := getStorageClusterState(cluster)
 	cluster.Status.Phase = string(newState)
-	return err
+	return nil
 }
 
 func convertDeprecatedClusterStatus(
@@ -169,6 +178,32 @@ func (p *portworx) updatePortworxRuntimeStatus(
 	cluster.Status.ClusterUID = pxCluster.Cluster.Id
 
 	return p.updateStorageNodes(cluster)
+}
+
+// updatePortworxMigrationStatus checks/updates DS->STC Migration status.
+func (p *portworx) updatePortworxMigrationStatus(
+	cluster *corev1.StorageCluster,
+) {
+	// Mark migration as completed when portworx daemonset got deleted
+	// TODO: check other component condition here
+	migrationCondition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	if migrationCondition == nil || migrationCondition.Status != corev1.ClusterConditionStatusInProgress {
+		return
+	}
+	ds := &appsv1.DaemonSet{}
+	err := p.k8sClient.Get(context.TODO(), types.NamespacedName{
+		Name:      constants.PortworxDaemonSetName,
+		Namespace: cluster.Namespace,
+	}, ds)
+
+	if errors.IsNotFound(err) {
+		logrus.Debug("Switching Migration to Completed")
+		util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+			Source: pxutil.PortworxComponentName,
+			Type:   corev1.ClusterConditionTypeMigration,
+			Status: corev1.ClusterConditionStatusCompleted,
+		})
+	}
 }
 
 // getPortworxConditions returns a map of portworx conditions with type as keys
