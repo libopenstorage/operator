@@ -444,15 +444,15 @@ func (c *Controller) validateStorageSpec(cluster *corev1.StorageCluster) error {
 			//when cluster has both, node only has 1
 			if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil && (Nodespec.Storage == nil || Nodespec.CloudStorage == nil) {
 
-				//trial1
-				// if cluster.Spec.CloudStorage.DeviceSpecs == nil &&
-				// 	(cluster.Spec.CloudStorage.JournalDeviceSpec == nil) &&
-				// 	(cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil) &&
-				// 	(cluster.Spec.CloudStorage.KvdbDeviceSpec == nil) &&
-				// 	(cluster.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil) {
-				// 	continue
+				//trial1 when cluster has storage and node has cloud, according to UT node doesnt get storage
+				if cluster.Spec.CloudStorage.DeviceSpecs == nil &&
+					(cluster.Spec.CloudStorage.JournalDeviceSpec == nil) &&
+					(cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil) &&
+					(cluster.Spec.CloudStorage.KvdbDeviceSpec == nil) &&
+					(cluster.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil) {
+					continue
 
-				// }
+				}
 
 				return fmt.Errorf("found spec 2 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
 
