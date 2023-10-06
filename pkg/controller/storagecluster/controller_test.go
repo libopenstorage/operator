@@ -2000,7 +2000,6 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
 
-	defaultQuantity, _ := resource.ParseQuantity("0")
 	expectedStorageNode1 := &corev1.StorageNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            k8sNode1.Name,
@@ -2011,10 +2010,6 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 		},
 		Status: corev1.NodeStatus{
 			Phase: string(corev1.NodeInitStatus),
-			Storage: corev1.StorageStatus{
-				TotalSize: defaultQuantity,
-				UsedSize:  defaultQuantity,
-			},
 		},
 	}
 	expectedStorageNode2 := expectedStorageNode1.DeepCopy()

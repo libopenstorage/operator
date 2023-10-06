@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -41,10 +42,18 @@ func (p *portworx) UpdateStorageClusterStatus(
 	}
 
 	convertDeprecatedClusterStatus(cluster)
-	err := p.updatePortworxRuntimeStatus(cluster)
+
+	// Update runtime status and StorageNodes from SDK server
+	if err := p.updatePortworxRuntimeStatus(cluster); err != nil {
+		return err
+	}
+
+	// Update migration status
+	p.updatePortworxMigrationStatus(cluster)
+
 	newState := getStorageClusterState(cluster)
 	cluster.Status.Phase = string(newState)
-	return err
+	return nil
 }
 
 func convertDeprecatedClusterStatus(
@@ -169,6 +178,32 @@ func (p *portworx) updatePortworxRuntimeStatus(
 	cluster.Status.ClusterUID = pxCluster.Cluster.Id
 
 	return p.updateStorageNodes(cluster)
+}
+
+// updatePortworxMigrationStatus checks/updates DS->STC Migration status.
+func (p *portworx) updatePortworxMigrationStatus(
+	cluster *corev1.StorageCluster,
+) {
+	// Mark migration as completed when portworx daemonset got deleted
+	// TODO: check other component condition here
+	migrationCondition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+	if migrationCondition == nil || migrationCondition.Status != corev1.ClusterConditionStatusInProgress {
+		return
+	}
+	ds := &appsv1.DaemonSet{}
+	err := p.k8sClient.Get(context.TODO(), types.NamespacedName{
+		Name:      constants.PortworxDaemonSetName,
+		Namespace: cluster.Namespace,
+	}, ds)
+
+	if errors.IsNotFound(err) {
+		logrus.Debug("Switching Migration to Completed")
+		util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
+			Source: pxutil.PortworxComponentName,
+			Type:   corev1.ClusterConditionTypeMigration,
+			Status: corev1.ClusterConditionStatusCompleted,
+		})
+	}
 }
 
 // getPortworxConditions returns a map of portworx conditions with type as keys
@@ -440,6 +475,9 @@ func (p *portworx) updateStorageNodeStatus(
 	node *api.StorageNode,
 	kvdbNodeMap map[string]*kvdb_api.BootstrapEntry,
 ) error {
+	if storageNode.Status.Storage == nil {
+		storageNode.Status.Storage = &corev1.StorageStatus{}
+	}
 	originalTotalSize := storageNode.Status.Storage.TotalSize
 	storageNode.Status.Storage.TotalSize = *resource.NewQuantity(0, resource.BinarySI)
 	originalUsedSize := storageNode.Status.Storage.UsedSize
@@ -447,7 +485,7 @@ func (p *portworx) updateStorageNodeStatus(
 	originalStorageNodeStatus := storageNode.Status.DeepCopy()
 
 	storageNode.Status.NodeUID = node.Id
-	storageNode.Status.Network = corev1.NetworkStatus{
+	storageNode.Status.Network = &corev1.NetworkStatus{
 		DataIP: node.DataIp,
 		MgmtIP: node.MgmtIp,
 	}
@@ -465,9 +503,11 @@ func (p *portworx) updateStorageNodeStatus(
 	}
 	totalSize := resource.NewQuantity(totalSizeInBytes, resource.BinarySI)
 	usedSize := resource.NewQuantity(usedSizeInBytes, resource.BinarySI)
+	hasStorage := !totalSize.IsZero()
 
 	kvdbEntry, present := kvdbNodeMap[storageNode.Status.NodeUID]
-	if present && kvdbEntry != nil {
+	hasKvdb := present && kvdbEntry != nil
+	if hasKvdb {
 		nodeKVDBCondition := &corev1.NodeCondition{
 			Type:   corev1.NodeKVDBCondition,
 			Status: mapKVDBState(kvdbEntry.State),
@@ -489,8 +529,20 @@ func (p *portworx) updateStorageNodeStatus(
 		storageNode.Status.Conditions = storageNode.Status.Conditions[:k]
 	}
 
+	storageNode.Status.NodeAttributes = &corev1.NodeAttributes{
+		Storage: &hasStorage,
+		KVDB:    &hasKvdb,
+	}
+
 	operatorops.Instance().UpdateStorageNodeCondition(&storageNode.Status, nodeStateCondition)
 	storageNode.Status.Phase = getStorageNodePhase(&storageNode.Status)
+
+	if os, exists := node.NodeLabels[labelOperatingSystem]; exists {
+		storageNode.Status.OperatingSystem = os
+	}
+	if kernel, exists := node.NodeLabels[labelKernelVersion]; exists {
+		storageNode.Status.KernelVersion = kernel
+	}
 
 	if !reflect.DeepEqual(originalStorageNodeStatus, &storageNode.Status) ||
 		totalSize.Cmp(originalTotalSize) != 0 ||
@@ -594,14 +646,14 @@ func mapNodeStatus(status api.Status) corev1.NodeConditionStatus {
 		return corev1.NodeMaintenanceStatus
 
 	case api.Status_STATUS_OK:
-		fallthrough
-	case api.Status_STATUS_STORAGE_DOWN:
 		return corev1.NodeOnlineStatus
 
 	case api.Status_STATUS_DECOMMISSION:
 		return corev1.NodeDecommissionedStatus
 
 	case api.Status_STATUS_STORAGE_DEGRADED:
+		fallthrough
+	case api.Status_STATUS_STORAGE_DOWN:
 		fallthrough
 	case api.Status_STATUS_STORAGE_REBALANCE:
 		fallthrough
