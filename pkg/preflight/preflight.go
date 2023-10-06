@@ -93,6 +93,10 @@ func InitPreflightChecker(client client.Client) error {
 		instance = &gce{
 			checker: *c,
 		}
+	} else if IsPKS() {
+		instance = &pks{
+			checker: *c,
+		}
 	}
 
 	return nil
@@ -117,6 +121,15 @@ func getCloudProviderName() (string, error) {
 	return "", nil
 }
 
+func nameSpaceExists(ns string) bool {
+	if len(ns) == 0 {
+		return false
+	}
+
+	_, err := coreops.Instance().GetNamespace(ns)
+	return err == nil
+}
+
 func getK8sDistributionName() (string, error) {
 	k8sVersion, err := coreops.Instance().GetVersion()
 	if err != nil {
@@ -129,6 +142,11 @@ func getK8sDistributionName() (string, error) {
 	} else if strings.Contains(strings.ToLower(k8sVersion.String()), gkeDistribution) {
 		return gkeDistribution, nil
 	}
+
+	if nameSpaceExists(PksSystemNamespace) {
+		return pksDistribution, nil
+	}
+
 	// TODO: detect other k8s distribution names
 	return "", nil
 }
