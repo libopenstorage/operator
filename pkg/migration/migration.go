@@ -33,7 +33,6 @@ import (
 )
 
 const (
-	portworxDaemonSetName          = "portworx"
 	portworxContainerName          = "portworx"
 	defaultSecretsNamespace        = "portworx"
 	migrationRetryInterval         = 30 * time.Second
@@ -111,16 +110,17 @@ func (h *Handler) Start() {
 		}
 
 		if err := h.processMigration(cluster, pxDaemonSet); err != nil {
+			logrus.WithError(err).Error("Migration encountered errors")
 			k8sutil.WarningEvent(h.ctrl.GetEventRecorder(), cluster, util.MigrationFailedReason,
 				fmt.Sprintf("Migration failed, will retry in %v, %v", migrationRetryIntervalFunc(), err))
 
-			updatedCluster := &corev1.StorageCluster{}
-			if err := h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, updatedCluster); err != nil {
-				logrus.Errorf("Failed to get StorageCluster. %v", err)
-			}
-			updatedCluster.Status.Phase = string(corev1.ClusterStateDegraded)
-			if err := k8sutil.UpdateStorageClusterStatus(h.client, updatedCluster); err != nil {
-				logrus.Errorf("Failed to update StorageCluster status. %v", err)
+			err = k8sutil.UpdateLiveStorageClusterStatusCB(h.client, cluster.Name, cluster.Namespace,
+				func(liveCluster *corev1.StorageCluster) error {
+					liveCluster.Status.Phase = string(corev1.ClusterStateDegraded)
+					return nil
+				})
+			if err != nil {
+				logrus.WithError(err).Errorf("Failed to update StorageCluster status to Degraded")
 			}
 			return false, nil
 		}
@@ -164,10 +164,12 @@ func (h *Handler) processMigration(
 ) error {
 	nodeList := &v1.NodeList{}
 	if err := h.client.List(context.TODO(), nodeList, &client.ListOptions{}); err != nil {
+		logrus.WithError(err).Errorf("Error fetching nodes list")
 		return err
 	}
 	nodes, err := h.markAllNodesAsPending(nodeList)
 	if err != nil {
+		logrus.WithError(err).Errorf("Error marking all nodes as pending-migration")
 		return err
 	}
 
@@ -175,76 +177,90 @@ func (h *Handler) processMigration(
 	// correctly as we go through different phases of migration we can use that instead of this
 	// internal annotation.
 	// Block the component migration until the portworx pod migration is finished.
-	cluster.Annotations[constants.AnnotationPauseComponentMigration] = "true"
-	if err := h.client.Update(context.TODO(), cluster, &client.UpdateOptions{}); err != nil {
+	err = k8sutil.UpdateLiveStorageClusterCB(h.client, cluster.Name, cluster.Namespace,
+		func(liveCluster *corev1.StorageCluster) error {
+			liveCluster.Annotations[constants.AnnotationPauseComponentMigration] = "true"
+			return nil
+		})
+	if err != nil {
+		logrus.WithError(err).Errorf("Error updating StorageCluster annotation %s=true",
+			constants.AnnotationPauseComponentMigration)
 		return err
 	}
+
 	// Unblock operator reconcile loop to start managing the storagecluster
-	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
-		Source: pxutil.PortworxComponentName,
-		Type:   corev1.ClusterConditionTypeMigration,
-		Status: corev1.ClusterConditionStatusInProgress,
-	})
-	if err := k8sutil.UpdateStorageClusterStatus(h.client, cluster); err != nil {
+	err = k8sutil.UpdateLiveStorageClusterStatusCB(h.client, cluster.Name, cluster.Namespace,
+		func(liveCluster *corev1.StorageCluster) error {
+			condition := util.GetStorageClusterCondition(liveCluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
+			if condition == nil || condition.Status != corev1.ClusterConditionStatusPending {
+				return k8sutil.ErrDoSkipUpdate
+			}
+			logrus.Debugf("Migration condition %v, updating to %v",
+				condition.Status, corev1.ClusterConditionStatusInProgress)
+			util.UpdateStorageClusterCondition(liveCluster, &corev1.ClusterCondition{
+				Source: pxutil.PortworxComponentName,
+				Type:   corev1.ClusterConditionTypeMigration,
+				Status: corev1.ClusterConditionStatusInProgress,
+			})
+			return nil
+		})
+	if err != nil {
+		logrus.WithError(err).Errorf("Error updating StorageCluster conditions")
 		return err
 	}
 
 	if err := h.updateDaemonsetToRunOnPendingNodes(ds); err != nil {
+		logrus.WithError(err).Errorf("Error updating DaemonSet on pending nodes")
 		return err
 	}
 
 	portworxNodes := sortedPortworxNodes(cluster, nodes)
 	if cluster.Spec.UpdateStrategy.Type == corev1.OnDeleteStorageClusterStrategyType {
 		if err := h.portworxNodesOnDeleteUpdate(cluster, ds, portworxNodes); err != nil {
+			logrus.WithError(err).Errorf("Error running OnDelete update of nodes")
 			return err
 		}
 	} else if err := h.portworxNodesRollingUpdate(cluster, ds, portworxNodes); err != nil {
+		logrus.WithError(err).Errorf("Error running Rolling update of nodes")
 		return err
 	}
 
 	logrus.Infof("Starting migration of components")
 	logrus.Infof("Deleting old components")
 	if err := h.deleteComponents(cluster); err != nil {
+		logrus.WithError(err).Errorf("Error deleting components")
 		return err
 	}
 
-	updatedCluster := &corev1.StorageCluster{}
-	if err := h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, updatedCluster); err != nil {
-		return err
-	}
 	// Notify operator to start installing the new components
 	logrus.Infof("Starting operator managed components")
-	delete(updatedCluster.Annotations, constants.AnnotationPauseComponentMigration)
-	if err := h.client.Update(context.TODO(), updatedCluster, &client.UpdateOptions{}); err != nil {
+	err = k8sutil.UpdateLiveStorageClusterCB(h.client, cluster.Name, cluster.Namespace,
+		func(liveCluster *corev1.StorageCluster) error {
+			delete(liveCluster.Annotations, constants.AnnotationPauseComponentMigration)
+			return nil
+		})
+	if err != nil {
+		logrus.WithError(err).Errorf("Error removing StorageCluster annotation %s", constants.AnnotationPauseComponentMigration)
 		return err
 	}
 
 	// TODO: Wait for all components to be up, before marking the migration as completed
 
-	// Mark migration as completed in the cluster condition list
-	updatedCluster = &corev1.StorageCluster{}
-	if err := h.client.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, updatedCluster); err != nil {
-		return err
-	}
-	util.UpdateStorageClusterCondition(updatedCluster, &corev1.ClusterCondition{
-		Source: pxutil.PortworxComponentName,
-		Type:   corev1.ClusterConditionTypeMigration,
-		Status: corev1.ClusterConditionStatusCompleted,
-	})
-	if err := k8sutil.UpdateStorageClusterStatus(h.client, updatedCluster); err != nil {
-		return err
-	}
+	// note: Migration switches to Complete via drivers/storage/portworx/status.go:updatePortworxMigrationStatus
+	// -- updating it here would result in concurrent Status update error
 
 	// TODO: once daemonset is deleted, if we restart operator all code after this line
 	// will not be re-executed, so we should delete daemonset after everything is finished.
 	logrus.Infof("Deleting portworx DaemonSet")
 	if err := h.deletePortworxDaemonSet(ds); err != nil {
+		logrus.WithError(err).Errorf("Error removing Portworx DaemonSet")
 		return err
 	}
 
 	// Unmark the nodes after the daemonset has been deleted, else it will create pods again
 	logrus.Infof("Removing migration label from all nodes")
 	if err := h.unmarkAllDoneNodes(); err != nil {
+		logrus.WithError(err).Errorf("Error unmarking nodes for migration")
 		return err
 	}
 
@@ -253,6 +269,7 @@ func (h *Handler) processMigration(
 	// this cluster is a result of migration. After we have added that we can remove the
 	// migration-approved annotation after a successful migration.
 
+	logrus.Info("Migration operations completed successfully")
 	return nil
 }
 
@@ -531,6 +548,7 @@ func (h *Handler) markMigrationAsStarting(n *v1.Node) error {
 	n.Labels = node.Labels
 	value := node.Labels[constants.LabelPortworxDaemonsetMigration]
 	if value == constants.LabelValueMigrationPending {
+		logrus.Debugf("Setting label %s=%s on node %s", constants.LabelPortworxDaemonsetMigration, constants.LabelValueMigrationStarting, node.GetName())
 		node.Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationStarting
 		return h.client.Update(context.TODO(), node, &client.UpdateOptions{})
 	}
@@ -545,6 +563,7 @@ func (h *Handler) markMigrationAsInProgress(n *v1.Node) error {
 	n.Labels = node.Labels
 	value := node.Labels[constants.LabelPortworxDaemonsetMigration]
 	if value == constants.LabelValueMigrationStarting {
+		logrus.Debugf("Setting label %s=%s on node %s", constants.LabelPortworxDaemonsetMigration, constants.LabelValueMigrationInProgress, node.GetName())
 		node.Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationInProgress
 		return h.client.Update(context.TODO(), node, &client.UpdateOptions{})
 	}
@@ -559,6 +578,7 @@ func (h *Handler) markMigrationAsDone(n *v1.Node) error {
 	n.Labels = node.Labels
 	value := node.Labels[constants.LabelPortworxDaemonsetMigration]
 	if value == constants.LabelValueMigrationInProgress {
+		logrus.Debugf("Setting label %s=%s on node %s", constants.LabelPortworxDaemonsetMigration, constants.LabelValueMigrationDone, node.GetName())
 		node.Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationDone
 		return h.client.Update(context.TODO(), node, &client.UpdateOptions{})
 	}
@@ -573,6 +593,7 @@ func (h *Handler) markAllNodesAsPending(nodeList *v1.NodeList) ([]*v1.Node, erro
 			node.Labels = make(map[string]string)
 		}
 		if v := node.Labels[constants.LabelPortworxDaemonsetMigration]; strings.TrimSpace(v) == "" {
+			logrus.Debugf("Setting label %s=%s on node %s", constants.LabelPortworxDaemonsetMigration, constants.LabelValueMigrationPending, node.GetName())
 			node.Labels[constants.LabelPortworxDaemonsetMigration] = constants.LabelValueMigrationPending
 			if err := h.client.Update(context.TODO(), node, &client.UpdateOptions{}); err != nil {
 				return nil, err
@@ -592,6 +613,7 @@ func (h *Handler) unmarkAllDoneNodes() error {
 	for _, node := range nodeList.Items {
 		value := node.Labels[constants.LabelPortworxDaemonsetMigration]
 		if value == constants.LabelValueMigrationPending || value == constants.LabelValueMigrationDone {
+			logrus.Debugf("Removing label %s on node %s", constants.LabelPortworxDaemonsetMigration, node.GetName())
 			delete(node.Labels, constants.LabelPortworxDaemonsetMigration)
 			if err := h.client.Update(context.TODO(), &node, &client.UpdateOptions{}); err != nil {
 				logrus.Errorf("Failed to remove migration label from node: %v. %v", node.Name, err)
@@ -610,7 +632,7 @@ func (h *Handler) getPortworxDaemonSet(ds *appsv1.DaemonSet) (*appsv1.DaemonSet,
 	err := h.client.Get(
 		context.TODO(),
 		types.NamespacedName{
-			Name:      portworxDaemonSetName,
+			Name:      constants.PortworxDaemonSetName,
 			Namespace: ds.Namespace,
 		},
 		pxDaemonSet,
@@ -634,15 +656,16 @@ func (h *Handler) findPortworxDaemonSet() (*appsv1.DaemonSet, error) {
 	}
 
 	for _, ds := range dsList.Items {
-		if ds.Name == portworxDaemonSetName {
+		if ds.Name == constants.PortworxDaemonSetName {
 			return ds.DeepCopy(), nil
 		}
 	}
 
-	return nil, errors.NewNotFound(appsv1.Resource("DaemonSet"), portworxDaemonSetName)
+	return nil, errors.NewNotFound(appsv1.Resource("DaemonSet"), constants.PortworxDaemonSetName)
 }
 
 func (h *Handler) deletePortworxDaemonSet(ds *appsv1.DaemonSet) error {
+	logrus.Debugf("Deleting Portworx DaemonSet")
 	pxDaemonSet := &appsv1.DaemonSet{}
 	err := h.client.Get(
 		context.TODO(),
