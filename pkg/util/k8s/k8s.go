@@ -1240,13 +1240,15 @@ func UpdateStorageClusterStatus(
 		},
 		existingCluster,
 	); err != nil {
-		return fmt.Errorf("error getting %s/%s: %s", cluster.Namespace, cluster.Name, err)
+		logrus.WithError(err).Errorf("error getting %s/%s", cluster.Namespace, cluster.Name)
+		return err
 	}
 
 	cluster.ResourceVersion = existingCluster.ResourceVersion
 	err := k8sClient.Status().Update(context.TODO(), cluster)
 	if err != nil {
-		return fmt.Errorf("error updating status for %s/%s: %s", cluster.Namespace, cluster.Name, err)
+		logrus.WithError(err).Errorf("error updating status for %s/%s", cluster.Namespace, cluster.Name)
+		return err
 	}
 	return err
 }
