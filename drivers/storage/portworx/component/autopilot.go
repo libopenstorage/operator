@@ -218,9 +218,9 @@ func (c *autopilot) createServiceAccount(
 func (c *autopilot) createClusterRole() error {
 	rules := []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{""},
+			APIGroups: []string{"", "events.k8s.io"},
 			Resources: []string{"events"},
-			Verbs:     []string{"create", "patch"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 		},
 		{
 			APIGroups: []string{""},

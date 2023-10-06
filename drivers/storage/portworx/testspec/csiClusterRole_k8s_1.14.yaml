@@ -33,7 +33,7 @@ rules:
 - apiGroups: ["apps"]
   resources: ["replicasets"]
   verbs: ["get"]
-- apiGroups: [""]
+- apiGroups: ["", "events.k8s.io"]
   resources: ["events"]
   verbs: ["get", "list", "watch", "create", "update", "patch"]
 - apiGroups: [""]
