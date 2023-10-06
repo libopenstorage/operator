@@ -2781,11 +2781,11 @@ func TestUpdateClusterStatus(t *testing.T) {
 		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedClusterResp, nil).
 		Times(2)
-	// Migration in progress
+	// Migration not completed
 	util.UpdateStorageClusterCondition(cluster, &corev1.ClusterCondition{
 		Source: pxutil.PortworxComponentName,
 		Type:   corev1.ClusterConditionTypeMigration,
-		Status: corev1.ClusterConditionStatusInProgress,
+		Status: corev1.ClusterConditionStatusPending,
 	})
 	err = driver.UpdateStorageClusterStatus(cluster)
 	require.NoError(t, err)
@@ -2795,7 +2795,7 @@ func TestUpdateClusterStatus(t *testing.T) {
 	require.Len(t, cluster.Status.Conditions, 2)
 	condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
 	require.NotNil(t, condition)
-	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+	require.Equal(t, corev1.ClusterConditionStatusPending, condition.Status)
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeRuntimeState)
 	require.NotNil(t, condition)
 	require.Equal(t, corev1.ClusterConditionStatusOffline, condition.Status)

@@ -770,7 +770,7 @@ func (c *Controller) syncStorageCluster(
 	}
 
 	if err := c.miscCleanUp(cluster); err != nil {
-		return err
+		return fmt.Errorf("misc cleanup failed: %s", err)
 	}
 
 	if !isPreflightComplete(cluster) {
@@ -779,7 +779,7 @@ func (c *Controller) syncStorageCluster(
 
 	// Ensure Stork is deployed with right configuration
 	if err := c.syncStork(cluster); err != nil {
-		return err
+		return fmt.Errorf("stork sync failed: %s", err)
 	}
 
 	// Construct histories of the StorageCluster, and get the hash of current history
@@ -794,14 +794,14 @@ func (c *Controller) syncStorageCluster(
 	// deletions have been processed.
 	err = c.manage(cluster, hash)
 	if err != nil {
-		return err
+		return fmt.Errorf("manage failed: %s", err)
 	}
 
 	switch cluster.Spec.UpdateStrategy.Type {
 	case corev1.OnDeleteStorageClusterStrategyType:
 	case corev1.RollingUpdateStorageClusterStrategyType:
 		if err := c.rollingUpdate(cluster, hash); err != nil {
-			return err
+			return fmt.Errorf("rolling update failed: %s", err)
 		}
 	}
 
