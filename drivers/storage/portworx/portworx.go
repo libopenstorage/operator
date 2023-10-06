@@ -45,6 +45,8 @@ const (
 	labelPortworxVersion              = "PX Version"
 	defaultEksCloudStorageDevice      = "type=gp3,size=150"
 	preFlightTimeOut                  = 15 * time.Minute
+	labelOperatingSystem              = "OS"
+	labelKernelVersion                = "Kernel Version"
 )
 
 type portworx struct {
