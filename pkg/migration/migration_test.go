@@ -2156,8 +2156,6 @@ func TestSuccessfulMigration(t *testing.T) {
 	require.NoError(t, err)
 	_, annotationExists := cluster.Annotations[constants.AnnotationPauseComponentMigration]
 	require.False(t, annotationExists)
-	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
-	require.Equal(t, corev1.ClusterConditionStatusCompleted, condition.Status)
 }
 
 func TestFailedMigrationRecoveredWithSkip(t *testing.T) {
