@@ -28,7 +28,7 @@ ifndef DOCKER_HUB_REGISTRY_IMG
     $(warning DOCKER_HUB_REGISTRY_IMG not defined, using '$(DOCKER_HUB_REGISTRY_IMG)' instead)
 endif
 ifndef BASE_REGISTRY_IMG
-    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:23.5.1
+    BASE_REGISTRY_IMG := docker.io/portworx/px-operator-registry:23.7.0
     $(warning BASE_REGISTRY_IMG not defined, using '$(BASE_REGISTRY_IMG)' instead)
 endif
 
@@ -103,20 +103,24 @@ $(GOPATH)/bin/mockgen:
 	env GOFLAGS="" go install github.com/golang/mock/mockgen@latest
 
 $(GOPATH)/bin/golangci-lint:
-	env GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.51.0
+	env GOFLAGS="" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.1
 
 $(GOPATH)/bin/errcheck:
 	env GOFLAGS="" go install github.com/kisielk/errcheck@latest
 
 $(GOPATH)/bin/staticcheck:
-	env GOFLAGS="" go install honnef.co/go/tools/cmd/staticcheck@v0.3.3
+	env GOFLAGS="" go install honnef.co/go/tools/cmd/staticcheck@v0.4.3
 
 # Static checks
 
 vendor-tidy:
 	go mod tidy
 
-lint: $(GOPATH)/bin/golangci-lint
+lint-version-check: $(GOPATH)/bin/golangci-lint
+	# golint version-check ...  (rm $< if fails)
+	@$(GOPATH)/bin/golangci-lint version | grep -q go1\.20\.
+
+lint: $(GOPATH)/bin/golangci-lint lint-version-check
 	# golint check ...
 	@$(GOPATH)/bin/golangci-lint run --timeout=5m ./...
 
@@ -190,11 +194,11 @@ container:
 	@echo "Building operator image $(OPERATOR_IMG)"
 	docker build --pull --tag $(OPERATOR_IMG) -f build/Dockerfile .
 
-DOCK_BUILD_CNT	:= golang:1.19
+DOCK_BUILD_CNT	:= golang:1.20
 
 docker-build:
 	@echo "Building using docker"
-	docker run --rm -v $(shell pwd):/go/src/github.com/libopenstorage/operator $(DOCK_BUILD_CNT) \
+	docker run --rm --privileged=true -v $(shell pwd):/go/src/github.com/libopenstorage/operator $(DOCK_BUILD_CNT) \
 		/bin/bash -c "cd /go/src/github.com/libopenstorage/operator; make vendor-update all test integration-test"
 
 deploy:
@@ -259,10 +263,13 @@ getccmconfigs:
 getpluginconfigs:
 	cp deploy/plugin/* bin/configs/
 
+getwindowsconfig:
+	cp deploy/windows/* bin/configs
+
 getgrafanaconfigs:
 	cp deploy/grafana/* bin/configs/
 
-getconfigs: cleanconfigs getccmconfigs getpluginconfigs getgrafanaconfigs
+getconfigs: cleanconfigs getccmconfigs getpluginconfigs getgrafanaconfigs getwindowsconfig
 	wget -q '$(PX_DOC_HOST)/samples/k8s/pxc/portworx-prometheus-rule.yaml' -P bin/configs --no-check-certificate
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagerconfigs.yaml' -O bin/configs/prometheus-crd-alertmanagerconfigs.yaml
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagers.yaml' -O bin/configs/prometheus-crd-alertmanagers.yaml

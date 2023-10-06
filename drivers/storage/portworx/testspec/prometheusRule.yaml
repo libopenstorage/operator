@@ -78,8 +78,7 @@ spec:
         description: Portworx storage on {{$labels.instance}} is over 80% used
           for more than 5 minutes.
         summary: Portworx storage on {{$labels.instance}} is at {{$value}}% used.
-      expr: 100 * (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)
-        > 80
+      expr: 100 * (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes) > 80
       for: 5m
       labels:
         issue: Portworx storage usage on {{$labels.instance}} is critical.
@@ -93,8 +92,7 @@ spec:
         description: Portworx storage on {{$labels.instance}} is over 70% used
           for more than 5 minutes.
         summary: Portworx storage on {{$labels.instance}} is at {{$value}}% used.
-      expr: 100 * (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)
-        > 70
+      expr: 100 * (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes) > 70
       for: 5m
       labels:
         issue: Portworx storage usage on {{$labels.instance}} is high.
@@ -106,7 +104,7 @@ spec:
     - alert: PortworxStorageWillFill
       annotations:
         description: Portworx storage on {{$labels.instance}} is over 70% full
-          and has been predicted to fill within 2 weeks.
+          and is predicted to fill within 2 weeks.
         summary: Portworx storage on {{$labels.instance}} is over 70% full and
           is predicted to fill within 2 weeks.
       expr: (100 * (1 - (px_cluster_disk_utilized_bytes / px_cluster_disk_total_bytes)))
@@ -123,45 +121,44 @@ spec:
         scrape_target_name: "{{$labels.node}}"
     - alert: PortworxStorageNodeDown
       annotations:
-        description: Portworx Storage Node has been offline for more than 5 minutes.
-        summary: Portworx Storage Node is Offline.
-      expr: max(px_cluster_status_nodes_storage_down) > 0
+        description: '{{ $value | printf "%.0f" }} Portworx node(s) are in StorageDown state for more than 5 minutes.'
+        summary: One or more Portworx nodes are in StorageDown state.
+      expr: max by(cluster, clusterUUID) (px_cluster_status_nodes_storage_down) > 0
       for: 5m
       labels:
         issue: Portworx Storage Node is Offline.
         severity: critical
         resource_type: portworx-cluster
         resource_name: "{{$labels.cluster}}"
-        scrape_target_type: portworx-node
-        scrape_target_name: "{{$labels.node}}"
+        scrape_target_type: portworx-cluster
+        scrape_target_name: "{{$labels.cluster}}"
     - alert: PortworxQuorumUnhealthy
       annotations:
         description: Portworx cluster Quorum Unhealthy for more than 5 minutes.
         summary: Portworx Quorum Unhealthy.
-      expr: max(px_cluster_status_cluster_quorum) > 1
+      expr: max by(cluster, clusterUUID) (px_cluster_status_cluster_quorum) > 1
       for: 5m
       labels:
         issue: Portworx Quorum Unhealthy.
         severity: critical
         resource_type: portworx-cluster
         resource_name: "{{$labels.cluster}}"
-        scrape_target_type: portworx-node
-        scrape_target_name: "{{$labels.node}}"
+        scrape_target_type: portworx-cluster
+        scrape_target_name: "{{$labels.cluster}}"
     - alert: PortworxMemberDown
       annotations:
-        description: Portworx cluster member(s) has(have) been down for more than
-          5 minutes.
-        summary: Portworx cluster member(s) is(are) down.
-      expr: (max(px_cluster_status_size) - max(px_cluster_status_nodes_online))
+        description: '{{ $value | printf "%.0f" }} Portworx cluster member(s) have been down for more than 5 minutes.'
+        summary: One or more Portworx cluster members are down.
+      expr: (max by(cluster, clusterUUID) (px_cluster_status_size) - max by(cluster, clusterUUID) (px_cluster_status_nodes_online))
         > 0
       for: 5m
       labels:
-        issue: Portworx cluster member(s) is(are) down.
+        issue: One or more Portworx cluster members are down.
         severity: critical
         resource_type: portworx-cluster
         resource_name: "{{$labels.cluster}}"
-        scrape_target_type: portworx-node
-        scrape_target_name: "{{$labels.node}}"
+        scrape_target_type: portworx-cluster
+        scrape_target_name: "{{$labels.cluster}}"
     - alert: PXBackupError
       annotations:
         description: Failed to take backup for volume {{$labels.volumename}} with error {{$labels.error_string}}.
@@ -263,3 +260,46 @@ spec:
         resource_name: "{{$labels.volumeid}}"
         scrape_target_type: portworx-node
         scrape_target_name: "{{$labels.node}}"
+  - name: Portworx License Alerts
+    rules:
+    - alert: PortworxLicenseExpiry
+      # Tuneable license-expiry alert, reported by each node individually, works for both regular and floating licenses.
+      # - note: if #days drops into negative, the license has already expired
+      expr: px_node_status_license_expiry < 5
+      labels:
+        issue: Portworx license (or license lease) expiring.
+        severity: warning
+        resource_type: portworx-node
+        resource_name: "{{$labels.node}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
+      annotations:
+        summary: Portworx license (or license lease) expiring in {{$value}} days.
+        description: Portworx node {{$labels.node}} of cluster {{$labels.cluster}} reports
+          its license (or license lease) expiring in {{$value}} days.
+    - alert: PortworxLicenseServerDown
+      expr: px_alerts_licenseserverdown > 0
+      labels:
+        severity: warning
+        issue: Portworx license server is unreachable
+        resource_type: portworx-node
+        resource_name: "{{$labels.node}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
+      annotations:
+        summary: Portworx instance {{$labels.instance}} is not able to reach the license server.
+        description: Portworx license server is unreachable. Please check license
+          server health and connection to license server.
+    - alert: PortworxLicenseSetupError
+      expr: px_alerts_floatinglicensesetuperror > 0
+      labels:
+        issue: Error setting up Portworx license
+        severity: critical
+        resource_type: portworx-node
+        resource_name: "{{$labels.node}}"
+        scrape_target_type: portworx-node
+        scrape_target_name: "{{$labels.node}}"
+      annotations:
+        summary: Failed to set up Portworx license on {{$labels.instance}}.
+        description: Failed to set up Portworx license on {{$labels.instance}}.
+          Please check licenses and/or license server.

@@ -267,6 +267,9 @@ func (c *grafana) getGrafanaDeploymentSpec(
 	templateLabels := map[string]string{
 		"app": "grafana",
 	}
+	selectorLabels := map[string]string{
+		"app": "grafana",
+	}
 
 	replicas := int32(1)
 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
@@ -280,7 +283,7 @@ func (c *grafana) getGrafanaDeploymentSpec(
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
-				MatchLabels: templateLabels,
+				MatchLabels: selectorLabels,
 			},
 			Replicas: &replicas,
 			Template: v1.PodTemplateSpec{
@@ -360,6 +363,7 @@ func (c *grafana) getGrafanaDeploymentSpec(
 			}
 		}
 	}
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	return deployment
 }

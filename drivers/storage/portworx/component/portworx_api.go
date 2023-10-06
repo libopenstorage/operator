@@ -292,6 +292,7 @@ func getPortworxAPIDaemonSetSpec(
 			}
 		}
 	}
+	newDaemonSet.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(newDaemonSet.Spec.Template.ObjectMeta)
 
 	return newDaemonSet
 }

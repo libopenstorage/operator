@@ -31,6 +31,7 @@ spec:
       labels:
         name: autopilot
         tier: control-plane
+        operator.libopenstorage.org/managed-by: portworx
     spec:
       containers:
       - command:
@@ -67,6 +68,10 @@ spec:
                     operator: NotIn
                     values:
                       - "false"
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - "linux"
                   - key: node-role.kubernetes.io/master
                     operator: DoesNotExist
                   - key: node-role.kubernetes.io/control-plane
@@ -76,6 +81,10 @@ spec:
                     operator: NotIn
                     values:
                       - "false"
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - "linux"
                   - key: node-role.kubernetes.io/master
                     operator: Exists
                   - key: node-role.kubernetes.io/worker
@@ -85,6 +94,10 @@ spec:
                     operator: NotIn
                     values:
                       - "false"
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - "linux"
                   - key: node-role.kubernetes.io/control-plane
                     operator: Exists
                   - key: node-role.kubernetes.io/worker

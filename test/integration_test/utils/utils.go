@@ -3,17 +3,24 @@ package utils
 import (
 	"bytes"
 	"fmt"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	"github.com/sirupsen/logrus"
 	"os"
 	"regexp"
 	"strings"
+	"testing"
+	"time"
 
 	"github.com/hashicorp/go-version"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
+
+type PxctlMetadata struct {
+	PxStoreV2NodeCount uint
+}
 
 // MakeDNS1123Compatible will make the given string a valid DNS1123 name, which is the same
 // validation that Kubernetes uses for its object names.
@@ -50,32 +57,29 @@ func GetPxVersionFromSpecGenURL(url string) *version.Version {
 }
 
 func addDefaultEnvVars(origEnvVarList []v1.EnvVar, specGenURL string) ([]v1.EnvVar, error) {
-	var envVarList []v1.EnvVar
+	var additionalEnvVars []v1.EnvVar
 
-	// Set release manifest URL and Docker credentials in case of edge-install.portworx.com
-	if strings.Contains(specGenURL, "edge") {
-		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(specGenURL)
-		if err != nil {
-			return nil, err
-		}
-
-		// Add release manifest URL to Env Vars
-		envVarList = append(envVarList, v1.EnvVar{Name: testutil.PxReleaseManifestURLEnvVarName, Value: releaseManifestURL})
+	// Add or remove Release Manifest URL incase of edge or none edge spec
+	envVarsList, err := configurePxReleaseManifestEnvVars(origEnvVarList, specGenURL)
+	if err != nil {
+		return nil, err
 	}
 
 	// Add Portworx image properties, if specified
 	if PxDockerUsername != "" && PxDockerPassword != "" {
-		envVarList = append(envVarList,
+		additionalEnvVars = append(additionalEnvVars,
 			[]v1.EnvVar{
 				{Name: testutil.PxRegistryUserEnvVarName, Value: PxDockerUsername},
 				{Name: testutil.PxRegistryPasswordEnvVarName, Value: PxDockerPassword},
 			}...)
 	}
+
+	// Override PX image
 	if PxImageOverride != "" {
-		envVarList = append(envVarList, v1.EnvVar{Name: testutil.PxImageEnvVarName, Value: PxImageOverride})
+		additionalEnvVars = append(additionalEnvVars, v1.EnvVar{Name: testutil.PxImageEnvVarName, Value: PxImageOverride})
 	}
 
-	return mergeEnvVars(origEnvVarList, envVarList), nil
+	return mergeEnvVars(envVarsList, additionalEnvVars), nil
 }
 
 // mergeEnvVars will overwrite existing or add new env variables
@@ -92,6 +96,48 @@ func mergeEnvVars(origList, newList []v1.EnvVar) []v1.EnvVar {
 		mergedList = append(mergedList, *(env.DeepCopy()))
 	}
 	return mergedList
+}
+
+// configurePxReleaseManifestEnvVars configures PX Release Manifest URL for edge and production PX versions, if needed
+func configurePxReleaseManifestEnvVars(origEnvVarList []v1.EnvVar, specGenURL string) ([]v1.EnvVar, error) {
+	var newEnvVarList []v1.EnvVar
+
+	// Remove release manifest URLs from Env Vars, if any exist
+	for _, env := range origEnvVarList {
+		if env.Name == testutil.PxReleaseManifestURLEnvVarName {
+			continue
+		}
+		newEnvVarList = append(newEnvVarList, env)
+	}
+
+	// Set release manifest URL in case of edge
+	if strings.Contains(specGenURL, "edge") {
+		releaseManifestURL, err := testutil.ConstructPxReleaseManifestURL(specGenURL)
+		if err != nil {
+			return nil, err
+		}
+		logrus.Debugf("Adding [%s] as a [%s] to the env vars, since its an edge endpoint", testutil.PxReleaseManifestURLEnvVarName, releaseManifestURL)
+
+		// Add release manifest URL to Env Vars
+		newEnvVarList = append(newEnvVarList, v1.EnvVar{Name: testutil.PxReleaseManifestURLEnvVarName, Value: releaseManifestURL})
+	}
+
+	return newEnvVarList, nil
+}
+
+func RunPxCmdRetry(command ...string) (string, string, error) {
+	var out string
+	var stderr string
+	var err error
+	for i := 0; i < 4; i++ {
+		out, stderr, err = RunPxCmd(command...)
+		// Occasionally, commands are terminated due to bad connections. Let's retry them.
+		if err == nil || strings.Contains(err.Error(), "command terminated") {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return out, stderr, err
 }
 
 func RunPxCmd(command ...string) (string, string, error) {
@@ -131,5 +177,20 @@ func RunPxCmdInPod(pod *v1.Pod, input ...string) (string, string, error) {
 	if retErr != nil {
 		return "", "", retErr
 	}
+	logrus.Debugf("CMD: %v, Output:%v", input, out.String())
 	return out.String(), stderr.String(), nil
+}
+func AnalyzePxctlStatus(t *testing.T, px_status string) PxctlMetadata {
+	output := PxctlMetadata{}
+	output.PxStoreV2NodeCount = uint(getPxStoreV2NodeCount(t, px_status))
+	return output
+}
+
+func getPxStoreV2NodeCount(t *testing.T, px_status string) int {
+	out := strings.Split(px_status, "SchedulerNodeName")
+	require.Greater(t, len(out), 1, "Could not find SchedulerNodeName in the pxctl status output")
+	out = strings.Split(out[1], "Global Storage Pool")
+	require.Greater(t, len(out), 1, "Could not find \"Global Storage Pool\" string the pxctl status output")
+	return strings.Count(strings.ToLower(out[0]), "px-storev2")
+
 }

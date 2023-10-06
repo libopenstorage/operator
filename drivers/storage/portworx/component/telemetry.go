@@ -112,11 +112,11 @@ const (
 	stagingArcusRegisterProxyURL    = "register.staging-cloud-support.purestorage.com"
 
 	// Ports for telemetry components
-	defaultCCMListeningPort          = 9024
-	defaultCCMListeningPortForPXge30 = 9029
-	defaultCollectorPort             = 10000
-	defaultRegisterPort              = 12001
-	defaultPhonehomePort             = 12002
+	defaultCCMListeningPort            = 9024
+	defaultCCMListeningPortForPXge2138 = 9029
+	defaultCollectorPort               = 10000
+	defaultRegisterPort                = 12001
+	defaultPhonehomePort               = 12002
 
 	arcusPingInterval = 6 * time.Second
 	arcusPingRetry    = 5
@@ -850,6 +850,7 @@ func (t *telemetry) createDeploymentTelemetryRegistration(
 	deployment.Namespace = cluster.Namespace
 	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNameTelemetry
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
 
 	existingDeployment := &appsv1.Deployment{}
@@ -923,6 +924,7 @@ func (t *telemetry) createDaemonSetTelemetryPhonehome(
 	daemonset.Namespace = cluster.Namespace
 	daemonset.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	daemonset.Spec.Template.Spec.ServiceAccountName = ServiceAccountNameTelemetry
+	daemonset.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(daemonset.Spec.Template.ObjectMeta)
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &daemonset.Spec.Template.Spec)
 
 	if restart {
@@ -988,6 +990,7 @@ func (t *telemetry) createDeploymentTelemetryCollectorV2(
 	deployment.Namespace = cluster.Namespace
 	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNameTelemetry
+	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
 
 	existingDeployment := &appsv1.Deployment{}
@@ -1059,14 +1062,8 @@ func CanAccessArcusRegisterEndpoint(
 	}
 	client := &http.Client{}
 	if proxy != "" {
-		if strings.Contains(strings.ToLower(proxy), "@") {
-			if !strings.HasPrefix(strings.ToLower(proxy), "https://") {
-				proxy = "https://" + proxy
-			}
-		} else {
-			if !strings.HasPrefix(strings.ToLower(proxy), "http://") {
-				proxy = "http://" + proxy
-			}
+		if !strings.HasPrefix(strings.ToLower(proxy), "http://") {
+			proxy = "http://" + proxy
 		}
 		proxyURL, err := url.Parse(proxy)
 		if err != nil {
@@ -1216,9 +1213,9 @@ func readConfigMapDataFromFile(
 func GetCCMListeningPort(cluster *corev1.StorageCluster) int {
 	defCCMPort := defaultCCMListeningPort
 
-	pxVer30, _ := version.NewVersion("3.0")
-	if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer30) {
-		defCCMPort = defaultCCMListeningPortForPXge30
+	pxVer2138, _ := version.NewVersion("2.13.8")
+	if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer2138) {
+		defCCMPort = defaultCCMListeningPortForPXge2138
 	}
 
 	startPort := pxutil.StartPort(cluster)

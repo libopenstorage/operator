@@ -545,7 +545,7 @@ func BasicTelemetryRegression(tc *types.TestCase) func(*testing.T) {
 			logrus.Infof("Validate Telemetry is enabled by default, PX version [%s], operator version [%s]", pxVersion, opVersion)
 			require.True(t, telemetryEnabled, "failed to validate default Telemetry status: expected enabled [true], actual enabled [%v]", telemetryEnabled)
 
-			err = testutil.ValidateMonitoring(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateComponentTimeout, ci_utils.DefaultValidateComponentRetryInterval)
+			err = testutil.ValidateMonitoring(ci_utils.PxSpecImages, cluster, cluster, ci_utils.DefaultValidateComponentTimeout, ci_utils.DefaultValidateComponentRetryInterval)
 			require.NoError(t, err)
 		} else {
 			// Validate Telemetry is not enabled by default

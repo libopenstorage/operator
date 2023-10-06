@@ -11,6 +11,7 @@ type Provider interface {
 	GetDefaultDataDrives() *[]string
 	GetDefaultMetadataDrive() *string
 	GetDefaultKvdbDrive() *string
+	GetDefaultJournalDrive() *string
 }
 
 func stringSlicePtr(slice []string) *[]string {

@@ -253,8 +253,9 @@ func (c *Controller) syncKVDB(
 		if p.Spec.NodeName == storageNode.Name {
 			// Let's delete the pod so that a new one will be created.
 			reason := strings.ToLower(p.Status.Reason)
-			if reason == "outofpods" || reason == "evicted" || reason == "terminated" {
-				logrus.Warningf("Found pod with %s status, will delete it: %+v", p.Status.Reason, p)
+			if reason == "outofpods" || reason == "evicted" || reason == "terminated" || reason == "nodeshutdown" {
+				logrus.Warningf("Found pod %s/%s with %s status, will delete it: %+v",
+					p.Namespace, p.Name, p.Status.Reason, p)
 				err = coreops.Instance().DeletePod(p.Name, p.Namespace, false)
 				if err != nil {
 					return err
@@ -376,6 +377,15 @@ func (c *Controller) syncStorage(
 				}
 			}
 
+			value, present := podCopy.Labels[constants.OperatorLabelManagedByKey]
+			if !present || value != constants.OperatorLabelManagedByValue {
+				if podCopy.Labels == nil {
+					podCopy.Labels = make(map[string]string)
+				}
+				podCopy.Labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
+				updateNeeded = true
+			}
+
 			if updateNeeded {
 				// TODO: get latest pod to update
 				if err := c.client.Update(context.TODO(), podCopy); err != nil {
@@ -413,9 +423,10 @@ func (c *Controller) createKVDBPod(
 
 func (c *Controller) kvdbPodLabels(cluster *corev1.StorageCluster) map[string]string {
 	return map[string]string{
-		constants.LabelKeyClusterName: cluster.Name,
-		constants.LabelKeyDriverName:  c.Driver.String(),
-		constants.LabelKeyKVDBPod:     constants.LabelValueTrue,
+		constants.LabelKeyClusterName:       cluster.Name,
+		constants.LabelKeyDriverName:        c.Driver.String(),
+		constants.LabelKeyKVDBPod:           constants.LabelValueTrue,
+		constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
 	}
 }
 

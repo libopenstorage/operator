@@ -54,7 +54,7 @@ const (
 
 	// default dynamic plugin images
 	DefaultDynamicPluginImage      = "portworx/portworx-dynamic-plugin:1.1.0"
-	DefaultDynamicPluginProxyImage = "nginxinc/nginx-unprivileged:1.23"
+	DefaultDynamicPluginProxyImage = "nginxinc/nginx-unprivileged:1.25"
 
 	defaultManifestRefreshInterval = 3 * time.Hour
 )
@@ -96,6 +96,9 @@ type Release struct {
 	Pause                      string `yaml:"pause,omitempty"`
 	DynamicPlugin              string `yaml:"dynamicPlugin,omitempty"`
 	DynamicPluginProxy         string `yaml:"dynamicPluginProxy,omitempty"`
+	CsiLivenessProbe           string `yaml:"csiLivenessProbe,omitempty"`
+	CsiWindowsDriver           string `yaml:"csiWindowsDriver,omitempty"`
+	CsiWindowsNodeRegistrar    string `yaml:"csiWindowsNodeRegistrar,omitempty"`
 }
 
 // Version is the response structure from a versions source
@@ -293,6 +296,9 @@ func fillCSIDefaults(
 	rel.Components.CSISnapshotter = csiImages.Snapshotter
 	rel.Components.CSISnapshotController = csiImages.SnapshotController
 	rel.Components.CSIHealthMonitorController = csiImages.HealthMonitorController
+	rel.Components.CsiLivenessProbe = csiImages.LivenessProbe
+	rel.Components.CsiWindowsDriver = csiImages.CsiDriverInstaller
+	rel.Components.CsiWindowsNodeRegistrar = csiImages.CsiWindowsNodeRegistrar
 }
 
 func fillPrometheusDefaults(

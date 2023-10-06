@@ -49,13 +49,13 @@ const (
 )
 
 var (
-	pxVer2_3_2, _ = version.NewVersion("2.3.2")
-	pxVer2_5_5, _ = version.NewVersion("2.5.5")
-	pxVer2_6, _   = version.NewVersion("2.6")
-	pxVer2_8, _   = version.NewVersion("2.8")
-	pxVer2_9_1, _ = version.NewVersion("2.9.1")
-	pxVer3_0, _   = version.NewVersion("3.0")
-	pxVer3_0_1, _ = version.NewVersion("3.0.1")
+	pxVer2_3_2, _  = version.NewVersion("2.3.2")
+	pxVer2_5_5, _  = version.NewVersion("2.5.5")
+	pxVer2_6, _    = version.NewVersion("2.6")
+	pxVer2_8, _    = version.NewVersion("2.8")
+	pxVer2_9_1, _  = version.NewVersion("2.9.1")
+	pxVer2_13_8, _ = version.NewVersion("2.13.8")
+	pxVer3_0_1, _  = version.NewVersion("3.0.1")
 )
 
 type volumeInfo struct {
@@ -107,7 +107,8 @@ type template struct {
 
 func newTemplate(
 	cluster *corev1.StorageCluster,
-	nodeName string) (*template, error) {
+	nodeName string,
+) (*template, error) {
 	if cluster == nil {
 		return nil, fmt.Errorf("storage cluster cannot be empty")
 	}
@@ -302,8 +303,8 @@ func (p *portworx) GetStoragePodSpec(
 	}
 
 	if _, has := t.cluster.Annotations[pxutil.AnnotationIsPrivileged]; has {
-		if pxutil.GetPortworxVersion(cluster).LessThan(pxVer3_0_1) {
-			err = fmt.Errorf("failed to create pod spec: need portworx %s or higher to use annotation '%s'",
+		if pxutil.GetPortworxVersion(cluster).LessThanOrEqual(pxVer3_0_1) {
+			err = fmt.Errorf("failed to create pod spec: need portworx higher than %s to use annotation '%s'",
 				pxVer3_0_1, pxutil.AnnotationIsPrivileged)
 			return v1.PodSpec{}, err
 		}
@@ -711,6 +712,11 @@ func (t *template) getSelectorTerms(k8sVersion *version.Version) []v1.NodeSelect
 			Operator: v1.NodeSelectorOpNotIn,
 			Values:   []string{"false"},
 		},
+		{
+			Key:      "kubernetes.io/os",
+			Operator: v1.NodeSelectorOpIn,
+			Values:   []string{"linux"},
+		},
 	}
 
 	if t.runOnMaster {
@@ -1035,7 +1041,7 @@ func (t *template) getArguments() []string {
 		args = append(args, "--log", t.cluster.Annotations[pxutil.AnnotationLogFile])
 	}
 	// for non-privileged and PKS, add shared mounts via parameters
-	if t.pxVersion.GreaterThanOrEqual(pxVer3_0_1) &&
+	if t.pxVersion.GreaterThan(pxVer3_0_1) &&
 		(!pxutil.IsPrivileged(t.cluster) || pxutil.IsPKS(t.cluster)) {
 		args = append(args,
 			"-v", "/var/lib/osd/pxns:/var/lib/osd/pxns:shared",
@@ -1057,6 +1063,9 @@ func (t *template) getArguments() []string {
 		}
 	}
 	if len(rtOpts) > 0 {
+		sort.SliceStable(rtOpts, func(i, j int) bool {
+			return strings.Compare(rtOpts[i], rtOpts[j]) < 0
+		})
 		args = append(args, "-rt_opts", strings.Join(rtOpts, ","))
 	}
 
@@ -1153,7 +1162,7 @@ func (t *template) getEnvList() []v1.EnvVar {
 
 	if t.isPKS {
 		ev := "if [ ! -x /bin/systemctl ]; then apt-get update; apt-get install -y systemd; fi"
-		if t.pxVersion.GreaterThanOrEqual(pxVer3_0_1) {
+		if t.pxVersion.GreaterThan(pxVer3_0_1) {
 			ev = "rm -fr /var/lib/osd/driver"
 		}
 		envMap["PRE-EXEC"] = &v1.EnvVar{
@@ -1315,7 +1324,7 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 	if t.cluster.Annotations != nil {
 		preFltCheck = strings.TrimSpace(strings.ToLower(t.cluster.Annotations[pxutil.AnnotationPreflightCheck]))
 	}
-	if t.pxVersion.GreaterThanOrEqual(pxVer3_0) && preFltCheck != "true" {
+	if t.pxVersion.GreaterThanOrEqual(pxVer2_13_8) && preFltCheck != "true" {
 		extensions = append(extensions, t.getTelemetryPhoneHomeVolumeInfoList)
 	}
 	for _, fn := range extensions {
@@ -1326,8 +1335,9 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 
 func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 	volumeMounts := make([]v1.VolumeMount, 0, len(vols))
-	mountPathSet := make(map[string]bool)
+	indexMap := make(map[string]int)
 	runPrivileged := pxutil.IsPrivileged(t.cluster)
+	idx := 0
 	for _, v := range vols {
 		volMount := v1.VolumeMount{
 			Name:             v.name,
@@ -1357,7 +1367,8 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 		}
 		if volMount.MountPath != "" {
 			volumeMounts = append(volumeMounts, volMount)
-			mountPathSet[volMount.MountPath] = true
+			indexMap[volMount.MountPath] = idx
+			idx++
 		}
 	}
 
@@ -1370,16 +1381,24 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 	}
 
 	for _, v := range t.cluster.Spec.Volumes {
-		if _, ok := mountPathSet[v.MountPath]; ok {
-			logrus.Warnf("Found mountPath conflict for volume %s at %s, volume will be ignored", v.Name, v.MountPath)
-			continue
-		}
-		volumeMounts = append(volumeMounts, v1.VolumeMount{
+		userVol := v1.VolumeMount{
 			Name:             pxutil.UserVolumeName(v.Name),
 			MountPath:        v.MountPath,
 			ReadOnly:         v.ReadOnly,
 			MountPropagation: v.MountPropagation,
-		})
+		}
+
+		if i, has := indexMap[v.MountPath]; !has {
+			volumeMounts = append(volumeMounts, userVol)
+			indexMap[v.MountPath] = idx
+			idx++
+		} else if i > len(volumeMounts) || volumeMounts[i].MountPath != v.MountPath {
+			// sanity check failed..
+			logrus.Errorf("INTERNAL ERROR -- invalid volume index (#%d %v)", i, v.MountPath)
+		} else {
+			logrus.Warnf("Replacing mountPath for volume %s at %s with %s", volumeMounts[i].Name, v.MountPath, v.Name)
+			volumeMounts[i] = userVol
+		}
 	}
 
 	return volumeMounts
@@ -1401,7 +1420,7 @@ func (t *template) getVolumes() []v1.Volume {
 	if t.cluster.Annotations != nil {
 		preFltCheck = strings.TrimSpace(strings.ToLower(t.cluster.Annotations[pxutil.AnnotationPreflightCheck]))
 	}
-	if t.pxVersion.GreaterThanOrEqual(pxVer3_0) && preFltCheck != "true" {
+	if t.pxVersion.GreaterThanOrEqual(pxVer2_13_8) && preFltCheck != "true" {
 		extensions = append(extensions, t.getTelemetryPhoneHomeVolumeInfoList)
 	}
 
@@ -1499,6 +1518,7 @@ func (t *template) getVolumes() []v1.Volume {
 		volumes = append(volumes, kvdbVolume)
 	}
 
+	// CHECKME: spec-mounts could override existing mounts, so we purge "dangling" host-mounts
 	for _, v := range t.cluster.Spec.Volumes {
 		volumes = append(volumes, v1.Volume{
 			Name:         pxutil.UserVolumeName(v.Name),
@@ -1853,7 +1873,7 @@ func getDefaultVolumeInfoList(pxVersion *version.Version) []volumeInfo {
 func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
 	list := make([]volumeInfo, 0)
 
-	if pxVersion.GreaterThanOrEqual(pxVer3_0_1) {
+	if pxVersion.GreaterThan(pxVer3_0_1) {
 		list = append(list, volumeInfo{
 			name:             "varlibosd",
 			hostPath:         "/var/lib/osd",

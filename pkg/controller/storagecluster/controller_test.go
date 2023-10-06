@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -1384,8 +1386,9 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test-ns",
 			Labels: map[string]string{
-				constants.LabelKeyClusterName: cluster.Name,
-				constants.LabelKeyDriverName:  driverName,
+				constants.LabelKeyClusterName:       cluster.Name,
+				constants.LabelKeyDriverName:        driverName,
+				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
 			},
 			Annotations: make(map[string]string),
 		},
@@ -1498,8 +1501,9 @@ func TestStoragePodGetsScheduledK8s1_24(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test-ns",
 			Labels: map[string]string{
-				constants.LabelKeyClusterName: cluster.Name,
-				constants.LabelKeyDriverName:  driverName,
+				constants.LabelKeyClusterName:       cluster.Name,
+				constants.LabelKeyDriverName:        driverName,
+				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
 			},
 			Annotations: make(map[string]string),
 		},
@@ -1882,8 +1886,9 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test-ns",
 			Labels: map[string]string{
-				constants.LabelKeyClusterName: cluster.Name,
-				constants.LabelKeyDriverName:  driverName,
+				constants.LabelKeyClusterName:       cluster.Name,
+				constants.LabelKeyDriverName:        driverName,
+				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
 			},
 		},
 		Spec: expectedPodSpec,
@@ -9130,6 +9135,187 @@ func TestEKSPreflightCheck(t *testing.T) {
 	condition = util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
 	require.NotNil(t, condition)
 	require.Equal(t, corev1.ClusterConditionStatusInProgress, condition.Status)
+}
+
+func TestPreflightStorageNodeCreation(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+
+	cluster.Spec.Placement.NodeAffinity = &v1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{
+				{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "px/enabled",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"false"},
+						},
+						{
+							Key:      k8s.NodeRoleLabelControlPlane,
+							Operator: v1.NodeSelectorOpExists,
+						},
+						{
+							Key:      k8s.NodeRoleLabelWorker,
+							Operator: v1.NodeSelectorOpExists,
+						},
+					},
+				},
+				{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "px/enabled",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"false"},
+						},
+						{
+							Key:      k8s.NodeRoleLabelMaster,
+							Operator: v1.NodeSelectorOpDoesNotExist,
+						},
+						{
+							Key:      k8s.NodeRoleLabelControlPlane,
+							Operator: v1.NodeSelectorOpDoesNotExist,
+						},
+						{
+							Key:      k8s.NodeRoleLabelInfra,
+							Operator: v1.NodeSelectorOpDoesNotExist,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	k8sNode1 := createK8sNode("k8s-node-1", 1)
+	k8sNode2 := createK8sNode("k8s-node-2", 1)
+	k8sNode3 := createK8sNode("k8s-node-3", 1)
+	k8sNode4 := createK8sNode("k8s-node-4", 1)
+
+	k8sNode1.Labels["node-role.kubernetes.io/worker"] = ""
+	k8sNode2.Labels["node-role.kubernetes.io/worker"] = ""
+	k8sNode3.Labels["node-role.kubernetes.io/control-plane"] = ""
+	k8sNode4.Labels["node-role.kubernetes.io/worker"] = ""
+
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster, k8sNode1, k8sNode2, k8sNode3, k8sNode4)
+
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+
+	controller := Controller{
+		client: k8sClient,
+		Driver: driver,
+	}
+
+	storageNodeNames := func(storageNodes *corev1.StorageNodeList) []string {
+		sNames := []string{}
+
+		for _, snode := range storageNodes.Items {
+			sNames = append(sNames, snode.Name)
+		}
+		sort.Strings(sNames)
+		return sNames
+	}
+
+	logrus.Infof("Skipping only 'control-plane' node")
+	expectedStorageNodeNames := []string{"k8s-node-1", "k8s-node-2", "k8s-node-4"}
+	err := controller.createPreFlightStorageNodes(cluster)
+	require.NoError(t, err)
+
+	storageNodes := &corev1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, len(expectedStorageNodeNames))
+	sNames := storageNodeNames(storageNodes)
+	require.Equal(t, strings.Join(expectedStorageNodeNames, " "), strings.Join(sNames, " "))
+
+	err = controller.deletePreFlightStorageNodes(cluster)
+	require.NoError(t, err)
+
+	logrus.Infof("Skipping 'control-plane' node & 'px/enabled=false' node")
+	k8sNode2.Labels["px/enabled"] = "false"
+	err = k8sClient.Update(context.TODO(), k8sNode2)
+	require.NoError(t, err)
+
+	expectedStorageNodeNames = []string{"k8s-node-1", "k8s-node-4"}
+
+	err = controller.createPreFlightStorageNodes(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, len(expectedStorageNodeNames))
+	sNames = storageNodeNames(storageNodes)
+	require.Equal(t, strings.Join(expectedStorageNodeNames, " "), strings.Join(sNames, " "))
+
+	err = controller.deletePreFlightStorageNodes(cluster)
+	require.NoError(t, err)
+
+	logrus.Infof("Skipping 'master' node & creating storage node for 'control-plane + worker'")
+	// Remove px/enabled=false
+	k8sNode2.Labels = map[string]string{"node-role.kubernetes.io/worker": ""}
+	err = k8sClient.Update(context.TODO(), k8sNode2)
+	require.NoError(t, err)
+
+	// Add 'worker' to the 'control-plane' node
+	k8sNode3.Labels["node-role.kubernetes.io/worker"] = ""
+	err = k8sClient.Update(context.TODO(), k8sNode3)
+	require.NoError(t, err)
+
+	// Add 'master'
+	k8sNode1.Labels = map[string]string{k8s.NodeRoleLabelMaster: ""}
+	err = k8sClient.Update(context.TODO(), k8sNode1)
+	require.NoError(t, err)
+
+	expectedStorageNodeNames = []string{"k8s-node-2", "k8s-node-3", "k8s-node-4"}
+
+	err = controller.createPreFlightStorageNodes(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, len(expectedStorageNodeNames))
+	sNames = storageNodeNames(storageNodes)
+	require.Equal(t, strings.Join(expectedStorageNodeNames, " "), strings.Join(sNames, " "))
+
+	err = controller.deletePreFlightStorageNodes(cluster)
+	require.NoError(t, err)
+
+	logrus.Infof("Skipping 'infra' node only")
+	// Remove 'master'
+	k8sNode1.Labels = map[string]string{"node-role.kubernetes.io/worker": ""}
+	err = k8sClient.Update(context.TODO(), k8sNode1)
+	require.NoError(t, err)
+
+	// Remove control-plane label
+	k8sNode3.Labels = map[string]string{"node-role.kubernetes.io/worker": ""}
+	err = k8sClient.Update(context.TODO(), k8sNode3)
+	require.NoError(t, err)
+
+	// Add 'infra'
+	k8sNode4.Labels = map[string]string{k8s.NodeRoleLabelInfra: ""}
+	err = k8sClient.Update(context.TODO(), k8sNode4)
+	require.NoError(t, err)
+
+	expectedStorageNodeNames = []string{"k8s-node-1", "k8s-node-2", "k8s-node-3"}
+
+	err = controller.createPreFlightStorageNodes(cluster)
+	require.NoError(t, err)
+
+	storageNodes = &corev1.StorageNodeList{}
+	err = testutil.List(k8sClient, storageNodes)
+	require.NoError(t, err)
+	require.Len(t, storageNodes.Items, len(expectedStorageNodeNames))
+	sNames = storageNodeNames(storageNodes)
+	require.Equal(t, strings.Join(expectedStorageNodeNames, " "), strings.Join(sNames, " "))
+
+	err = controller.deletePreFlightStorageNodes(cluster)
+	require.NoError(t, err)
 }
 
 func TestStorageClusterStateDuringValidation(t *testing.T) {

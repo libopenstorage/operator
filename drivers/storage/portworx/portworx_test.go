@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	version "github.com/hashicorp/go-version"
+	ocp_secv1 "github.com/openshift/api/security/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -207,7 +208,7 @@ func TestValidate(t *testing.T) {
 	preFlighter := NewPreFlighter(cluster, k8sClient, podSpec)
 	require.NotNil(t, preFlighter)
 
-	/// Create preflighter podSpec
+	// / Create preflighter podSpec
 	preflightDSCheck, err := preFlighter.CreatePreFlightDaemonsetSpec(clusterRef)
 	require.NoError(t, err)
 	require.NotNil(t, preflightDSCheck)
@@ -218,6 +219,34 @@ func TestValidate(t *testing.T) {
 			require.True(t, volumeMount.Name != "ccm-phonehome-config")
 		}
 	}
+
+	// Check OCP Security component setting function
+	expectedSCC := testutil.GetExpectedSCC(t, "portworxSCC.yaml")
+	scc := &ocp_secv1.SecurityContextConstraints{}
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NotNil(t, err)
+
+	expectedPxRestrictedSCC := testutil.GetExpectedSCC(t, "portworxRestrictedSCC.yaml")
+	pxRestrictedSCC := &ocp_secv1.SecurityContextConstraints{}
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NotNil(t, err)
+
+	// Install with SCC enabled
+	crd := testutil.GetExpectedCRDV1(t, "sccCrd.yaml")
+	err = k8sClient.Create(context.TODO(), crd)
+	require.NoError(t, err)
+
+	err = createSecurityContextForValidate(recorder, cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSCC, scc)
+
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSCC, scc)
+
 }
 
 func TestValidateCheckFailure(t *testing.T) {
@@ -524,6 +553,139 @@ func TestValidateVsphere(t *testing.T) {
 	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaVsphere)
 }
 
+func TestValidatePure(t *testing.T) {
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	labels := map[string]string{
+		"name": pxPreFlightDaemonSetName,
+	}
+
+	clusterRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	preflightDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pxPreFlightDaemonSetName,
+			Namespace:       cluster.Namespace,
+			Labels:          labels,
+			UID:             types.UID("preflight-ds-uid"),
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
+	}
+
+	checks := []corev1.CheckResult{
+		{
+			Type:    "status",
+			Reason:  "oci-mon: pre-flight completed",
+			Success: true,
+		},
+	}
+
+	status := corev1.NodeStatus{
+		Checks: checks,
+	}
+
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: status,
+	}
+
+	preFlightPod1 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "preflight-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: preflightDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{
+				{
+					Name:  "portworx",
+					Ready: true,
+				},
+			},
+		},
+	}
+
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sClient := testutil.FakeK8sClient(preflightDS)
+
+	err := k8sClient.Create(context.TODO(), preFlightPod1)
+	require.NoError(t, err)
+
+	preflightDS.Status.DesiredNumberScheduled = int32(1)
+	err = k8sClient.Status().Update(context.TODO(), preflightDS)
+	require.NoError(t, err)
+
+	recorder := record.NewFakeRecorder(100)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	origCluster := cluster.DeepCopy() // No pure env
+
+	// force pure ISCSI
+	env := make([]v1.EnvVar, 1)
+	env[0].Name = "PURE_FLASHARRAY_SAN_TYPE"
+	env[0].Value = "ISCSI"
+	cluster.Spec.Env = env
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = k8sClient.Create(context.TODO(), storageNode)
+	require.NoError(t, err)
+
+	err = driver.Validate(cluster)
+	require.NoError(t, err)
+	require.Contains(t, cluster.Annotations[pxutil.AnnotationMiscArgs], "-T px-storev2")
+
+	actual, err := driver.GetStoragePodSpec(cluster, "testNode")
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider pure")
+	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-metadata "+DefCmetaPure)
+
+	require.NotEmpty(t, recorder.Events)
+	<-recorder.Events // Pop first event which is Default telemetry enabled event
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling PX-StoreV2"))
+	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaPure)
+
+	// Below just validate that changing the PURE_FLASHARRAY_SAN_TYPE value will still set the
+	// -cloud_provider param correctly.
+
+	cluster = origCluster // Reset Cluster with no pure env
+	// force pure ISCSI
+	env = make([]v1.EnvVar, 1)
+	env[0].Name = "PURE_FLASHARRAY_SAN_TYPE"
+	env[0].Value = "FC"
+	cluster.Spec.Env = env
+
+	actual, err = driver.GetStoragePodSpec(cluster, "testNode")
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.NotContains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider pure")
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	actual, err = driver.GetStoragePodSpec(cluster, "testNode")
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider pure")
+}
+
 func TestGetSelectorLabels(t *testing.T) {
 	driver := portworx{}
 	expectedLabels := map[string]string{"name": pxutil.DriverName}
@@ -665,6 +827,11 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpDoesNotExist,
 							},
@@ -676,6 +843,11 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 								Key:      "px/enabled",
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"false"},
+							},
+							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
 							},
 							{
 								Key:      "node-role.kubernetes.io/master",
@@ -980,6 +1152,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpDoesNotExist,
 							},
@@ -991,6 +1168,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Key:      "px/enabled",
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"false"},
+							},
+							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
 							},
 							{
 								Key:      "node-role.kubernetes.io/master",
@@ -1023,6 +1205,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpDoesNotExist,
 							},
@@ -1040,6 +1227,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/master",
 								Operator: v1.NodeSelectorOpExists,
 							},
@@ -1055,6 +1247,11 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 								Key:      "px/enabled",
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"false"},
+							},
+							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
 							},
 							{
 								Key:      "node-role.kubernetes.io/control-plane",
@@ -2544,7 +2741,28 @@ func TestStorageClusterDefaultsForPlugin(t *testing.T) {
 	err := driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.Equal(t, cluster.Status.DesiredImages.DynamicPlugin, "portworx/portworx-dynamic-plugin:1.1.0")
-	require.Equal(t, cluster.Status.DesiredImages.DynamicPluginProxy, "nginxinc/nginx-unprivileged:1.23")
+	require.Equal(t, cluster.Status.DesiredImages.DynamicPluginProxy, "nginxinc/nginx-unprivileged:1.25")
+}
+
+func TestStorageClusterDefaultsForWindows(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.10.0",
+		},
+	}
+
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Equal(t, cluster.Status.DesiredImages.CsiWindowsDriver, "docker.io/portworx/px-windows-csi-driver:23.8.0")
+	require.Equal(t, cluster.Status.DesiredImages.CsiLivenessProbe, "docker.io/portworx/livenessprobe:v2.10.0-windows")
+	require.Equal(t, cluster.Status.DesiredImages.CsiWindowsNodeRegistrar, "docker.io/portworx/csi-node-driver-registrar:v2.8.0-windows")
+
 }
 
 func assertDefaultSecuritySpec(t *testing.T, cluster *corev1.StorageCluster, expectAuthDefaults bool) {
@@ -2869,6 +3087,11 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 								Values:   []string{"false"},
 							},
 							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
+							},
+							{
 								Key:      "node-role.kubernetes.io/infra",
 								Operator: v1.NodeSelectorOpDoesNotExist,
 							},
@@ -2884,6 +3107,11 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 								Key:      "px/enabled",
 								Operator: v1.NodeSelectorOpNotIn,
 								Values:   []string{"false"},
+							},
+							{
+								Key:      "kubernetes.io/os",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"linux"},
 							},
 							{
 								Key:      "node-role.kubernetes.io/infra",
@@ -10370,7 +10598,10 @@ func (m *fakeManifest) GetVersions(
 			TelemetryProxy:             "purestorage/envoy:1.2.3",
 			PxRepo:                     "portworx/px-repo:" + compVersion,
 			DynamicPlugin:              "portworx/portworx-dynamic-plugin:1.1.0",
-			DynamicPluginProxy:         "nginxinc/nginx-unprivileged:1.23",
+			DynamicPluginProxy:         "nginxinc/nginx-unprivileged:1.25",
+			CsiLivenessProbe:           "docker.io/portworx/livenessprobe:v2.10.0-windows",
+			CsiWindowsDriver:           "docker.io/portworx/px-windows-csi-driver:23.8.0",
+			CsiWindowsNodeRegistrar:    "docker.io/portworx/csi-node-driver-registrar:v2.8.0-windows",
 		},
 	}
 	if m.k8sVersion != nil && m.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
