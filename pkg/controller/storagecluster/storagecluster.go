@@ -746,7 +746,14 @@ func preflightShouldRun(cluster *corev1.StorageCluster) bool {
 			}
 			// Vsphere only supported on 3.1.0
 			if clusterPXver.GreaterThanOrEqual(pxVer31) {
-				return true
+				// Don't run Vsphere w/PKS
+				if pxutil.IsVsphere(cluster) && preflight.IsPKS() {
+					return false
+				}
+				// Vsphere, Pure & Azure only supported on 3.1.0
+				if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer31) {
+					return true
+				}
 			}
 		}
 	}
