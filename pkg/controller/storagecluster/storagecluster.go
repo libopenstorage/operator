@@ -752,9 +752,15 @@ func preflightShouldRun(cluster *corev1.StorageCluster) bool {
 				return true
 			}
 
-			// Don't run Vsphere w/PKS
-			if pxutil.IsVsphere(cluster) && preflight.IsPKS() {
-				return false
+			if pxutil.IsVsphere(cluster) {
+				if preflight.IsPKS() { // Don't run Vsphere w/PKS
+					return false
+				}
+
+				envValue, exists := pxutil.GetClusterEnvValue(cluster, "VSPHERE_INSTALL_MODE")
+				if exists && envValue == pxutil.VsphereInstallModeLocal { // Don't run Vsphere w/local install mode
+					return false
+				}
 			}
 			// Vsphere, Pure & Azure only supported on 3.1.0
 			if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer31) {

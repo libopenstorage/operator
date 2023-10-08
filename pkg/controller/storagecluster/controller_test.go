@@ -9129,7 +9129,7 @@ func TestShouldPreflightRun(t *testing.T) {
 	cluster.Spec.Image = "portworx/oci-image:3.0.0"
 
 	// force vsphere
-	env := make([]v1.EnvVar, 1)
+	env := make([]v1.EnvVar, 2)
 	env[0].Name = "VSPHERE_VCENTER"
 	env[0].Value = "some.vcenter.server.com"
 	cluster.Spec.Env = env
@@ -9163,6 +9163,23 @@ func TestShouldPreflightRun(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, preflightShouldRun(cluster))
 	logrus.Infof("vshpere cloud w/PX >= 3.1, preflight will run")
+
+	// TestCase: Vsphere cloud provider with Install mode 'local'
+	logrus.Infof("check vsphere cloud w/local install mode...")
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+	env[1].Name = "VSPHERE_INSTALL_MODE"
+	env[1].Value = "local"
+	cluster.Spec.Env = env
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	driver.EXPECT().UpdateDriver(gomock.Any())
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.False(t, preflightShouldRun(cluster))
+	logrus.Infof("vshpere cloud w/local install mode will not run")
 
 	// Reset preflight for other tests
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
