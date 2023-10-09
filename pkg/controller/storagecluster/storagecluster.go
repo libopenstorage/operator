@@ -739,12 +739,14 @@ func preflightShouldRun(cluster *corev1.StorageCluster) bool {
 
 	// Preflight should only run freshInstall and if the PX version is 3.0.0 and above
 	if pxutil.IsFreshInstall(cluster) {
-		if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer30) {
+		clusterPXver := pxutil.GetPortworxVersion(cluster)
+
+		if clusterPXver.GreaterThanOrEqual(pxVer30) {
 			if !pxutil.IsVsphere(cluster) {
 				return true
 			}
 			// Vsphere only supported on 3.1.0
-			if pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer31) {
+			if clusterPXver.GreaterThanOrEqual(pxVer31) {
 				return true
 			}
 		}
