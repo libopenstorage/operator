@@ -401,6 +401,17 @@ func (c *portworxBasic) createClusterRole() error {
 					Resources: []string{"certificatesigningrequests"},
 					Verbs:     []string{"get", "list", "create", "watch", "delete", "update"},
 				},
+				{
+					APIGroups: []string{"kubevirt.io", "cdi.kubevirt.io", "clone.kubevirt.io",
+						"migrations.kubevirt.io", "snapshot.kubevirt.io"},
+					Resources: []string{"*"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"kubevirt.io"},
+					Resources: []string{"virtualmachineinstancemigrations"},
+					Verbs:     []string{"get", "list", "create", "watch", "delete", "update"},
+				},
 			},
 		},
 	)
