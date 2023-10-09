@@ -70,20 +70,19 @@ const (
 	// ControllerName is the name of the controller
 	ControllerName = "storagecluster-controller"
 	// ComponentName is the component name of the storage cluster
-	ComponentName                       = "storage"
-	slowStartInitialBatchSize           = 1
-	validateCRDInterval                 = 5 * time.Second
-	validateCRDTimeout                  = 1 * time.Minute
-	deleteFinalizerName                 = constants.OperatorPrefix + "/delete"
-	nodeNameIndex                       = "nodeName"
-	defaultStorageClusterUniqueLabelKey = apps.ControllerRevisionHashLabelKey
-	defaultRevisionHistoryLimit         = 10
-	defaultMaxUnavailablePods           = 1
-	failureDomainZoneKey                = v1.LabelZoneFailureDomainStable
-	crdBasePath                         = "/crds"
-	deprecatedCRDBasePath               = "/crds/deprecated"
-	storageClusterCRDFile               = "core_v1_storagecluster_crd.yaml"
-	minSupportedK8sVersion              = "1.21.0"
+	ComponentName               = "storage"
+	slowStartInitialBatchSize   = 1
+	validateCRDInterval         = 5 * time.Second
+	validateCRDTimeout          = 1 * time.Minute
+	deleteFinalizerName         = constants.OperatorPrefix + "/delete"
+	nodeNameIndex               = "nodeName"
+	defaultRevisionHistoryLimit = 10
+	defaultMaxUnavailablePods   = 1
+	failureDomainZoneKey        = v1.LabelZoneFailureDomainStable
+	crdBasePath                 = "/crds"
+	deprecatedCRDBasePath       = "/crds/deprecated"
+	storageClusterCRDFile       = "core_v1_storagecluster_crd.yaml"
+	minSupportedK8sVersion      = "1.21.0"
 )
 
 var _ reconcile.Reconciler = &Controller{}
@@ -807,7 +806,7 @@ func (c *Controller) syncStorageCluster(
 		return fmt.Errorf("failed to construct revisions of StorageCluster %v/%v: %v",
 			cluster.Namespace, cluster.Name, err)
 	}
-	hash := cur.Labels[defaultStorageClusterUniqueLabelKey]
+	hash := cur.Labels[util.DefaultStorageClusterUniqueLabelKey]
 
 	// TODO: Don't process a storage cluster until all its previous creations and
 	// deletions have been processed.
@@ -831,7 +830,7 @@ func (c *Controller) syncStorageCluster(
 	}
 
 	// Update status of the cluster
-	return c.updateStorageClusterStatus(cluster)
+	return c.updateStorageClusterStatus(cluster, hash)
 }
 
 func (c *Controller) deleteStorageCluster(
@@ -969,9 +968,10 @@ func (c *Controller) removeMigrationLabels() error {
 
 func (c *Controller) updateStorageClusterStatus(
 	cluster *corev1.StorageCluster,
+	clusterHash string,
 ) error {
 	toUpdate := cluster.DeepCopy()
-	if err := c.Driver.UpdateStorageClusterStatus(toUpdate); err != nil {
+	if err := c.Driver.UpdateStorageClusterStatus(toUpdate, clusterHash); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedSyncReason, err.Error())
 	}
 	return k8s.UpdateStorageClusterStatus(c.client, toUpdate)
@@ -1407,7 +1407,7 @@ func (c *Controller) CreatePodTemplate(
 		newTemplate.Annotations = nil
 	}
 	if len(hash) > 0 {
-		newTemplate.Labels[defaultStorageClusterUniqueLabelKey] = hash
+		newTemplate.Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
 	}
 	return newTemplate, nil
 }
@@ -1706,6 +1706,7 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 	}
 
 	if err := c.Driver.SetDefaultsOnStorageCluster(toUpdate); err != nil {
+		// TODO: investigate update failure
 		return err
 	}
 
