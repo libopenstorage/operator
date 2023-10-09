@@ -32,10 +32,17 @@ type CheckerOps interface {
 
 	// CheckCloudDrivePermission checks if permissions for drive operation is granted
 	CheckCloudDrivePermission(cluster *corev1.StorageCluster) error
+
+	// SetProvider helps set the provider when that information is not available to Init
+	SetProvider(string)
 }
 
 func (c *checker) ProviderName() string {
 	return c.providerName
+}
+
+func (c *checker) SetProvider(providerName string) {
+	c.providerName = providerName
 }
 
 func (c *checker) K8sDistributionName() string {
@@ -82,6 +89,10 @@ func InitPreflightChecker(client client.Client) error {
 		instance = &aws{
 			checker: *c,
 		}
+	} else if IsGKE() {
+		instance = &gce{
+			checker: *c,
+		}
 	}
 
 	return nil
@@ -115,8 +126,9 @@ func getK8sDistributionName() (string, error) {
 	logrus.Infof("cluster is running k8s distribution %s", k8sVersion.String())
 	if strings.Contains(strings.ToLower(k8sVersion.String()), eksDistribution) {
 		return eksDistribution, nil
+	} else if strings.Contains(strings.ToLower(k8sVersion.String()), gkeDistribution) {
+		return gkeDistribution, nil
 	}
-
 	// TODO: detect other k8s distribution names
 	return "", nil
 }

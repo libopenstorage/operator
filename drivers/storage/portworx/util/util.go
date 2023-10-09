@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libopenstorage/cloudops"
+
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
@@ -27,6 +29,7 @@ import (
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -337,6 +340,30 @@ func IsOpenshift(cluster *corev1.StorageCluster) bool {
 func IsPrivileged(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsPrivileged])
 	return err != nil || enabled
+}
+
+// IsVsphere returns true if VSPHERE_VCENTER is present in the spec
+func IsVsphere(cluster *corev1.StorageCluster) bool {
+	for _, env := range cluster.Spec.Env {
+		if env.Name == "VSPHERE_VCENTER" && len(env.Value) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// GetCloudProvider returns the cloud provider string
+func GetCloudProvider(cluster *corev1.StorageCluster) string {
+	if IsVsphere(cluster) {
+		return cloudops.Vsphere
+	}
+
+	if len(preflight.Instance().ProviderName()) > 0 {
+		return preflight.Instance().ProviderName()
+	}
+
+	// TODO: implement conditions for other providers
+	return ""
 }
 
 // IsHostPidEnabled returns if hostPid should be set to true for portworx pod.

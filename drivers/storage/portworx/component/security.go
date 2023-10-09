@@ -182,7 +182,7 @@ func (c *security) getPrivateKeyOrGenerate(cluster *corev1.StorageCluster, envVa
 	// check for pre-configured shared secret
 	for _, envVar := range cluster.Spec.Env {
 		if envVar.Name == envVarKey {
-			privateKey, err = pxutil.GetValueFromEnvVar(context.TODO(), c.k8sClient, &envVar, cluster.Namespace)
+			privateKey, err = k8sutil.GetValueFromEnvVar(context.TODO(), c.k8sClient, &envVar, cluster.Namespace)
 			if err != nil {
 				return "", err
 

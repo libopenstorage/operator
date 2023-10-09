@@ -732,6 +732,27 @@ func (c *Controller) miscCleanUp(cluster *corev1.StorageCluster) error {
 	return nil
 }
 
+func preflightShouldRun(cluster *corev1.StorageCluster) bool {
+	pxVer30, _ := version.NewVersion("3.0")
+	pxVer31, _ := version.NewVersion("3.1")
+
+	// Preflight should only run freshInstall and if the PX version is 3.0.0 and above
+	if pxutil.IsFreshInstall(cluster) {
+		clusterPXver := pxutil.GetPortworxVersion(cluster)
+
+		if clusterPXver.GreaterThanOrEqual(pxVer30) {
+			if !pxutil.IsVsphere(cluster) {
+				return true
+			}
+			// Vsphere only supported on 3.1.0
+			if clusterPXver.GreaterThanOrEqual(pxVer31) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (c *Controller) syncStorageCluster(
 	cluster *corev1.StorageCluster,
 ) error {
@@ -750,9 +771,7 @@ func (c *Controller) syncStorageCluster(
 			cluster.Namespace, cluster.Name, err)
 	}
 
-	pxVer30, _ := version.NewVersion("3.0")
-	// Preflight should only run freshInstall and if the PX version is 3.0.0 and above
-	if pxutil.IsFreshInstall(cluster) && pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer30) {
+	if preflightShouldRun(cluster) {
 		// If preflight failed, or previous check failed, reconcile would stop here until issues got resolved
 		if err := c.runPreflightCheck(cluster); err != nil {
 			if updateErr := c.updateStorageClusterState(cluster, corev1.ClusterStateDegraded); updateErr != nil {

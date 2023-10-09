@@ -9198,6 +9198,110 @@ func TestDoesTelemetryMatch(t *testing.T) {
 	}
 }
 
+func TestShouldPreflightRun(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+
+	// TestCase: aws cloud provider with image < 3.0
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-1"}},
+	}}
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
+
+	cluster.Spec.Image = "portworx/oci-image:2.9.0"
+
+	err := preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	require.Equal(t, string(cloudops.AWS), pxutil.GetCloudProvider(cluster)) // Make sure aws
+
+	driver.EXPECT().UpdateDriver(gomock.Any())
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.False(t, preflightShouldRun(cluster))
+
+	// Reset preflight for other tests
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: aws cloud provider with image >= 3.0
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	driver.EXPECT().UpdateDriver(gomock.Any())
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.True(t, preflightShouldRun(cluster))
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Vsphere cloud provider with image = 3.0
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+
+	// force vsphere
+	env := make([]v1.EnvVar, 1)
+	env[0].Name = "VSPHERE_VCENTER"
+	env[0].Value = "some.vcenter.server.com"
+	cluster.Spec.Env = env
+
+	require.Equal(t, string(cloudops.Vsphere), pxutil.GetCloudProvider(cluster)) // Make sure Vsphere
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	driver.EXPECT().UpdateDriver(gomock.Any())
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.False(t, preflightShouldRun(cluster))
+
+	// Reset preflight for other tests
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Vsphere cloud provider with image >= 3.1
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	driver.EXPECT().UpdateDriver(gomock.Any())
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any())
+	err = controller.setStorageClusterDefaults(cluster)
+	require.NoError(t, err)
+	require.True(t, preflightShouldRun(cluster))
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+}
+
 func TestEKSPreflightCheck(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
