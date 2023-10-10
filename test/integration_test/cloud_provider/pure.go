@@ -8,18 +8,17 @@ func newPureProvider() Provider {
 
 func (pureProvider) GetDefaultDataDrives() *[]string {
 	return stringSlicePtr([]string{
-		"type=thin,size=49",
-		"type=zeroedthick,size=59"})
+		"type=pure-block,size=150"})
 }
 
 func (pureProvider) GetDefaultMetadataDrive() *string {
-	return stringPtr("type=zeroedthick,size=64")
+	return stringPtr("type=pure-block,size=64")
 }
 
 func (pureProvider) GetDefaultKvdbDrive() *string {
-	return stringPtr("type=zeroedthick,size=32")
+	return stringPtr("type=pure-block,size=32")
 }
 
 func (pureProvider) GetDefaultJournalDrive() *string {
-	return stringPtr("type=zeroedthick,size=32")
+	return stringPtr("type=pure-block,size=32")
 }
