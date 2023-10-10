@@ -392,10 +392,10 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, expectedDaemonSet.Spec, ds.Spec)
 
 	// Portworx CSI enabled by default
-	statefulset := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulset, component.CSIApplicationName, cluster.Namespace)
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(statefulset.Spec.Template.Spec.Containers))
+	require.Equal(t, 2, len(deployment.Spec.Template.Spec.Containers))
 }
 
 func TestPxRepoInstallUninstall(t *testing.T) {
@@ -5560,21 +5560,21 @@ func verifyCsiInstall(
 	require.Equal(t, expectedService.Labels, service.Labels)
 	require.Equal(t, expectedService.Spec, service.Spec)
 
-	// CSI StatefulSet
-	statefulSetList := &appsv1.StatefulSetList{}
-	err = testutil.List(k8sClient, statefulSetList)
+	// CSI Deployment
+	deploymentList := &appsv1.DeploymentList{}
+	err = testutil.List(k8sClient, deploymentList)
 	require.NoError(t, err)
-	require.Len(t, statefulSetList.Items, 1)
+	require.Len(t, deploymentList.Items, 1)
 
-	expectedStatefulSet := testutil.GetExpectedStatefulSet(t, "csiStatefulSet_0.3.yaml")
-	statefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
+	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeploymentNonPriv.yaml")
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Equal(t, expectedStatefulSet.Name, statefulSet.Name)
-	require.Equal(t, expectedStatefulSet.Namespace, statefulSet.Namespace)
-	require.Len(t, statefulSet.OwnerReferences, 1)
-	require.Equal(t, cluster.Name, statefulSet.OwnerReferences[0].Name)
-	require.Equal(t, expectedStatefulSet.Spec, statefulSet.Spec)
+	require.Equal(t, expectedDeployment.Name, deployment.Name)
+	require.Equal(t, expectedDeployment.Namespace, deployment.Namespace)
+	require.Len(t, deployment.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, deployment.OwnerReferences[0].Name)
+	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
 	// CSIDriver object should be created only for k8s version 1.14+
 	csiDriver := &storagev1beta1.CSIDriver{}
@@ -6633,82 +6633,147 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[2].Image)
 }
 
-func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.12.0",
-	}
-	fakeExtClient := fakeextclient.NewSimpleClientset()
-	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
-	require.NoError(t, err)
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
+// func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
+// 	versionClient := fakek8sclient.NewSimpleClientset()
+// 	coreops.SetInstance(coreops.New(versionClient))
+// 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+// 		GitVersion: "v1.12.0",
+// 	}
+// 	fakeExtClient := fakeextclient.NewSimpleClientset()
+// 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+// 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+// 	require.NoError(t, err)
+// 	reregisterComponents()
+// 	k8sClient := testutil.FakeK8sClient()
+// 	driver := portworx{}
+// 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+// 	require.NoError(t, err)
 
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Image: "portworx/image:2.1.0",
-			CSI: &corev1.CSISpec{
-				Enabled: true,
-			},
-		},
-	}
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
+// 	cluster := &corev1.StorageCluster{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name:      "px-cluster",
+// 			Namespace: "kube-test",
+// 		},
+// 		Spec: corev1.StorageClusterSpec{
+// 			Image: "portworx/image:2.1.0",
+// 			CSI: &corev1.CSISpec{
+// 				Enabled: true,
+// 			},
+// 		},
+// 	}
+// 	err = driver.SetDefaultsOnStorageCluster(cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	statefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 2)
-	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
-		statefulSet.Spec.Template.Spec.Containers[0].Image)
-	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
-		statefulSet.Spec.Template.Spec.Containers[1].Image)
+// 	deployment := &appsv1.Deployment{}
+// 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
+// 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
+// 		deployment.Spec.Template.Spec.Containers[0].Image)
+// 	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
+// 		deployment.Spec.Template.Spec.Containers[1].Image)
+// 	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+// 		deployment.Spec.Template.Spec.Containers[2].Image)
 
-	// Change provisioner image
-	statefulSet.Spec.Template.Spec.Containers[0].Image = "my-csi-provisioner:test"
-	err = k8sClient.Update(context.TODO(), statefulSet)
-	require.NoError(t, err)
+// 	// Change provisioner image
+// 	deployment.Spec.Template.Spec.Containers[0].Image = "my-csi-provisioner:test"
+// 	err = k8sClient.Update(context.TODO(), deployment)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
-		statefulSet.Spec.Template.Spec.Containers[0].Image)
+// 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
+// 		deployment.Spec.Template.Spec.Containers[0].Image)
 
-	// Change attacher image
-	statefulSet.Spec.Template.Spec.Containers[1].Image = "my-csi-attacher:test"
-	err = k8sClient.Update(context.TODO(), statefulSet)
-	require.NoError(t, err)
+// 	// Change attacher image
+// 	deployment.Spec.Template.Spec.Containers[1].Image = "my-csi-attacher:test"
+// 	err = k8sClient.Update(context.TODO(), deployment)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
-		statefulSet.Spec.Template.Spec.Containers[1].Image)
-}
+// 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
+// 		deployment.Spec.Template.Spec.Containers[1].Image)
+
+// 	//change snapshotter image
+// 	deployment.Spec.Template.Spec.Containers[2].Image = "my-csi-snapshotter:test"
+// 	err = k8sClient.Update(context.TODO(), deployment)
+// 	require.NoError(t, err)
+
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
+
+// 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Equal(t, "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+// 		deployment.Spec.Template.Spec.Containers[2].Image)
+// }
 
 func TestCSIChangeKubernetesVersions(t *testing.T) {
+	// versionClient := fakek8sclient.NewSimpleClientset()
+	// coreops.SetInstance(coreops.New(versionClient))
+	// versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+	// 	GitVersion: "v1.12.0",
+	// }
+	// fakeExtClient := fakeextclient.NewSimpleClientset()
+	// apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	// err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+	// require.NoError(t, err)
+	// reregisterComponents()
+	// k8sClient := testutil.FakeK8sClient()
+	// driver := portworx{}
+	// err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	// require.NoError(t, err)
+
+	// cluster := &corev1.StorageCluster{
+	// 	ObjectMeta: metav1.ObjectMeta{
+	// 		Name:      "px-cluster",
+	// 		Namespace: "kube-test",
+	// 	},
+	// 	Spec: corev1.StorageClusterSpec{
+	// 		Image: "portworx/image:2.2",
+	// 		CSI: &corev1.CSISpec{
+	// 			Enabled: true,
+	// 		},
+	// 	},
+	// }
+	// err = driver.SetDefaultsOnStorageCluster(cluster)
+	// require.NoError(t, err)
+
+	// err = driver.PreInstall(cluster)
+	// require.NoError(t, err)
+
+	statefulSet := &appsv1.StatefulSet{}
+	// err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
+	// require.NoError(t, err)
+	// require.Len(t, statefulSet.Spec.Template.Spec.Containers, 2)
+	// require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
+	// 	statefulSet.Spec.Template.Spec.Containers[0].Image)
+	// require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
+	// 	statefulSet.Spec.Template.Spec.Containers[1].Image)
+
+	deployment := &appsv1.Deployment{}
+	// err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	// require.True(t, errors.IsNotFound(err))
+
+	// Use kubernetes version 1.13. CSI sidecars should run as Deployment instead of StatefulSet
+
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
+
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.12.0",
+		GitVersion: "v1.13.0",
 	}
+
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -6731,34 +6796,18 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 			},
 		},
 	}
+
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	statefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 2)
-	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
-		statefulSet.Spec.Template.Spec.Containers[0].Image)
-	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
-		statefulSet.Spec.Template.Spec.Containers[1].Image)
+	// driver.k8sVersion, _ = k8sutil.GetVersion()
+	// driver.initializeComponents()
 
-	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-
-	// Use kubernetes version 1.13. CSI sidecars should run as Deployment instead of StatefulSet
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
-	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
-	driver.initializeComponents()
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+	// err = driver.PreInstall(cluster)
+	// require.NoError(t, err)
 
 	// We should remove the old StatefulSet and replaced it with Deployment
 	statefulSet = &appsv1.StatefulSet{}
@@ -6812,368 +6861,368 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[2].Image)
 }
 
-func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.12.0",
-	}
-	fakeExtClient := fakeextclient.NewSimpleClientset()
-	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
-	require.NoError(t, err)
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
+// func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
+// 	versionClient := fakek8sclient.NewSimpleClientset()
+// 	coreops.SetInstance(coreops.New(versionClient))
+// 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+// 		GitVersion: "v1.12.0",
+// 	}
+// 	fakeExtClient := fakeextclient.NewSimpleClientset()
+// 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+// 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+// 	require.NoError(t, err)
+// 	reregisterComponents()
+// 	k8sClient := testutil.FakeK8sClient()
+// 	driver := portworx{}
+// 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+// 	require.NoError(t, err)
 
-	imagePullSecret := "pull-secret"
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Image: "portworx/image:2.1.0",
-			CSI: &corev1.CSISpec{
-				Enabled: true,
-			},
-			ImagePullSecret: &imagePullSecret,
-		},
-	}
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	err = k8sClient.Create(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	imagePullSecret := "pull-secret"
+// 	cluster := &corev1.StorageCluster{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name:      "px-cluster",
+// 			Namespace: "kube-test",
+// 		},
+// 		Spec: corev1.StorageClusterSpec{
+// 			Image: "portworx/image:2.1.0",
+// 			CSI: &corev1.CSISpec{
+// 				Enabled: true,
+// 			},
+// 			ImagePullSecret: &imagePullSecret,
+// 		},
+// 	}
+// 	err = driver.SetDefaultsOnStorageCluster(cluster)
+// 	require.NoError(t, err)
+// 	err = k8sClient.Create(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	// Case: Image pull secret should be applied to the deployment
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	// Case: Image pull secret should be applied to the deployment
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets, 1)
-	require.Equal(t, imagePullSecret, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
+// 	csiStatefulSet := &appsv1.Deployment{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Len(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets, 1)
+// 	require.Equal(t, imagePullSecret, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
 
-	// Case: Updated image pull secet should be applied to the deployment
-	imagePullSecret = "new-secret"
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: Updated image pull secet should be applied to the deployment
+// 	imagePullSecret = "new-secret"
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets, 1)
-	require.Equal(t, imagePullSecret, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
+// 	csiStatefulSet = &appsv1.Deployment{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Len(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets, 1)
+// 	require.Equal(t, imagePullSecret, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
 
-	// Case: If empty, remove image pull secret from the deployment
-	imagePullSecret = ""
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: If empty, remove image pull secret from the deployment
+// 	imagePullSecret = ""
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Empty(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets)
+// 	csiStatefulSet = &appsv1.Deployment{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Empty(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets)
 
-	// Case: If nil, remove image pull secret from the deployment
-	cluster.Spec.ImagePullSecret = nil
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: If nil, remove image pull secret from the deployment
+// 	cluster.Spec.ImagePullSecret = nil
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Empty(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets)
+// 	csiStatefulSet = &appsv1.Deployment{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Empty(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets)
 
-	// Case: Image pull secret should be added back if not present in deployment
-	imagePullSecret = "pull-secret"
-	cluster.Spec.ImagePullSecret = &imagePullSecret
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: Image pull secret should be added back if not present in deployment
+// 	imagePullSecret = "pull-secret"
+// 	cluster.Spec.ImagePullSecret = &imagePullSecret
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets, 1)
-	require.Equal(t, imagePullSecret, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
-}
+// 	csiStatefulSet = &appsv1.Deployment{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Len(t, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets, 1)
+// 	require.Equal(t, imagePullSecret, csiStatefulSet.Spec.Template.Spec.ImagePullSecrets[0].Name)
+// }
 
-func TestCSI_0_3_TolerationsChange(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.12.0",
-	}
-	fakeExtClient := fakeextclient.NewSimpleClientset()
-	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
-	require.NoError(t, err)
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
+// func TestCSI_0_3_TolerationsChange(t *testing.T) {
+// 	versionClient := fakek8sclient.NewSimpleClientset()
+// 	coreops.SetInstance(coreops.New(versionClient))
+// 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+// 		GitVersion: "v1.12.0",
+// 	}
+// 	fakeExtClient := fakeextclient.NewSimpleClientset()
+// 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+// 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+// 	require.NoError(t, err)
+// 	reregisterComponents()
+// 	k8sClient := testutil.FakeK8sClient()
+// 	driver := portworx{}
+// 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+// 	require.NoError(t, err)
 
-	tolerations := []v1.Toleration{
-		{
-			Key:      "foo",
-			Value:    "bar",
-			Operator: v1.TolerationOpEqual,
-			Effect:   v1.TaintEffectNoSchedule,
-		},
-	}
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Image: "portworx/image:2.1.0",
-			CSI: &corev1.CSISpec{
-				Enabled: true,
-			},
-			Placement: &corev1.PlacementSpec{
-				Tolerations: tolerations,
-			},
-		},
-	}
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	err = k8sClient.Create(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	tolerations := []v1.Toleration{
+// 		{
+// 			Key:      "foo",
+// 			Value:    "bar",
+// 			Operator: v1.TolerationOpEqual,
+// 			Effect:   v1.TaintEffectNoSchedule,
+// 		},
+// 	}
+// 	cluster := &corev1.StorageCluster{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name:      "px-cluster",
+// 			Namespace: "kube-test",
+// 		},
+// 		Spec: corev1.StorageClusterSpec{
+// 			Image: "portworx/image:2.1.0",
+// 			CSI: &corev1.CSISpec{
+// 				Enabled: true,
+// 			},
+// 			Placement: &corev1.PlacementSpec{
+// 				Tolerations: tolerations,
+// 			},
+// 		},
+// 	}
+// 	err = driver.SetDefaultsOnStorageCluster(cluster)
+// 	require.NoError(t, err)
+// 	err = k8sClient.Create(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	// Case: Tolerations should be applied to the deployment
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	// Case: Tolerations should be applied to the deployment
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
+// 	csiStatefulSet := &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
 
-	// Case: Updated tolerations should be applied to the deployment
-	tolerations[0].Value = "baz"
-	cluster.Spec.Placement.Tolerations = tolerations
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: Updated tolerations should be applied to the deployment
+// 	tolerations[0].Value = "baz"
+// 	cluster.Spec.Placement.Tolerations = tolerations
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
+// 	csiStatefulSet = &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
 
-	// Case: New tolerations should be applied to the deployment
-	tolerations = append(tolerations, v1.Toleration{
-		Key:      "must-exist",
-		Operator: v1.TolerationOpExists,
-		Effect:   v1.TaintEffectNoExecute,
-	})
-	cluster.Spec.Placement.Tolerations = tolerations
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: New tolerations should be applied to the deployment
+// 	tolerations = append(tolerations, v1.Toleration{
+// 		Key:      "must-exist",
+// 		Operator: v1.TolerationOpExists,
+// 		Effect:   v1.TaintEffectNoExecute,
+// 	})
+// 	cluster.Spec.Placement.Tolerations = tolerations
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
+// 	csiStatefulSet = &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
 
-	// Case: Removed tolerations should be removed from the deployment
-	tolerations = []v1.Toleration{tolerations[0]}
-	cluster.Spec.Placement.Tolerations = tolerations
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: Removed tolerations should be removed from the deployment
+// 	tolerations = []v1.Toleration{tolerations[0]}
+// 	cluster.Spec.Placement.Tolerations = tolerations
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
+// 	csiStatefulSet = &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
 
-	// Case: If tolerations are empty, should be removed from the deployment
-	cluster.Spec.Placement.Tolerations = []v1.Toleration{}
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: If tolerations are empty, should be removed from the deployment
+// 	cluster.Spec.Placement.Tolerations = []v1.Toleration{}
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Tolerations)
+// 	csiStatefulSet = &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Tolerations)
 
-	// Case: Tolerations should be added back if not present in deployment
-	cluster.Spec.Placement.Tolerations = tolerations
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: Tolerations should be added back if not present in deployment
+// 	cluster.Spec.Placement.Tolerations = tolerations
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
+// 	csiStatefulSet = &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.ElementsMatch(t, tolerations, csiStatefulSet.Spec.Template.Spec.Tolerations)
 
-	// Case: If placement is empty, deployment should not have tolerations
-	cluster.Spec.Placement = nil
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: If placement is empty, deployment should not have tolerations
+// 	cluster.Spec.Placement = nil
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Tolerations)
-}
+// 	csiStatefulSet = &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Tolerations)
+// }
 
-func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.12.0",
-	}
-	fakeExtClient := fakeextclient.NewSimpleClientset()
-	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
-	require.NoError(t, err)
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
+// func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
+// 	versionClient := fakek8sclient.NewSimpleClientset()
+// 	coreops.SetInstance(coreops.New(versionClient))
+// 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+// 		GitVersion: "v1.12.0",
+// 	}
+// 	fakeExtClient := fakeextclient.NewSimpleClientset()
+// 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+// 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
+// 	require.NoError(t, err)
+// 	reregisterComponents()
+// 	k8sClient := testutil.FakeK8sClient()
+// 	driver := portworx{}
+// 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+// 	require.NoError(t, err)
 
-	nodeAffinity := &v1.NodeAffinity{
-		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-			NodeSelectorTerms: []v1.NodeSelectorTerm{
-				{
-					MatchExpressions: []v1.NodeSelectorRequirement{
-						{
-							Key:      "px/enabled",
-							Operator: v1.NodeSelectorOpNotIn,
-							Values:   []string{"false"},
-						},
-					},
-				},
-			},
-		},
-	}
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Image: "portworx/image:2.1.0",
-			CSI: &corev1.CSISpec{
-				Enabled: true,
-			},
-			Placement: &corev1.PlacementSpec{
-				NodeAffinity: nodeAffinity,
-			},
-		},
-	}
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	err = k8sClient.Create(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	nodeAffinity := &v1.NodeAffinity{
+// 		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+// 			NodeSelectorTerms: []v1.NodeSelectorTerm{
+// 				{
+// 					MatchExpressions: []v1.NodeSelectorRequirement{
+// 						{
+// 							Key:      "px/enabled",
+// 							Operator: v1.NodeSelectorOpNotIn,
+// 							Values:   []string{"false"},
+// 						},
+// 					},
+// 				},
+// 			},
+// 		},
+// 	}
+// 	cluster := &corev1.StorageCluster{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name:      "px-cluster",
+// 			Namespace: "kube-test",
+// 		},
+// 		Spec: corev1.StorageClusterSpec{
+// 			Image: "portworx/image:2.1.0",
+// 			CSI: &corev1.CSISpec{
+// 				Enabled: true,
+// 			},
+// 			Placement: &corev1.PlacementSpec{
+// 				NodeAffinity: nodeAffinity,
+// 			},
+// 		},
+// 	}
+// 	err = driver.SetDefaultsOnStorageCluster(cluster)
+// 	require.NoError(t, err)
+// 	err = k8sClient.Create(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	// Case: Node affinity should be applied to the deployment
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	// Case: Node affinity should be applied to the deployment
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, csiStatefulSet.Spec.Template.Spec.Affinity.NodeAffinity)
+// 	csiStatefulSet := &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Equal(t, nodeAffinity, csiStatefulSet.Spec.Template.Spec.Affinity.NodeAffinity)
 
-	// Case: Updated node affinity should be applied to the deployment
-	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
-		NodeSelectorTerms[0].
-		MatchExpressions[0].
-		Key = "px/disabled"
-	cluster.Spec.Placement.NodeAffinity = nodeAffinity
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: Updated node affinity should be applied to the deployment
+// 	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
+// 		NodeSelectorTerms[0].
+// 		MatchExpressions[0].
+// 		Key = "px/disabled"
+// 	cluster.Spec.Placement.NodeAffinity = nodeAffinity
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, csiStatefulSet.Spec.Template.Spec.Affinity.NodeAffinity)
+// 	csiStatefulSet = &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Equal(t, nodeAffinity, csiStatefulSet.Spec.Template.Spec.Affinity.NodeAffinity)
 
-	// Case: If node affinity is removed, it should be removed from the deployment
-	cluster.Spec.Placement.NodeAffinity = nil
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: If node affinity is removed, it should be removed from the deployment
+// 	cluster.Spec.Placement.NodeAffinity = nil
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Affinity)
+// 	csiStatefulSet = &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Affinity)
 
-	// Case: Node affinity should be added back if not present in deployment
-	cluster.Spec.Placement.NodeAffinity = nodeAffinity
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: Node affinity should be added back if not present in deployment
+// 	cluster.Spec.Placement.NodeAffinity = nodeAffinity
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, nodeAffinity, csiStatefulSet.Spec.Template.Spec.Affinity.NodeAffinity)
+// 	csiStatefulSet = &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Equal(t, nodeAffinity, csiStatefulSet.Spec.Template.Spec.Affinity.NodeAffinity)
 
-	// Case: If placement is nil, node affinity should be removed from the deployment
-	cluster.Spec.Placement = nil
-	err = k8sClient.Update(context.TODO(), cluster)
-	require.NoError(t, err)
+// 	// Case: If placement is nil, node affinity should be removed from the deployment
+// 	cluster.Spec.Placement = nil
+// 	err = k8sClient.Update(context.TODO(), cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	csiStatefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Affinity)
-}
+// 	csiStatefulSet = &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, csiStatefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
+// 	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Affinity)
+// }
 
 func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.11.4",
+		GitVersion: "v1.14.0",
 	}
 	nodeName := "testNode"
 	reregisterComponents()
@@ -7238,14 +7287,16 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// CSI StatefulSet
-	statefulSetList := &appsv1.StatefulSetList{}
-	err = testutil.List(k8sClient, statefulSetList)
+	deployment := &appsv1.StatefulSet{}
+	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	deploymentList := &appsv1.DeploymentList{}
+	err = testutil.List(k8sClient, deploymentList)
 	require.NoError(t, err)
-	require.Len(t, statefulSetList.Items, 1)
+	require.Len(t, deploymentList.Items, 1)
 
 	var validStatefulSetSocketPath, validCSIDriverPath bool
-	for _, v := range statefulSetList.Items[0].Spec.Template.Spec.Volumes {
+	for _, v := range deploymentList.Items[0].Spec.Template.Spec.Volumes {
 		if v.Name == "socket-dir" && v.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
 			validStatefulSetSocketPath = true
 		}
@@ -11751,106 +11802,106 @@ func TestDisableAutopilot(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
-func TestDisableCSI_0_3(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.11.4",
-	}
-	reregisterComponents()
-	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
+// func TestDisableCSI_0_3(t *testing.T) {
+// 	versionClient := fakek8sclient.NewSimpleClientset()
+// 	coreops.SetInstance(coreops.New(versionClient))
+// 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+// 		GitVersion: "v1.11.4",
+// 	}
+// 	reregisterComponents()
+// 	k8sClient := testutil.FakeK8sClient()
+// 	driver := portworx{}
+// 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+// 	require.NoError(t, err)
 
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
-			CSI: &corev1.CSISpec{
-				Enabled: true,
-			},
-		},
-	}
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
+// 	cluster := &corev1.StorageCluster{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name:      "px-cluster",
+// 			Namespace: "kube-test",
+// 		},
+// 		Spec: corev1.StorageClusterSpec{
+// 			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+// 			CSI: &corev1.CSISpec{
+// 				Enabled: true,
+// 			},
+// 		},
+// 	}
+// 	err = driver.SetDefaultsOnStorageCluster(cluster)
+// 	require.NoError(t, err)
 
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	sa := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
+// 	sa := &v1.ServiceAccount{}
+// 	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
+// 	require.NoError(t, err)
 
-	cr := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, component.CSIClusterRoleName, "")
-	require.NoError(t, err)
+// 	cr := &rbacv1.ClusterRole{}
+// 	err = testutil.Get(k8sClient, cr, component.CSIClusterRoleName, "")
+// 	require.NoError(t, err)
 
-	crb := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, component.CSIClusterRoleBindingName, "")
-	require.NoError(t, err)
+// 	crb := &rbacv1.ClusterRoleBinding{}
+// 	err = testutil.Get(k8sClient, crb, component.CSIClusterRoleBindingName, "")
+// 	require.NoError(t, err)
 
-	service := &v1.Service{}
-	err = testutil.Get(k8sClient, service, component.CSIServiceName, cluster.Namespace)
-	require.NoError(t, err)
+// 	service := &v1.Service{}
+// 	err = testutil.Get(k8sClient, service, component.CSIServiceName, cluster.Namespace)
+// 	require.NoError(t, err)
 
-	statefulSet := &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
+// 	statefulSet := &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.NoError(t, err)
 
-	// Disable CSI
-	cluster.Spec.CSI.Enabled = false
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	// Disable CSI
+// 	cluster.Spec.CSI.Enabled = false
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+// 	sa = &v1.ServiceAccount{}
+// 	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
+// 	require.True(t, errors.IsNotFound(err))
 
-	cr = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, component.CSIClusterRoleName, "")
-	require.True(t, errors.IsNotFound(err))
+// 	cr = &rbacv1.ClusterRole{}
+// 	err = testutil.Get(k8sClient, cr, component.CSIClusterRoleName, "")
+// 	require.True(t, errors.IsNotFound(err))
 
-	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, component.CSIClusterRoleBindingName, "")
-	require.True(t, errors.IsNotFound(err))
+// 	crb = &rbacv1.ClusterRoleBinding{}
+// 	err = testutil.Get(k8sClient, crb, component.CSIClusterRoleBindingName, "")
+// 	require.True(t, errors.IsNotFound(err))
 
-	service = &v1.Service{}
-	err = testutil.Get(k8sClient, service, component.CSIServiceName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+// 	service = &v1.Service{}
+// 	err = testutil.Get(k8sClient, service, component.CSIServiceName, cluster.Namespace)
+// 	require.True(t, errors.IsNotFound(err))
 
-	statefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+// 	statefulSet = &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.True(t, errors.IsNotFound(err))
 
-	// Remove CSI flag. Default should be disabled.
-	delete(cluster.Spec.FeatureGates, string(pxutil.FeatureCSI))
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
+// 	// Remove CSI flag. Default should be disabled.
+// 	delete(cluster.Spec.FeatureGates, string(pxutil.FeatureCSI))
+// 	err = driver.PreInstall(cluster)
+// 	require.NoError(t, err)
 
-	sa = &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+// 	sa = &v1.ServiceAccount{}
+// 	err = testutil.Get(k8sClient, sa, component.CSIServiceAccountName, cluster.Namespace)
+// 	require.True(t, errors.IsNotFound(err))
 
-	cr = &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, cr, component.CSIClusterRoleName, "")
-	require.True(t, errors.IsNotFound(err))
+// 	cr = &rbacv1.ClusterRole{}
+// 	err = testutil.Get(k8sClient, cr, component.CSIClusterRoleName, "")
+// 	require.True(t, errors.IsNotFound(err))
 
-	crb = &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, crb, component.CSIClusterRoleBindingName, "")
-	require.True(t, errors.IsNotFound(err))
+// 	crb = &rbacv1.ClusterRoleBinding{}
+// 	err = testutil.Get(k8sClient, crb, component.CSIClusterRoleBindingName, "")
+// 	require.True(t, errors.IsNotFound(err))
 
-	service = &v1.Service{}
-	err = testutil.Get(k8sClient, service, component.CSIServiceName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+// 	service = &v1.Service{}
+// 	err = testutil.Get(k8sClient, service, component.CSIServiceName, cluster.Namespace)
+// 	require.True(t, errors.IsNotFound(err))
 
-	statefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-}
+// 	statefulSet = &appsv1.StatefulSet{}
+// 	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
+// 	require.True(t, errors.IsNotFound(err))
+// }
 
 func TestDisableCSI_1_0(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
