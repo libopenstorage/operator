@@ -114,4 +114,19 @@ func TestDefaultProviders(t *testing.T) {
 	err = c.CheckCloudDrivePermission(cluster)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "env variable AWS_ZONE is not set")
+
+	// TestCase: init PKS cloud Provider
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sClient := testutil.FakeK8sClient(cluster)
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: PksSystemNamespace,
+		},
+	}
+	_, err = coreops.Instance().CreateNamespace(ns)
+	require.NoError(t, err)
+
+	err = InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+	require.True(t, IsPKS())
 }
