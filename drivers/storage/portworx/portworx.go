@@ -467,6 +467,56 @@ func (p *portworx) getCurrentMaxStorageNodesPerZone(
 	return 0, fmt.Errorf("storage disabled")
 }
 
+func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
+
+	if !pxutil.IsFreshInstall(toUpdate) { // Preflight should only run freshInstall
+		return false
+	}
+
+	clusterPXver := pxutil.GetPortworxVersion(toUpdate)
+
+	pxVer30, _ := version.NewVersion("3.0")
+	if !clusterPXver.GreaterThanOrEqual(pxVer30) { // Preflight should only run if the PX version is 3.0.0 and above
+		return false
+	}
+
+	check, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]
+	check = strings.TrimSpace(strings.ToLower(check))
+	if ok && check == "true" { // Preflight is enabled
+		return true
+	}
+
+	if !preflight.RequiresCheck() { // Preflight is only supported on AWS, VSPHERE & Pure
+		return false
+	}
+
+	if preflight.IsAWS() { // Preflight runs on AWS & PX 3.0.0 or above
+		return true
+	}
+
+	pxVer31, _ := version.NewVersion("3.1")
+	if clusterPXver.GreaterThanOrEqual(pxVer31) { // PX version is 3.1.0 or above
+		if pxutil.IsPure(toUpdate) { // Preflight runs on Pure & PX 3.1.0 or above
+			return true
+		}
+
+		if pxutil.IsVsphere(toUpdate) {
+			if preflight.IsPKS() { // Don't run preflight on Vsphere w/PKS
+				return false
+			}
+
+			envValue, exists := pxutil.GetClusterEnvValue(toUpdate, "VSPHERE_INSTALL_MODE")
+			if exists && envValue == pxutil.VsphereInstallModeLocal { // Don't run preflight on Vsphere w/local install mode
+				return false
+			}
+
+			return true // Preflight runs on Vsphere & PX 3.1.0 or above
+		}
+	}
+
+	return false // All else disable
+}
+
 func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) error {
 	if toUpdate.Annotations == nil {
 		toUpdate.Annotations = make(map[string]string)
@@ -493,11 +543,12 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		}
 	}
 
-	// Initialize the preflight check annotation
-	if preflight.RequiresCheck() {
+	if p.preflightShouldRun(toUpdate) {
 		if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
 			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "true"
 		}
+	} else {
+		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
 	}
 
 	if preflight.IsEKS() {
