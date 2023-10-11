@@ -7663,6 +7663,7 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 	newDeviceSpecs := []string{"type=dev1", "type=dev2", "type=dev3"}
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
+
 	cluster.Spec.Nodes[0].CloudStorage.DeviceSpecs = &newDeviceSpecs
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
@@ -7674,7 +7675,7 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 	oldPod.Labels[util.DefaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[util.DefaultStorageClusterUniqueLabelKey]
 	err = k8sClient.Update(context.TODO(), oldPod)
 	require.NoError(t, err)
-	fmt.Println((cluster.Spec.Storage != nil), (cluster.Spec.CloudStorage != nil), (cluster.Spec.Nodes[0].Storage != nil), (cluster.Spec.Nodes[0].CloudStorage != nil))
+	fmt.Println((cluster.Spec.Storage == nil), (cluster.Spec.CloudStorage == nil), (cluster.Spec.Nodes[0].Storage == nil), (cluster.Spec.Nodes[0].CloudStorage == nil))
 
 	podControl.DeletePodName = nil
 
@@ -7682,6 +7683,7 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result)
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+
 }
 
 func TestUpdateStorageClusterNodeSpec(t *testing.T) {
@@ -10278,6 +10280,7 @@ func TestRequiredSCCAnnotationOnPortworxPods(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
+
 	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
@@ -10295,6 +10298,277 @@ func TestRequiredSCCAnnotationOnPortworxPods(t *testing.T) {
 	require.Empty(t, result)
 	require.Len(t, podControl.Templates, 1)
 	require.Empty(t, podControl.Templates[0].Annotations)
+}
+
+
+func TestStorageSpecValidation(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster",
+			Namespace: "ns",
+		},
+	}
+	//Testcase: Cluster has both storage types and no node specs
+	useAllDevices := true
+	cluster.Spec.Storage = &corev1.StorageSpec{
+		UseAll: &useAllDevices,
+	}
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			DeviceSpecs: stringSlicePtr([]string{"type=dev1"}),
+		},
+	}
+	k8sClient := testutil.FakeK8sClient(cluster)
+	recorder := record.NewFakeRecorder(10)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+	}
+	validationErr := fmt.Errorf("found spec 1 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+	driver.EXPECT().Validate(gomock.Any()).Return(validationErr).AnyTimes()
+	driver.EXPECT().String().Return("mock-driver").AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.Contains(t, err.Error(), validationErr.Error())
+	require.Error(t, err)
+	require.Empty(t, result)
+
+	//Testcase: Validate node having both storage and cloudstorage and cluster has cloudstorage
+
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.Storage = nil
+	devices := []string{"dev1", "dev2"}
+	deviceSpecs := []string{"type=dev1", "type=dev2"}
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "foo",
+					},
+				},
+			},
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
+					Devices: &devices,
+				},
+			},
+			CloudStorage: &corev1.CloudStorageNodeSpec{
+				CloudStorageCommon: corev1.CloudStorageCommon{
+					DeviceSpecs: &deviceSpecs,
+				},
+			},
+		},
+	}
+
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+	request = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	validationErr = fmt.Errorf("found spec 2 for storage and cloudstorage on node")
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.Contains(t, err.Error(), validationErr.Error())
+	require.Error(t, err)
+	require.Empty(t, result)
+
+	//Testcase: Node has both specs and cluster has storage
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.CloudStorage = nil
+	cluster.Spec.Storage = &corev1.StorageSpec{
+		UseAll: &useAllDevices,
+	}
+
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+	request = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	validationErr = fmt.Errorf("found spec 2 for storage and cloudstorage on node")
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.Contains(t, err.Error(), validationErr.Error())
+	require.Error(t, err)
+	require.Empty(t, result)
+
+	//Testcase: Validate when cluster has both specs and node has cloud
+
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			DeviceSpecs: stringSlicePtr([]string{"type=dev1"}),
+		},
+	}
+
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "foo",
+					},
+				},
+			},
+			CloudStorage: &corev1.CloudStorageNodeSpec{
+				CloudStorageCommon: corev1.CloudStorageCommon{
+					DeviceSpecs: &deviceSpecs,
+				},
+			},
+		},
+	}
+
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+	request = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	validationErr = fmt.Errorf("found spec 3 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.Contains(t, err.Error(), validationErr.Error())
+	require.Error(t, err)
+	require.Empty(t, result)
+
+	//Testcase: When cluster has both and node has storage
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "foo",
+					},
+				},
+			},
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
+					Devices: &devices,
+				},
+			},
+		},
+	}
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+	request = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	validationErr = fmt.Errorf("found spec 3 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.Contains(t, err.Error(), validationErr.Error())
+	require.Error(t, err)
+	require.Empty(t, result)
+
+	//Update specs to have no error
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.CloudStorage = nil
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "foo",
+					},
+				},
+			},
+			CloudStorage: &corev1.CloudStorageNodeSpec{
+				CloudStorageCommon: corev1.CloudStorageCommon{
+					DeviceSpecs: &deviceSpecs,
+				},
+			},
+		},
+	}
+
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+	request = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	fmt.Println((cluster.Spec.Storage == nil), (cluster.Spec.CloudStorage == nil), (cluster.Spec.Nodes[0].Storage == nil), (cluster.Spec.Nodes[0].CloudStorage == nil))
+
+	//ANother valid case
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+
+	cluster.Spec.Storage = nil
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{
+		CloudStorageCommon: corev1.CloudStorageCommon{
+			DeviceSpecs: stringSlicePtr([]string{"type=dev1"}),
+		},
+	}
+	cluster.Spec.Nodes = []corev1.NodeSpec{
+		{
+			Selector: corev1.NodeSelector{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "foo",
+					},
+				},
+			},
+			CommonConfig: corev1.CommonConfig{
+				Storage: &corev1.StorageSpec{
+					Devices: &devices,
+				},
+			},
+		},
+	}
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+	request = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	fmt.Println((cluster.Spec.Storage == nil), (cluster.Spec.CloudStorage == nil), (cluster.Spec.Nodes[0].Storage == nil), (cluster.Spec.Nodes[0].CloudStorage == nil))
+
 }
 
 func replaceOldPod(
