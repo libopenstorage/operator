@@ -1129,9 +1129,9 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 		// Populate node specs with all storage values, to make it explicit what values
 		// every node group is using.
 		nodeSpecCopy := nodeSpec.DeepCopy()
-		if nodeSpec.Storage == nil {
+		if nodeSpec.Storage == nil && nodeSpec.CloudStorage == nil {
 			nodeSpecCopy.Storage = toUpdate.Spec.Storage.DeepCopy()
-		} else if toUpdate.Spec.Storage != nil {
+		} else if toUpdate.Spec.Storage != nil && nodeSpecCopy.Storage != nil {
 			// Devices, UseAll and UseAllWithPartitions should be set exclusive of each other, if not already
 			// set by the user in the node spec.
 			if nodeSpecCopy.Storage.Devices == nil &&
@@ -1172,11 +1172,11 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 		}
 
 		if toUpdate.Spec.CloudStorage != nil {
-			if nodeSpec.CloudStorage == nil {
+			if nodeSpec.CloudStorage == nil && nodeSpec.Storage == nil {
 				nodeSpecCopy.CloudStorage = &corev1.CloudStorageNodeSpec{
 					CloudStorageCommon: *(toUpdate.Spec.CloudStorage.CloudStorageCommon.DeepCopy()),
 				}
-			} else {
+			} else if nodeSpecCopy.CloudStorage != nil {
 				if nodeSpecCopy.CloudStorage.DeviceSpecs == nil &&
 					toUpdate.Spec.CloudStorage.DeviceSpecs != nil {
 					deviceSpecs := append(make([]string, 0), *toUpdate.Spec.CloudStorage.DeviceSpecs...)
@@ -1226,6 +1226,7 @@ func setPortworxStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
 				initializeStorageSpec = false
 				break
 			}
+
 		}
 		if preflight.RunningOnCloud() {
 			setPortworxCloudStorageSpecDefaults(toUpdate)
