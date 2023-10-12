@@ -6635,8 +6635,6 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 
 func TestCSIChangeKubernetesVersions(t *testing.T) {
 
-	statefulSet := &appsv1.StatefulSet{}
-	deployment := &appsv1.Deployment{}
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 
@@ -6674,11 +6672,11 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	require.NoError(t, err)
 
 	// There should be no StatefulSet and replaced it with Deployment
-	statefulSet = &appsv1.StatefulSet{}
+	statefulSet := &appsv1.StatefulSet{}
 	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
-	deployment = &appsv1.Deployment{}
+	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
