@@ -27,9 +27,17 @@ func isVsphere() bool {
 		utils.CloudProvider == cloudops.Vsphere
 }
 
+func isAzure() bool {
+	return utils.CloudProvider == cloudops.Azure
+}
+
 func GetCloudProvider() Provider {
 	if isVsphere() {
 		return newVsphereProvider()
+	}
+
+	if isAzure() {
+		return newAzureProvider()
 	}
 
 	log.Fatalf("CloudProvider Unknown %v", utils.CloudProvider)
