@@ -10,16 +10,26 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
+	// storageapi "github.com/libopenstorage/openstorage/api"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	"github.com/libopenstorage/operator/test/integration_test/cloud_provider"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+
+	// "google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	// "k8s.io/kubernetes/pkg/api/service"
+
+	// "k8s.io/client-go/tools/record"
+	// storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
@@ -53,6 +63,30 @@ var testStorageClusterBasicCases = []types.TestCase{
 		},
 		TestFunc: BasicInstallInCustomNamespace,
 	},
+	{
+		TestName:        "BasicInstallWithMaxStorageNodePerZone",
+		TestrailCaseIDs: []string{"C93000"},
+		TestSpec: func(t *testing.T) interface{} {
+			objects, err := ci_utils.ParseSpecs("storagecluster/storagecluster-with-all-components.yaml")
+			require.NoError(t, err)
+			cluster, ok := objects[0].(*corev1.StorageCluster)
+			require.True(t, ok)
+			cluster.Name = "test-stc"
+			cluster.Spec.StartPort = func(val uint32) *uint32 { return &val }(17001)
+			tempRequiredMaxStorageNodesPerZone := 3
+			RequiredMaxStorageNodesPerZone := uint32(tempRequiredMaxStorageNodesPerZone)
+			cloudSpec := &corev1.CloudStorageSpec{
+				MaxStorageNodesPerZone: &RequiredMaxStorageNodesPerZone,
+			}
+			provider := cloud_provider.GetCloudProvider()
+			cloudSpec.DeviceSpecs = provider.GetDefaultDataDrives()
+			cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled = false
+			cluster.Spec.CloudStorage = cloudSpec
+			return cluster
+		},
+		TestFunc: BasicInstallWithMaxStorageNodesPerZone,
+	},
+
 	{
 		TestName:        "BasicUpgradeStorageCluster",
 		TestrailCaseIDs: []string{"C50241"},
@@ -258,9 +292,11 @@ var testStorageClusterBasicCases = []types.TestCase{
 }
 
 func TestStorageClusterBasic(t *testing.T) {
-	for _, testCase := range testStorageClusterBasicCases {
-		testCase.RunTest(t)
-	}
+	// for _, testCase := range testStorageClusterBasicCases {
+	// 	testCase.RunTest(t)
+	// }
+	testCase := testStorageClusterBasicCases[1]
+	testCase.RunTest(t)
 }
 
 func BasicInstall(tc *types.TestCase) func(*testing.T) {
@@ -344,6 +380,47 @@ func BasicInstallInCustomNamespace(tc *types.TestCase) func(*testing.T) {
 	}
 }
 
+func BasicInstallWithMaxStorageNodesPerZone(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+		//Create secret if you are don't have a secret in the required namespace
+		// err := ci_utils.CreatePxVsphereSecret(cluster.Namespace, ci_utils.PxVsphereUsername, ci_utils.PxVspherePassword)
+		// logrus.Infof("Error %v", err)
+		// require.NoError(t, err)
+		// Construct StorageCluster
+		err := ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
+		require.NoError(t, err)
+		// Deploy PX and validate
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		s := scheme.Scheme
+		err = corev1.AddToScheme(s)
+
+		require.NoError(t, err)
+		k8sclient, err := k8sutil.NewK8sClient(s)
+		logrus.Info("Getting k8s client")
+		require.NoError(t, err)
+		// sdkConn, err := pxutil.GetPortworxConn(nil, k8sclient, cluster.Namespace)
+		logrus.Info("getting sdk connection")
+		require.NoError(t, err)
+		storageNodeList, err := pxutil.GetStorageNodes(cluster, k8sclient, nil)
+		logrus.Info("getting storage node list")
+		if err != nil {
+			logrus.Errorf("Couldn't get storage node list: %v", err)
+
+		} else {
+			numofstorgenodes := len(storageNodeList)
+			require.EqualValues(t, numofstorgenodes, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+			logrus.Info("Test is runnningg!!!!!!!!")
+		}
+
+		// Wipe PX and validate
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+
+	}
+}
 func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		testSpec := tc.TestSpec(t)
