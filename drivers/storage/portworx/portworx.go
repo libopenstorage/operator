@@ -481,7 +481,6 @@ func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 	}
 
 	if check, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; ok { // Preflight is already set
-		logrus.Infof("*** Annotation Exists: %v ***", check)
 		check = strings.TrimSpace(strings.ToLower(check))
 		return check == "true"
 	}
@@ -545,11 +544,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 	shouldRun := p.preflightShouldRun(toUpdate)
 	if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
-		logrus.Infof("*** Setting preflight annotation: %s", strings.ToLower(strconv.FormatBool(shouldRun)))
 		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = strings.ToLower(strconv.FormatBool(shouldRun))
 	}
-
-	logrus.Infof("*** Preflight annotation: %s", strings.ToLower(toUpdate.Annotations[pxutil.AnnotationPreflightCheck]))
 
 	if preflight.IsEKS() {
 		toUpdate.Annotations[pxutil.AnnotationIsEKS] = "true"
