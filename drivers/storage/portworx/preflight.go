@@ -23,6 +23,7 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	preflt "github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
@@ -39,6 +40,8 @@ const (
 	DefCmetaVsphere = "type=eagerzeroedthick,size=64"
 	// DefCmetaPure default metadata cloud device for DMthin Pure
 	DefCmetaPure = "size=64"
+	// DefCmetaAzure default metadata cloud device for DMthin Azure
+	DefCmetaAzure = "type=Premium_LRS,size=64"
 )
 
 // PreFlightPortworx provides a set of APIs to uninstall portworx
@@ -371,6 +374,8 @@ func (u *preFlightPortworx) processPassedChecks(recorder record.EventRecorder) {
 			cmetaData = DefCmetaVsphere
 		} else if pxutil.IsPure(u.cluster) {
 			cmetaData = DefCmetaPure
+		} else if preflt.IsAzure() {
+			cmetaData = DefCmetaAzure
 		}
 		u.cluster.Spec.CloudStorage.SystemMdDeviceSpec = &cmetaData
 	}
