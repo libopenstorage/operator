@@ -34,6 +34,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/libopenstorage/cloudops"
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
@@ -156,6 +157,7 @@ func TestValidate(t *testing.T) {
 	}
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+
 	k8sClient := testutil.FakeK8sClient(preflightDS)
 
 	err := k8sClient.Create(context.TODO(), preFlightPod1)
@@ -247,6 +249,10 @@ func TestValidate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expectedSCC, scc)
 
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
 }
 
 func TestValidateCheckFailure(t *testing.T) {
@@ -686,6 +692,528 @@ func TestValidatePure(t *testing.T) {
 	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider pure")
 }
 
+func TestShouldPreflightRun(t *testing.T) {
+	driver := portworx{}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+		},
+	}
+
+	maxStorageNodes := uint32(1)
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+	cluster.Spec.CloudStorage.MaxStorageNodes = &maxStorageNodes
+	k8sClient := testutil.FakeK8sClient(cluster)
+
+	// TestCase: aws cloud provider with image < 3.0
+	logrus.Infof("check aws cloud w/PX < 3.0...")
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-1"}},
+	}}
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
+
+	cluster.Spec.Image = "portworx/oci-image:2.9.0"
+
+	err := preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	setPortworxStorageSpecDefaults(cluster)
+	require.False(t, driver.preflightShouldRun(cluster))
+	logrus.Infof("aws cloud w/PX < 3.0, preflight will not run")
+
+	// Reset preflight for other tests
+	cluster.Spec.CloudStorage.Provider = nil
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: aws cloud provider with image >= 3.0
+	logrus.Infof("check aws cloud w/PX >= 3.0...")
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	setPortworxStorageSpecDefaults(cluster)
+	require.True(t, driver.preflightShouldRun(cluster))
+	logrus.Infof("aws cloud w/PX >= 3.0, preflight will run")
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	cluster.Spec.CloudStorage.Provider = nil
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Vsphere cloud provider with image <= 3.0
+	logrus.Infof("check vsphere cloud w/PX <= 3.0...")
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+
+	// force vsphere
+	env := make([]v1.EnvVar, 2)
+	env[0].Name = "VSPHERE_VCENTER"
+	env[0].Value = "some.vcenter.server.com"
+	cluster.Spec.Env = env
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	setPortworxStorageSpecDefaults(cluster)
+	require.False(t, driver.preflightShouldRun(cluster))
+	logrus.Infof("vshpere cloud w/PX <= 3.0, preflight will not run")
+
+	// Reset preflight for other tests
+	cluster.Spec.CloudStorage.Provider = nil
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Vsphere cloud provider with image >= 3.1
+	logrus.Infof("check vsphere cloud w/PX >= 3.1...")
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	setPortworxStorageSpecDefaults(cluster)
+	require.True(t, driver.preflightShouldRun(cluster))
+	logrus.Infof("vshpere cloud w/PX >= 3.1, preflight will run")
+
+	// TestCase: Vsphere cloud provider with Install mode 'local'
+	logrus.Infof("check vsphere cloud w/local install mode...")
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+	env[1].Name = "VSPHERE_INSTALL_MODE"
+	env[1].Value = "local"
+	cluster.Spec.Env = env
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	setPortworxStorageSpecDefaults(cluster)
+	require.False(t, driver.preflightShouldRun(cluster))
+	logrus.Infof("vshpere cloud w/local install mode will not run")
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	cluster.Spec.CloudStorage.Provider = nil
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Pure cloud provider with image <= 3.0
+	logrus.Infof("check Pure cloud w/PX <= 3.0...")
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+
+	// force Pure
+	env = make([]v1.EnvVar, 1)
+	env[0].Name = "PURE_FLASHARRAY_SAN_TYPE"
+	env[0].Value = "FC"
+	cluster.Spec.Env = env
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	setPortworxStorageSpecDefaults(cluster)
+	require.False(t, driver.preflightShouldRun(cluster))
+	logrus.Infof("Pure cloud w/PX <= 3.0, preflight will not run")
+
+	// Reset preflight for other tests
+	cluster.Spec.CloudStorage.Provider = nil
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Pure cloud provider with image >= 3.1
+	logrus.Infof("check Pure cloud w/PX >= 3.1...")
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	setPortworxStorageSpecDefaults(cluster)
+	require.True(t, driver.preflightShouldRun(cluster))
+	logrus.Infof("Pure cloud w/PX >= 3.1, preflight will run")
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	cluster.Spec.CloudStorage.Provider = nil
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Azure cloud provider with image <= 3.0
+	logrus.Infof("check Azure cloud w/PX <= 3.0...")
+	fakeK8sNodes = &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Spec: v1.NodeSpec{ProviderID: "azure://node-id-1"}},
+	}}
+
+	versionClient := fakek8sclient.NewSimpleClientset(fakeK8sNodes)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.26.5",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+	k8sClient = testutil.FakeK8sClient(fakeK8sNodes)
+
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	c := preflight.Instance()
+	require.Equal(t, cloudops.Azure, c.ProviderName()) // Make sure Azure
+
+	setPortworxStorageSpecDefaults(cluster)
+	require.False(t, driver.preflightShouldRun(cluster))
+	logrus.Infof("Azure cloud w/PX <= 3.0, preflight will not run")
+
+	// Reset preflight for other tests
+	cluster.Spec.CloudStorage.Provider = nil
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Azure cloud provider with image >= 3.1
+	logrus.Infof("check Azure cloud w/PX >= 3.1...")
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	setPortworxStorageSpecDefaults(cluster)
+	require.True(t, driver.preflightShouldRun(cluster))
+	logrus.Infof("Pure Azure w/PX >= 3.1, preflight will run")
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	cluster.Spec.CloudStorage.Provider = nil
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Vsphere cloud provider with PKS and image >= 3.1
+	logrus.Infof("check vsphere cloud with PKS and PX >= 3.1...")
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+
+	env = make([]v1.EnvVar, 1)
+	env[0].Name = "VSPHERE_VCENTER"
+	env[0].Value = "some.vcenter.server.com"
+	cluster.Spec.Env = env
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sClient = testutil.FakeK8sClient(cluster)
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: preflight.PksSystemNamespace,
+		},
+	}
+	_, err = coreops.Instance().CreateNamespace(ns)
+	require.NoError(t, err)
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+	require.True(t, preflight.IsPKS())
+
+	setPortworxStorageSpecDefaults(cluster)
+	logrus.Infof("vsphere cloud with PKS and PX >= 3.1 will not run")
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	cluster.Spec.CloudStorage.Provider = nil
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+}
+
+func TestPreflightAnnotations(t *testing.T) {
+	driver := portworx{}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+		},
+	}
+
+	maxStorageNodes := uint32(1)
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+	cluster.Spec.CloudStorage.MaxStorageNodes = &maxStorageNodes
+	k8sClient := testutil.FakeK8sClient(cluster)
+
+	// TestCase: aws cloud provider with image < 3.0
+	logrus.Infof("check aws cloud w/PX < 3.0...")
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-1"}},
+	}}
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
+
+	cluster.Spec.Image = "portworx/oci-image:2.9.0"
+
+	err := preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+	require.Equal(t, string(cloudops.AWS), pxutil.GetCloudProvider(cluster)) // Make sure aws
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "false", check)
+	logrus.Infof("aws cloud w/PX < 3.0, preflight will not run")
+
+	// Reset preflight for other tests
+	cluster.Spec.CloudStorage.Provider = nil
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: aws cloud provider with image >= 3.0
+	logrus.Infof("check aws cloud w/PX >= 3.0...")
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "true", check)
+	logrus.Infof("aws cloud w/PX >= 3.0, preflight will run")
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	cluster.Spec.CloudStorage.Provider = nil
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Vsphere cloud provider with image <= 3.0
+	logrus.Infof("check vsphere cloud w/PX <= 3.0...")
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+
+	// force vsphere
+	env := make([]v1.EnvVar, 2)
+	env[0].Name = "VSPHERE_VCENTER"
+	env[0].Value = "some.vcenter.server.com"
+	cluster.Spec.Env = env
+
+	require.Equal(t, string(cloudops.Vsphere), pxutil.GetCloudProvider(cluster)) // Make sure Vsphere
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "false", check)
+	logrus.Infof("vshpere cloud w/PX <= 3.0, preflight will not run")
+
+	// Reset preflight for other tests
+	cluster.Spec.CloudStorage.Provider = nil
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Vsphere cloud provider with image >= 3.1
+	logrus.Infof("check vsphere cloud w/PX >= 3.1...")
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "true", check)
+	logrus.Infof("vshpere cloud w/PX >= 3.1, preflight will run")
+
+	// TestCase: Vsphere cloud provider with Install mode 'local'
+	logrus.Infof("check vsphere cloud w/local install mode...")
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+	env[1].Name = "VSPHERE_INSTALL_MODE"
+	env[1].Value = "local"
+	cluster.Spec.Env = env
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "false", check)
+	logrus.Infof("vshpere cloud w/local install mode will not run")
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	cluster.Spec.CloudStorage.Provider = nil
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Pure cloud provider with image <= 3.0
+	logrus.Infof("check Pure cloud w/PX <= 3.0...")
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+
+	// force Pure
+	env = make([]v1.EnvVar, 1)
+	env[0].Name = "PURE_FLASHARRAY_SAN_TYPE"
+	env[0].Value = "FC"
+	cluster.Spec.Env = env
+
+	require.Equal(t, string(cloudops.Pure), pxutil.GetCloudProvider(cluster)) // Make sure Pure
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "false", check)
+	logrus.Infof("Pure cloud w/PX <= 3.0, preflight will not run")
+
+	// Reset preflight for other tests
+	cluster.Spec.CloudStorage.Provider = nil
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Pure cloud provider with image >= 3.1
+	logrus.Infof("check Pure cloud w/PX >= 3.1...")
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "true", check)
+	logrus.Infof("Pure cloud w/PX >= 3.1, preflight will run")
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	cluster.Spec.CloudStorage.Provider = nil
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Azure cloud provider with image <= 3.0
+	logrus.Infof("check Azure cloud w/PX <= 3.0...")
+	fakeK8sNodes = &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Spec: v1.NodeSpec{ProviderID: "azure://node-id-1"}},
+	}}
+
+	versionClient := fakek8sclient.NewSimpleClientset(fakeK8sNodes)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.26.5",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+	k8sClient = testutil.FakeK8sClient(fakeK8sNodes)
+
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	c := preflight.Instance()
+	require.Equal(t, cloudops.Azure, c.ProviderName()) // Make sure Azure
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "false", check)
+	logrus.Infof("Azure cloud w/PX <= 3.0, preflight will not run")
+
+	// Reset preflight for other tests
+	cluster.Spec.CloudStorage.Provider = nil
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Azure cloud provider with image >= 3.1
+	logrus.Infof("check Azure cloud w/PX >= 3.1...")
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "true", check)
+	logrus.Infof("Pure Azure w/PX >= 3.1, preflight will run")
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	cluster.Spec.CloudStorage.Provider = nil
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Vsphere cloud provider with PKS and image >= 3.1
+	logrus.Infof("check vsphere cloud with PKS and PX >= 3.1...")
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+
+	env = make([]v1.EnvVar, 1)
+	env[0].Name = "VSPHERE_VCENTER"
+	env[0].Value = "some.vcenter.server.com"
+	cluster.Spec.Env = env
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sClient = testutil.FakeK8sClient(cluster)
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: preflight.PksSystemNamespace,
+		},
+	}
+	_, err = coreops.Instance().CreateNamespace(ns)
+	require.NoError(t, err)
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+	require.True(t, preflight.IsPKS())
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "false", check)
+	logrus.Infof("vsphere cloud with PKS and PX >= 3.1 will not run")
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	cluster.Spec.CloudStorage.Provider = nil
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: Azure cloud provider with image >= 3.1 w/skip annotation
+	logrus.Infof("check Azure cloud w/PX >= 3.1 w/skip annotation...")
+	cluster.Spec.Image = "portworx/oci-image:3.1.0"
+	cluster.Annotations[pxutil.AnnotationPreflightCheck] = "skip"
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "skip", check)
+	logrus.Infof("Pure Azure w/PX >= 3.1, preflight will run, skip exists")
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	cluster.Spec.CloudStorage.Provider = nil
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+}
+
 func TestGetSelectorLabels(t *testing.T) {
 	driver := portworx{}
 	expectedLabels := map[string]string{"name": pxutil.DriverName}
@@ -1052,12 +1580,13 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 	require.NoError(t, err)
 	_, ok := cluster.Annotations[pxutil.AnnotationIsEKS]
 	require.False(t, ok)
-	_, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
-	require.False(t, ok)
+	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "false", check)
 	require.NotNil(t, cluster.Spec.Storage)
 	require.Nil(t, cluster.Spec.CloudStorage)
 
-	// TestCase: test eks
+	// TestCase: test eks on PX version < 3.0
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
 		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-1"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-2"}},
@@ -1075,7 +1604,15 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 	require.NoError(t, err)
 	_, ok = cluster.Annotations[pxutil.AnnotationIsEKS]
 	require.True(t, ok)
-	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
+	require.True(t, ok)
+	require.Equal(t, "false", check)
+
+	delete(cluster.Annotations, pxutil.AnnotationPreflightCheck)
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
 	require.True(t, ok)
 	require.Equal(t, "true", check)
 
