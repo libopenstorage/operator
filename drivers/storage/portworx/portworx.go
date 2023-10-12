@@ -480,10 +480,10 @@ func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 		return false
 	}
 
-	check, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]
-	check = strings.TrimSpace(strings.ToLower(check))
-	if ok && check == "true" { // Preflight is enabled
-		return true
+	if check, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; ok { // Preflight is already set
+		logrus.Infof("*** Annotation Exists: %v ***", check)
+		check = strings.TrimSpace(strings.ToLower(check))
+		return check == "true"
 	}
 
 	if !preflight.RequiresCheck() { // Preflight is only supported on AWS, VSPHERE & Pure
@@ -543,13 +543,13 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		}
 	}
 
-	if p.preflightShouldRun(toUpdate) {
-		if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
-			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "true"
-		}
-	} else {
-		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+	shouldRun := p.preflightShouldRun(toUpdate)
+	if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
+		logrus.Infof("*** Setting preflight annotation: %s", strings.ToLower(strconv.FormatBool(shouldRun)))
+		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = strings.ToLower(strconv.FormatBool(shouldRun))
 	}
+
+	logrus.Infof("*** Preflight annotation: %s", strings.ToLower(toUpdate.Annotations[pxutil.AnnotationPreflightCheck]))
 
 	if preflight.IsEKS() {
 		toUpdate.Annotations[pxutil.AnnotationIsEKS] = "true"
