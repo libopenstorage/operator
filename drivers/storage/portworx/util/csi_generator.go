@@ -44,8 +44,6 @@ type CSIConfiguration struct {
 	DriverName string
 	// DriverRegistrationBasePath is the base path for CSI driver registration path
 	DriverRegistrationBasePath string
-	// UseDeployment decides whether to use a StatefulSet or Deployment for the CSI side cars.
-	// UseDeployment bool
 	// IncludeAttacher dictates whether we include the csi-attacher sidecar or not.
 	IncludeAttacher bool
 	// IncludeResizer dicates whether or not to include the resizer sidecar.
@@ -125,11 +123,6 @@ func (g *CSIGenerator) GetBasicCSIConfiguration() *CSIConfiguration {
 // for the specified Kubernetes and Portworx versions
 func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
 	var cv *CSIConfiguration = g.getDefaultConfigV1_0()
-	// if g.kubeVersion.GreaterThanOrEqual(k8sVer1_13) {
-	// cv = g.getDefaultConfigV1_0()
-	// } else {
-	// 	cv = g.getDefaultConfigV0_4()
-	// }
 
 	// Check if configmaps are necessary for leader election.
 	// If it is  >=1.13.0 and and <1.14.0

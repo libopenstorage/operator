@@ -132,21 +132,13 @@ func (c *csi) Reconcile(cluster *corev1.StorageCluster) error {
 			return err
 		}
 	}
-	// if csiConfig.UseDeployment {
+
 	if err := k8sutil.DeleteStatefulSet(c.k8sClient, CSIApplicationName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	if err := c.createDeployment(cluster, csiConfig, ownerRef); err != nil {
 		return err
 	}
-	// } else {
-	// 	if err := k8sutil.DeleteDeployment(c.k8sClient, CSIApplicationName, cluster.Namespace, *ownerRef); err != nil {
-	// 		return err
-	// 	}
-	// 	if err := c.createStatefulSet(cluster, csiConfig, ownerRef); err != nil {
-	// 		return err
-	// 	}
-	// }
 	if csiConfig.CreateCsiNodeCrd && !c.csiNodeInfoCRDCreated {
 		if err := createCSINodeInfoCRD(); err != nil {
 			return err
@@ -867,183 +859,6 @@ func getCSIDeploymentSpec(
 	return deployment
 }
 
-// func (c *csi) createStatefulSet(
-// 	cluster *corev1.StorageCluster,
-// 	csiConfig *pxutil.CSIConfiguration,
-// 	ownerRef *metav1.OwnerReference,
-// ) error {
-// 	existingSS := &appsv1.StatefulSet{}
-// 	err := c.k8sClient.Get(
-// 		context.TODO(),
-// 		types.NamespacedName{
-// 			Name:      CSIApplicationName,
-// 			Namespace: cluster.Namespace,
-// 		},
-// 		existingSS,
-// 	)
-// 	if err != nil && !errors.IsNotFound(err) {
-// 		return err
-// 	}
-
-// 	var (
-// 		existingProvisionerImage = getImageFromStatefulSet(existingSS, csiProvisionerContainerName)
-// 		existingAttacherImage    = getImageFromStatefulSet(existingSS, csiAttacherContainerName)
-// 		provisionerImage         string
-// 		attacherImage            string
-// 	)
-
-// 	provisionerImage = util.GetImageURN(
-// 		cluster,
-// 		cluster.Status.DesiredImages.CSIProvisioner,
-// 	)
-// 	attacherImage = util.GetImageURN(
-// 		cluster,
-// 		cluster.Status.DesiredImages.CSIAttacher,
-// 	)
-
-// 	//statefulSet := getCSIStatefulSetSpec(cluster, csiConfig, ownerRef, provisionerImage, attacherImage)
-// 	modified := provisionerImage != existingProvisionerImage ||
-// 		attacherImage != existingAttacherImage ||
-// 		util.HasPullSecretChanged(cluster, existingSS.Spec.Template.Spec.ImagePullSecrets) ||
-// 		util.HasNodeAffinityChanged(cluster, existingSS.Spec.Template.Spec.Affinity) ||
-// 		util.HaveTolerationsChanged(cluster, existingSS.Spec.Template.Spec.Tolerations)
-
-// 	// if !c.isCreated || modified {
-// 	// 	if err = k8sutil.CreateOrUpdateStatefulSet(c.k8sClient, statefulSet, ownerRef); err != nil {
-// 	// 		return err
-// 	// 	}
-// 	// }
-// 	//c.isCreated = true
-// 	return nil
-// }
-
-// func getCSIStatefulSetSpec(
-// 	cluster *corev1.StorageCluster,
-// 	csiConfig *pxutil.CSIConfiguration,
-// 	ownerRef *metav1.OwnerReference,
-// 	provisionerImage, attacherImage string,
-// ) *appsv1.StatefulSet {
-// 	replicas := int32(1)
-// 	labels := map[string]string{
-// 		"app": "px-csi-driver",
-// 	}
-// 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
-
-// 	sc := &v1.SecurityContext{
-// 		Privileged: boolPtr(true),
-// 	}
-
-// 	statefulSet := &appsv1.StatefulSet{
-// 		ObjectMeta: metav1.ObjectMeta{
-// 			Name:            CSIApplicationName,
-// 			Namespace:       cluster.Namespace,
-// 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
-// 		},
-// 		Spec: appsv1.StatefulSetSpec{
-// 			ServiceName: CSIServiceName,
-// 			Replicas:    &replicas,
-// 			Selector: &metav1.LabelSelector{
-// 				MatchLabels: labels,
-// 			},
-// 			Template: v1.PodTemplateSpec{
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					Labels: labels,
-// 				},
-// 				Spec: v1.PodSpec{
-// 					ServiceAccountName: CSIServiceAccountName,
-// 					Containers: []v1.Container{
-// 						{
-// 							Name:            csiProvisionerContainerName,
-// 							Image:           provisionerImage,
-// 							ImagePullPolicy: imagePullPolicy,
-// 							Args: []string{
-// 								"--v=3",
-// 								"--provisioner=" + csiConfig.DriverName,
-// 								"--csi-address=$(ADDRESS)",
-// 							},
-// 							Env: []v1.EnvVar{
-// 								{
-// 									Name:  "ADDRESS",
-// 									Value: "/csi/csi.sock",
-// 								},
-// 							},
-// 							VolumeMounts: []v1.VolumeMount{
-// 								{
-// 									Name:      "socket-dir",
-// 									MountPath: "/csi",
-// 								},
-// 							},
-// 							SecurityContext: sc,
-// 						},
-// 						{
-// 							Name:            csiAttacherContainerName,
-// 							Image:           attacherImage,
-// 							ImagePullPolicy: imagePullPolicy,
-// 							Args: []string{
-// 								"--v=3",
-// 								"--csi-address=$(ADDRESS)",
-// 							},
-// 							Env: []v1.EnvVar{
-// 								{
-// 									Name:  "ADDRESS",
-// 									Value: "/csi/csi.sock",
-// 								},
-// 							},
-// 							VolumeMounts: []v1.VolumeMount{
-// 								{
-// 									Name:      "socket-dir",
-// 									MountPath: "/csi",
-// 								},
-// 							},
-// 							SecurityContext: sc,
-// 						},
-// 					},
-// 					Volumes: []v1.Volume{
-// 						{
-// 							Name: "socket-dir",
-// 							VolumeSource: v1.VolumeSource{
-// 								HostPath: &v1.HostPathVolumeSource{
-// 									Path: csiConfig.DriverBasePath(),
-// 									Type: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
-// 								},
-// 							},
-// 						},
-// 					},
-// 				},
-// 			},
-// 		},
-// 	}
-
-// 	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
-// 		statefulSet.Spec.Template.Spec.ImagePullSecrets = append(
-// 			[]v1.LocalObjectReference{},
-// 			v1.LocalObjectReference{
-// 				Name: *cluster.Spec.ImagePullSecret,
-// 			},
-// 		)
-// 	}
-
-// 	if cluster.Spec.Placement != nil {
-// 		if cluster.Spec.Placement.NodeAffinity != nil {
-// 			statefulSet.Spec.Template.Spec.Affinity = &v1.Affinity{
-// 				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
-// 			}
-// 		}
-
-// 		if len(cluster.Spec.Placement.Tolerations) > 0 {
-// 			statefulSet.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
-// 			for _, toleration := range cluster.Spec.Placement.Tolerations {
-// 				statefulSet.Spec.Template.Spec.Tolerations = append(
-// 					statefulSet.Spec.Template.Spec.Tolerations,
-// 					*(toleration.DeepCopy()),
-// 				)
-// 			}
-// 		}
-// 	}
-
-// 	return statefulSet
-// }
-
 func (c *csi) createCSIDriver(
 	csiConfig *pxutil.CSIConfiguration,
 ) error {
@@ -1262,15 +1077,6 @@ func (c *csi) getCSIConfiguration(
 	}
 	return csiGenerator.GetBasicCSIConfiguration()
 }
-
-// func getImageFromStatefulSet(ss *appsv1.StatefulSet, containerName string) string {
-// 	for _, c := range ss.Spec.Template.Spec.Containers {
-// 		if c.Name == containerName {
-// 			return c.Image
-// 		}
-// 	}
-// 	return ""
-// }
 
 func boolPtr(val bool) *bool {
 	return &val
