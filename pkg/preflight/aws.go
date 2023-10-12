@@ -56,7 +56,7 @@ func (a *aws) initCloudOps(cluster *corev1.StorageCluster) error {
 	}
 
 	// Initialize aws client for cloud drive permission checks
-	client, err := awsops.NewClient()
+	client, err := awsops.NewClient("", "")
 	unsetAWSCredentialEnvVars()
 	if err != nil {
 		return err

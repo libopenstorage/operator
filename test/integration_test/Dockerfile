@@ -1,8 +1,8 @@
-FROM golang:1.20
+FROM golang:1.18
 
 # Install dependancies
-RUN apt-get update && \ 
-    /usr/local/go/bin/go install gotest.tools/gotestsum@latest
+RUN apt-get update
+RUN /usr/local/go/bin/go install gotest.tools/gotestsum@latest
 RUN apt-get install -y jq
 
 # Install aws-iam-authenticator

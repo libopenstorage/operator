@@ -82,8 +82,8 @@ func (a *awsStorageManager) RecommendStoragePoolUpdate(
 func determineIOPSForPool(instStorage *cloudops.StoragePoolSpec, row *cloudops.StorageDecisionMatrixRow, currentIOPS uint64) uint64 {
 	if instStorage.DriveType == DriveTypeGp2 {
 		return instStorage.DriveCapacityGiB * Gp2IopsMultiplier
-	} else if instStorage.DriveType == DriveTypeIo1 {
-		// For io1 volumes we need to specify the requested iops as the provisioned iops
+	} else if instStorage.DriveType == DriveTypeIo1 || instStorage.DriveType == DriveTypeGp3 {
+		// For io1 & gp3 IOPS is independent of the drive size and is a configurable parameter.
 		return currentIOPS
 	}
 	return row.MinIOPS

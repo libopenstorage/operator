@@ -340,8 +340,8 @@ func (e *exponentialBackoff) Describe() (interface{}, error) {
 // FreeDevices returns free block devices on the instance.
 // blockDeviceMappings is a data structure that contains all block devices on
 // the instance and where they are mapped to
-func (e *exponentialBackoff) FreeDevices(blockDeviceMappings []interface{}, rootDeviceName string) ([]string, error) {
-	return e.cloudOps.FreeDevices(blockDeviceMappings, rootDeviceName)
+func (e *exponentialBackoff) FreeDevices() ([]string, error) {
+	return e.cloudOps.FreeDevices()
 }
 
 // Inspect volumes specified by volumeID
@@ -434,6 +434,10 @@ func (e *exponentialBackoff) DevicePath(volumeID string) (string, error) {
 		return "", cloudops.NewStorageError(cloudops.ErrExponentialTimeout, origErr.Error(), "")
 	}
 	return devicePath, origErr
+}
+
+func (e *exponentialBackoff) AreVolumesReadyToExpand(volumeIDs []*string) (bool, error) {
+	return e.cloudOps.AreVolumesReadyToExpand(volumeIDs)
 }
 
 func (e *exponentialBackoff) Expand(volumeID string, targetSize uint64, options map[string]string) (uint64, error) {

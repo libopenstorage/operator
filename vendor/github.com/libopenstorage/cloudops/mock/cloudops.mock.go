@@ -225,18 +225,18 @@ func (mr *MockOpsMockRecorder) Expand(arg0, arg1, arg2 interface{}) *gomock.Call
 }
 
 // FreeDevices mocks base method.
-func (m *MockOps) FreeDevices(arg0 []interface{}, arg1 string) ([]string, error) {
+func (m *MockOps) FreeDevices() ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FreeDevices", arg0, arg1)
+	ret := m.ctrl.Call(m, "FreeDevices")
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FreeDevices indicates an expected call of FreeDevices.
-func (mr *MockOpsMockRecorder) FreeDevices(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockOpsMockRecorder) FreeDevices() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FreeDevices", reflect.TypeOf((*MockOps)(nil).FreeDevices), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FreeDevices", reflect.TypeOf((*MockOps)(nil).FreeDevices))
 }
 
 // GetClusterSizeForInstance mocks base method.
@@ -356,6 +356,21 @@ func (m *MockOps) InstanceID() string {
 func (mr *MockOpsMockRecorder) InstanceID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InstanceID", reflect.TypeOf((*MockOps)(nil).InstanceID))
+}
+
+// IsVolumesReadyToExpand mocks base method.
+func (m *MockOps) AreVolumesReadyToExpand(arg0 []*string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsVolumesReadyToExpand", arg0)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsVolumesReadyToExpand indicates an expected call of IsVolumesReadyToExpand.
+func (mr *MockOpsMockRecorder) IsVolumesReadyToExpand(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsVolumesReadyToExpand", reflect.TypeOf((*MockOps)(nil).AreVolumesReadyToExpand), arg0)
 }
 
 // Name mocks base method.
