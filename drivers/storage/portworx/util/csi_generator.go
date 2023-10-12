@@ -22,11 +22,11 @@ var (
 	k8sVer1_17, _ = version.NewVersion("1.17")
 	k8sVer1_20, _ = version.NewVersion("1.20")
 	k8sVer1_21, _ = version.NewVersion("1.21")
-	// pxVer2_1, _   = version.NewVersion("2.1")
-	pxVer2_2, _  = version.NewVersion("2.2")
-	pxVer2_5, _  = version.NewVersion("2.5")
-	pxVer2_10, _ = version.NewVersion("2.10")
-	pxVer2_13, _ = version.NewVersion("2.13")
+	pxVer2_1, _   = version.NewVersion("2.1")
+	pxVer2_2, _   = version.NewVersion("2.2")
+	pxVer2_5, _   = version.NewVersion("2.5")
+	pxVer2_10, _  = version.NewVersion("2.10")
+	pxVer2_13, _  = version.NewVersion("2.13")
 )
 
 // CSIConfiguration holds the versions of the all the CSI sidecar containers,
@@ -122,7 +122,12 @@ func (g *CSIGenerator) GetBasicCSIConfiguration() *CSIConfiguration {
 // GetCSIConfiguration returns the appropriate side car versions
 // for the specified Kubernetes and Portworx versions
 func (g *CSIGenerator) GetCSIConfiguration() *CSIConfiguration {
-	var cv *CSIConfiguration = g.getDefaultConfigV1_0()
+	var cv *CSIConfiguration
+	if g.kubeVersion.GreaterThanOrEqual(k8sVer1_13) {
+		cv = &CSIConfiguration{}
+	} else {
+		cv = g.getDefaultConfigV0_4()
+	}
 
 	// Check if configmaps are necessary for leader election.
 	// If it is  >=1.13.0 and and <1.14.0
@@ -236,23 +241,14 @@ func (g *CSIGenerator) driverName() string {
 	return CSIDriverName
 }
 
-func (g *CSIGenerator) getDefaultConfigV1_0() *CSIConfiguration {
-	return &CSIConfiguration{
-		// UseDeployment: true,
+func (g *CSIGenerator) getDefaultConfigV0_4() *CSIConfiguration {
+	c := &CSIConfiguration{}
+	// Force CSI 0.3 for Portworx version 2.1
+	if g.pxVersion.GreaterThanOrEqual(pxVer2_1) {
+		c.Version = "0.3"
 	}
+	return c
 }
-
-// func (g *CSIGenerator) getDefaultConfigV0_4() *CSIConfiguration {
-// 	c := &CSIConfiguration{
-// 		UseDeployment: false,
-// 	}
-
-// 	// Force CSI 0.3 for Portworx version 2.1
-// 	if g.pxVersion.GreaterThanOrEqual(pxVer2_1) {
-// 		c.Version = "0.3"
-// 	}
-// 	return c
-// }
 
 // DriverBasePath returns the basepath under which the CSI driver is stored
 func (c *CSIConfiguration) DriverBasePath() string {
