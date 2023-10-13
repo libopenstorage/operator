@@ -9551,7 +9551,7 @@ func TestStorageSpecValidation(t *testing.T) {
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
 	}
-	validationErr := fmt.Errorf("found spec 1 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+	validationErr := fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
 	driver.EXPECT().Validate(gomock.Any()).Return(validationErr).AnyTimes()
 	driver.EXPECT().String().Return("mock-driver").AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -9611,7 +9611,7 @@ func TestStorageSpecValidation(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	validationErr = fmt.Errorf("found spec 2 for storage and cloudstorage on node")
+	validationErr = fmt.Errorf("found spec for storage and cloudstorage on node")
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.Contains(t, err.Error(), validationErr.Error())
 	require.Error(t, err)
@@ -9634,7 +9634,7 @@ func TestStorageSpecValidation(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	validationErr = fmt.Errorf("found spec 2 for storage and cloudstorage on node")
+	validationErr = fmt.Errorf("found spec for storage and cloudstorage on node")
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.Contains(t, err.Error(), validationErr.Error())
 	require.Error(t, err)
@@ -9676,7 +9676,7 @@ func TestStorageSpecValidation(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	validationErr = fmt.Errorf("found spec 3 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+	validationErr = fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.Contains(t, err.Error(), validationErr.Error())
 	require.Error(t, err)
@@ -9710,7 +9710,7 @@ func TestStorageSpecValidation(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
-	validationErr = fmt.Errorf("found spec 3 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+	validationErr = fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.Contains(t, err.Error(), validationErr.Error())
 	require.Error(t, err)
@@ -9749,9 +9749,8 @@ func TestStorageSpecValidation(t *testing.T) {
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
-	fmt.Println((cluster.Spec.Storage == nil), (cluster.Spec.CloudStorage == nil), (cluster.Spec.Nodes[0].Storage == nil), (cluster.Spec.Nodes[0].CloudStorage == nil))
 
-	//ANother valid case
+	//Another valid case
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -9788,8 +9787,6 @@ func TestStorageSpecValidation(t *testing.T) {
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
-	fmt.Println((cluster.Spec.Storage == nil), (cluster.Spec.CloudStorage == nil), (cluster.Spec.Nodes[0].Storage == nil), (cluster.Spec.Nodes[0].CloudStorage == nil))
-
 }
 
 func replaceOldPod(
