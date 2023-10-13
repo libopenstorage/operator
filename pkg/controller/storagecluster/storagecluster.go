@@ -424,20 +424,20 @@ func (c *Controller) validateStorageSpec(cluster *corev1.StorageCluster) error {
 
 	//when cluster has both, no nodes
 	if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil && cluster.Spec.Nodes == nil {
-		return fmt.Errorf("found spec 1 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+		return fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
 	}
 
 	for node, Nodespec := range cluster.Spec.Nodes {
 
 		//when node has both spec
 		if Nodespec.Storage != nil && Nodespec.CloudStorage != nil {
-			return fmt.Errorf("found spec 2 for storage and cloudstorage on node %d, only 1 type of storage is allowed", node)
+			return fmt.Errorf("found spec for storage and cloudstorage on node %d, only 1 type of storage is allowed", node)
 		}
 
 		//when cluster has both
 		if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil {
 
-			//When cluster leevl storage and node level cloud
+			//When cluster level storage and node level cloud
 			if Nodespec.Storage == nil && cluster.Spec.CloudStorage.DeviceSpecs == nil &&
 				(cluster.Spec.CloudStorage.JournalDeviceSpec == nil) &&
 				(cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil) &&
@@ -446,7 +446,7 @@ func (c *Controller) validateStorageSpec(cluster *corev1.StorageCluster) error {
 				continue
 
 			}
-			return fmt.Errorf("found spec 3 for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+			return fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
 		}
 
 	}
