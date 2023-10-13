@@ -1917,8 +1917,6 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-1").
 			DoAndReturn(func(c *corev1.StorageCluster, _ string) (v1.PodSpec, error) {
 				require.Equal(t, cluster.Spec.Nodes[0].Storage, c.Spec.Storage)
-				// require.Equal(t, cluster.Spec.Nodes[0].CloudStorage.CloudStorageCommon,
-				// c.Spec.CloudStorage.CloudStorageCommon)
 				require.Equal(t, cluster.Spec.Nodes[0].Network, c.Spec.Network)
 				require.Equal(t, cluster.Spec.Nodes[0].RuntimeOpts, c.Spec.RuntimeOpts)
 				expectedEnv := []v1.EnvVar{
