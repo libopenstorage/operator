@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	// storageapi "github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/test/integration_test/cloud_provider"
 	"github.com/sirupsen/logrus"
@@ -29,13 +28,13 @@ import (
 	// storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/portworx/sched-ops/k8s/operator"
+	"k8s.io/client-go/kubernetes/scheme"
 )
 
 const (
@@ -385,36 +384,32 @@ func BasicInstallWithMaxStorageNodesPerZone(tc *types.TestCase) func(*testing.T)
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
-		//Create secret if you are don't have a secret in the required namespace
-		// err := ci_utils.CreatePxVsphereSecret(cluster.Namespace, ci_utils.PxVsphereUsername, ci_utils.PxVspherePassword)
-		// logrus.Infof("Error %v", err)
-		// require.NoError(t, err)
-		// Construct StorageCluster
+
 		err := ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
 		require.NoError(t, err)
+
 		// Deploy PX and validate
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
+		// Verify the total number of storage nodes
 		s := scheme.Scheme
 		err = corev1.AddToScheme(s)
-
 		require.NoError(t, err)
+
 		k8sclient, err := k8sutil.NewK8sClient(s)
-		logrus.Info("Getting k8s client")
 		require.NoError(t, err)
-		// sdkConn, err := pxutil.GetPortworxConn(nil, k8sclient, cluster.Namespace)
-		logrus.Info("getting sdk connection")
-		require.NoError(t, err)
-		storageNodeList, err := pxutil.GetStorageNodes(cluster, k8sclient, nil)
-		logrus.Info("getting storage node list")
-		if err != nil {
-			logrus.Errorf("Couldn't get storage node list: %v", err)
 
-		} else {
-			numofstorgenodes := len(storageNodeList)
-			require.EqualValues(t, numofstorgenodes, cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
-			logrus.Info("Test is runnningg!!!!!!!!")
+		storageNodeList, err := pxutil.GetStorageNodes(cluster, k8sclient, nil)
+		require.NoError(t, err)
+
+		NumberOfStorageNodes := 0
+		for _, storageNode := range storageNodeList {
+			if len(storageNode.SchedulerNodeName) != 0 && len(storageNode.Pools) > 0 {
+				NumberOfStorageNodes++
+			}
 		}
+
+		require.EqualValues(t, uint32(NumberOfStorageNodes), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 
 		// Wipe PX and validate
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
