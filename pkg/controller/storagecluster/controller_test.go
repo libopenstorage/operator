@@ -1593,6 +1593,45 @@ func TestFailureDuringDriverPreInstall(t *testing.T) {
 	require.Contains(t, actualEvent, "preinstall error")
 }
 
+func TestStorageClusterFailedSyncObjectModified(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+	}
+
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil)
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).Return(fmt.Errorf(k8s.UpdateRevisionConflictErr))
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	// When failed to sync StorageCluster due to object modified, don't raise an event
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Len(t, recorder.Events, 0)
+}
+
 func TestStoragePodsShouldNotBeScheduledIfDisabled(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -2986,6 +3025,11 @@ func TestFailureDuringPodTemplateCreation(t *testing.T) {
 	require.Contains(t, err.Error(), "pod template error for k8s-node-1")
 	require.Empty(t, result)
 
+	existingCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, existingCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), existingCluster.Status.Phase)
+
 	// Verify there is event raised for failure to create pod templates for node spec
 	require.Len(t, recorder.Events, 1)
 	eventMsg := <-recorder.Events
@@ -3010,6 +3054,11 @@ func TestFailureDuringPodTemplateCreation(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pod template error for k8s-node-2")
 	require.Empty(t, result)
+
+	existingCluster = &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, existingCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), existingCluster.Status.Phase)
 
 	// Verify there is event raised for failure to create pod templates for node spec
 	require.Len(t, recorder.Events, 1)
@@ -3090,6 +3139,11 @@ func TestFailureDuringCreateDeletePods(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pod control error")
 	require.Empty(t, result)
+
+	existingCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, existingCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), existingCluster.Status.Phase)
 
 	// Verify there is event raised for failure to create/delete pods
 	require.Len(t, recorder.Events, 2)
@@ -3307,6 +3361,11 @@ func TestFailedPreInstallFromDriver(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pre-install error")
 	require.Empty(t, result)
+
+	existingCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, existingCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), existingCluster.Status.Phase)
 
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -5045,6 +5104,11 @@ func TestUpdateStorageClusterWithInvalidMaxUnavailableValue(t *testing.T) {
 	require.Empty(t, result)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid value for MaxUnavailable")
+
+	existingCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, existingCluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, string(corev1.ClusterStateDegraded), existingCluster.Status.Phase)
 
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
@@ -8462,6 +8526,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	err = testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Nil(t, currCluster.Status.CollisionCount)
+	require.Equal(t, string(corev1.ClusterStateDegraded), currCluster.Status.Phase)
 
 	// New revision should not be created
 	revisions := &appsv1.ControllerRevisionList{}
@@ -8489,6 +8554,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	err = testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), *currCluster.Status.CollisionCount)
+	require.Equal(t, string(corev1.ClusterStateDegraded), currCluster.Status.Phase)
 
 	// New revision should not be created
 	err = testutil.List(k8sClient, revisions)
@@ -8520,6 +8586,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	err = testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), *currCluster.Status.CollisionCount)
+	require.Equal(t, string(corev1.ClusterStateDegraded), currCluster.Status.Phase)
 
 	// New revision should not be created
 	err = testutil.List(k8sClient, revisions)
@@ -8546,6 +8613,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 	err = testutil.Get(k8sClient, currCluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, int32(2), *currCluster.Status.CollisionCount)
+	require.Equal(t, string(corev1.ClusterStateDegraded), currCluster.Status.Phase)
 
 	// New revision should not be created
 	err = testutil.List(k8sClient, revisions)
