@@ -1742,11 +1742,6 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 					"rt_two": "rt_val_2",
 				},
 			},
-			// CloudStorage: &corev1.CloudStorageNodeSpec{
-			// 	CloudStorageCommon: corev1.CloudStorageCommon{
-			// 		DeviceSpecs: stringSlicePtr([]string{"type=dev1"}),
-			// 	},
-			// },
 		},
 		{
 			// Match using a label selector
@@ -6909,8 +6904,6 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 	oldPod.Labels[util.DefaultStorageClusterUniqueLabelKey] = latestRevision(revs).Labels[util.DefaultStorageClusterUniqueLabelKey]
 	err = k8sClient.Update(context.TODO(), oldPod)
 	require.NoError(t, err)
-	fmt.Println((cluster.Spec.Storage == nil), (cluster.Spec.CloudStorage == nil), (cluster.Spec.Nodes[0].Storage == nil), (cluster.Spec.Nodes[0].CloudStorage == nil))
-
 	podControl.DeletePodName = nil
 
 	result, err = controller.Reconcile(context.TODO(), request)
