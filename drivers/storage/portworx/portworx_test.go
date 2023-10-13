@@ -661,7 +661,7 @@ func TestValidatePure(t *testing.T) {
 
 	actual, err := driver.GetStoragePodSpec(cluster, "testNode")
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider pure")
+	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider "+cloudops.Pure)
 	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-metadata "+DefCmetaPure)
 
 	require.NotEmpty(t, recorder.Events)
@@ -682,14 +682,128 @@ func TestValidatePure(t *testing.T) {
 
 	actual, err = driver.GetStoragePodSpec(cluster, "testNode")
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-	require.NotContains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider pure")
+	require.NotContains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider "+cloudops.Pure)
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
 	actual, err = driver.GetStoragePodSpec(cluster, "testNode")
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider pure")
+	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider "+cloudops.Pure)
+}
+
+func TestValidateAzure(t *testing.T) {
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+
+	labels := map[string]string{
+		"name": pxPreFlightDaemonSetName,
+	}
+
+	clusterRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	preflightDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pxPreFlightDaemonSetName,
+			Namespace:       cluster.Namespace,
+			Labels:          labels,
+			UID:             types.UID("preflight-ds-uid"),
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
+	}
+
+	checks := []corev1.CheckResult{
+		{
+			Type:    "status",
+			Reason:  "oci-mon: pre-flight completed",
+			Success: true,
+		},
+	}
+
+	status := corev1.NodeStatus{
+		Checks: checks,
+	}
+
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: status,
+	}
+
+	preFlightPod1 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "preflight-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: preflightDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{
+				{
+					Name:  "portworx",
+					Ready: true,
+				},
+			},
+		},
+	}
+
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}, Spec: v1.NodeSpec{ProviderID: "azure://node-id-1"}},
+	}}
+
+	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
+	k8sClient := testutil.FakeK8sClient(cluster)
+
+	err := k8sClient.Create(context.TODO(), preflightDS)
+	require.NoError(t, err)
+
+	err = k8sClient.Create(context.TODO(), preFlightPod1)
+	require.NoError(t, err)
+
+	preflightDS.Status.DesiredNumberScheduled = int32(1)
+	err = k8sClient.Status().Update(context.TODO(), preflightDS)
+	require.NoError(t, err)
+
+	recorder := record.NewFakeRecorder(100)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = k8sClient.Create(context.TODO(), storageNode)
+	require.NoError(t, err)
+
+	err = driver.Validate(cluster)
+	require.NoError(t, err)
+	require.Contains(t, cluster.Annotations[pxutil.AnnotationMiscArgs], "-T px-storev2")
+
+	actual, err := driver.GetStoragePodSpec(cluster, "testNode")
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider "+cloudops.Azure)
+	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-metadata "+DefCmetaAzure)
+
+	require.NotEmpty(t, recorder.Events)
+	<-recorder.Events // Pop first event which is Default telemetry enabled event
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling PX-StoreV2"))
+	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaAzure)
 }
 
 func TestShouldPreflightRun(t *testing.T) {
