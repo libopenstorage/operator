@@ -305,6 +305,9 @@ func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	if err := c.validateCloudStorageLabelKey(cluster); err != nil {
 		return err
 	}
+	if err := c.validateStorageSpec(cluster); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -415,6 +418,40 @@ func (c *Controller) validateCloudStorageLabelKey(cluster *corev1.StorageCluster
 	}
 
 	return nil
+}
+
+func (c *Controller) validateStorageSpec(cluster *corev1.StorageCluster) error {
+
+	//when cluster has both, no nodes
+	if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil && cluster.Spec.Nodes == nil {
+		return fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+	}
+
+	for node, Nodespec := range cluster.Spec.Nodes {
+
+		//when node has both spec
+		if Nodespec.Storage != nil && Nodespec.CloudStorage != nil {
+			return fmt.Errorf("found spec for storage and cloudstorage on node %d, only 1 type of storage is allowed", node)
+		}
+
+		//when cluster has both
+		if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil {
+
+			//When cluster level storage and node level cloud
+			if Nodespec.Storage == nil && cluster.Spec.CloudStorage.DeviceSpecs == nil &&
+				(cluster.Spec.CloudStorage.JournalDeviceSpec == nil) &&
+				(cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil) &&
+				(cluster.Spec.CloudStorage.KvdbDeviceSpec == nil) &&
+				(cluster.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil) {
+				continue
+
+			}
+			return fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+		}
+
+	}
+	return nil
+
 }
 
 func isPreflightComplete(cluster *corev1.StorageCluster) bool {
