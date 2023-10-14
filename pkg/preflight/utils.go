@@ -33,7 +33,8 @@ func IsAWS() bool {
 func RequiresCheck() bool {
 	return Instance().ProviderName() == string(cloudops.AWS) ||
 		Instance().ProviderName() == string(cloudops.Vsphere) ||
-		Instance().ProviderName() == string(cloudops.Pure)
+		Instance().ProviderName() == string(cloudops.Pure) ||
+		Instance().ProviderName() == string(cloudops.Azure)
 }
 
 // RunningOnCloud checks whether portworx is running on cloud

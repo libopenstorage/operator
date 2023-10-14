@@ -499,6 +499,10 @@ func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 			return true
 		}
 
+		if preflight.IsAzure() { // Preflight runs on Azure & PX 3.1.0 or above
+			return true
+		}
+
 		if pxutil.IsVsphere(toUpdate) {
 			if preflight.IsPKS() { // Don't run preflight on Vsphere w/PKS
 				return false
