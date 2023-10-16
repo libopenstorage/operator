@@ -292,9 +292,6 @@ var testCloudDriveBasicCases = []types.TestCase{
 		},
 		TestFunc: BasicInstallMaxSNPZ,
 		ShouldSkip: func(tc *types.TestCase) bool {
-			provider := cloud_provider.GetCloudProvider()
-			logrus.Infof("provider %v", provider)
-			logrus.Infof("cloudProvider: %v  vsphere: %v", utils.CloudProvider, cloudops.Vsphere)
 			return utils.CloudProvider == cloudops.Vsphere
 		},
 	},
