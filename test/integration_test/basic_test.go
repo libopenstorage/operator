@@ -291,11 +291,9 @@ var testStorageClusterBasicCases = []types.TestCase{
 }
 
 func TestStorageClusterBasic(t *testing.T) {
-	// for _, testCase := range testStorageClusterBasicCases {
-	// 	testCase.RunTest(t)
-	// }
-	testCase := testStorageClusterBasicCases[1]
-	testCase.RunTest(t)
+	for _, testCase := range testStorageClusterBasicCases {
+		testCase.RunTest(t)
+	}
 }
 
 func BasicInstall(tc *types.TestCase) func(*testing.T) {
