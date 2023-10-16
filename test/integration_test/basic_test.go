@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/cloudops"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/test/integration_test/cloud_provider"
+	"github.com/libopenstorage/operator/test/integration_test/utils"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
@@ -62,30 +64,6 @@ var testStorageClusterBasicCases = []types.TestCase{
 		},
 		TestFunc: BasicInstallInCustomNamespace,
 	},
-	{
-		TestName:        "BasicInstallWithMaxStorageNodePerZone",
-		TestrailCaseIDs: []string{"C93000"},
-		TestSpec: func(t *testing.T) interface{} {
-			objects, err := ci_utils.ParseSpecs("storagecluster/storagecluster-with-all-components.yaml")
-			require.NoError(t, err)
-			cluster, ok := objects[0].(*corev1.StorageCluster)
-			require.True(t, ok)
-			cluster.Name = "test-stc"
-			cluster.Spec.StartPort = func(val uint32) *uint32 { return &val }(17001)
-			tempRequiredMaxStorageNodesPerZone := 3
-			RequiredMaxStorageNodesPerZone := uint32(tempRequiredMaxStorageNodesPerZone)
-			cloudSpec := &corev1.CloudStorageSpec{
-				MaxStorageNodesPerZone: &RequiredMaxStorageNodesPerZone,
-			}
-			provider := cloud_provider.GetCloudProvider()
-			cloudSpec.DeviceSpecs = provider.GetDefaultDataDrives()
-			cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled = false
-			cluster.Spec.CloudStorage = cloudSpec
-			return cluster
-		},
-		TestFunc: BasicInstallWithMaxStorageNodesPerZone,
-	},
-
 	{
 		TestName:        "BasicUpgradeStorageCluster",
 		TestrailCaseIDs: []string{"C50241"},
@@ -290,8 +268,46 @@ var testStorageClusterBasicCases = []types.TestCase{
 	},
 }
 
+var testCloudDriveBasicCases = []types.TestCase{
+	{
+		TestName:        "BasicInstallMaxSNPZ",
+		TestrailCaseIDs: []string{"C93000"},
+		TestSpec: func(t *testing.T) interface{} {
+			objects, err := ci_utils.ParseSpecs("storagecluster/storagecluster-with-all-components.yaml")
+			require.NoError(t, err)
+			cluster, ok := objects[0].(*corev1.StorageCluster)
+			require.True(t, ok)
+			cluster.Name = "test-stc"
+			cluster.Spec.StartPort = func(val uint32) *uint32 { return &val }(17001)
+			tempRequiredMaxStorageNodesPerZone := 3
+			RequiredMaxStorageNodesPerZone := uint32(tempRequiredMaxStorageNodesPerZone)
+			cloudSpec := &corev1.CloudStorageSpec{
+				MaxStorageNodesPerZone: &RequiredMaxStorageNodesPerZone,
+			}
+			provider := cloud_provider.GetCloudProvider()
+			cloudSpec.DeviceSpecs = provider.GetDefaultDataDrives()
+			cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled = false
+			cluster.Spec.CloudStorage = cloudSpec
+			return cluster
+		},
+		TestFunc: BasicInstallMaxSNPZ,
+		ShouldSkip: func(tc *types.TestCase) bool {
+			provider := cloud_provider.GetCloudProvider()
+			logrus.Infof("provider %v", provider)
+			logrus.Infof("cloudProvider: %v  vsphere: %v", utils.CloudProvider, cloudops.Vsphere)
+			return utils.CloudProvider == cloudops.Vsphere
+		},
+	},
+}
+
 func TestStorageClusterBasic(t *testing.T) {
 	for _, testCase := range testStorageClusterBasicCases {
+		testCase.RunTest(t)
+	}
+}
+
+func TestCloudDrivesBasicInstall(t *testing.T) {
+	for _, testCase := range testCloudDriveBasicCases {
 		testCase.RunTest(t)
 	}
 }
@@ -377,7 +393,7 @@ func BasicInstallInCustomNamespace(tc *types.TestCase) func(*testing.T) {
 	}
 }
 
-func BasicInstallWithMaxStorageNodesPerZone(tc *types.TestCase) func(*testing.T) {
+func BasicInstallMaxSNPZ(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
