@@ -25,7 +25,6 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/libopenstorage/openstorage/api"
-	storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/auth"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -777,26 +776,26 @@ func getSpecsBaseDir() string {
 }
 
 func GetStorageNodes(
-	cluster *corev1.StorageCluster, k8sClient client.Client, sdkConn *grpc.ClientConn) ([]*storageapi.StorageNode, error) {
-	sdkConn, err := GetPortworxConn(sdkConn,k8sClient,cluster.Namespace)
+	cluster *corev1.StorageCluster, k8sClient client.Client, sdkConn *grpc.ClientConn) ([]*api.StorageNode, error) {
+	sdkConn, err := GetPortworxConn(sdkConn, k8sClient, cluster.Namespace)
 	if err != nil {
 		if IsFreshInstall(cluster) && strings.HasPrefix(err.Error(), ErrMsgGrpcConnection) {
 			// Don't return grpc connection error during initialization,
 			// as SDK server won't be up anyway
 			logrus.Warn(err)
-			return []*storageapi.StorageNode{}, nil
+			return []*api.StorageNode{}, nil
 		}
 		return nil, err
 	}
 
-	nodeClient := storageapi.NewOpenStorageNodeClient(sdkConn)
+	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
 	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
 	if err != nil {
 		return nil, err
 	}
 	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
 		ctx,
-		&storageapi.SdkNodeEnumerateWithFiltersRequest{},
+		&api.SdkNodeEnumerateWithFiltersRequest{},
 	)
 	if err != nil {
 		return nil, err

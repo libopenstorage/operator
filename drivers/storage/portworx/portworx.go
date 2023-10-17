@@ -914,7 +914,7 @@ func (p *portworx) IsPodUpdated(
 func (p *portworx) GetStorageNodes(
 	cluster *corev1.StorageCluster,
 ) ([]*storageapi.StorageNode, error) {
-	
+
 	return pxutil.GetStorageNodes(cluster, p.k8sClient, p.sdkConn)
 
 }
