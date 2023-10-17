@@ -467,6 +467,59 @@ func (p *portworx) getCurrentMaxStorageNodesPerZone(
 	return 0, fmt.Errorf("storage disabled")
 }
 
+func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
+
+	if !pxutil.IsFreshInstall(toUpdate) { // Preflight should only run freshInstall
+		return false
+	}
+
+	clusterPXver := pxutil.GetPortworxVersion(toUpdate)
+
+	pxVer30, _ := version.NewVersion("3.0")
+	if !clusterPXver.GreaterThanOrEqual(pxVer30) { // Preflight should only run if the PX version is 3.0.0 and above
+		return false
+	}
+
+	if check, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; ok { // Preflight is already set
+		check = strings.TrimSpace(strings.ToLower(check))
+		return check == "true"
+	}
+
+	if !preflight.RequiresCheck() { // Preflight is only supported on AWS, VSPHERE & Pure
+		return false
+	}
+
+	if preflight.IsAWS() { // Preflight runs on AWS & PX 3.0.0 or above
+		return true
+	}
+
+	pxVer31, _ := version.NewVersion("3.1")
+	if clusterPXver.GreaterThanOrEqual(pxVer31) { // PX version is 3.1.0 or above
+		if pxutil.IsPure(toUpdate) { // Preflight runs on Pure & PX 3.1.0 or above
+			return true
+		}
+
+		if preflight.IsAzure() { // Preflight runs on Azure & PX 3.1.0 or above
+			return true
+		}
+
+		if pxutil.IsVsphere(toUpdate) {
+			if preflight.IsPKS() { // Don't run preflight on Vsphere w/PKS
+				return false
+			}
+
+			envValue, exists := pxutil.GetClusterEnvValue(toUpdate, "VSPHERE_INSTALL_MODE")
+			if exists && envValue == pxutil.VsphereInstallModeLocal { // Don't run preflight on Vsphere w/local install mode
+				return false
+			}
+
+			return true // Preflight runs on Vsphere & PX 3.1.0 or above
+		}
+	}
+
+	return false // All else disable
+}
+
 func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) error {
 	if toUpdate.Annotations == nil {
 		toUpdate.Annotations = make(map[string]string)
@@ -493,11 +546,9 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		}
 	}
 
-	// Initialize the preflight check annotation
-	if preflight.RequiresCheck() {
-		if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
-			toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = "true"
-		}
+	shouldRun := p.preflightShouldRun(toUpdate)
+	if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
+		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = strings.ToLower(strconv.FormatBool(shouldRun))
 	}
 
 	if preflight.IsEKS() {
@@ -1106,9 +1157,9 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 		// Populate node specs with all storage values, to make it explicit what values
 		// every node group is using.
 		nodeSpecCopy := nodeSpec.DeepCopy()
-		if nodeSpec.Storage == nil {
+		if nodeSpec.Storage == nil && nodeSpec.CloudStorage == nil {
 			nodeSpecCopy.Storage = toUpdate.Spec.Storage.DeepCopy()
-		} else if toUpdate.Spec.Storage != nil {
+		} else if toUpdate.Spec.Storage != nil && nodeSpecCopy.Storage != nil {
 			// Devices, UseAll and UseAllWithPartitions should be set exclusive of each other, if not already
 			// set by the user in the node spec.
 			if nodeSpecCopy.Storage.Devices == nil &&
@@ -1149,11 +1200,11 @@ func setNodeSpecDefaults(toUpdate *corev1.StorageCluster) {
 		}
 
 		if toUpdate.Spec.CloudStorage != nil {
-			if nodeSpec.CloudStorage == nil {
+			if nodeSpec.CloudStorage == nil && nodeSpec.Storage == nil {
 				nodeSpecCopy.CloudStorage = &corev1.CloudStorageNodeSpec{
 					CloudStorageCommon: *(toUpdate.Spec.CloudStorage.CloudStorageCommon.DeepCopy()),
 				}
-			} else {
+			} else if nodeSpecCopy.CloudStorage != nil {
 				if nodeSpecCopy.CloudStorage.DeviceSpecs == nil &&
 					toUpdate.Spec.CloudStorage.DeviceSpecs != nil {
 					deviceSpecs := append(make([]string, 0), *toUpdate.Spec.CloudStorage.DeviceSpecs...)
@@ -1203,6 +1254,7 @@ func setPortworxStorageSpecDefaults(toUpdate *corev1.StorageCluster) {
 				initializeStorageSpec = false
 				break
 			}
+
 		}
 		if preflight.RunningOnCloud() {
 			setPortworxCloudStorageSpecDefaults(toUpdate)

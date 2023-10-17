@@ -305,6 +305,9 @@ func (c *Controller) validate(cluster *corev1.StorageCluster) error {
 	if err := c.validateCloudStorageLabelKey(cluster); err != nil {
 		return err
 	}
+	if err := c.validateStorageSpec(cluster); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -415,6 +418,40 @@ func (c *Controller) validateCloudStorageLabelKey(cluster *corev1.StorageCluster
 	}
 
 	return nil
+}
+
+func (c *Controller) validateStorageSpec(cluster *corev1.StorageCluster) error {
+
+	//when cluster has both, no nodes
+	if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil && cluster.Spec.Nodes == nil {
+		return fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+	}
+
+	for node, Nodespec := range cluster.Spec.Nodes {
+
+		//when node has both spec
+		if Nodespec.Storage != nil && Nodespec.CloudStorage != nil {
+			return fmt.Errorf("found spec for storage and cloudstorage on node %d, only 1 type of storage is allowed", node)
+		}
+
+		//when cluster has both
+		if cluster.Spec.Storage != nil && cluster.Spec.CloudStorage != nil {
+
+			//When cluster level storage and node level cloud
+			if Nodespec.Storage == nil && cluster.Spec.CloudStorage.DeviceSpecs == nil &&
+				(cluster.Spec.CloudStorage.JournalDeviceSpec == nil) &&
+				(cluster.Spec.CloudStorage.SystemMdDeviceSpec == nil) &&
+				(cluster.Spec.CloudStorage.KvdbDeviceSpec == nil) &&
+				(cluster.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil) {
+				continue
+
+			}
+			return fmt.Errorf("found spec for storage and cloudStorage, ensure spec.storage fields are empty to use cloud storage")
+		}
+
+	}
+	return nil
+
 }
 
 func isPreflightComplete(cluster *corev1.StorageCluster) bool {
@@ -760,19 +797,9 @@ func (c *Controller) syncStorageCluster(
 			cluster.Namespace, cluster.Name, err)
 	}
 
-	pxVer30, _ := version.NewVersion("3.0")
-	// Preflight should only run freshInstall and if the PX version is 3.0.0 and above
-	if pxutil.IsFreshInstall(cluster) && pxutil.GetPortworxVersion(cluster).GreaterThanOrEqual(pxVer30) {
-		// If preflight failed, or previous check failed, reconcile would stop here until issues got resolved
-		if err := c.runPreflightCheck(cluster); err != nil {
-			return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
-		}
-	} else {
-		// Always disable preflight if not supported.
-		if cluster.Annotations == nil {
-			cluster.Annotations = make(map[string]string)
-		}
-		cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+	// If preflight failed, or previous check failed, reconcile would stop here until issues got resolved
+	if err := c.runPreflightCheck(cluster); err != nil {
+		return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
 	}
 
 	if err := c.miscCleanUp(cluster); err != nil {

@@ -244,6 +244,9 @@ const (
 	InternalEtcdConfigMapPrefix = "px-bootstrap-"
 	// CloudDriveConfigMapPrefix is prefix of the cloud drive configmap.
 	CloudDriveConfigMapPrefix = "px-cloud-drive-"
+
+	// VsphereInstallModeLocal env value for Vsphere 'local' install
+	VsphereInstallModeLocal = "local"
 )
 
 // TLS related constants
@@ -364,22 +367,30 @@ func IsOpenshift(cluster *corev1.StorageCluster) bool {
 	return err == nil && enabled
 }
 
+// GetClusterEnvValue helper routine to get the env value from cluster spec.
+func GetClusterEnvValue(cluster *corev1.StorageCluster, envName string) (string, bool) {
+	for _, env := range cluster.Spec.Env {
+		if env.Name == envName {
+			return env.Value, true
+		}
+	}
+	return "", false
+}
+
 // IsVsphere returns true if VSPHERE_VCENTER is present in the spec
 func IsVsphere(cluster *corev1.StorageCluster) bool {
-	for _, env := range cluster.Spec.Env {
-		if env.Name == "VSPHERE_VCENTER" && len(env.Value) > 0 {
-			return true
-		}
+	envValue, exists := GetClusterEnvValue(cluster, "VSPHERE_VCENTER")
+	if exists && len(envValue) > 0 {
+		return true
 	}
 	return false
 }
 
 // IsPure true if PURE_FLASHARRAY_SAN_TYPE is present in the spec
 func IsPure(cluster *corev1.StorageCluster) bool {
-	for _, env := range cluster.Spec.Env {
-		if env.Name == "PURE_FLASHARRAY_SAN_TYPE" && len(env.Value) > 0 {
-			return true
-		}
+	envValue, exists := GetClusterEnvValue(cluster, "PURE_FLASHARRAY_SAN_TYPE")
+	if exists && len(envValue) > 0 {
+		return true
 	}
 	return false
 }
