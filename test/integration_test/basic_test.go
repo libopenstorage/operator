@@ -11,7 +11,6 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/cloudops"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/test/integration_test/cloud_provider"
 	"github.com/libopenstorage/operator/test/integration_test/utils"
 	"github.com/sirupsen/logrus"
@@ -410,7 +409,7 @@ func BasicInstallMaxSNPZ(tc *types.TestCase) func(*testing.T) {
 		k8sclient, err := k8sutil.NewK8sClient(s)
 		require.NoError(t, err)
 
-		storageNodeList, err := pxutil.GetStorageNodes(cluster, k8sclient, nil)
+		storageNodeList, err := utils.GetStorageNodes(cluster, k8sclient, nil)
 		require.NoError(t, err)
 
 		NumberOfStorageNodes := 0
