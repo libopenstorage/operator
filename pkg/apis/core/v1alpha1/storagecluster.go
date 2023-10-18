@@ -93,6 +93,64 @@ type StorageClusterSpec struct {
 	// Nodes node level configurations that will override the ones at cluster
 	// level. These configurations can be grouped based on label selectors.
 	Nodes []NodeSpec `json:"nodes,omitempty"`
+	// Security configurations for setting up an auth enabled or disabled cluster
+	Security *SecuritySpec `json:"security,omitempty"`
+}
+
+// SecuritySpec is used to define the security configuration for a cluster.
+type SecuritySpec struct {
+	Enabled bool      `json:"enabled,omitempty"`
+	Auth    *AuthSpec `json:"auth,omitempty"`
+	TLS     *TLSSpec  `json:"tls,omitempty"`
+}
+
+// AuthSpec lets the user define authorization (RBAC) configurations
+// for creating a PX Security enabled cluster
+type AuthSpec struct {
+	// Defaults to parent (i.e. if missing, takes value from spec.security.enabled )
+	Enabled     *bool            `json:"enabled,omitempty"`
+	GuestAccess *GuestAccessType `json:"guestAccess,omitempty"`
+	SelfSigned  *SelfSignedSpec  `json:"selfSigned,omitempty"`
+}
+
+// SelfSignedSpec defines a configuration for self signed authentication
+type SelfSignedSpec struct {
+	Issuer        *string `json:"issuer,omitempty"`
+	TokenLifetime *string `json:"tokenLifetime,omitempty"`
+	SharedSecret  *string `json:"sharedSecret,omitempty"`
+}
+
+// GuestAccessType lets the user choose the
+// level of permissions the system.user has
+type GuestAccessType string
+
+// TLSSpec is the spec used to define TLS configuration for a cluster
+type TLSSpec struct {
+	// Defaults to parent (i.e. if missing, takes value from spec.security.enabled )
+	Enabled *bool `json:"enabled,omitempty"`
+	// RootCA defines the location of the Root CA certificate needed to enable TLS
+	RootCA *CertLocation `json:"rootCA,omitempty"`
+	// ServerCert defines the location of the Server certificate (public key) certificate needed to enable TLS
+	ServerCert *CertLocation `json:"serverCert,omitempty"`
+	// ServerKey defines the location of the Server key (private key) needed to enable TLS
+	ServerKey *CertLocation `json:"serverKey,omitempty"`
+}
+
+// CertLocation specifies where portworx should pick up the certificate.
+// Certificate can be in a file on a fixed location or in a secret
+type CertLocation struct {
+	// file name with path on the node for the cert file. Currently all files must be installed on a subfolder under /etc/pwx
+	FileName *string `json:"filename,omitempty"`
+	// reference to the k8s secret that holds the cert
+	SecretRef *SecretRef `json:"secretRef,omitempty"`
+}
+
+// SecretRef specifies which k8s secret portworx should pick up the certificate.
+type SecretRef struct {
+	// name of the k8s secret. Secret must live in the same namespace as the StorageCluster custom resource
+	SecretName string `json:"secretName,omitempty"`
+	// the key that contains the cert.
+	SecretKey string `json:"secretKey,omitempty"`
 }
 
 // NodeSpec is the spec used to define node level configuration. Values
@@ -382,6 +440,47 @@ type StorageClusterStatus struct {
 	Conditions []ClusterCondition `json:"conditions,omitempty"`
 	// Storage represents cluster storage details
 	Storage Storage `json:"storage,omitempty"`
+	// Version version of the storage driver image
+	Version string `json:"version,omitempty"`
+	// DesiredImages represents all the desired images of various components
+	DesiredImages *ComponentImages `json:"desiredImages,omitempty"`
+}
+
+// ComponentImages is a collection of all the images managed by the operator
+// -note: please keep in sync w/ `manifest.Release` structure
+// -WARN: the ComponentImages are annotated w/ `json:` while `manifest.Release` uses `yaml:`
+type ComponentImages struct {
+	Stork                      string `json:"stork,omitempty"`
+	UserInterface              string `json:"userInterface,omitempty"`
+	Autopilot                  string `json:"autopilot,omitempty"`
+	CSINodeDriverRegistrar     string `json:"csiNodeDriverRegistrar,omitempty"`
+	CSIDriverRegistrar         string `json:"csiDriverRegistrar,omitempty"`
+	CSIProvisioner             string `json:"csiProvisioner,omitempty"`
+	CSIAttacher                string `json:"csiAttacher,omitempty"`
+	CSIResizer                 string `json:"csiResizer,omitempty"`
+	CSISnapshotter             string `json:"csiSnapshotter,omitempty"`
+	CSISnapshotController      string `json:"csiSnapshotController,omitempty"`
+	CSIHealthMonitorController string `json:"csiHealthMonitorController,omitempty"`
+	PrometheusOperator         string `json:"prometheusOperator,omitempty"`
+	PrometheusConfigMapReload  string `json:"prometheusConfigMapReload,omitempty"`
+	PrometheusConfigReloader   string `json:"prometheusConfigReloader,omitempty"`
+	Prometheus                 string `json:"prometheus,omitempty"`
+	Grafana                    string `json:"grafana,omitempty"`
+	AlertManager               string `json:"alertManager,omitempty"`
+	Telemetry                  string `json:"telemetry,omitempty"`
+	MetricsCollector           string `json:"metricsCollector,omitempty"`
+	MetricsCollectorProxy      string `json:"metricsCollectorProxy,omitempty"` // TODO: use TelemetryProxy only
+	LogUploader                string `json:"logUploader,omitempty"`
+	TelemetryProxy             string `json:"telemetryProxy,omitempty"`
+	PxRepo                     string `json:"pxRepo,omitempty"`
+	KubeScheduler              string `json:"kubeScheduler,omitempty"`
+	KubeControllerManager      string `json:"kubeControllerManager,omitempty"`
+	Pause                      string `json:"pause,omitempty"`
+	DynamicPlugin              string `json:"dynamicPlugin,omitempty"`
+	DynamicPluginProxy         string `json:"dynamicPluginProxy,omitempty"`
+	CsiLivenessProbe           string `json:"csiLivenessProbe,omitempty"`
+	CsiWindowsDriver           string `json:"csiWindowsDriver,omitempty"`
+	CsiWindowsNodeRegistrar    string `json:"csiWindowsNodeRegistrar,omitempty"`
 }
 
 // Storage represents cluster storage details
