@@ -7824,6 +7824,11 @@ func TestDeleteClusterShouldResetSDKConnection(t *testing.T) {
 		},
 	})
 
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.25.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
 	// Create driver object with the fake k8s client
 	driver := &portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
@@ -7844,7 +7849,8 @@ func TestDeleteClusterShouldResetSDKConnection(t *testing.T) {
 	// Force initialize a connection to the GRPC server
 	_, err = driver.GetStorageNodes(cluster)
 	require.NoError(t, err)
-
+	logrus.Infof("sdk %v", err)
+	logrus.Infof("sdkConn %+v", driver)
 	require.NotNil(t, driver.sdkConn)
 
 	// SDK connection should be closed on StorageCluster deletion

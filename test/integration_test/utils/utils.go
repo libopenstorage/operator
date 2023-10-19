@@ -2,7 +2,6 @@ package utils
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"regexp"
@@ -11,15 +10,10 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	api "github.com/libopenstorage/openstorage/api"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	v1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
@@ -199,33 +193,4 @@ func getPxStoreV2NodeCount(t *testing.T, px_status string) int {
 	require.Greater(t, len(out), 1, "Could not find \"Global Storage Pool\" string the pxctl status output")
 	return strings.Count(strings.ToLower(out[0]), "px-storev2")
 
-}
-
-func GetStorageNodes(
-	cluster *corev1.StorageCluster, k8sClient client.Client, sdkConn *grpc.ClientConn) ([]*api.StorageNode, error) {
-	sdkConn, err := pxutil.GetPortworxConn(sdkConn, k8sClient, cluster.Namespace)
-	if err != nil {
-		if pxutil.IsFreshInstall(cluster) && strings.HasPrefix(err.Error(), pxutil.ErrMsgGrpcConnection) {
-			// Don't return grpc connection error during initialization,
-			// as SDK server won't be up anyway
-			logrus.Warn(err)
-			return []*api.StorageNode{}, nil
-		}
-		return nil, err
-	}
-
-	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, k8sClient)
-	if err != nil {
-		return nil, err
-	}
-	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
-		ctx,
-		&api.SdkNodeEnumerateWithFiltersRequest{},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return nodeEnumerateResponse.Nodes, nil
 }

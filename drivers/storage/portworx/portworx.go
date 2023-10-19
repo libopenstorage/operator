@@ -966,33 +966,8 @@ func (p *portworx) GetStorageNodes(
 	cluster *corev1.StorageCluster,
 ) ([]*storageapi.StorageNode, error) {
 
-	var err error
-	p.sdkConn, err = pxutil.GetPortworxConn(p.sdkConn, p.k8sClient, cluster.Namespace)
-	if err != nil {
-		if pxutil.IsFreshInstall(cluster) && strings.HasPrefix(err.Error(), pxutil.ErrMsgGrpcConnection) {
-			// Don't return grpc connection error during initialization,
-			// as SDK server won't be up anyway
-			logrus.Warn(err)
-			return []*storageapi.StorageNode{}, nil
-		}
-		return nil, err
-	}
-
-	nodeClient := storageapi.NewOpenStorageNodeClient(p.sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
-	if err != nil {
-		return nil, err
-	}
-	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
-		ctx,
-		&storageapi.SdkNodeEnumerateWithFiltersRequest{},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return nodeEnumerateResponse.Nodes, nil
-
+	return pxutil.GetStorageNodes(cluster,p.k8sClient, p.sdkConn)
+	
 }
 
 func (p *portworx) DeleteStorage(
