@@ -80,7 +80,7 @@ required = [
 
 [[constraint]]
   name = "k8s.io/code-generator"
-  version = "kubernetes-1.14.6"
+  version = "kubernetes-1.16.0"
 
 [[override]]
   name = "github.com/coreos/prometheus-operator"

@@ -1250,7 +1250,7 @@
   revision = "029ecc113e6d819f75bde3705b0ff3fafb52d397"
 
 [[projects]]
-  digest = "1:742ce70d2c6de0f02b5331a25d4d549f55de6b214af22044455fd6e6b451cad9"
+  digest = "1:d99b9dbcb69e89d4aac33fe95d319d6674bd3fea33b8159fdfe8120ba82df6e6"
   name = "k8s.io/code-generator"
   packages = [
     "cmd/client-gen",
@@ -1267,8 +1267,8 @@
     "pkg/util",
   ]
   pruneopts = ""
-  revision = "50b561225d70b3eb79a1faafd3dfe7b1a62cbe73"
-  version = "kubernetes-1.14.6"
+  revision = "cd179ad6a2693011d6f2fa5cd64c6680ee99379f"
+  version = "kubernetes-1.16.0"
 
 [[projects]]
   branch = "master"
@@ -1522,6 +1522,7 @@
     "k8s.io/gengo/examples/defaulter-gen/generators",
     "k8s.io/gengo/generator",
     "k8s.io/kubernetes/pkg/api/v1/pod",
+    "k8s.io/kubernetes/pkg/apis/core",
     "k8s.io/kubernetes/pkg/apis/core/v1/helper",
     "k8s.io/kubernetes/pkg/controller",
     "k8s.io/kubernetes/pkg/controller/daemon/util",
