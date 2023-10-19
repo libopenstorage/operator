@@ -22,7 +22,6 @@ limitations under the License.
 package v1
 
 import (
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -820,11 +819,6 @@ func (in *PrometheusSpec) DeepCopyInto(out *PrometheusSpec) {
 		*out = new(int32)
 		**out = **in
 	}
-	if in.Storage != nil {
-		in, out := &in.Storage, &out.Storage
-		*out = new(monitoringv1.StorageSpec)
-		(*in).DeepCopyInto(*out)
-	}
 	if in.Volumes != nil {
 		in, out := &in.Volumes, &out.Volumes
 		*out = make([]corev1.Volume, len(*in))
@@ -1026,7 +1020,7 @@ func (in *StorageClusterDeleteStrategy) DeepCopy() *StorageClusterDeleteStrategy
 func (in *StorageClusterList) DeepCopyInto(out *StorageClusterList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	in.ListMeta.DeepCopyInto(&out.ListMeta)
+	out.ListMeta = in.ListMeta
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]StorageCluster, len(*in))
@@ -1317,7 +1311,7 @@ func (in *StorageNodeCloudDriveConfigs) DeepCopy() *StorageNodeCloudDriveConfigs
 func (in *StorageNodeList) DeepCopyInto(out *StorageNodeList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	in.ListMeta.DeepCopyInto(&out.ListMeta)
+	out.ListMeta = in.ListMeta
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]StorageNode, len(*in))

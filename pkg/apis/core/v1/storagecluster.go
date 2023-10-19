@@ -1,7 +1,6 @@
 package v1
 
 import (
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	v1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -596,7 +595,7 @@ type PrometheusSpec struct {
 	// StorageSpec defines the configured storage for a group Prometheus servers. If no storage option is
 	// specified, then by default an EmptyDir will be used. If multiple storage options are specified,
 	// priority will be given as follows: EmptyDir, Ephemeral, and lastly VolumeClaimTemplate.
-	Storage *monitoringv1.StorageSpec `json:"storage,omitempty"`
+	// Storage *monitoringv1.StorageSpec `json:"storage,omitempty"`
 	// Volumes allows configuration of additional volumes on the output StatefulSet definition. Volumes specified will
 	// be appended to other volumes that are generated as a result of StorageSpec objects.
 	Volumes []v1.Volume `json:"volumes,omitempty"`

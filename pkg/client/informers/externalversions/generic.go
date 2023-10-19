@@ -21,6 +21,7 @@ package externalversions
 import (
 	"fmt"
 
+	v1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	v1alpha1 "github.com/libopenstorage/operator/pkg/apis/core/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
@@ -52,7 +53,13 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=core.libopenstorage.org, Version=v1alpha1
+	// Group=core.libopenstorage.org, Version=v1
+	case v1.SchemeGroupVersion.WithResource("storageclusters"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().StorageClusters().Informer()}, nil
+	case v1.SchemeGroupVersion.WithResource("storagenodes"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().StorageNodes().Informer()}, nil
+
+		// Group=core.libopenstorage.org, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("storageclusters"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1alpha1().StorageClusters().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("storagenodes"):
