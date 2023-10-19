@@ -786,32 +786,32 @@ func getSpecsBaseDir() string {
 	return PortworxSpecsDir
 }
 func GetStorageNodes(
-	cluster *corev1.StorageCluster, k8sClient client.Client, sdkConn *grpc.ClientConn) ([]*api.StorageNode, error) {
+	cluster *corev1.StorageCluster, k8sClient client.Client, sdkConn *grpc.ClientConn) (*grpc.ClientConn, []*api.StorageNode, error) {
+
 	sdkConn, err := GetPortworxConn(sdkConn, k8sClient, cluster.Namespace)
 	if err != nil {
 		if IsFreshInstall(cluster) && strings.HasPrefix(err.Error(), ErrMsgGrpcConnection) {
 			// Don't return grpc connection error during initialization,
 			// as SDK server won't be up anyway
 			logrus.Warn(err)
-			return []*api.StorageNode{}, nil
+			return nil, []*api.StorageNode{}, nil
 		}
-		return nil, err
+		return sdkConn, nil, err
 	}
 
 	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
 	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
 	if err != nil {
-		return nil, err
+		return sdkConn, nil, err
 	}
 	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
 		ctx,
 		&api.SdkNodeEnumerateWithFiltersRequest{},
 	)
 	if err != nil {
-		return nil, err
+		return sdkConn, nil, err
 	}
-
-	return nodeEnumerateResponse.Nodes, nil
+	return sdkConn, nodeEnumerateResponse.Nodes, nil
 }
 
 // GetPortworxConn returns a new Portworx SDK client

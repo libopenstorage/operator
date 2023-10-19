@@ -7849,8 +7849,7 @@ func TestDeleteClusterShouldResetSDKConnection(t *testing.T) {
 	// Force initialize a connection to the GRPC server
 	_, err = driver.GetStorageNodes(cluster)
 	require.NoError(t, err)
-	logrus.Infof("sdk %v", err)
-	logrus.Infof("sdkConn %+v", driver)
+
 	require.NotNil(t, driver.sdkConn)
 
 	// SDK connection should be closed on StorageCluster deletion

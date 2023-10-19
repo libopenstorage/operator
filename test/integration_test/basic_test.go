@@ -11,24 +11,10 @@ import (
 
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/cloudops"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/test/integration_test/cloud_provider"
 	"github.com/libopenstorage/operator/test/integration_test/utils"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 
-	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/require"
-
-	// "google.golang.org/grpc"
-	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-
-	// "k8s.io/kubernetes/pkg/api/service"
-
-	// "k8s.io/client-go/tools/record"
-	// storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
@@ -37,6 +23,13 @@ import (
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/portworx/sched-ops/k8s/operator"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
@@ -411,7 +404,7 @@ func BasicInstallMaxSNPZ(tc *types.TestCase) func(*testing.T) {
 		k8sclient, err := k8sutil.NewK8sClient(s)
 		require.NoError(t, err)
 
-		storageNodeList, err := pxutil.GetStorageNodes(cluster, k8sclient, nil)
+		_, storageNodeList, err := pxutil.GetStorageNodes(cluster, k8sclient, nil)
 		require.NoError(t, err)
 
 		NumberOfStorageNodes := 0
