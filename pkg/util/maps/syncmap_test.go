@@ -3,7 +3,52 @@ package maps
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
+
+func TestBasicSyncMap(t *testing.T) {
+	m := MakeSyncMap[string, int]()
+
+	m.Store("a", 1)
+	m.Store("b", 2)
+	m.Store("c", 3)
+
+	x, has := m.Load("b")
+	assert.True(t, has)
+	assert.Equal(t, 2, x)
+
+	x, has = m.Load("z")
+	assert.False(t, has)
+	assert.Equal(t, 0, x)
+
+	x = m.LoadUnchecked("c")
+	assert.Equal(t, 3, x)
+
+	m.Store("b", 99)
+	x, has = m.Load("b")
+	assert.True(t, has)
+	assert.Equal(t, 99, x)
+
+	m.Delete("c")
+
+	x, has = m.Load("c")
+	assert.False(t, has)
+	assert.Equal(t, 0, x)
+
+	x = m.LoadUnchecked("c")
+	assert.Equal(t, 0, x)
+
+	m.Range(func(key string, value int) bool {
+		if key != "a" && key != "b" {
+			t.Errorf("Invalid key %v", key)
+		}
+		if value != 1 && value != 99 {
+			t.Errorf("Invalid value %v", value)
+		}
+		return true
+	})
+}
 
 // TestMapConcurrentPutGet_DEMO demonstrates panic when regular map is used
 func TestMapConcurrentPutGet_DEMO(t *testing.T) {
@@ -36,6 +81,7 @@ func TestMapConcurrentPutGet(t *testing.T) {
 		}
 	}()
 	time.Sleep(time.Second)
+	// note -- if no panic, test has suceeded
 }
 
 // TestMapConcurrentPutEnumerate_DEMO demonstrates panic when regular map is used
@@ -75,4 +121,5 @@ func TestMapConcurrentPutEnumerate(t *testing.T) {
 		}
 	}()
 	time.Sleep(time.Second)
+	// note -- if no panic, test has suceeded
 }
