@@ -7,6 +7,12 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/operator/drivers/storage"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/libopenstorage/operator/pkg/util/maps"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
@@ -57,7 +63,7 @@ type Controller struct {
 	recorder record.EventRecorder
 	ctrl     controller.Controller
 	// Node to NodeInfo map
-	nodeInfoMap map[string]*k8s.NodeInfo
+	nodeInfoMap maps.SyncMap[string, *k8s.NodeInfo]
 }
 
 // Init initialize the storage storagenode controller
@@ -65,7 +71,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	c.client = mgr.GetClient()
 	c.scheme = mgr.GetScheme()
 	c.recorder = mgr.GetEventRecorderFor(ControllerName)
-	c.nodeInfoMap = make(map[string]*k8s.NodeInfo)
+	c.nodeInfoMap = maps.MakeSyncMap[string, *k8s.NodeInfo]()
 
 	var err error
 	// Create a new controller
@@ -299,15 +305,15 @@ func (c *Controller) syncKVDB(
 				return err
 			}
 
-			nodeInfo, ok := c.nodeInfoMap[storageNode.Name]
+			nodeInfo, ok := c.nodeInfoMap.Load(storageNode.Name)
 			if ok {
 				nodeInfo.LastPodCreationTime = time.Now()
 			} else {
-				c.nodeInfoMap[storageNode.Name] = &k8s.NodeInfo{
+				c.nodeInfoMap.Store(storageNode.Name, &k8s.NodeInfo{
 					NodeName:             storageNode.Name,
 					LastPodCreationTime:  time.Now(),
 					CordonedRestartDelay: constants.DefaultCordonedRestartDelay,
-				}
+				})
 			}
 		}
 	} else { // delete pods if present

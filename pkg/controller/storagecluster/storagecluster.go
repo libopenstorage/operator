@@ -64,6 +64,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/libopenstorage/operator/pkg/util/maps"
 )
 
 const (
@@ -113,7 +114,7 @@ type Controller struct {
 	isStorkSchedDeploymentCreated bool
 	ctrl                          controller.Controller
 	// Node to NodeInfo map
-	nodeInfoMap map[string]*k8s.NodeInfo
+	nodeInfoMap maps.SyncMap[string, *k8s.NodeInfo]
 }
 
 // Init initialize the storage cluster controller
@@ -122,7 +123,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	c.client = mgr.GetClient()
 	c.scheme = mgr.GetScheme()
 	c.recorder = mgr.GetEventRecorderFor(ControllerName)
-	c.nodeInfoMap = make(map[string]*k8s.NodeInfo)
+	c.nodeInfoMap = maps.MakeSyncMap[string, *k8s.NodeInfo]()
 
 	// Create a new controller
 	c.ctrl, err = controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
@@ -1051,15 +1052,15 @@ func (c *Controller) syncNodes(
 					errCh <- err
 				} else {
 					// Pod created, store nodeInfo into the map, reset creation time if exists
-					nodeInfo, ok := c.nodeInfoMap[nodeName]
+					nodeInfo, ok := c.nodeInfoMap.Load(nodeName)
 					if ok {
 						nodeInfo.LastPodCreationTime = time.Now()
 					} else {
-						c.nodeInfoMap[nodeName] = &k8s.NodeInfo{
+						c.nodeInfoMap.Store(nodeName, &k8s.NodeInfo{
 							NodeName:             nodeName,
 							LastPodCreationTime:  time.Now(),
 							CordonedRestartDelay: constants.DefaultCordonedRestartDelay,
-						}
+						})
 					}
 					if errors.IsTimeout(err) {
 						// TODO

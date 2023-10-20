@@ -31,6 +31,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/libopenstorage/operator/pkg/util/maps"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 )
@@ -85,7 +86,7 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -408,7 +409,7 @@ func TestStorkSchedulerK8SVersions(t *testing.T) {
 			client:            k8sClient,
 			Driver:            driver,
 			kubernetesVersion: k8sVersion,
-			nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+			nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		}
 
 		driverEnvs := map[string]*v1.EnvVar{
@@ -542,7 +543,7 @@ func TestStorkWithoutImage(t *testing.T) {
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
 		recorder:          recorder,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -593,7 +594,7 @@ func TestStorkWithDesiredImage(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -651,7 +652,7 @@ func TestStorkImageChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -712,7 +713,7 @@ func TestStorkArgumentsChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -789,7 +790,7 @@ func TestStorkEnvVarsChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -878,7 +879,7 @@ func TestStorkCustomRegistryChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -1011,7 +1012,7 @@ func TestStorkCustomRepoRegistryChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -1143,7 +1144,7 @@ func TestStorkImagePullSecretChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -1287,7 +1288,7 @@ func TestStorkTolerationsChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -1474,7 +1475,7 @@ func TestStorkNodeAffinityChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -1616,7 +1617,7 @@ func TestStorkVolumesChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -1775,7 +1776,7 @@ func TestStorkAndStorkSchedulerResources(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -1873,7 +1874,7 @@ func TestStorkCPUChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -1937,7 +1938,7 @@ func TestStorkSchedulerCPUChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2005,7 +2006,7 @@ func TestStorkInvalidCPU(t *testing.T) {
 		Driver:            driver,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -2050,7 +2051,7 @@ func TestStorkSchedulerInvalidCPU(t *testing.T) {
 		Driver:            driver,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2100,7 +2101,7 @@ func TestStorkSchedulerRollbackImageChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2166,7 +2167,7 @@ func TestStorkSchedulerImageWithNewerK8sVersion(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("pxd", nil).AnyTimes()
@@ -2287,7 +2288,7 @@ func TestStorkSchedulerRollbackCommandChange(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2351,7 +2352,7 @@ func TestStorkInstallWithImagePullPolicy(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2413,7 +2414,7 @@ func TestStorkInstallWithHostNetwork(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2494,7 +2495,7 @@ func TestStorkWithConfigReconciliationDisabled(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2596,7 +2597,7 @@ func TestStorkSchedulerWithMissingLabelsFromSelector(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2687,7 +2688,7 @@ func TestDisableStork(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2824,7 +2825,7 @@ func TestRemoveStork(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -2961,7 +2962,7 @@ func TestStorkDriverNotImplemented(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().GetStorkDriverName().Return("", fmt.Errorf("not supported"))
@@ -3048,7 +3049,7 @@ func TestStorkAndSchedulerDeploymentWithPodTopologySpreadConstraints(t *testing.
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
@@ -3130,7 +3131,7 @@ func TestStorkAndSchedulerDeploymentWithoutPodTopologySpreadConstraints(t *testi
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driverEnvs := map[string]*v1.EnvVar{
