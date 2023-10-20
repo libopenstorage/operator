@@ -7,11 +7,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"github.com/libopenstorage/operator/drivers/storage"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/util"
-	"github.com/libopenstorage/operator/pkg/util/k8s"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
@@ -28,6 +23,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"github.com/libopenstorage/operator/drivers/storage"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
@@ -244,7 +245,7 @@ func (c *Controller) syncKVDB(
 	// operator would keep creating kvdb pods in this case.
 	// https://portworx.atlassian.net/browse/CEE-400
 	// https://portworx.atlassian.net/browse/OPERATOR-809
-	podList, err := coreops.Instance().GetPods(cluster.Namespace, c.kvdbPodLabels(cluster))
+	podList, err := coreops.Instance().GetPods(cluster.Namespace, c.kvdbOldPodLabels(cluster))
 	if err != nil {
 		return err
 	}
@@ -422,11 +423,20 @@ func (c *Controller) createKVDBPod(
 }
 
 func (c *Controller) kvdbPodLabels(cluster *corev1.StorageCluster) map[string]string {
-	return map[string]string{
-		constants.LabelKeyClusterName:       cluster.Name,
-		constants.LabelKeyDriverName:        c.Driver.String(),
-		constants.LabelKeyKVDBPod:           constants.LabelValueTrue,
+	podLabels := map[string]string{
 		constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
+	}
+	for k, v := range c.kvdbOldPodLabels(cluster) {
+		podLabels[k] = v
+	}
+	return podLabels
+}
+
+func (c *Controller) kvdbOldPodLabels(cluster *corev1.StorageCluster) map[string]string {
+	return map[string]string{
+		constants.LabelKeyClusterName: cluster.Name,
+		constants.LabelKeyDriverName:  c.Driver.String(),
+		constants.LabelKeyKVDBPod:     constants.LabelValueTrue,
 	}
 }
 
