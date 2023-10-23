@@ -53,6 +53,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/libopenstorage/operator/pkg/util/maps"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -1091,7 +1092,7 @@ func TestFailureDuringStorkInstallation(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -1139,7 +1140,7 @@ func TestFailureDuringDriverPreInstall(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -1185,7 +1186,7 @@ func TestStorageClusterFailedSyncObjectModified(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -1231,7 +1232,7 @@ func TestStoragePodsShouldNotBeScheduledIfDisabled(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -1372,7 +1373,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	expectedPodSpec := v1.PodSpec{
@@ -1487,7 +1488,7 @@ func TestStoragePodGetsScheduledK8s1_24(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	expectedPodSpec := v1.PodSpec{
@@ -1586,7 +1587,7 @@ func TestStorageNodeGetsCreated(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
@@ -1870,7 +1871,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	expectedPodSpec := v1.PodSpec{
@@ -2005,7 +2006,7 @@ func TestFailedStoragePodsGetRemoved(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -2108,7 +2109,7 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -2236,7 +2237,7 @@ func TestStoragePodsAreRemovedIfDisabled(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -2331,7 +2332,7 @@ func TestStoragePodFailureDueToNodeSelectorNotMatch(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -2428,7 +2429,7 @@ func TestStoragePodSchedulingWithTolerations(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -2569,7 +2570,7 @@ func TestFailureDuringPodTemplateCreation(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -2661,7 +2662,7 @@ func TestFailureDuringCreateDeletePods(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -2742,7 +2743,7 @@ func TestTimeoutFailureDuringCreatePods(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -2793,7 +2794,7 @@ func TestUpdateClusterStatusFromDriver(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -2855,7 +2856,7 @@ func TestUpdateClusterStatusErrorFromDriver(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -2911,7 +2912,7 @@ func TestFailedPreInstallFromDriver(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -2968,7 +2969,7 @@ func TestUpdateDriverWithInstanceInformation(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	expectedDriverInfo := &storage.UpdateDriverInfo{
@@ -3112,7 +3113,7 @@ func TestGarbageCollection(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -3203,7 +3204,7 @@ func TestDeleteStorageClusterWithoutFinalizers(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -3285,7 +3286,7 @@ func TestDeleteStorageClusterWithFinalizers(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -3449,7 +3450,7 @@ func TestDeleteStorageClusterShouldSetTelemetryCertOwnerRef(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -3547,7 +3548,7 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 		client:            k8sClient,
 		Driver:            driver,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -3680,7 +3681,7 @@ func TestDeleteStorageClusterShouldRemoveMigrationLabels(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -3755,7 +3756,7 @@ func TestRollingUpdateWithMinReadySeconds(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -3861,7 +3862,7 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -4014,7 +4015,7 @@ func TestUpdateStorageClusterBasedOnStorageNodeStatuses(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	var storageNodes []*storageapi.StorageNode
@@ -4231,7 +4232,7 @@ func TestUpdateStorageClusterWithOpenshiftUpgrade(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -4368,7 +4369,7 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -4578,7 +4579,7 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -4742,7 +4743,7 @@ func TestUpdateStorageClusterWithInvalidMaxUnavailableValue(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -4808,7 +4809,7 @@ func TestUpdateStorageClusterWhenDriverReportsPodNotUpdated(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -4876,7 +4877,7 @@ func TestUpdateStorageClusterShouldRestartPodIfItDoesNotHaveAnyHash(t *testing.T
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -4938,7 +4939,7 @@ func TestUpdateStorageClusterImagePullSecret(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -5047,7 +5048,7 @@ func TestUpdateStorageClusterCustomImageRegistry(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -5154,7 +5155,7 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -5274,7 +5275,7 @@ func TestUpdateStorageClusterResourceRequirements(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -5390,7 +5391,7 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -5663,7 +5664,7 @@ func TestUpdateStorageClusterStorageSpec(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -5889,7 +5890,7 @@ func TestUpdateStorageClusterNetworkSpec(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -5982,7 +5983,7 @@ func TestUpdateStorageClusterEnvVariables(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -6077,7 +6078,7 @@ func TestUpdateStorageClusterRuntimeOptions(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -6169,7 +6170,7 @@ func TestUpdateStorageClusterVolumes(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -6432,7 +6433,7 @@ func TestUpdateStorageClusterSecretsProvider(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -6523,7 +6524,7 @@ func TestUpdateStorageClusterStartPort(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -6617,7 +6618,7 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -6792,7 +6793,7 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -6942,7 +6943,7 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -7382,7 +7383,7 @@ func TestUpdateStorageClusterK8sNodeChanges(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -7477,7 +7478,7 @@ func TestUpdateStorageClusterShouldNotRestartPodsForSomeOptions(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -7645,7 +7646,7 @@ func TestUpdateStorageClusterShouldRestartPodIfItsHistoryHasInvalidSpec(t *testi
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -7728,7 +7729,7 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -8039,7 +8040,7 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -8238,7 +8239,7 @@ func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -8388,7 +8389,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	fakeClient := fake.NewSimpleClientset()
@@ -8562,7 +8563,7 @@ func TestUpdateClusterShouldDedupRevisionsAnywhereInHistory(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -8710,7 +8711,7 @@ func TestHistoryCleanup(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:       make(map[string]*k8s.NodeInfo),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
@@ -8870,7 +8871,7 @@ func TestNodeShouldRunStoragePod(t *testing.T) {
 		client:      k8sClient,
 		podControl:  podControl,
 		recorder:    recorder,
-		nodeInfoMap: make(map[string]*k8s.NodeInfo),
+		nodeInfoMap: maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	// TestCase: machine for node is being deleted
@@ -8878,11 +8879,11 @@ func TestNodeShouldRunStoragePod(t *testing.T) {
 	k8sNode.Annotations = map[string]string{
 		constants.AnnotationClusterAPIMachine: "m2",
 	}
-	controller.nodeInfoMap[k8sNode.Name] = &k8s.NodeInfo{
+	controller.nodeInfoMap.Store(k8sNode.Name, &k8s.NodeInfo{
 		NodeName:             k8sNode.Name,
 		LastPodCreationTime:  time.Now().Add(-time.Hour),
 		CordonedRestartDelay: constants.DefaultCordonedRestartDelay,
-	}
+	})
 
 	shouldRun, shouldContinueRunning, err := controller.nodeShouldRunStoragePod(k8sNode, cluster)
 	require.NoError(t, err)
@@ -9092,6 +9093,7 @@ func TestDoesTelemetryMatch(t *testing.T) {
 			podControl:        podControl,
 			recorder:          recorder,
 			kubernetesVersion: k8sVersion,
+			nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		}
 
 		driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -9322,8 +9324,9 @@ func TestPreflightStorageNodeCreation(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:      k8sClient,
+		Driver:      driver,
+		nodeInfoMap: maps.MakeSyncMap[string, *k8s.NodeInfo](),
 	}
 
 	storageNodeNames := func(storageNodes *corev1.StorageNodeList) []string {

@@ -11,6 +11,7 @@ import (
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util/maps"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
 
@@ -112,7 +113,7 @@ func TestIsNodeCordoned(t *testing.T) {
 func TestIsPodRecentlyCreatedAfterNodeCordoned(t *testing.T) {
 	node := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node"}}
 	cluster := &corev1.StorageCluster{}
-	nodeInfoMap := make(map[string]*NodeInfo)
+	nodeInfoMap := maps.MakeSyncMap[string, *NodeInfo]()
 
 	// TestCase: Pod never created
 	recentlyCreatedAfterCordon := IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
@@ -124,11 +125,11 @@ func TestIsPodRecentlyCreatedAfterNodeCordoned(t *testing.T) {
 	}
 
 	// Simulate new pod was recently created.
-	nodeInfoMap[node.Name] = &NodeInfo{
+	nodeInfoMap.Store(node.Name, &NodeInfo{
 		NodeName:             node.Name,
 		LastPodCreationTime:  time.Now(),
 		CordonedRestartDelay: constants.DefaultCordonedRestartDelay,
-	}
+	})
 
 	// TestCase: Node not cordoned
 	recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
@@ -166,7 +167,7 @@ func TestIsPodRecentlyCreatedAfterNodeCordoned(t *testing.T) {
 	require.True(t, recentlyCreatedAfterCordon)
 
 	// Simulate pod was created before the restart delay.
-	nodeInfoMap[node.Name].LastPodCreationTime = time.Now().Add(-time.Hour)
+	nodeInfoMap.LoadUnchecked(node.Name).LastPodCreationTime = time.Now().Add(-time.Hour)
 
 	// TestCase: Node not cordoned
 	node.Spec.Taints = nil
@@ -215,14 +216,14 @@ func TestIsPodRecentlyCreatedAfterNodeCordoned(t *testing.T) {
 	// Simulate pod keeps restarting when node is cordoned
 	for delay := constants.DefaultCordonedRestartDelay; delay < constants.MaxCordonedRestartDelay; delay = delay * 2 {
 		// Pod was created after cordoned restart delay
-		nodeInfoMap[node.Name].LastPodCreationTime = time.Now().Add(-delay).Add(time.Second)
+		nodeInfoMap.LoadUnchecked(node.Name).LastPodCreationTime = time.Now().Add(-delay).Add(time.Second)
 		recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
 		require.True(t, recentlyCreatedAfterCordon)
 		// Cordoned restart delay should remain unchanged if there's no pod restart
-		require.Equal(t, delay, nodeInfoMap[node.Name].CordonedRestartDelay)
+		require.Equal(t, delay, nodeInfoMap.LoadUnchecked(node.Name).CordonedRestartDelay)
 
 		// Time elapse 2s, now pod creation time is before the cutoff time and should restart
-		nodeInfoMap[node.Name].LastPodCreationTime = time.Now().Add(-delay).Add(-time.Second)
+		nodeInfoMap.LoadUnchecked(node.Name).LastPodCreationTime = time.Now().Add(-delay).Add(-time.Second)
 		recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
 		require.False(t, recentlyCreatedAfterCordon)
 		// Restart delay should increase
@@ -230,7 +231,7 @@ func TestIsPodRecentlyCreatedAfterNodeCordoned(t *testing.T) {
 		if expectedNextDelay > constants.MaxCordonedRestartDelay {
 			expectedNextDelay = constants.MaxCordonedRestartDelay
 		}
-		require.Equal(t, expectedNextDelay, nodeInfoMap[node.Name].CordonedRestartDelay)
+		require.Equal(t, expectedNextDelay, nodeInfoMap.LoadUnchecked(node.Name).CordonedRestartDelay)
 	}
 
 	// TestCase: Failure to parse the annotation will result in using default delay. Pod was recently created.
@@ -250,5 +251,5 @@ func TestIsPodRecentlyCreatedAfterNodeCordoned(t *testing.T) {
 	node = &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node"}}
 	recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
 	require.False(t, recentlyCreatedAfterCordon)
-	require.Equal(t, constants.DefaultCordonedRestartDelay, nodeInfoMap[node.Name].CordonedRestartDelay)
+	require.Equal(t, constants.DefaultCordonedRestartDelay, nodeInfoMap.LoadUnchecked(node.Name).CordonedRestartDelay)
 }
