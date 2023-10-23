@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net"
@@ -19,6 +20,7 @@ import (
 	"github.com/hashicorp/go-version"
 	ocpconfig "github.com/openshift/api/config/v1"
 	routev1 "github.com/openshift/api/route/v1"
+	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -1395,4 +1397,21 @@ func isVersionSupported(current, target string) bool {
 	}
 
 	return currentVersion.GreaterThanOrEqual(targetVersion)
+}
+
+func BlobToBootstrapEntries(
+	entriesBlob []byte,
+) (map[string]*kvdb_api.BootstrapEntry, error) {
+
+	var bEntries []*kvdb_api.BootstrapEntry
+	if err := json.Unmarshal(entriesBlob, &bEntries); err != nil {
+		return nil, err
+	}
+
+	// return as a map by ID to facilitate callers
+	retMap := make(map[string]*kvdb_api.BootstrapEntry)
+	for _, e := range bEntries {
+		retMap[e.ID] = e
+	}
+	return retMap, nil
 }
