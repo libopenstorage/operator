@@ -22,17 +22,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 
 	storageapi "github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	operatorutil "github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
+	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
+
+	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
@@ -48,6 +51,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	// pxEntriesKey is key which holds all the bootstrap entries
+	pxEntriesKey = "px-entries"
+)
+
 // rollingUpdate deletes old storage cluster pods making sure that no more than
 // cluster.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable pods are unavailable
 func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) error {
@@ -57,7 +65,6 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		return fmt.Errorf("couldn't get node to storage pod mapping for storage cluster %v: %v",
 			cluster.Name, err)
 	}
-
 	_, oldPods := c.groupStorageClusterPods(cluster, nodeToStoragePods, hash)
 	maxUnavailable, numUnavailable, err := c.getUnavailableNumbers(cluster, nodeToStoragePods)
 	if err != nil {
@@ -77,12 +84,32 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		oldPodsToDelete = append(oldPodsToDelete, pod.Name)
 	}
 
+	//TODO: Max unavaibable kvdb nodes has been set to 1 assuming default setup of 3 KVDB nodes.
+	// Need to generalise code for 5 KVDB nodes
+
+	//get the number of kvdb members which are unavailable in case of internal kvdb
+	numUnavailableKvdb, availableKvdbNodes, err := c.getKVDBNodeAvailablity(cluster)
+	if err != nil {
+		return err
+	}
+
 	logrus.Debugf("Marking old pods for deletion")
 	for _, pod := range oldAvailablePods {
 		if numUnavailable >= maxUnavailable {
 			logrus.Infof("Number of unavailable StorageCluster pods: %d, is equal "+
 				"to or exceeds allowed maximum: %d", numUnavailable, maxUnavailable)
 			break
+		}
+
+		//check if pod is running in a node which has internal kvdb running in it
+		if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal && isPodInKvdbNode(pod, availableKvdbNodes, nodeToStoragePods) {
+			// if number of unavailable kvdb nodes is greater than 1, then dont restart portworx on this node
+			if numUnavailableKvdb > 0 {
+				logrus.Infof("Number of unavaliable KVDB members exceeds 1, temorarily stopping update for this node to prevent KVDB from going out of qorum ")
+				continue
+			} else {
+				numUnavailableKvdb++
+			}
 		}
 		logrus.Infof("Marking pod %s/%s for deletion", cluster.Name, pod.Name)
 		oldPodsToDelete = append(oldPodsToDelete, pod.Name)
@@ -102,6 +129,73 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 	}
 
 	return c.syncNodes(cluster, oldPodsToDelete, []string{}, hash)
+}
+
+func isPodInKvdbNode(pod *v1.Pod, nodes []string, nodeToStoragePods map[string][]*v1.Pod) bool {
+	for _, node := range nodes {
+		if pods, ok := nodeToStoragePods[node]; ok {
+			for _, nodePod := range pods {
+				if reflect.DeepEqual(nodePod, pod) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (c *Controller) getKVDBNodeAvailablity(cluster *corev1.StorageCluster) (int, []string, error) {
+
+	kvdbNodeMap := make(map[string]*kvdb_api.BootstrapEntry)
+	if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal {
+		clusterID := util.GetClusterID(cluster)
+		strippedClusterName := strings.ToLower(util.ConfigMapNameRegex.ReplaceAllString(clusterID, ""))
+		cmName := fmt.Sprintf("%s%s", util.InternalEtcdConfigMapPrefix, strippedClusterName)
+		cm := &v1.ConfigMap{}
+		err := c.client.Get(context.TODO(), types.NamespacedName{
+			Name:      cmName,
+			Namespace: "kube-system",
+		}, cm)
+		if err != nil {
+			logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
+		}
+		// Get the bootstrap entries
+		entriesBlob, ok := cm.Data[pxEntriesKey]
+		if ok {
+			kvdbNodeMap, err = util.BlobToBootstrapEntries([]byte(entriesBlob))
+			if err != nil {
+				logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
+			}
+		}
+	}
+
+	var kvdbStorageNodeList []string
+	unavailableKvdbNodes := 0
+	if storagePodsEnabled(cluster) {
+		storageNodeList, err := c.Driver.GetStorageNodes(cluster)
+		if err != nil {
+			return -1, nil, fmt.Errorf("couldn't get list of storage nodes during rolling "+
+				"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
+		}
+		for _, storageNode := range storageNodeList {
+			kvdbEntry, present := kvdbNodeMap[storageNode.Id]
+			if present {
+				ip := kvdbEntry.IP + ":" + kvdbEntry.ClientPort
+				conn, err := net.Dial("tcp", ip)
+				if err != nil {
+					unavailableKvdbNodes++
+				} else {
+					conn.Close()
+				}
+				kvdbStorageNodeList = append(kvdbStorageNodeList, storageNode.SchedulerNodeName)
+			}
+
+		}
+
+	}
+
+	return unavailableKvdbNodes, kvdbStorageNodeList, nil
+
 }
 
 // annotateStoragePod annotate storage pods with custom annotations along with known annotations,
