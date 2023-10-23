@@ -7824,6 +7824,11 @@ func TestDeleteClusterShouldResetSDKConnection(t *testing.T) {
 		},
 	})
 
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.25.0",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
 	// Create driver object with the fake k8s client
 	driver := &portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
