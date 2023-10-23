@@ -7,12 +7,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"github.com/libopenstorage/operator/drivers/storage"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/util"
-	"github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/libopenstorage/operator/pkg/util/maps"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
@@ -35,6 +29,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/libopenstorage/operator/pkg/util/maps"
 )
 
 const (
