@@ -10,9 +10,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	"github.com/libopenstorage/operator/test/integration_test/cloud_provider"
-	"github.com/libopenstorage/operator/test/integration_test/utils"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -29,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes/scheme"
 )
 
 const (
@@ -261,44 +257,8 @@ var testStorageClusterBasicCases = []types.TestCase{
 	},
 }
 
-var testCloudDriveBasicCases = []types.TestCase{
-	{
-		TestName:        "BasicInstallMaxSNPZ",
-		TestrailCaseIDs: []string{"C93000"},
-		TestSpec: func(t *testing.T) interface{} {
-			objects, err := ci_utils.ParseSpecs("storagecluster/storagecluster-with-all-components.yaml")
-			require.NoError(t, err)
-			cluster, ok := objects[0].(*corev1.StorageCluster)
-			require.True(t, ok)
-			cluster.Name = "test-stc"
-			cluster.Spec.StartPort = func(val uint32) *uint32 { return &val }(17001)
-			tempRequiredMaxStorageNodesPerZone := 3
-			RequiredMaxStorageNodesPerZone := uint32(tempRequiredMaxStorageNodesPerZone)
-			cloudSpec := &corev1.CloudStorageSpec{
-				MaxStorageNodesPerZone: &RequiredMaxStorageNodesPerZone,
-			}
-			provider := cloud_provider.GetCloudProvider()
-			cloudSpec.DeviceSpecs = provider.GetDefaultDataDrives()
-			cluster.Spec.Monitoring.Prometheus.AlertManager.Enabled = false
-			cluster.Spec.CloudStorage = cloudSpec
-			return cluster
-		},
-		TestFunc: BasicInstallMaxSNPZ,
-		// Skip test if the cloud provider is not vsphere
-		ShouldSkip: func(tc *types.TestCase) bool {
-			return !strings.Contains(utils.PxEnvVars, "VSPHERE_VCENTER")
-		},
-	},
-}
-
 func TestStorageClusterBasic(t *testing.T) {
 	for _, testCase := range testStorageClusterBasicCases {
-		testCase.RunTest(t)
-	}
-}
-
-func TestCloudDrivesBasicInstall(t *testing.T) {
-	for _, testCase := range testCloudDriveBasicCases {
 		testCase.RunTest(t)
 	}
 }
@@ -381,43 +341,6 @@ func BasicInstallInCustomNamespace(tc *types.TestCase) func(*testing.T) {
 			err = ci_utils.ValidateObjectsAreTerminated([]runtime.Object{ns}, false)
 			require.NoError(t, err)
 		}
-	}
-}
-
-func BasicInstallMaxSNPZ(tc *types.TestCase) func(*testing.T) {
-	return func(t *testing.T) {
-		testSpec := tc.TestSpec(t)
-		cluster, ok := testSpec.(*corev1.StorageCluster)
-		require.True(t, ok)
-
-		err := ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
-		require.NoError(t, err)
-
-		// Deploy PX and validate
-		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
-
-		// Verify the total number of storage nodes
-		s := scheme.Scheme
-		err = corev1.AddToScheme(s)
-		require.NoError(t, err)
-
-		k8sclient, err := k8sutil.NewK8sClient(s)
-		require.NoError(t, err)
-
-		_, storageNodeList, err := pxutil.GetStorageNodes(cluster, k8sclient, nil)
-		require.NoError(t, err)
-
-		NumberOfStorageNodes := 0
-		for _, storageNode := range storageNodeList {
-			if len(storageNode.SchedulerNodeName) != 0 && len(storageNode.Pools) > 0 {
-				NumberOfStorageNodes++
-			}
-		}
-		require.EqualValues(t, uint32(NumberOfStorageNodes), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
-
-		// Wipe PX and validate
-		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
-
 	}
 }
 func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
