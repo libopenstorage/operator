@@ -2,7 +2,6 @@ package portworx
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -401,7 +400,7 @@ func (p *portworx) getKvdbMap(
 		// Get the bootstrap entries
 		entriesBlob, ok := cm.Data[pxEntriesKey]
 		if ok {
-			kvdbNodeMap, err = blobToBootstrapEntries([]byte(entriesBlob))
+			kvdbNodeMap, err = pxutil.BlobToBootstrapEntries([]byte(entriesBlob))
 			if err != nil {
 				logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
 			}
@@ -881,21 +880,4 @@ func getStorageNodePhase(status *corev1.NodeStatus) string {
 		return string(nodeInitCondition.Status)
 	}
 	return string(nodeStateCondition.Status)
-}
-
-func blobToBootstrapEntries(
-	entriesBlob []byte,
-) (map[string]*kvdb_api.BootstrapEntry, error) {
-
-	var bEntries []*kvdb_api.BootstrapEntry
-	if err := json.Unmarshal(entriesBlob, &bEntries); err != nil {
-		return nil, err
-	}
-
-	// return as a map by ID to facilitate callers
-	retMap := make(map[string]*kvdb_api.BootstrapEntry)
-	for _, e := range bEntries {
-		retMap[e.ID] = e
-	}
-	return retMap, nil
 }
