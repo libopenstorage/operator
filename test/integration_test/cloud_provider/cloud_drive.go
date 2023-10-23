@@ -27,11 +27,19 @@ func isVsphere() bool {
 		utils.CloudProvider == cloudops.Vsphere
 }
 
+func isPure() bool {
+	return strings.Contains(utils.PxEnvVars, "PURE_FLASHARRAY_SAN_TYPE") ||
+		utils.CloudProvider == cloudops.Pure
+}
+
 func GetCloudProvider() Provider {
 	if isVsphere() {
 		return newVsphereProvider()
 	}
 
+	if isPure() {
+		return newPureProvider()
+	}
 	log.Fatalf("CloudProvider Unknown %v", utils.CloudProvider)
 
 	return nil
