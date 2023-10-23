@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"github.com/libopenstorage/cloudops"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/test/integration_test/cloud_provider"
 	"github.com/libopenstorage/operator/test/integration_test/utils"
@@ -285,8 +284,9 @@ var testCloudDriveBasicCases = []types.TestCase{
 			return cluster
 		},
 		TestFunc: BasicInstallMaxSNPZ,
+		// Skip test if the cloud provider is not vsphere
 		ShouldSkip: func(tc *types.TestCase) bool {
-			return utils.CloudProvider == cloudops.Vsphere
+			return !strings.Contains(utils.PxEnvVars, "VSPHERE_VCENTER")
 		},
 	},
 }
@@ -413,7 +413,6 @@ func BasicInstallMaxSNPZ(tc *types.TestCase) func(*testing.T) {
 				NumberOfStorageNodes++
 			}
 		}
-
 		require.EqualValues(t, uint32(NumberOfStorageNodes), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 
 		// Wipe PX and validate
