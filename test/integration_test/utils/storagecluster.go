@@ -88,6 +88,15 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 			cluster.Annotations = make(map[string]string)
 		}
 		cluster.Annotations["portworx.io/is-aks"] = "true"
+		// Create Azure vSphere Env var credentials, if PX vSphere secret exists
+		ocpEnvVarCreds, err := testutil.CreateAzureCredentialEnvVarsFromSecret(cluster.Namespace)
+		if err != nil {
+			return err
+		}
+
+		if ocpEnvVarCreds != nil {
+			envVarList = append(envVarList, ocpEnvVarCreds...)
+		}
 	}
 
 	// Add GKE annotation
