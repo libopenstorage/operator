@@ -100,6 +100,9 @@ const (
 	// DefaultPxVsphereSecretName is a default name for PX vSphere credentials secret
 	DefaultPxVsphereSecretName = "px-vsphere-secret"
 
+	// DefaultPxAzureSecretName is a default name for PX vSphere credentials secret
+	DefaultPxAzureSecretName = "px-azure"
+
 	// PxMasterVersion is a tag for Portworx master version
 	PxMasterVersion = "4.0.0.0"
 
@@ -627,6 +630,59 @@ func FindAndCopyVsphereSecretToCustomNamespace(customNamespace string) error {
 	}
 
 	return nil
+}
+
+// CreateAzureCredentialEnvVarsFromSecret check if px-vsphere-secret exists and returns vSphere crendentials Env vars
+func CreateAzureCredentialEnvVarsFromSecret(namespace string) ([]v1.EnvVar, error) {
+	var envVars []v1.EnvVar
+
+	// Get PX vSphere secret
+	_, err := coreops.Instance().GetSecret(DefaultPxAzureSecretName, namespace)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logrus.Warnf("Azure secret %s in not found in %s namespace", DefaultPxAzureSecretName, namespace)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get secret %s in %s namespace, err %v", DefaultPxVsphereSecretName, namespace, err)
+	}
+
+	envVars = []v1.EnvVar{
+		{
+			Name: "AZURE_CLIENT_ID",
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: DefaultPxAzureSecretName,
+					},
+					Key: "AZURE_CLIENT_ID",
+				},
+			},
+		},
+		{
+			Name: "AZURE_CLIENT_SECRET",
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: DefaultPxAzureSecretName,
+					},
+					Key: "AZURE_CLIENT_SECRET",
+				},
+			},
+		},
+		{
+			Name: "AZURE_TENANT_ID",
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: DefaultPxAzureSecretName,
+					},
+					Key: "AZURE_TENANT_ID",
+				},
+			},
+		},
+	}
+
+	return envVars, nil
 }
 
 // CreateVsphereCredentialEnvVarsFromSecret check if px-vsphere-secret exists and returns vSphere crendentials Env vars
