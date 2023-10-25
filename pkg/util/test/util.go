@@ -1704,6 +1704,7 @@ func ValidateInternalKvdbEnabled(pxImageList map[string]string, cluster *corev1.
 		return err
 	}
 
+	logrus.Debug("Internal KVDB components are enabled")
 	return nil
 }
 
@@ -1714,9 +1715,17 @@ func ValidateInternalKvdbDisabled(cluster *corev1.StorageCluster, timeout, inter
 	t := func() (interface{}, bool, error) {
 		// Validate KVDB pods
 		listOptions := map[string]string{"kvdb": "true"}
-		_, err := coreops.Instance().GetPods(cluster.Namespace, listOptions)
-		if !errors.IsNotFound(err) {
-			return nil, true, fmt.Errorf("found KVDB pods, waiting for deletion")
+		podList, err := coreops.Instance().GetPods(cluster.Namespace, listOptions)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get pods, Err: %v", err)
+		}
+
+		if len(podList.Items) != 0 {
+			podNames := []string{}
+			for _, pod := range podList.Items {
+				podNames = append(podNames, pod.Name)
+			}
+			return nil, true, fmt.Errorf("found unexpected KVDB pod(s) %s", podNames)
 		}
 
 		// Validate Portworx KVDB service
@@ -1733,6 +1742,7 @@ func ValidateInternalKvdbDisabled(cluster *corev1.StorageCluster, timeout, inter
 		return err
 	}
 
+	logrus.Debug("Internal KVDB components are disabled")
 	return nil
 }
 
