@@ -66,6 +66,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/libopenstorage/operator/pkg/util/maps"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -114,6 +115,7 @@ type Controller struct {
 	isStorkDeploymentCreated      bool
 	isStorkSchedDeploymentCreated bool
 	ctrl                          controller.Controller
+	grpcConn                      *grpc.ClientConn
 	// Node to NodeInfo map
 	nodeInfoMap maps.SyncMap[string, *k8s.NodeInfo]
 }
