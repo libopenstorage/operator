@@ -873,7 +873,7 @@ func TestValidateGKE(t *testing.T) {
 	}
 
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
-		{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}, Spec: v1.NodeSpec{ProviderID: "azure://node-id-1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}, Spec: v1.NodeSpec{ProviderID: "gce://node-id-1"}},
 	}}
 
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
@@ -894,6 +894,13 @@ func TestValidateGKE(t *testing.T) {
 	recorder := record.NewFakeRecorder(100)
 	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
+
+	// TestCase: init gke cloud provider
+	versionClient := fakek8sclient.NewSimpleClientset(fakeK8sNodes)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.26.5-gke.1200",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
 
 	err = preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
@@ -917,7 +924,7 @@ func TestValidateGKE(t *testing.T) {
 	<-recorder.Events // Pop first event which is Default telemetry enabled event
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling PX-StoreV2"))
-	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaAzure)
+	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaGKE)
 }
 
 func TestShouldPreflightRun(t *testing.T) {
