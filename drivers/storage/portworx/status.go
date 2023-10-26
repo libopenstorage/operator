@@ -379,7 +379,7 @@ func getStorageClusterState(
 	return corev1.ClusterStateUnknown
 }
 
-func (p *portworx) getKvdbMap(
+func GetKvdbMap(k8sClient client.Client,
 	cluster *corev1.StorageCluster,
 ) map[string]*kvdb_api.BootstrapEntry {
 	// If cluster is running internal kvdb, get current bootstrap nodes
@@ -390,7 +390,7 @@ func (p *portworx) getKvdbMap(
 		cmName := fmt.Sprintf("%s%s", pxutil.InternalEtcdConfigMapPrefix, strippedClusterName)
 
 		cm := &v1.ConfigMap{}
-		err := p.k8sClient.Get(context.TODO(), types.NamespacedName{
+		err := k8sClient.Get(context.TODO(), types.NamespacedName{
 			Name:      cmName,
 			Namespace: bootstrapCloudDriveNamespace,
 		}, cm)
@@ -427,7 +427,7 @@ func (p *portworx) updateStorageNodes(
 		return fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
-	kvdbNodeMap := p.getKvdbMap(cluster)
+	kvdbNodeMap := GetKvdbMap(p.k8sClient, cluster)
 	nodesToPods, err := p.getNodesToPortworxPods(cluster)
 	if err != nil {
 		return err
