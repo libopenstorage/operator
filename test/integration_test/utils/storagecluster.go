@@ -235,130 +235,194 @@ func UpdateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluste
 
 // UpdateAndValidateStorageCluster update, validate and return new StorageCluster
 func UpdateAndValidateStorageCluster(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
-	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-	require.NoError(t, err)
+	var latestLiveCluster *corev1.StorageCluster
 
-	newCluster := f(liveCluster)
+	for i := 0; i < 5; i++ {
+		liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
 
-	latestLiveCluster, err := UpdateStorageCluster(newCluster)
-	require.NoError(t, err)
+		newCluster := f(liveCluster)
+
+		latestLiveCluster, err = UpdateStorageCluster(newCluster)
+		if err != nil && strings.Contains(err.Error(), k8sutil.UpdateRevisionConflictErr) {
+			logrus.Warnf("Failed to update StorageCluster [%s], Err: %s, Retrying..", latestLiveCluster.Name, err)
+			continue
+		}
+		require.NoError(t, err)
+		break
+	}
 
 	logrus.Infof("Validate StorageCluster %s", latestLiveCluster.Name)
-	err = testutil.ValidateStorageCluster(pxSpecImages, latestLiveCluster, DefaultValidateUpdateTimeout, DefaultValidateUpdateRetryInterval, true, "")
+	err := testutil.ValidateStorageCluster(pxSpecImages, latestLiveCluster, DefaultValidateUpdateTimeout, DefaultValidateUpdateRetryInterval, true, "")
 	require.NoError(t, err)
-
 	return latestLiveCluster
 }
 
 // UpdateAndValidatePvcController update StorageCluster, validates PVC Controller components only and return latest version of live StorageCluster
 func UpdateAndValidatePvcController(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
-	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	var latestLiveCluster *corev1.StorageCluster
+
+	for i := 0; i < 5; i++ {
+		liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+
+		newCluster := f(liveCluster)
+
+		latestLiveCluster, err = UpdateStorageCluster(newCluster)
+		if err != nil && strings.Contains(err.Error(), k8sutil.UpdateRevisionConflictErr) {
+			logrus.Warnf("Failed to update StorageCluster [%s], Err: %s, Retrying..", latestLiveCluster.Name, err)
+			continue
+		}
+		require.NoError(t, err)
+		break
+	}
+
+	err := testutil.ValidatePvcController(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
 	require.NoError(t, err)
-
-	newCluster := f(liveCluster)
-
-	latestLiveCluster, err := UpdateStorageCluster(newCluster)
-	require.NoError(t, err)
-
-	err = testutil.ValidatePvcController(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
-	require.NoError(t, err)
-
 	return latestLiveCluster
 }
 
 // UpdateAndValidateStork update StorageCluster, validates Stork components only and return latest version of live StorageCluster
 func UpdateAndValidateStork(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
-	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	var latestLiveCluster *corev1.StorageCluster
+
+	for i := 0; i < 5; i++ {
+		liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+
+		newCluster := f(liveCluster)
+
+		latestLiveCluster, err = UpdateStorageCluster(newCluster)
+		if err != nil && strings.Contains(err.Error(), k8sutil.UpdateRevisionConflictErr) {
+			logrus.Warnf("Failed to update StorageCluster [%s], Err: %s, Retrying..", latestLiveCluster.Name, err)
+			continue
+		}
+		require.NoError(t, err)
+		break
+	}
+
+	err := testutil.ValidateStork(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
 	require.NoError(t, err)
-
-	newCluster := f(liveCluster)
-
-	latestLiveCluster, err := UpdateStorageCluster(newCluster)
-	require.NoError(t, err)
-
-	err = testutil.ValidateStork(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
-	require.NoError(t, err)
-
 	return latestLiveCluster
 }
 
 // UpdateAndValidateAutopilot update StorageCluster, validates Autopilot components only and return latest version of live StorageCluster
 func UpdateAndValidateAutopilot(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
-	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	var latestLiveCluster *corev1.StorageCluster
+
+	for i := 0; i < 5; i++ {
+		liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+
+		newCluster := f(liveCluster)
+
+		latestLiveCluster, err = UpdateStorageCluster(newCluster)
+		if err != nil && strings.Contains(err.Error(), k8sutil.UpdateRevisionConflictErr) {
+			logrus.Warnf("Failed to update StorageCluster [%s], Err: %s, Retrying..", latestLiveCluster.Name, err)
+			continue
+		}
+		require.NoError(t, err)
+		break
+	}
+
+	err := testutil.ValidateAutopilot(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
 	require.NoError(t, err)
-
-	newCluster := f(liveCluster)
-
-	latestLiveCluster, err := UpdateStorageCluster(newCluster)
-	require.NoError(t, err)
-
-	err = testutil.ValidateAutopilot(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
-	require.NoError(t, err)
-
 	return latestLiveCluster
 }
 
 // UpdateAndValidateMonitoring update StorageCluster, validates Monitoring components only and return latest version of live StorageCluster
 func UpdateAndValidateMonitoring(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
-	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	var latestLiveCluster *corev1.StorageCluster
+
+	for i := 0; i < 5; i++ {
+		liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+
+		newCluster := f(liveCluster)
+
+		latestLiveCluster, err = UpdateStorageCluster(newCluster)
+		if err != nil && strings.Contains(err.Error(), k8sutil.UpdateRevisionConflictErr) {
+			logrus.Warnf("Failed to update StorageCluster [%s], Err: %s, Retrying..", latestLiveCluster.Name, err)
+			continue
+		}
+		require.NoError(t, err)
+		break
+	}
+
+	err := testutil.ValidateMonitoring(pxSpecImages, latestLiveCluster, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
 	require.NoError(t, err)
-
-	newCluster := f(liveCluster)
-
-	latestLiveCluster, err := UpdateStorageCluster(newCluster)
-	require.NoError(t, err)
-
-	err = testutil.ValidateMonitoring(pxSpecImages, latestLiveCluster, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
-	require.NoError(t, err)
-
 	return latestLiveCluster
 }
 
 // UpdateAndValidateSecurity update StorageCluster, validates Security components only and return latest version of live StorageCluster
 func UpdateAndValidateSecurity(cluster *corev1.StorageCluster, previouslyEnabled bool, f func(*corev1.StorageCluster) *corev1.StorageCluster, t *testing.T) *corev1.StorageCluster {
-	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	var latestLiveCluster *corev1.StorageCluster
+
+	for i := 0; i < 5; i++ {
+		liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+
+		newCluster := f(liveCluster)
+
+		latestLiveCluster, err = UpdateStorageCluster(newCluster)
+		if err != nil && strings.Contains(err.Error(), k8sutil.UpdateRevisionConflictErr) {
+			logrus.Warnf("Failed to update StorageCluster [%s], Err: %s, Retrying..", latestLiveCluster.Name, err)
+			continue
+		}
+		require.NoError(t, err)
+		break
+	}
+
+	err := testutil.ValidateSecurity(latestLiveCluster, previouslyEnabled, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
 	require.NoError(t, err)
-
-	newCluster := f(liveCluster)
-
-	latestLiveCluster, err := UpdateStorageCluster(newCluster)
-	require.NoError(t, err)
-
-	err = testutil.ValidateSecurity(latestLiveCluster, previouslyEnabled, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
-	require.NoError(t, err)
-
 	return latestLiveCluster
 }
 
 // UpdateAndValidateCSI update StorageCluster, validates CSI components only and return latest version of live StorageCluster
 func UpdateAndValidateCSI(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
-	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	var latestLiveCluster *corev1.StorageCluster
+
+	for i := 0; i < 5; i++ {
+		liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+
+		newCluster := f(liveCluster)
+
+		latestLiveCluster, err = UpdateStorageCluster(newCluster)
+		if err != nil && strings.Contains(err.Error(), k8sutil.UpdateRevisionConflictErr) {
+			logrus.Warnf("Failed to update StorageCluster [%s], Err: %s, Retrying..", latestLiveCluster.Name, err)
+			continue
+		}
+		require.NoError(t, err)
+		break
+	}
+
+	err := testutil.ValidateCSI(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
 	require.NoError(t, err)
-
-	newCluster := f(liveCluster)
-
-	latestLiveCluster, err := UpdateStorageCluster(newCluster)
-	require.NoError(t, err)
-
-	err = testutil.ValidateCSI(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
-	require.NoError(t, err)
-
 	return latestLiveCluster
 }
 
 // UpdateAndValidateGrafana update StorageCluster, validates grafana and return latest version of live StorageCluster
 func UpdateAndValidateGrafana(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
-	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	var latestLiveCluster *corev1.StorageCluster
+
+	for i := 0; i < 5; i++ {
+		liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		require.NoError(t, err)
+
+		newCluster := f(liveCluster)
+
+		latestLiveCluster, err = UpdateStorageCluster(newCluster)
+		if err != nil && strings.Contains(err.Error(), k8sutil.UpdateRevisionConflictErr) {
+			logrus.Warnf("Failed to update StorageCluster [%s], Err: %s, Retrying..", latestLiveCluster.Name, err)
+			continue
+		}
+		require.NoError(t, err)
+		break
+	}
+
+	err := testutil.ValidateGrafana(pxSpecImages, latestLiveCluster)
 	require.NoError(t, err)
-
-	newCluster := f(liveCluster)
-
-	latestLiveCluster, err := UpdateStorageCluster(newCluster)
-	require.NoError(t, err)
-
-	err = testutil.ValidateGrafana(pxSpecImages, latestLiveCluster)
-	require.NoError(t, err)
-
 	return latestLiveCluster
 }
 
