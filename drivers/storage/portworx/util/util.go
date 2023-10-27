@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"math"
 	"net"
@@ -28,7 +27,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -1570,21 +1568,4 @@ func GetTLSCipherSuites(cluster *corev1.StorageCluster) (string, error) {
 		}
 	}
 	return strings.Join(outList, ","), nil
-}
-
-func BlobToBootstrapEntries(
-	entriesBlob []byte,
-) (map[string]*kvdb_api.BootstrapEntry, error) {
-
-	var bEntries []*kvdb_api.BootstrapEntry
-	if err := json.Unmarshal(entriesBlob, &bEntries); err != nil {
-		return nil, err
-	}
-
-	// return as a map by ID to facilitate callers
-	retMap := make(map[string]*kvdb_api.BootstrapEntry)
-	for _, e := range bEntries {
-		retMap[e.ID] = e
-	}
-	return retMap, nil
 }
