@@ -26,10 +26,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	storageapi "github.com/libopenstorage/openstorage/api"
-	pxapi "github.com/libopenstorage/operator/api/px"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	operatorutil "github.com/libopenstorage/operator/pkg/util"
@@ -49,7 +47,6 @@ import (
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 	"k8s.io/kubernetes/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	//"google.golang.org/grpc/metadata"
 )
 
 // rollingUpdate deletes old storage cluster pods making sure that no more than
@@ -80,11 +77,11 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		oldPodsToDelete = append(oldPodsToDelete, pod.Name)
 	}
 
-	//TODO: Max unavaibable kvdb nodes has been set to 1 assuming default setup of 3 KVDB nodes.
+	// TODO: Max unavaibable kvdb nodes has been set to 1 assuming default setup of 3 KVDB nodes.
 	// Need to generalise code for 5 KVDB nodes
 
-	//get the number of kvdb members which are unavailable in case of internal kvdb
-	numUnavailableKvdb, kvdbNodes, err := c.getKVDBNodeAvailablity(cluster)
+	// get the number of kvdb members which are unavailable in case of internal kvdb
+	numUnavailableKvdb, kvdbNodes, err := c.getKVDBNodeAvailability(cluster)
 	if err != nil {
 		return err
 	}
@@ -97,11 +94,11 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 			break
 		}
 
-		//check if pod is running in a node which has internal kvdb running in it
-		if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal && isPodInKvdbNode(pod, kvdbNodes, nodeToStoragePods) {
+		// check if pod is running in a node which has internal kvdb running in it
+		if _, isKvdbNode := kvdbNodes[pod.Spec.NodeName]; cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal && isKvdbNode {
 			// if number of unavailable kvdb nodes is greater than 1, then dont restart portworx on this node
 			if numUnavailableKvdb > 0 {
-				logrus.Infof("Number of unavaliable KVDB members exceeds 1, temorarily stopping update for this node to prevent KVDB from going out of qorum ")
+				logrus.Infof("Number of unavaliable KVDB members exceeds 1, temporarily stopping update for this node to prevent KVDB from going out of quorum ")
 				continue
 			} else {
 				numUnavailableKvdb++
@@ -127,24 +124,10 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 	return c.syncNodes(cluster, oldPodsToDelete, []string{}, hash)
 }
 
-// function that returns if a pod belongs to a node that is running kvdb
-func isPodInKvdbNode(pod *v1.Pod, nodes []string, nodeToStoragePods map[string][]*v1.Pod) bool {
-	for _, node := range nodes {
-		if pods, ok := nodeToStoragePods[node]; ok {
-			for _, nodePod := range pods {
-				if reflect.DeepEqual(nodePod, pod) {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
 // function to return the number of unavailable kvdb members and a list of the nodes which should have kvdb running in them
-func (c *Controller) getKVDBNodeAvailablity(cluster *corev1.StorageCluster) (int, []string, error) {
+func (c *Controller) getKVDBNodeAvailability(cluster *corev1.StorageCluster) (int, map[string]bool, error) {
 
-	var kvdbStorageNodeList []string
+	var kvdbStorageNodeList = make(map[string]bool)
 	unavailableKvdbNodes := 0
 	if storagePodsEnabled(cluster) {
 		storageNodeList, err := c.Driver.GetStorageNodes(cluster)
@@ -153,24 +136,10 @@ func (c *Controller) getKVDBNodeAvailablity(cluster *corev1.StorageCluster) (int
 				"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
 		}
 
-		conn, err := util.GetPortworxConn(c.grpcConn, c.client, cluster.Namespace)
+		var kvdbMap map[string]bool
+		kvdbMap, err = c.Driver.GetKVDBMembers(cluster)
 		if err != nil {
-			return -1, nil, fmt.Errorf("error in connecting to portworx sdk server: %s", err)
-		}
-		serviceClient := pxapi.NewPortworxServiceClient(conn)
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-
-		// This is guaranteed to return before context deadline exceeds
-		members, err := serviceClient.GetKvdbMemberInfo(ctx, &pxapi.PxKvdbMemberRequest{})
-
-		if err != nil {
-			return -1, nil, fmt.Errorf("error in getting kvdb member info from sdk: %s", err)
-		}
-
-		kvdbMap := make(map[string]bool)
-		for id, member := range members.GetKvdbMemberInfo() {
-			kvdbMap[id] = member.GetIsHealthy()
+			return -1, nil, err
 		}
 
 		for _, storageNode := range storageNodeList {
@@ -179,7 +148,7 @@ func (c *Controller) getKVDBNodeAvailablity(cluster *corev1.StorageCluster) (int
 				if !isHealthy {
 					unavailableKvdbNodes++
 				}
-				kvdbStorageNodeList = append(kvdbStorageNodeList, storageNode.SchedulerNodeName)
+				kvdbStorageNodeList[storageNode.SchedulerNodeName] = true
 			}
 
 		}
