@@ -42,6 +42,8 @@ const (
 	DefCmetaPure = "size=64"
 	// DefCmetaAzure default metadata cloud device for DMthin Azure
 	DefCmetaAzure = "type=Premium_LRS,size=64"
+	// DefCmetaGKE default metadata cloud device for DMthin GKE
+	DefCmetaGKE = "type=pd-ssd,size=64"
 )
 
 // PreFlightPortworx provides a set of APIs to uninstall portworx
@@ -376,6 +378,8 @@ func (u *preFlightPortworx) processPassedChecks(recorder record.EventRecorder) {
 			cmetaData = DefCmetaPure
 		} else if preflt.IsAzure() {
 			cmetaData = DefCmetaAzure
+		} else if preflt.IsGKE() {
+			cmetaData = DefCmetaGKE
 		}
 		u.cluster.Spec.CloudStorage.SystemMdDeviceSpec = &cmetaData
 	}
