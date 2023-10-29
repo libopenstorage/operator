@@ -54,7 +54,7 @@ func (p *Portworx) UpdateStorageClusterStatus(
 
 	// Update install and update status
 	storageNodes := &corev1.StorageNodeList{}
-	if err := p.k8sClient.List(context.TODO(), storageNodes, &client.ListOptions{}); err != nil {
+	if err := p.K8sClient.List(context.TODO(), storageNodes, &client.ListOptions{}); err != nil {
 		logrus.Warnf("failed to get a list of StorageNode: %v", err)
 	}
 	p.updatePortworxInstallStatus(cluster, storageNodes.Items)
@@ -139,7 +139,7 @@ func (p *Portworx) updatePortworxRuntimeStatus(
 	}
 
 	var err error
-	p.sdkConn, err = pxutil.GetPortworxConn(p.sdkConn, p.k8sClient, cluster.Namespace)
+	p.SdkConn, err = pxutil.GetPortworxConn(p.SdkConn, p.K8sClient, cluster.Namespace)
 	if err != nil {
 		p.updateRemainingStorageNodesWithoutError(cluster, nil)
 		if pxutil.IsFreshInstall(cluster) &&
@@ -152,17 +152,17 @@ func (p *Portworx) updatePortworxRuntimeStatus(
 		return err
 	}
 
-	clusterClient := api.NewOpenStorageClusterClient(p.sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
+	clusterClient := api.NewOpenStorageClusterClient(p.SdkConn)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.K8sClient)
 	if err != nil {
 		return err
 	}
 	pxCluster, err := clusterClient.InspectCurrent(ctx, &api.SdkClusterInspectCurrentRequest{})
 	if err != nil {
-		if closeErr := p.sdkConn.Close(); closeErr != nil {
+		if closeErr := p.SdkConn.Close(); closeErr != nil {
 			logrus.Warnf("Failed to close grpc connection. %v", closeErr)
 		}
-		p.sdkConn = nil
+		p.SdkConn = nil
 		p.updateRemainingStorageNodesWithoutError(cluster, nil)
 		return fmt.Errorf("failed to inspect cluster: %v", err)
 	} else if pxCluster.Cluster == nil {
@@ -198,7 +198,7 @@ func (p *Portworx) updatePortworxMigrationStatus(
 	migrationCondition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeMigration)
 	if migrationCondition != nil && migrationCondition.Status == corev1.ClusterConditionStatusInProgress {
 		ds := &appsv1.DaemonSet{}
-		err := p.k8sClient.Get(context.TODO(), types.NamespacedName{
+		err := p.K8sClient.Get(context.TODO(), types.NamespacedName{
 			Name:      constants.PortworxDaemonSetName,
 			Namespace: cluster.Namespace,
 		}, ds)
@@ -390,7 +390,7 @@ func (p *Portworx) getKvdbMap(
 		cmName := fmt.Sprintf("%s%s", pxutil.InternalEtcdConfigMapPrefix, strippedClusterName)
 
 		cm := &v1.ConfigMap{}
-		err := p.k8sClient.Get(context.TODO(), types.NamespacedName{
+		err := p.K8sClient.Get(context.TODO(), types.NamespacedName{
 			Name:      cmName,
 			Namespace: bootstrapCloudDriveNamespace,
 		}, cm)
@@ -413,8 +413,8 @@ func (p *Portworx) getKvdbMap(
 func (p *Portworx) updateStorageNodes(
 	cluster *corev1.StorageCluster,
 ) error {
-	nodeClient := api.NewOpenStorageNodeClient(p.sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
+	nodeClient := api.NewOpenStorageNodeClient(p.SdkConn)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.K8sClient)
 	if err != nil {
 		return err
 	}
@@ -495,7 +495,7 @@ func (p *Portworx) updateRemainingStorageNodes(
 	}
 
 	storageNodes := &corev1.StorageNodeList{}
-	if err = p.k8sClient.List(context.TODO(), storageNodes, &client.ListOptions{}); err != nil {
+	if err = p.K8sClient.List(context.TODO(), storageNodes, &client.ListOptions{}); err != nil {
 		return fmt.Errorf("failed to get a list of StorageNode: %v", err)
 	}
 
@@ -506,7 +506,7 @@ func (p *Portworx) updateRemainingStorageNodes(
 			logrus.Infof("Deleting orphan StorageNode %v/%v",
 				storageNode.Namespace, storageNode.Name)
 
-			err = p.k8sClient.Delete(context.TODO(), storageNode.DeepCopy())
+			err = p.K8sClient.Delete(context.TODO(), storageNode.DeepCopy())
 			if err != nil && !errors.IsNotFound(err) {
 				msg := fmt.Sprintf("Failed to delete StorageNode %v/%v: %v",
 					storageNode.Namespace, storageNode.Name, err)
@@ -539,7 +539,7 @@ func (p *Portworx) updateRemainingStorageNodes(
 				storageNodeCopy.Status.Phase = newPhase
 				logrus.Infof("Updating StorageNode %v/%v status",
 					storageNode.Namespace, storageNode.Name)
-				err = p.k8sClient.Status().Update(context.TODO(), storageNodeCopy)
+				err = p.K8sClient.Status().Update(context.TODO(), storageNodeCopy)
 				if err != nil && !errors.IsNotFound(err) {
 					msg := fmt.Sprintf("Failed to update StorageNode %v/%v: %v",
 						storageNode.Namespace, storageNode.Name, err)
@@ -557,7 +557,7 @@ func (p *Portworx) getNodesToPortworxPods(
 ) (map[string][]*v1.Pod, error) {
 	pxLabels := p.GetSelectorLabels()
 	portworxPodList := &v1.PodList{}
-	err := p.k8sClient.List(
+	err := p.K8sClient.List(
 		context.TODO(),
 		portworxPodList,
 		&client.ListOptions{
@@ -613,7 +613,7 @@ func (p *Portworx) createOrUpdateStorageNode(
 ) (*corev1.StorageNode, error) {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 	storageNode := &corev1.StorageNode{}
-	getErr := p.k8sClient.Get(
+	getErr := p.K8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
 			Name:      node.SchedulerNodeName,
@@ -650,10 +650,10 @@ func (p *Portworx) createOrUpdateStorageNode(
 	var err error
 	if errors.IsNotFound(getErr) {
 		logrus.Infof("Creating StorageNode %s/%s", storageNode.Namespace, storageNode.Name)
-		err = p.k8sClient.Create(context.TODO(), storageNode)
+		err = p.K8sClient.Create(context.TODO(), storageNode)
 	} else if !reflect.DeepEqual(originalStorageNode, storageNode) {
 		logrus.Debugf("Updating StorageNode %s/%s", storageNode.Namespace, storageNode.Name)
-		err = p.k8sClient.Update(context.TODO(), storageNode)
+		err = p.K8sClient.Update(context.TODO(), storageNode)
 	}
 	return storageNode, err
 }
@@ -743,7 +743,7 @@ func (p *Portworx) updateStorageNodeStatus(
 		storageNode.Status.Storage.UsedSize = *usedSize
 		logrus.Debugf("Updating StorageNode %s/%s status",
 			storageNode.Namespace, storageNode.Name)
-		return p.k8sClient.Status().Update(context.TODO(), storageNode)
+		return p.K8sClient.Status().Update(context.TODO(), storageNode)
 	}
 
 	return nil

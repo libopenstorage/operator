@@ -57,13 +57,13 @@ var (
 )
 
 type Portworx struct {
-	k8sClient          client.Client
-	k8sVersion         *version.Version
-	scheme             *runtime.Scheme
-	recorder           record.EventRecorder
-	sdkConn            *grpc.ClientConn
-	zoneToInstancesMap map[string]uint64
-	cloudProvider      string
+	K8sClient          client.Client
+	K8sVersion         *version.Version
+	Scheme             *runtime.Scheme
+	Recorder           record.EventRecorder
+	SdkConn            *grpc.ClientConn
+	ZoneToInstancesMap map[string]uint64
+	CloudProvider      string
 }
 
 func (p *Portworx) String() string {
@@ -78,20 +78,20 @@ func (p *Portworx) Init(
 	if k8sClient == nil {
 		return fmt.Errorf("kubernetes client cannot be nil")
 	}
-	p.k8sClient = k8sClient
+	p.K8sClient = k8sClient
 	if scheme == nil {
 		return fmt.Errorf("kubernetes scheme cannot be nil")
 	}
-	p.scheme = scheme
+	p.Scheme = scheme
 	if recorder == nil {
 		return fmt.Errorf("event recorder cannot be nil")
 	}
-	p.recorder = recorder
+	p.Recorder = recorder
 	k8sVersion, err := k8sutil.GetVersion()
 	if err != nil {
 		return err
 	}
-	p.k8sVersion = k8sVersion
+	p.K8sVersion = k8sVersion
 
 	manifest.Instance().Init(k8sClient, recorder, k8sVersion)
 	p.initializeComponents()
@@ -134,10 +134,10 @@ func (p *Portworx) Validate(cluster *corev1.StorageCluster) error {
 		return err
 	}
 
-	preFlighter := NewPreFlighter(cluster, p.k8sClient, podSpec)
+	preFlighter := NewPreFlighter(cluster, p.K8sClient, podSpec)
 
 	deletePreflight := func() {
-		_, _, err := GetPreFlightPodsFromNamespace(p.k8sClient, cluster.Namespace)
+		_, _, err := GetPreFlightPodsFromNamespace(p.K8sClient, cluster.Namespace)
 		if err == nil {
 			// Clean up the pre-flight pods
 			logrus.Infof("pre-flight: cleaning pre-flight ds...")
@@ -156,7 +156,7 @@ func (p *Portworx) Validate(cluster *corev1.StorageCluster) error {
 		return nil
 	}
 
-	if err := createSecurityContextForValidate(p.recorder, cluster); err != nil {
+	if err := createSecurityContextForValidate(p.Recorder, cluster); err != nil {
 		setClusterCondition(corev1.ClusterConditionStatusFailed, err.Error())
 		deletePreflight()
 		return err
@@ -195,7 +195,7 @@ func (p *Portworx) Validate(cluster *corev1.StorageCluster) error {
 		if age >= preFlightTimeOut {
 			err = fmt.Errorf("pre-flight: pre-flight check timed out")
 			setClusterCondition(corev1.ClusterConditionStatusTimeout, err.Error())
-			k8sutil.WarningEvent(p.recorder, cluster, util.FailedPreFlight, err.Error())
+			k8sutil.WarningEvent(p.Recorder, cluster, util.FailedPreFlight, err.Error())
 			deletePreflight()
 			return err
 		}
@@ -217,7 +217,7 @@ func (p *Portworx) Validate(cluster *corev1.StorageCluster) error {
 	}
 
 	logrus.Infof("pre-flight: process pre-flight results...")
-	err = preFlighter.ProcessPreFlightResults(p.recorder, storageNodes)
+	err = preFlighter.ProcessPreFlightResults(p.Recorder, storageNodes)
 	if err != nil {
 		err = fmt.Errorf("pre-flight: Error processing results: %v", err)
 		setClusterCondition(corev1.ClusterConditionStatusFailed, err.Error())
@@ -234,13 +234,13 @@ func (p *Portworx) Validate(cluster *corev1.StorageCluster) error {
 
 func (p *Portworx) initializeComponents() {
 	for _, comp := range component.GetAll() {
-		comp.Initialize(p.k8sClient, *p.k8sVersion, p.scheme, p.recorder)
+		comp.Initialize(p.K8sClient, *p.K8sVersion, p.Scheme, p.Recorder)
 	}
 }
 
 func (p *Portworx) UpdateDriver(info *storage.UpdateDriverInfo) error {
-	p.zoneToInstancesMap = info.ZoneToInstancesMap
-	p.cloudProvider = info.CloudProvider
+	p.ZoneToInstancesMap = info.ZoneToInstancesMap
+	p.CloudProvider = info.CloudProvider
 	return nil
 }
 
@@ -309,7 +309,7 @@ func (p *Portworx) setMaxStorageNodePerZone(toUpdate *corev1.StorageCluster, upg
 		var err error
 
 		nodeList := &v1.NodeList{}
-		err = p.k8sClient.List(context.TODO(), nodeList, &client.ListOptions{})
+		err = p.K8sClient.List(context.TODO(), nodeList, &client.ListOptions{})
 		if err != nil {
 			return err
 		}
@@ -351,7 +351,7 @@ func (p *Portworx) getDefaultStorageNodesDisaggregatedMode(
 	}
 
 	// This will return a zone map of storage nodes in each zones
-	nodeTypeZoneMap, err := cloudprovider.GetZoneMap(p.k8sClient, util.NodeTypeKey, util.StorageNodeValue)
+	nodeTypeZoneMap, err := cloudprovider.GetZoneMap(p.K8sClient, util.NodeTypeKey, util.StorageNodeValue)
 	if err != nil {
 		return 0, false, err
 	}
@@ -368,7 +368,7 @@ func (p *Portworx) getDefaultStorageNodesDisaggregatedMode(
 		}
 		if prevValue != math.MaxUint64 && prevValue != value {
 			k8sutil.InfoEvent(
-				p.recorder, cluster, util.UnevenStorageNodesReason,
+				p.Recorder, cluster, util.UnevenStorageNodesReason,
 				fmt.Sprintf("Uneven number of storage nodes labelled across zones."+
 					" %v has %v, %v has %v", prevKey, prevValue, key, value),
 			)
@@ -378,14 +378,14 @@ func (p *Portworx) getDefaultStorageNodesDisaggregatedMode(
 	}
 	if totalNodes == 0 {
 		// no node is labelled with portworx.io/node-type
-		nodeTypeZoneMap, err = cloudprovider.GetZoneMap(p.k8sClient, util.NodeTypeKey, util.StoragelessNodeValue)
+		nodeTypeZoneMap, err = cloudprovider.GetZoneMap(p.K8sClient, util.NodeTypeKey, util.StoragelessNodeValue)
 		if err == nil {
 			for _, value := range nodeTypeZoneMap {
 				totalNodes += value
 			}
 			if totalNodes > 0 {
 				k8sutil.InfoEvent(
-					p.recorder, cluster, util.AllStoragelessNodesReason,
+					p.Recorder, cluster, util.AllStoragelessNodesReason,
 					fmt.Sprintf("%v nodes marked as storageless, none marked as storage nodes", totalNodes),
 				)
 				return 0, true, fmt.Errorf("storageless nodes found. None marked as storage node")
@@ -415,7 +415,7 @@ func (p *Portworx) getDefaultMaxStorageNodesPerZone(
 		return uint32(storageNodes), nil
 	}
 
-	zoneMap, err := cloudprovider.GetZoneMap(p.k8sClient, "", "")
+	zoneMap, err := cloudprovider.GetZoneMap(p.K8sClient, "", "")
 	if err != nil {
 		return 0, err
 	}
@@ -541,7 +541,7 @@ func (p *Portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			}
 		}
 
-		if err := SetPortworxDefaults(toUpdate, p.k8sVersion); err != nil {
+		if err := SetPortworxDefaults(toUpdate, p.K8sVersion); err != nil {
 			return err
 		}
 
@@ -862,7 +862,7 @@ func (p *Portworx) PreInstall(cluster *corev1.StorageCluster) error {
 func (p Portworx) validateCleanup(cluster *corev1.StorageCluster) error {
 	cmList := &v1.ConfigMapList{}
 	// list across all namespaces.
-	if err := p.k8sClient.List(context.TODO(), cmList, &client.ListOptions{}); err != nil {
+	if err := p.K8sClient.List(context.TODO(), cmList, &client.ListOptions{}); err != nil {
 		return err
 	}
 
@@ -884,7 +884,7 @@ func (p *Portworx) validateEssentials() error {
 			Namespace: api.NamespaceSystem,
 		}
 		secret := &v1.Secret{}
-		err := p.k8sClient.Get(context.TODO(), resource, secret)
+		err := p.K8sClient.Get(context.TODO(), resource, secret)
 		if errors.IsNotFound(err) {
 			return fmt.Errorf("secret %s/%s should be present to deploy a "+
 				"Portworx Essentials cluster", api.NamespaceSystem, pxutil.EssentialsSecretName)
@@ -971,7 +971,7 @@ func (p *Portworx) GetStorageNodes(
 ) ([]*storageapi.StorageNode, error) {
 	var storageNodes []*storageapi.StorageNode
 	var err error
-	p.sdkConn, storageNodes, err = pxutil.GetStorageNodes(cluster, p.k8sClient, p.sdkConn)
+	p.SdkConn, storageNodes, err = pxutil.GetStorageNodes(cluster, p.K8sClient, p.SdkConn)
 	return storageNodes, err
 
 }
@@ -982,11 +982,11 @@ func (p *Portworx) DeleteStorage(
 	p.deleteComponents(cluster)
 
 	// Close connection to Portworx GRPC server
-	if p.sdkConn != nil {
-		if err := p.sdkConn.Close(); err != nil {
+	if p.SdkConn != nil {
+		if err := p.SdkConn.Close(); err != nil {
 			logrus.Warnf("Failed to close sdk connection: %v", err)
 		}
-		p.sdkConn = nil
+		p.SdkConn = nil
 	}
 
 	if cluster.Spec.DeleteStrategy == nil || !pxutil.IsPortworxEnabled(cluster) {
@@ -1009,7 +1009,7 @@ func (p *Portworx) DeleteStorage(
 		completeMsg = storageClusterUninstallAndWipeMsg
 	}
 
-	u := NewUninstaller(cluster, p.k8sClient)
+	u := NewUninstaller(cluster, p.K8sClient)
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
 	if err != nil && errors.IsNotFound(err) {
 		deleteCondition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypeDelete)
@@ -1021,7 +1021,7 @@ func (p *Portworx) DeleteStorage(
 				Message: completeMsg,
 			}, nil
 		}
-		if err := u.RunNodeWiper(removeData, p.recorder); err != nil {
+		if err := u.RunNodeWiper(removeData, p.Recorder); err != nil {
 			return &corev1.ClusterCondition{
 				Source:  pxutil.PortworxComponentName,
 				Type:    corev1.ClusterConditionTypeDelete,
@@ -1087,7 +1087,7 @@ func (p *Portworx) normalEvent(
 	reason, message string,
 ) {
 	logrus.Info(message)
-	p.recorder.Event(cluster, v1.EventTypeNormal, reason, message)
+	p.Recorder.Event(cluster, v1.EventTypeNormal, reason, message)
 }
 
 func (p *Portworx) warningEvent(
@@ -1095,7 +1095,7 @@ func (p *Portworx) warningEvent(
 	reason, message string,
 ) {
 	logrus.Warn(message)
-	p.recorder.Event(cluster, v1.EventTypeWarning, reason, message)
+	p.Recorder.Event(cluster, v1.EventTypeWarning, reason, message)
 }
 
 func (p *Portworx) storageNodeToCloudSpec(storageNodes []*corev1.StorageNode, cluster *corev1.StorageCluster) *cloudstorage.Config {
@@ -1617,7 +1617,7 @@ func (p *Portworx) setTelemetryDefaults(
 	if err != nil {
 		if pxutil.IsTelemetryEnabled(toUpdate.Spec) {
 			msg := fmt.Sprintf("telemetry will be disabled: %v", err)
-			k8sutil.WarningEvent(p.recorder, toUpdate, util.TelemetryDisabledReason, msg)
+			k8sutil.WarningEvent(p.Recorder, toUpdate, util.TelemetryDisabledReason, msg)
 		}
 		toUpdate.Spec.Monitoring.Telemetry.Enabled = false
 		toUpdate.Spec.Monitoring.Telemetry.Image = ""
@@ -1631,7 +1631,7 @@ func (p *Portworx) setTelemetryDefaults(
 	// * If Arcus is not reachable, registration will fail anyway, or it's an air-gapped cluster, disable telemetry
 	// * If Arcus is reachable, enable telemetry by default
 	secret := &v1.Secret{}
-	err = p.k8sClient.Get(
+	err = p.K8sClient.Get(
 		context.TODO(),
 		types.NamespacedName{
 			Name:      pxutil.TelemetryCertName,
@@ -1647,7 +1647,7 @@ func (p *Portworx) setTelemetryDefaults(
 			toUpdate.Spec.Monitoring.Telemetry.Image = ""
 			toUpdate.Spec.Monitoring.Telemetry.LogUploaderImage = ""
 			msg := "telemetry will be disabled: cannot reach to Pure1"
-			k8sutil.WarningEvent(p.recorder, toUpdate, util.TelemetryDisabledReason, msg)
+			k8sutil.WarningEvent(p.Recorder, toUpdate, util.TelemetryDisabledReason, msg)
 			return nil
 		}
 	} else if err != nil {
@@ -1656,7 +1656,7 @@ func (p *Portworx) setTelemetryDefaults(
 
 	// Set telemetry as enabled if telemetry secret exists or the registration endpoint is reachable
 	if !pxutil.IsTelemetryEnabled(toUpdate.Spec) {
-		k8sutil.InfoEvent(p.recorder, toUpdate, util.TelemetryEnabledReason, "telemetry will be enabled by default")
+		k8sutil.InfoEvent(p.Recorder, toUpdate, util.TelemetryEnabledReason, "telemetry will be enabled by default")
 		toUpdate.Spec.Monitoring.Telemetry.Enabled = true
 	}
 	return nil
@@ -1797,7 +1797,7 @@ func hasGrafanaChanged(cluster *corev1.StorageCluster) bool {
 }
 
 func (p *Portworx) hasKubernetesVersionChanged(cluster *corev1.StorageCluster) bool {
-	if p.k8sVersion == nil {
+	if p.K8sVersion == nil {
 		return false
 	} else if cluster.Status.DesiredImages.KubeControllerManager == "" &&
 		cluster.Status.DesiredImages.KubeScheduler == "" {
@@ -1809,7 +1809,7 @@ func (p *Portworx) hasKubernetesVersionChanged(cluster *corev1.StorageCluster) b
 		parts := strings.Split(img, ":")
 		if len(parts) > 1 {
 			v, err := version.NewVersion(parts[1])
-			if err == nil && !v.Equal(p.k8sVersion) {
+			if err == nil && !v.Equal(p.K8sVersion) {
 				return true
 			}
 		}
@@ -1818,14 +1818,14 @@ func (p *Portworx) hasKubernetesVersionChanged(cluster *corev1.StorageCluster) b
 }
 
 func (p *Portworx) hasPrometheusVersionChanged(cluster *corev1.StorageCluster) bool {
-	return p.k8sVersion != nil &&
-		p.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) &&
+	return p.K8sVersion != nil &&
+		p.K8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) &&
 		cluster.Status.DesiredImages.PrometheusOperator == manifest.DefaultPrometheusOperatorImage
 }
 
 func (p *Portworx) hasGrafanaVersionChanged(cluster *corev1.StorageCluster) bool {
-	return p.k8sVersion != nil &&
-		p.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) &&
+	return p.K8sVersion != nil &&
+		p.K8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) &&
 		cluster.Status.DesiredImages.Grafana == manifest.DefaultGrafanaImage
 }
 

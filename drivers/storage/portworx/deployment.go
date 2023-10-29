@@ -166,10 +166,10 @@ func (p *Portworx) generateCloudStorageSpecs(
 		}
 
 		cloudStorageManager := &portworxCloudStorage{
-			p.zoneToInstancesMap,
-			cloudops.ProviderType(p.cloudProvider),
+			p.ZoneToInstancesMap,
+			cloudops.ProviderType(p.CloudProvider),
 			cluster.Namespace,
-			p.k8sClient,
+			p.K8sClient,
 			metav1.NewControllerRef(cluster, pxutil.StorageClusterKind()),
 		}
 
@@ -178,7 +178,7 @@ func (p *Portworx) generateCloudStorageSpecs(
 			config := &cloudstorage.Config{
 				StorageInstancesPerZone: instancesPerZone,
 			}
-			storageInstancesCount := uint64(len(p.zoneToInstancesMap)) * instancesPerZone
+			storageInstancesCount := uint64(len(p.ZoneToInstancesMap)) * instancesPerZone
 			if storageInstancesCount == 0 {
 				return nil, fmt.Errorf("unable to get total number of storage instances")
 			}
@@ -212,8 +212,8 @@ func (p *Portworx) generateCloudStorageSpecs(
 func (p *Portworx) getNodeByName(nodeName string) (*v1.Node, error) {
 	node := &v1.Node{}
 	var err error
-	if p != nil && p.k8sClient != nil {
-		err = p.k8sClient.Get(
+	if p != nil && p.K8sClient != nil {
+		err = p.K8sClient.Get(
 			context.TODO(),
 			types.NamespacedName{
 				Name: nodeName,
@@ -443,13 +443,13 @@ func (p *Portworx) createStorageNode(cluster *corev1.StorageCluster, nodeName st
 	configureStorageNodeSpec(storageNode, cloudConfig)
 	if cluster.Status.Storage.StorageNodesPerZone != cloudConfig.StorageInstancesPerZone {
 		cluster.Status.Storage.StorageNodesPerZone = cloudConfig.StorageInstancesPerZone
-		err := k8sutil.UpdateStorageClusterStatus(p.k8sClient, cluster)
+		err := k8sutil.UpdateStorageClusterStatus(p.K8sClient, cluster)
 		if err != nil {
 			return err
 		}
 	}
 
-	err := p.k8sClient.Create(context.TODO(), storageNode)
+	err := p.K8sClient.Create(context.TODO(), storageNode)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
@@ -461,7 +461,7 @@ func (p *Portworx) storageNodesList(cluster *corev1.StorageCluster) ([]*corev1.S
 	nodes := &corev1.StorageNodeList{}
 	storageNodes := make([]*corev1.StorageNode, 0)
 
-	err := p.k8sClient.List(context.TODO(), nodes,
+	err := p.K8sClient.List(context.TODO(), nodes,
 		&client.ListOptions{Namespace: cluster.Namespace})
 
 	if err != nil {

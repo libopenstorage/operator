@@ -84,7 +84,7 @@ func TestInit(t *testing.T) {
 	// Valid k8s client
 	err = driver.Init(k8sClient, scheme, recorder)
 	require.NoError(t, err)
-	require.Equal(t, k8sClient, driver.k8sClient)
+	require.Equal(t, k8sClient, driver.K8sClient)
 }
 
 func TestValidate(t *testing.T) {
@@ -2043,7 +2043,7 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
 		GitVersion: "v1.24.0",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.Equal(t, expectedPlacement, cluster.Spec.Placement)
@@ -2090,7 +2090,7 @@ func TestSetDefaultsOnStorageClusterWithPortworxDisabled(t *testing.T) {
 func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	driver := Portworx{
-		k8sClient: testutil.FakeK8sClient(),
+		K8sClient: testutil.FakeK8sClient(),
 	}
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3390,7 +3390,7 @@ func TestStorageClusterDefaultsForNodeSpecsWithStorage(t *testing.T) {
 
 func TestStorageClusterDefaultsForNodeSpecsWithCloudStorage(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	driver := Portworx{k8sClient: testutil.FakeK8sClient()}
+	driver := Portworx{K8sClient: testutil.FakeK8sClient()}
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -4187,8 +4187,8 @@ func TestUpdateDeprecatedClusterStatus(t *testing.T) {
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -4287,8 +4287,8 @@ func TestUpdateClusterStatus(t *testing.T) {
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -4601,8 +4601,8 @@ func TestPortworxInstallCondition(t *testing.T) {
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -4824,8 +4824,8 @@ func TestPortworxUpdateCondition(t *testing.T) {
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -5155,7 +5155,7 @@ func TestUpdateClusterStatusForNodes(t *testing.T) {
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
+		K8sClient: k8sClient,
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -5541,7 +5541,7 @@ func TestUpdateClusterStatusForNodeVersions(t *testing.T) {
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
+		K8sClient: k8sClient,
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -5634,7 +5634,7 @@ func TestUpdateClusterStatusWithoutPortworxService(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient()
 
 	driver := Portworx{
-		k8sClient: k8sClient,
+		K8sClient: k8sClient,
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -5723,7 +5723,7 @@ func TestUpdateClusterStatusServiceWithoutClusterIP(t *testing.T) {
 	})
 
 	driver := Portworx{
-		k8sClient: k8sClient,
+		K8sClient: k8sClient,
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -5792,7 +5792,7 @@ func TestUpdateClusterStatusServiceGrpcServerError(t *testing.T) {
 	})
 
 	driver := Portworx{
-		k8sClient: k8sClient,
+		K8sClient: k8sClient,
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -5892,7 +5892,7 @@ func TestUpdateClusterStatusInspectClusterFailure(t *testing.T) {
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
+		K8sClient: k8sClient,
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -6034,7 +6034,7 @@ func TestUpdateClusterStatusEnumerateNodesFailure(t *testing.T) {
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
+		K8sClient: k8sClient,
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -6240,8 +6240,8 @@ func TestUpdateClusterStatusShouldUpdateStatusIfChanged(t *testing.T) {
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -6365,8 +6365,8 @@ func TestUpdateClusterStatusShouldUpdateNodePhaseBasedOnConditions(t *testing.T)
 	})
 
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -6647,8 +6647,8 @@ func TestUpdateClusterStatusWithoutSchedulerNodeName(t *testing.T) {
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(0),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(0),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -6859,8 +6859,8 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeForNonExistingNodes(t *testin
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -6974,8 +6974,8 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExists(t *testing.T) 
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -7277,8 +7277,8 @@ func TestUpdateClusterStatusShouldDeleteStorageNodeIfSchedulerNodeNameNotPresent
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -7421,8 +7421,8 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -7971,14 +7971,14 @@ func TestDeleteClusterShouldResetSDKConnection(t *testing.T) {
 	_, err = driver.GetStorageNodes(cluster)
 	require.NoError(t, err)
 
-	require.NotNil(t, driver.sdkConn)
+	require.NotNil(t, driver.SdkConn)
 
 	// SDK connection should be closed on StorageCluster deletion
 	cluster.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	_, err = driver.DeleteStorage(cluster)
 	require.NoError(t, err)
 
-	require.Nil(t, driver.sdkConn)
+	require.Nil(t, driver.SdkConn)
 }
 
 func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
@@ -9198,7 +9198,7 @@ func testDeleteEssentialSecret(t *testing.T, wipe bool) {
 	}
 	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, essentialSecret)
 	driver := Portworx{
-		k8sClient: k8sClient,
+		K8sClient: k8sClient,
 	}
 
 	condition, err := driver.DeleteStorage(cluster)
@@ -9361,7 +9361,7 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 	}
 	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap, pureConfigMap)
 	driver := Portworx{
-		k8sClient: k8sClient,
+		K8sClient: k8sClient,
 	}
 
 	configMaps := &v1.ConfigMapList{}
@@ -9492,7 +9492,7 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbData(t *testing.T
 
 	k8sClient := fakeClientWithWiperPod(cluster.Namespace)
 	driver := Portworx{
-		k8sClient: k8sClient,
+		K8sClient: k8sClient,
 	}
 
 	// Test etcd v3 without http/https
@@ -9678,7 +9678,7 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveKvdbDataWhenOverwrite
 
 	k8sClient := fakeClientWithWiperPod(cluster.Namespace)
 	driver := Portworx{
-		k8sClient: k8sClient,
+		K8sClient: k8sClient,
 	}
 
 	// Test etcd v3 without http/https
@@ -9731,7 +9731,7 @@ func TestDeleteClusterWithUninstallWipeStrategyFailedRemoveKvdbData(t *testing.T
 
 	k8sClient := fakeClientWithWiperPod(cluster.Namespace)
 	driver := Portworx{
-		k8sClient: k8sClient,
+		K8sClient: k8sClient,
 	}
 
 	// Fail if no kvdb endpoints given
@@ -9892,8 +9892,8 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 		},
 	})
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -9950,7 +9950,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 		},
 	}
 
-	err = driver.k8sClient.Create(context.TODO(), cm)
+	err = driver.K8sClient.Create(context.TODO(), cm)
 	require.NoError(t, err)
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
@@ -9963,7 +9963,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	for _, n := range []string{"node-one", "node-two"} {
 		found := false
 		checkStorageNode := &corev1.StorageNode{}
-		err = driver.k8sClient.Get(context.TODO(), client.ObjectKey{
+		err = driver.K8sClient.Get(context.TODO(), client.ObjectKey{
 			Name:      n,
 			Namespace: clusterNS,
 		}, checkStorageNode)
@@ -9981,7 +9981,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 
 	// TEST 2: Remove KVDB condition
 	cm.Data[pxEntriesKey] = `[{"IP":"10.0.1.2","ID":"node-three","Index":0,"State":3,"Type":0,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-four","Index":2,"State":0,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`
-	err = driver.k8sClient.Update(context.TODO(), cm)
+	err = driver.K8sClient.Update(context.TODO(), cm)
 	require.NoError(t, err)
 	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
@@ -9989,7 +9989,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	for _, n := range []string{"node-one", "node-two"} {
 		found := false
 		checkStorageNode := &corev1.StorageNode{}
-		err = driver.k8sClient.Get(context.TODO(), client.ObjectKey{
+		err = driver.K8sClient.Get(context.TODO(), client.ObjectKey{
 			Name:      n,
 			Namespace: clusterNS,
 		}, checkStorageNode)
@@ -10053,7 +10053,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 		cm.Data[pxEntriesKey] = fmt.Sprintf(
 			`[{"IP":"10.0.1.2","ID":"node-one","State":%d,"Type":%d,"Version":"v2","peerport":"9018","clientport":"9019"}]`,
 			kvdbNodeStateTest.state, kvdbNodeStateTest.nodeType)
-		err = driver.k8sClient.Update(context.TODO(), cm)
+		err = driver.K8sClient.Update(context.TODO(), cm)
 		require.NoError(t, err)
 		err = driver.UpdateStorageClusterStatus(cluster, "")
 		require.NoError(t, err)
@@ -10064,7 +10064,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			conditionMsg string
 		)
 		checkStorageNode := &corev1.StorageNode{}
-		err = driver.k8sClient.Get(context.TODO(), client.ObjectKey{
+		err = driver.K8sClient.Get(context.TODO(), client.ObjectKey{
 			Name:      "node-one",
 			Namespace: clusterNS,
 		}, checkStorageNode)
@@ -10085,7 +10085,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	}
 
 	// TEST 5: config map not found
-	err = driver.k8sClient.Delete(context.TODO(), cm)
+	err = driver.K8sClient.Delete(context.TODO(), cm)
 	require.NoError(t, err)
 	err = driver.UpdateStorageClusterStatus(cluster, "")
 	require.NoError(t, err)
@@ -10135,8 +10135,8 @@ func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
 		},
 	})
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -10196,7 +10196,7 @@ func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
 		},
 	}
 
-	err = driver.k8sClient.Create(context.TODO(), cm)
+	err = driver.K8sClient.Create(context.TODO(), cm)
 	require.NoError(t, err)
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
@@ -10209,7 +10209,7 @@ func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
 	for _, n := range []string{"node-one", "node-two"} {
 		found := false
 		checkStorageNode := &corev1.StorageNode{}
-		err = driver.k8sClient.Get(context.TODO(), client.ObjectKey{
+		err = driver.K8sClient.Get(context.TODO(), client.ObjectKey{
 			Name:      n,
 			Namespace: clusterNS,
 		}, checkStorageNode)
@@ -10601,8 +10601,8 @@ func TestGetStorageNodes(t *testing.T) {
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -10673,8 +10673,8 @@ func TestGetStorageNodesWithConnectionErrors(t *testing.T) {
 
 	// Create driver object with the fake k8s client
 	driver := Portworx{
-		k8sClient: k8sClient,
-		recorder:  record.NewFakeRecorder(10),
+		K8sClient: k8sClient,
+		Recorder:  record.NewFakeRecorder(10),
 	}
 
 	cluster := &corev1.StorageCluster{
@@ -10921,7 +10921,7 @@ func testStoragelessNodesDisaggregatedMode(t *testing.T, expectedValue uint32, s
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
-	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.k8sClient, "", "")
+	driver.ZoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.K8sClient, "", "")
 	require.NoError(t, err)
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -10969,7 +10969,7 @@ func TestDisaggregatedMissingLabels(t *testing.T) {
 	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
-	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.k8sClient, "", "")
+	driver.ZoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.K8sClient, "", "")
 	require.NoError(t, err)
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -11087,7 +11087,7 @@ func TestHasKubernetesVersionChanged(t *testing.T) {
 	}
 	assert.False(t, driver.hasKubernetesVersionChanged(cluster))
 
-	driver.k8sVersion = dummyVer
+	driver.K8sVersion = dummyVer
 	assert.False(t, driver.hasKubernetesVersionChanged(cluster))
 
 	cluster.Status.DesiredImages.KubeControllerManager = "foo:1.2.3"
@@ -11132,7 +11132,7 @@ func testClusterDefaultsMaxStorageNodesPerZoneCase1(t *testing.T) {
 	k8sClient, _ := getK8sClientWithNodesZones(t, 6, 1, cluster)
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
-	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.k8sClient, "", "")
+	driver.ZoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.K8sClient, "", "")
 	require.NoError(t, err)
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -11165,7 +11165,7 @@ func testClusterDefaultsMaxStorageNodesPerZone(t *testing.T, expectedValue uint3
 	k8sClient, _ := getK8sClientWithNodesZones(t, totalNodes, zones, cluster)
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
-	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.k8sClient, "", "")
+	driver.ZoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.K8sClient, "", "")
 	require.NoError(t, err)
 
 	cluster.Spec.CloudStorage = &corev1.CloudStorageSpec{}
@@ -11205,7 +11205,7 @@ func testClusterDefaultsMaxStorageNodesPerZoneValueSpecified(t *testing.T) {
 	k8sClient, _ := getK8sClientWithNodesZones(t, 30, 3, cluster)
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
-	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.k8sClient, "", "")
+	driver.ZoneToInstancesMap, err = cloudprovider.GetZoneMap(driver.K8sClient, "", "")
 	require.NoError(t, err)
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)

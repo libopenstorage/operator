@@ -1531,10 +1531,10 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 
 	zoneToInstancesMap := map[string]uint64{"a": 3, "b": 3, "c": 2}
 	driver := Portworx{
-		k8sClient:          k8sClient,
-		recorder:           record.NewFakeRecorder(0),
-		zoneToInstancesMap: zoneToInstancesMap,
-		cloudProvider:      "mock",
+		K8sClient:          k8sClient,
+		Recorder:           record.NewFakeRecorder(0),
+		ZoneToInstancesMap: zoneToInstancesMap,
+		CloudProvider:      "mock",
 	}
 
 	expectedArgs := []string{
@@ -1927,7 +1927,7 @@ func TestPodSpecWithCloudStorageSpecOnEKS(t *testing.T) {
 	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
-	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(k8sClient, "", "")
+	driver.ZoneToInstancesMap, err = cloudprovider.GetZoneMap(k8sClient, "", "")
 	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
@@ -2179,10 +2179,10 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 
 	zoneToInstancesMap := map[string]uint64{"a": 3, "b": 3, "c": 2}
 	driver := Portworx{
-		k8sClient:          k8sClient,
-		recorder:           record.NewFakeRecorder(0),
-		zoneToInstancesMap: zoneToInstancesMap,
-		cloudProvider:      "mock",
+		K8sClient:          k8sClient,
+		Recorder:           record.NewFakeRecorder(0),
+		ZoneToInstancesMap: zoneToInstancesMap,
+		CloudProvider:      "mock",
 	}
 
 	inputInstancesPerZone := uint64(2)
@@ -3094,7 +3094,7 @@ func TestPodSpecForBottleRocketAMI(t *testing.T) {
 		},
 	}
 	driver := Portworx{
-		k8sClient: testutil.FakeK8sClient(
+		K8sClient: testutil.FakeK8sClient(
 			&v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      nodeName,
@@ -4103,10 +4103,10 @@ func TestStorageNodeConfig(t *testing.T) {
 
 	zoneToInstancesMap := map[string]uint64{"a": 3, "b": 3, "c": 2}
 	driver := Portworx{
-		k8sClient:          k8sClient,
-		recorder:           record.NewFakeRecorder(0),
-		zoneToInstancesMap: zoneToInstancesMap,
-		cloudProvider:      "mock",
+		K8sClient:          k8sClient,
+		Recorder:           record.NewFakeRecorder(0),
+		ZoneToInstancesMap: zoneToInstancesMap,
+		CloudProvider:      "mock",
 	}
 
 	// Max storage nodes

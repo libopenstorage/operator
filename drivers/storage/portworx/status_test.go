@@ -164,9 +164,9 @@ func TestSetupContextWithToken(t *testing.T) {
 			}
 			// setup context and assert
 			p := Portworx{
-				k8sClient: k8sClient,
+				K8sClient: k8sClient,
 			}
-			ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
+			ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.K8sClient)
 			if tc.expectError {
 				assert.Error(t, err)
 				assert.EqualError(t, err, tc.expectedError)
@@ -517,7 +517,7 @@ func TestUpdateStorageNodePhase(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			driver := Portworx{
-				k8sClient: k8sClient,
+				K8sClient: k8sClient,
 			}
 			err := k8sClient.Create(context.TODO(), tc.storageNode, &client.CreateOptions{})
 			require.NoError(t, err)

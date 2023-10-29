@@ -425,11 +425,11 @@ func TestPxRepoInstallUninstall(t *testing.T) {
 	require.NoError(t, err)
 
 	service := &v1.Service{}
-	err = testutil.Get(driver.k8sClient, service, component.PxRepoServiceName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, service, component.PxRepoServiceName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
 	// Enable the service
@@ -437,10 +437,10 @@ func TestPxRepoInstallUninstall(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(driver.k8sClient, service, component.PxRepoServiceName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, service, component.PxRepoServiceName, cluster.Namespace)
 	require.NoError(t, err)
 
-	err = testutil.Get(driver.k8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Change the deployment
@@ -448,7 +448,7 @@ func TestPxRepoInstallUninstall(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(driver.k8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Disable the service
@@ -456,10 +456,10 @@ func TestPxRepoInstallUninstall(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	err = testutil.Get(driver.k8sClient, service, component.PxRepoServiceName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, service, component.PxRepoServiceName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
-	err = testutil.Get(driver.k8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.PxRepoDeploymentName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 }
 
@@ -2403,7 +2403,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.6",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 	require.NoError(t, err)
 
@@ -2422,7 +2422,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.17.10",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
@@ -2440,7 +2440,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.17.9",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
@@ -2458,7 +2458,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.16.14",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
@@ -2476,7 +2476,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.16.13",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
@@ -5675,7 +5675,7 @@ func TestCSIInstallWithk8s1_13(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 	cluster.Spec.Image = "portworx/image:2.2"
 
@@ -6123,7 +6123,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.99",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
 	go func() {
@@ -6151,7 +6151,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.99",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
@@ -6167,7 +6167,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
@@ -6326,7 +6326,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.16.0",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
@@ -6346,7 +6346,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.17.0",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
@@ -6368,7 +6368,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 	cluster.Spec.Env[0].Value = "false"
 
@@ -6390,7 +6390,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 	cluster.Spec.Env[0].Value = "invalid"
 
@@ -6609,7 +6609,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
@@ -6698,7 +6698,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
@@ -7534,7 +7534,7 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
+	driver.K8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
 	err = driver.PreInstall(cluster)
@@ -14155,7 +14155,7 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 
 	// CSI deployment topology constraints
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	expectedConstraints := []v1.TopologySpreadConstraint{
 		{
@@ -14173,7 +14173,7 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 
 	// PVC controller deployment topology constraints
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	expectedConstraints = []v1.TopologySpreadConstraint{
 		{
@@ -14223,13 +14223,13 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 
 	// CSI deployment topology constraints
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, deployment.Spec.Template.Spec.TopologySpreadConstraints)
 
 	// PVC controller deployment topology constraints
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.PVCDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, deployment.Spec.Template.Spec.TopologySpreadConstraints)
 }
@@ -14681,7 +14681,7 @@ func TestCSISnapController(t *testing.T) {
 
 	expectedDeployment := testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s116.yaml")
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
@@ -14718,7 +14718,7 @@ func TestCSISnapController(t *testing.T) {
 
 	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120.yaml")
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
@@ -14753,7 +14753,7 @@ func TestCSISnapController(t *testing.T) {
 
 	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120_without_snapcontroller.yaml")
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
@@ -14788,7 +14788,7 @@ func TestCSISnapController(t *testing.T) {
 
 	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120.yaml")
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
@@ -14834,7 +14834,7 @@ func TestCSISnapController(t *testing.T) {
 
 	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120_without_snapcontroller.yaml")
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
@@ -14880,12 +14880,12 @@ func TestCSISnapController(t *testing.T) {
 
 	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120_without_snapcontroller.yaml")
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
 	// Delete the snapshot controller and restart operator
-	err = testutil.Delete(driver.k8sClient, snapshotControllerPod)
+	err = testutil.Delete(driver.K8sClient, snapshotControllerPod)
 	require.NoError(t, err)
 	reregisterComponents()
 	driver = Portworx{}
@@ -14904,7 +14904,7 @@ func TestCSISnapController(t *testing.T) {
 
 	expectedDeployment = testutil.GetExpectedDeployment(t, "csiDeployment_1.0_k8s120.yaml")
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
@@ -14937,7 +14937,7 @@ func TestCSISnapController(t *testing.T) {
 	require.NotEmpty(t, cluster.Status.DesiredImages.CSISnapshotController)
 
 	deployment = &appsv1.Deployment{}
-	err = testutil.Get(driver.k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
+	err = testutil.Get(driver.K8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 }
