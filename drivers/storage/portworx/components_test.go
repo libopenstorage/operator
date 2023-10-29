@@ -115,7 +115,7 @@ func TestBasicComponentsInstallWithPreTLSPx(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -205,7 +205,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -402,7 +402,7 @@ func TestPxRepoInstallUninstall(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -467,7 +467,7 @@ func TestBasicInstallWithPortworxDisabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -527,7 +527,7 @@ func TestBasicInstallWithInternalKVDBDisabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -559,7 +559,7 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -635,7 +635,7 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -706,7 +706,7 @@ func TestPortworxProxyIsNotDeployedWhenClusterInKubeSystem(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -746,7 +746,7 @@ func TestPortworxProxyIsNotDeployedWhenUsingDefaultPort(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -781,7 +781,7 @@ func TestPortworxProxyIsNotDeployedWhenDisabledExplicitly(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -868,7 +868,7 @@ func TestPortworxWithCustomServiceAccount(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -972,7 +972,7 @@ func TestDisablePortworx(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -1102,7 +1102,7 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 	}
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1292,7 +1292,7 @@ func TestDefaultStorageClassesWithoutStork(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1352,7 +1352,7 @@ func TestDefaultStorageClassesWithPortworxDisabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1390,7 +1390,7 @@ func TestDefaultStorageClassesWhenDisabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1439,7 +1439,7 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1543,7 +1543,7 @@ func TestPVCControllerInstall(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1567,7 +1567,7 @@ func TestPVCControllerInstallWithNonPriviliged(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1599,7 +1599,7 @@ func TestPVCControllerInstallWithK8s1_24(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1636,7 +1636,7 @@ func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1692,7 +1692,7 @@ func TestPVCControllerWithInvalidValue(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1730,7 +1730,7 @@ func TestPVCControllerInstallInKubeSystemNamespace(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1770,7 +1770,7 @@ func TestPVCControllerInstallInNonKubeSystemNamespace(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1829,7 +1829,7 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1863,7 +1863,7 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1897,7 +1897,7 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1931,7 +1931,7 @@ func TestPVCControllerInstallForOKE(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -1965,7 +1965,7 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2008,7 +2008,7 @@ func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2052,7 +2052,7 @@ func TestPVCControllerInstallWithPortworxDisabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2182,7 +2182,7 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2223,7 +2223,7 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
@@ -2251,7 +2251,7 @@ func TestPVCControllerCustomPorts(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2325,7 +2325,7 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2374,7 +2374,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	}
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2496,7 +2496,7 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2538,7 +2538,7 @@ func TestLighthouseInstall(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2569,7 +2569,7 @@ func TestLighthouseInstallWithNonPrivileged(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2686,7 +2686,7 @@ func TestLighthouseServiceTypeForAKS(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2722,7 +2722,7 @@ func TestLighthouseServiceTypeForGKE(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2758,7 +2758,7 @@ func TestLighthouseServiceTypeForEKS(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2794,7 +2794,7 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2862,7 +2862,7 @@ func TestLighthouseWithoutImage(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
@@ -2901,7 +2901,7 @@ func TestLighthouseWithDesiredImage(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2947,7 +2947,7 @@ func TestLighthouseImageChange(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -2989,7 +2989,7 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -3036,7 +3036,7 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -3083,7 +3083,7 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -3122,7 +3122,7 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -3178,7 +3178,7 @@ func TestAutopilotInstall(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -3311,7 +3311,7 @@ func TestAutopilotInstall(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient = testutil.FakeK8sClient()
-	driver = portworx{}
+	driver = Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -3338,7 +3338,7 @@ func TestAutopilotInstallIncorrectSpec(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -3414,7 +3414,7 @@ func TestAutopilotWithoutImage(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
@@ -3455,7 +3455,7 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(0)
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
@@ -3507,7 +3507,7 @@ func TestAutopilotWithTLSEnabled(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
@@ -3870,7 +3870,7 @@ func TestAutopilotWithDesiredImage(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -3916,7 +3916,7 @@ func TestAutopilotImageChange(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -3958,7 +3958,7 @@ func TestAutopilotArgumentsChange(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -4014,7 +4014,7 @@ func TestAutopilotConfigArgumentsChange(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -4067,7 +4067,7 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -4134,7 +4134,7 @@ func TestAutopilotResources(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -4209,7 +4209,7 @@ func TestAutopilotCPUChange(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -4256,7 +4256,7 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
@@ -4288,7 +4288,7 @@ func TestAutopilotSecurityContext(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
@@ -4325,7 +4325,7 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -4513,7 +4513,7 @@ func validateAuthSecurityInstall(t *testing.T, cluster *corev1.StorageCluster) {
 	k8sClient := testutil.FakeK8sClient()
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
-	driver := portworx{}
+	driver := Portworx{}
 	recorder := record.NewFakeRecorder(100)
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
@@ -4733,7 +4733,7 @@ func TestTLSSpecValidation(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
@@ -4751,7 +4751,7 @@ func TestTLSSpecValidation(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	recorder = record.NewFakeRecorder(10)
-	driver = portworx{}
+	driver = Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
@@ -4853,7 +4853,7 @@ func validateThatWarningEventIsRaisedOnPreinstall(t *testing.T, cluster *corev1.
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
@@ -4894,7 +4894,7 @@ func validateSecurityTokenRefreshOnUpdate(t *testing.T, cluster *corev1.StorageC
 	k8sClient := testutil.FakeK8sClient()
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 
@@ -5045,7 +5045,7 @@ func TestSecuritySkipAnnotationIsAdded(t *testing.T) {
 	k8sClient := testutil.FakeK8sClient(sharedSecret, systemSecret, adminToken, userToken)
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 
@@ -5128,7 +5128,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 	component.DeregisterAllComponents()
 	component.RegisterAuthComponent()
 
-	driver := portworx{}
+	driver := Portworx{}
 	recorder := record.NewFakeRecorder(10)
 	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
@@ -5264,7 +5264,7 @@ func TestDisableSecurity(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -5321,7 +5321,7 @@ func TestCSIInstallDisable(t *testing.T) {
 	}
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -5381,7 +5381,7 @@ func TestCSIInstall(t *testing.T) {
 	}
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
 	require.NoError(t, err)
 
@@ -5441,7 +5441,7 @@ func TestCSIInstallNonPrivileged(t *testing.T) {
 	}
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
 	require.NoError(t, err)
 
@@ -5597,7 +5597,7 @@ func TestCSIInstallWithk8s1_13(t *testing.T) {
 	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -5717,7 +5717,7 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -5826,7 +5826,7 @@ func TestCSIInstallEphemeralWithK8s1_17VersionAndPX2_5(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -5878,7 +5878,7 @@ func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -5950,7 +5950,7 @@ func TestCSIInstallWithk8s1_21_px210(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -6004,7 +6004,7 @@ func TestCSIInstallWithPKS(t *testing.T) {
 	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -6077,7 +6077,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	}
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -6187,7 +6187,7 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 	}
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -6255,7 +6255,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -6418,7 +6418,7 @@ func TestCSIInstallWithTopology(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -6490,7 +6490,7 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 	}
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -6533,7 +6533,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -6648,7 +6648,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -6732,7 +6732,7 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	nodeName := "testNode"
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -6836,7 +6836,7 @@ func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -6972,7 +6972,7 @@ func TestPrometheusInstall(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -7206,7 +7206,7 @@ func TestGrafanaInstall(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -7315,7 +7315,7 @@ func TestCompleteInstallDuringMigration(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
 	require.NoError(t, err)
 
@@ -7424,7 +7424,7 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -7559,7 +7559,7 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -8146,7 +8146,7 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -8289,7 +8289,7 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -8983,7 +8983,7 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 	require.NoError(t, err)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -9154,7 +9154,7 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -9576,7 +9576,7 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -10101,7 +10101,7 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -10499,7 +10499,7 @@ func TestRemovePVCController(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -10560,7 +10560,7 @@ func TestDisablePVCController(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -10620,7 +10620,7 @@ func TestRemoveLighthouse(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -10691,7 +10691,7 @@ func TestDisableLighthouse(t *testing.T) {
 	// Set fake kubernetes client for k8s version
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -10761,7 +10761,7 @@ func TestDisableLighthouse(t *testing.T) {
 func TestRemoveAutopilot(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -10830,7 +10830,7 @@ func TestRemoveAutopilot(t *testing.T) {
 func TestDisableAutopilot(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -10905,7 +10905,7 @@ func TestDisableCSI_1_0(t *testing.T) {
 	}
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -11014,7 +11014,7 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -11114,7 +11114,7 @@ func TestDisableMonitoring(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -11182,7 +11182,7 @@ func TestDisableMonitoring(t *testing.T) {
 func TestRemovePrometheus(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -11287,7 +11287,7 @@ func TestRemovePrometheus(t *testing.T) {
 func TestDisablePrometheus(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -11453,7 +11453,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	component.DeregisterAllComponents()
 	component.RegisterDisruptionBudgetComponent()
 
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -11656,7 +11656,7 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	component.DeregisterAllComponents()
 	component.RegisterDisruptionBudgetComponent()
 
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
@@ -11721,7 +11721,7 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 	component.DeregisterAllComponents()
 	component.RegisterDisruptionBudgetComponent()
 
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -11862,7 +11862,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	component.DeregisterAllComponents()
 	component.RegisterDisruptionBudgetComponent()
 
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -11949,7 +11949,7 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 	component.DeregisterAllComponents()
 	component.RegisterDisruptionBudgetComponent()
 
-	driver := portworx{}
+	driver := Portworx{}
 	k8sClient := testutil.FakeK8sClient(pxService)
 	recorder := record.NewFakeRecorder(1)
 	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
@@ -12078,7 +12078,7 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	component.DeregisterAllComponents()
 	component.RegisterDisruptionBudgetComponent()
 
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -12136,7 +12136,7 @@ func TestSCC(t *testing.T) {
 		},
 	}
 
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -12231,7 +12231,7 @@ func TestPodSecurityPoliciesEnabled(t *testing.T) {
 		},
 	}
 
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -12346,7 +12346,7 @@ func TestRemovePodSecurityPolicies(t *testing.T) {
 		},
 	}
 
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -12434,7 +12434,7 @@ func TestDisablePodSecurityPolicies(t *testing.T) {
 		},
 	}
 
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -12471,7 +12471,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -12667,7 +12667,7 @@ func TestMetricsCollectorIsDisabledForOldPxVersions(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -12728,7 +12728,7 @@ func TestTelemetryCCMProxy(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -12807,7 +12807,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -13064,7 +13064,7 @@ func TestValidateTelemetryEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	recorder := record.NewFakeRecorder(10)
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
@@ -13161,7 +13161,7 @@ func TestSetTelemetryDefaultWithoutCertCreated(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	recorder := record.NewFakeRecorder(10)
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
@@ -13297,7 +13297,7 @@ func TestSetTelemetryDefaultWithCertCreated(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	recorder := record.NewFakeRecorder(10)
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
@@ -13370,7 +13370,7 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	// Deploy px with CCM Java enabled and telemetry image specified
@@ -13560,7 +13560,7 @@ func TestTelemetryCCMGoHTTPProxy(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -13722,7 +13722,7 @@ func TestTelemetryCCMGoHTTPSProxy(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -13884,7 +13884,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{
@@ -13948,7 +13948,7 @@ func TestTelemetryCCMGoRestartPhonehome(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -14027,7 +14027,7 @@ func TestPortworxAPIServiceCustomLabels(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -14131,7 +14131,7 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 	coreops.SetInstance(coreops.New(versionClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient(fakeNode)
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -14199,7 +14199,7 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 	coreops.SetInstance(coreops.New(versionClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -14238,7 +14238,7 @@ func TestServiceCustomAnnotations(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -14419,7 +14419,7 @@ func TestServiceTypeAnnotation(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	startPort := uint32(10001)
@@ -14655,7 +14655,7 @@ func TestCSISnapController(t *testing.T) {
 	}
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -14691,7 +14691,7 @@ func TestCSISnapController(t *testing.T) {
 	}
 	reregisterComponents()
 	k8sClient = testutil.FakeK8sClient()
-	driver = portworx{}
+	driver = Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -14725,7 +14725,7 @@ func TestCSISnapController(t *testing.T) {
 	// TestCase: SnapshotController set to false explicitly
 	reregisterComponents()
 	k8sClient = testutil.FakeK8sClient()
-	driver = portworx{}
+	driver = Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -14760,7 +14760,7 @@ func TestCSISnapController(t *testing.T) {
 	// TestCase: SnapshotController set to true explicitly
 	reregisterComponents()
 	k8sClient = testutil.FakeK8sClient()
-	driver = portworx{}
+	driver = Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -14809,7 +14809,7 @@ func TestCSISnapController(t *testing.T) {
 		},
 	}
 	k8sClient = testutil.FakeK8sClient(snapshotControllerPod)
-	driver = portworx{}
+	driver = Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -14855,7 +14855,7 @@ func TestCSISnapController(t *testing.T) {
 		},
 	}
 	k8sClient = testutil.FakeK8sClient(snapshotControllerPod)
-	driver = portworx{}
+	driver = Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -14888,7 +14888,7 @@ func TestCSISnapController(t *testing.T) {
 	err = testutil.Delete(driver.k8sClient, snapshotControllerPod)
 	require.NoError(t, err)
 	reregisterComponents()
-	driver = portworx{}
+	driver = Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -14922,7 +14922,7 @@ func TestCSISnapController(t *testing.T) {
 	k8sClient = testutil.FakeK8sClient(csiPod, dummyPod)
 	reregisterComponents()
 
-	driver = portworx{}
+	driver = Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -15028,7 +15028,7 @@ func TestInstallOnNonOpenshiftCluster(t *testing.T) {
 
 	k8sClient := testutil.FakeK8sClient()
 
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -15075,7 +15075,7 @@ func TestIsVersionSupportedForSupportedVersionOpenshift(t *testing.T) {
 	err := k8sClient.Create(context.TODO(), operator)
 	require.NoError(t, err)
 
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -15123,7 +15123,7 @@ func TestIsVersionSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 	err := k8sClient.Create(context.TODO(), operator)
 	require.NoError(t, err)
 
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -15170,7 +15170,7 @@ func TestPluginInstallAndUninstall(t *testing.T) {
 	err := k8sClient.Create(context.TODO(), operator)
 	require.NoError(t, err)
 
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{
@@ -15251,7 +15251,7 @@ func TestWindowsComponentEnabled(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -15288,7 +15288,7 @@ func TestWindowsComponentEnabledOnWindowsNodeWithK8s124(t *testing.T) {
 	cluster := &corev1.StorageCluster{}
 	windowsComponent, _ := component.Get(component.WindowsComponentName)
 
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -15334,7 +15334,7 @@ func TestWindowsComponentEnabledWhenCsiDisabled(t *testing.T) {
 
 	windowsComponent, _ := component.Get(component.WindowsComponentName)
 
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -15380,7 +15380,7 @@ func TestWindowsComponentEnabledOnWindowsNodeWithK8s125(t *testing.T) {
 
 	windowsComponent, _ := component.Get(component.WindowsComponentName)
 
-	driver := portworx{}
+	driver := Portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -15422,7 +15422,7 @@ func TestWindowsComponentInstallAndUninstall(t *testing.T) {
 	err := k8sClient.Create(context.TODO(), node)
 	require.NoError(t, err)
 
-	driver := portworx{}
+	driver := Portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 	cluster := &corev1.StorageCluster{

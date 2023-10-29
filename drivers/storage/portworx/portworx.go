@@ -56,7 +56,7 @@ var (
 	ErrNodeListEmpty = stderr.New("no nodes were available for px installation")
 )
 
-type portworx struct {
+type Portworx struct {
 	k8sClient          client.Client
 	k8sVersion         *version.Version
 	scheme             *runtime.Scheme
@@ -66,11 +66,11 @@ type portworx struct {
 	cloudProvider      string
 }
 
-func (p *portworx) String() string {
+func (p *Portworx) String() string {
 	return pxutil.DriverName
 }
 
-func (p *portworx) Init(
+func (p *Portworx) Init(
 	k8sClient client.Client,
 	scheme *runtime.Scheme,
 	recorder record.EventRecorder,
@@ -114,7 +114,7 @@ func createSecurityContextForValidate(recorder record.EventRecorder, cluster *co
 	return nil
 }
 
-func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
+func (p *Portworx) Validate(cluster *corev1.StorageCluster) error {
 
 	condition := &corev1.ClusterCondition{
 		Source: pxutil.PortworxComponentName,
@@ -232,23 +232,23 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 	return nil
 }
 
-func (p *portworx) initializeComponents() {
+func (p *Portworx) initializeComponents() {
 	for _, comp := range component.GetAll() {
 		comp.Initialize(p.k8sClient, *p.k8sVersion, p.scheme, p.recorder)
 	}
 }
 
-func (p *portworx) UpdateDriver(info *storage.UpdateDriverInfo) error {
+func (p *Portworx) UpdateDriver(info *storage.UpdateDriverInfo) error {
 	p.zoneToInstancesMap = info.ZoneToInstancesMap
 	p.cloudProvider = info.CloudProvider
 	return nil
 }
 
-func (p *portworx) GetStorkDriverName() (string, error) {
+func (p *Portworx) GetStorkDriverName() (string, error) {
 	return storkDriverName, nil
 }
 
-func (p *portworx) GetStorkEnvMap(cluster *corev1.StorageCluster) map[string]*v1.EnvVar {
+func (p *Portworx) GetStorkEnvMap(cluster *corev1.StorageCluster) map[string]*v1.EnvVar {
 	envMap := map[string]*v1.EnvVar{
 		pxutil.EnvKeyPortworxNamespace: {
 			Name:  pxutil.EnvKeyPortworxNamespace,
@@ -294,11 +294,11 @@ func (p *portworx) GetStorkEnvMap(cluster *corev1.StorageCluster) map[string]*v1
 	return envMap
 }
 
-func (p *portworx) GetSelectorLabels() map[string]string {
+func (p *Portworx) GetSelectorLabels() map[string]string {
 	return pxutil.SelectorLabels()
 }
 
-func (p *portworx) setMaxStorageNodePerZone(toUpdate *corev1.StorageCluster, upgradingPortworx bool) error {
+func (p *Portworx) setMaxStorageNodePerZone(toUpdate *corev1.StorageCluster, upgradingPortworx bool) error {
 	// Set max node per zone
 	// if no value is set for any of max_storage_nodes*, try to see if can set a default value
 	if toUpdate.Spec.CloudStorage != nil &&
@@ -337,7 +337,7 @@ func (p *portworx) setMaxStorageNodePerZone(toUpdate *corev1.StorageCluster, upg
 	return nil
 }
 
-func (p *portworx) getDefaultStorageNodesDisaggregatedMode(
+func (p *Portworx) getDefaultStorageNodesDisaggregatedMode(
 	cluster *corev1.StorageCluster,
 ) (uint64, bool, error) {
 	// Check if ENABLE_ASG_STORAGE_PARTITIONING is set to false. If not, we can look at the 'portworx.io/node-type' label
@@ -398,7 +398,7 @@ func (p *portworx) getDefaultStorageNodesDisaggregatedMode(
 
 // getDefaultMaxStorageNodesPerZone aims to return a good value for MaxStorageNodesPerZone with the
 // intention of having at least 3 nodes in the cluster.
-func (p *portworx) getDefaultMaxStorageNodesPerZone(
+func (p *Portworx) getDefaultMaxStorageNodesPerZone(
 	cluster *corev1.StorageCluster,
 	nodeList *v1.NodeList,
 ) (uint32, error) {
@@ -427,7 +427,7 @@ func (p *portworx) getDefaultMaxStorageNodesPerZone(
 	return uint32(storageNodes), nil
 }
 
-func (p *portworx) getCurrentMaxStorageNodesPerZone(
+func (p *Portworx) getCurrentMaxStorageNodesPerZone(
 	cluster *corev1.StorageCluster,
 	nodeList *v1.NodeList,
 ) (uint32, error) {
@@ -467,7 +467,7 @@ func (p *portworx) getCurrentMaxStorageNodesPerZone(
 	return 0, fmt.Errorf("storage disabled")
 }
 
-func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
+func (p *Portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 
 	if !pxutil.IsFreshInstall(toUpdate) { // Preflight should only run freshInstall
 		return false
@@ -524,7 +524,7 @@ func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 	return false // All else disable
 }
 
-func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) error {
+func (p *Portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) error {
 	if toUpdate.Annotations == nil {
 		toUpdate.Annotations = make(map[string]string)
 	}
@@ -818,7 +818,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	return nil
 }
 
-func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
+func (p *Portworx) PreInstall(cluster *corev1.StorageCluster) error {
 	if err := p.validateCleanup(cluster); err != nil {
 		return err
 	}
@@ -859,7 +859,7 @@ func (p *portworx) PreInstall(cluster *corev1.StorageCluster) error {
 }
 
 // If px was uninstalled and reinstalled, validate if cleanup was done properly.
-func (p portworx) validateCleanup(cluster *corev1.StorageCluster) error {
+func (p Portworx) validateCleanup(cluster *corev1.StorageCluster) error {
 	cmList := &v1.ConfigMapList{}
 	// list across all namespaces.
 	if err := p.k8sClient.List(context.TODO(), cmList, &client.ListOptions{}); err != nil {
@@ -877,7 +877,7 @@ func (p portworx) validateCleanup(cluster *corev1.StorageCluster) error {
 	return nil
 }
 
-func (p *portworx) validateEssentials() error {
+func (p *Portworx) validateEssentials() error {
 	if pxutil.EssentialsEnabled() {
 		resource := types.NamespacedName{
 			Name:      pxutil.EssentialsSecretName,
@@ -905,7 +905,7 @@ func (p *portworx) validateEssentials() error {
 	return nil
 }
 
-func (p *portworx) validateFACDTopology(cluster *corev1.StorageCluster) error {
+func (p *Portworx) validateFACDTopology(cluster *corev1.StorageCluster) error {
 	facdTopologyEnv := ""
 	for _, env := range cluster.Spec.Env {
 		if env.Name == "FACD_TOPOLOGY_ENABLED" {
@@ -927,7 +927,7 @@ func (p *portworx) validateFACDTopology(cluster *corev1.StorageCluster) error {
 	return fmt.Errorf("FACD topology cannot be enabled on existing clusters")
 }
 
-func (p *portworx) IsPodUpdated(
+func (p *Portworx) IsPodUpdated(
 	cluster *corev1.StorageCluster,
 	pod *v1.Pod,
 ) bool {
@@ -966,7 +966,7 @@ func (p *portworx) IsPodUpdated(
 	return true
 }
 
-func (p *portworx) GetStorageNodes(
+func (p *Portworx) GetStorageNodes(
 	cluster *corev1.StorageCluster,
 ) ([]*storageapi.StorageNode, error) {
 	var storageNodes []*storageapi.StorageNode
@@ -976,7 +976,7 @@ func (p *portworx) GetStorageNodes(
 
 }
 
-func (p *portworx) DeleteStorage(
+func (p *Portworx) DeleteStorage(
 	cluster *corev1.StorageCluster,
 ) (*corev1.ClusterCondition, error) {
 	p.deleteComponents(cluster)
@@ -1073,7 +1073,7 @@ func (p *portworx) DeleteStorage(
 	}, nil
 }
 
-func (p *portworx) deleteComponents(cluster *corev1.StorageCluster) {
+func (p *Portworx) deleteComponents(cluster *corev1.StorageCluster) {
 	for _, comp := range component.GetAll() {
 		if err := comp.Delete(cluster); err != nil {
 			msg := fmt.Sprintf("Failed to cleanup %v. %v", comp.Name(), err)
@@ -1082,7 +1082,7 @@ func (p *portworx) deleteComponents(cluster *corev1.StorageCluster) {
 	}
 }
 
-func (p *portworx) normalEvent(
+func (p *Portworx) normalEvent(
 	cluster *corev1.StorageCluster,
 	reason, message string,
 ) {
@@ -1090,7 +1090,7 @@ func (p *portworx) normalEvent(
 	p.recorder.Event(cluster, v1.EventTypeNormal, reason, message)
 }
 
-func (p *portworx) warningEvent(
+func (p *Portworx) warningEvent(
 	cluster *corev1.StorageCluster,
 	reason, message string,
 ) {
@@ -1098,7 +1098,7 @@ func (p *portworx) warningEvent(
 	p.recorder.Event(cluster, v1.EventTypeWarning, reason, message)
 }
 
-func (p *portworx) storageNodeToCloudSpec(storageNodes []*corev1.StorageNode, cluster *corev1.StorageCluster) *cloudstorage.Config {
+func (p *Portworx) storageNodeToCloudSpec(storageNodes []*corev1.StorageNode, cluster *corev1.StorageCluster) *cloudstorage.Config {
 	res := &cloudstorage.Config{
 		CloudStorage:            []cloudstorage.CloudDriveConfig{},
 		StorageInstancesPerZone: cluster.Status.Storage.StorageNodesPerZone,
@@ -1581,7 +1581,7 @@ func setTLSDefaults(
 // 3. PX version incompatible
 // 4. Cannot ping Arcus endpoint when first time enabled (telemetry cert is not created yet)
 // Otherwise it will be enabled by default
-func (p *portworx) setTelemetryDefaults(
+func (p *Portworx) setTelemetryDefaults(
 	toUpdate *corev1.StorageCluster,
 ) error {
 	// Telemetry is disabled explicitly then leave it as is
@@ -1710,7 +1710,7 @@ func removeDeprecatedFields(
 	}
 }
 
-func (p *portworx) hasComponentChanged(cluster *corev1.StorageCluster) bool {
+func (p *Portworx) hasComponentChanged(cluster *corev1.StorageCluster) bool {
 	return hasStorkChanged(cluster) ||
 		hasAutopilotChanged(cluster) ||
 		hasLighthouseChanged(cluster) ||
@@ -1796,7 +1796,7 @@ func hasGrafanaChanged(cluster *corev1.StorageCluster) bool {
 		cluster.Status.DesiredImages.Grafana == ""
 }
 
-func (p *portworx) hasKubernetesVersionChanged(cluster *corev1.StorageCluster) bool {
+func (p *Portworx) hasKubernetesVersionChanged(cluster *corev1.StorageCluster) bool {
 	if p.k8sVersion == nil {
 		return false
 	} else if cluster.Status.DesiredImages.KubeControllerManager == "" &&
@@ -1817,13 +1817,13 @@ func (p *portworx) hasKubernetesVersionChanged(cluster *corev1.StorageCluster) b
 	return false
 }
 
-func (p *portworx) hasPrometheusVersionChanged(cluster *corev1.StorageCluster) bool {
+func (p *Portworx) hasPrometheusVersionChanged(cluster *corev1.StorageCluster) bool {
 	return p.k8sVersion != nil &&
 		p.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) &&
 		cluster.Status.DesiredImages.PrometheusOperator == manifest.DefaultPrometheusOperatorImage
 }
 
-func (p *portworx) hasGrafanaVersionChanged(cluster *corev1.StorageCluster) bool {
+func (p *Portworx) hasGrafanaVersionChanged(cluster *corev1.StorageCluster) bool {
 	return p.k8sVersion != nil &&
 		p.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) &&
 		cluster.Status.DesiredImages.Grafana == manifest.DefaultGrafanaImage
@@ -1904,7 +1904,7 @@ func essentialsArgPresent(args string) bool {
 }
 
 func init() {
-	if err := storage.Register(pxutil.DriverName, &portworx{}); err != nil {
+	if err := storage.Register(pxutil.DriverName, &Portworx{}); err != nil {
 		logrus.Panicf("Error registering portworx storage driver: %v", err)
 	}
 }

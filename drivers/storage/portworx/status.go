@@ -33,7 +33,7 @@ const (
 	pxEntriesKey = "px-entries"
 )
 
-func (p *portworx) UpdateStorageClusterStatus(
+func (p *Portworx) UpdateStorageClusterStatus(
 	cluster *corev1.StorageCluster,
 	clusterHash string,
 ) error {
@@ -126,7 +126,7 @@ func convertDeprecatedClusterStatus(
 	}
 }
 
-func (p *portworx) updatePortworxRuntimeStatus(
+func (p *Portworx) updatePortworxRuntimeStatus(
 	cluster *corev1.StorageCluster,
 ) error {
 	if !pxutil.IsPortworxEnabled(cluster) {
@@ -190,7 +190,7 @@ func (p *portworx) updatePortworxRuntimeStatus(
 	return p.updateStorageNodes(cluster)
 }
 
-func (p *portworx) updatePortworxMigrationStatus(
+func (p *Portworx) updatePortworxMigrationStatus(
 	cluster *corev1.StorageCluster,
 ) {
 	// Mark migration as completed when portworx daemonset got deleted
@@ -215,7 +215,7 @@ func (p *portworx) updatePortworxMigrationStatus(
 // updatePortworxInstallStatus updates portworx install status, expected status: InProgress, Completed
 // If there's 1 node that has Initializing status and portworx is not initialized, mark as PortworxInstallInProgress
 // If all nodes status are updated according to SDK server response and portworx is installing, mark as PortworxInstallCompleted
-func (p *portworx) updatePortworxInstallStatus(
+func (p *Portworx) updatePortworxInstallStatus(
 	cluster *corev1.StorageCluster,
 	storageNodes []corev1.StorageNode,
 ) {
@@ -260,7 +260,7 @@ func (p *portworx) updatePortworxInstallStatus(
 // updatePortworxUpdateStatus updates portworx update status, expected status: InProgress, Completed
 // If there's 1 node that has NodeUpdateInProgress status, mark as PortworxUpdateInProgress
 // If all nodes status are updated according to SDK server response and portworx is updating, mark as PortworxUpdateCompleted
-func (p *portworx) updatePortworxUpdateStatus(
+func (p *Portworx) updatePortworxUpdateStatus(
 	cluster *corev1.StorageCluster,
 	storageNodes []corev1.StorageNode,
 	clusterHash string,
@@ -379,7 +379,7 @@ func getStorageClusterState(
 	return corev1.ClusterStateUnknown
 }
 
-func GetKvdbMap(k8sClient client.Client,
+func (p *Portworx) getKvdbMap(
 	cluster *corev1.StorageCluster,
 ) map[string]*kvdb_api.BootstrapEntry {
 	// If cluster is running internal kvdb, get current bootstrap nodes
@@ -390,7 +390,7 @@ func GetKvdbMap(k8sClient client.Client,
 		cmName := fmt.Sprintf("%s%s", pxutil.InternalEtcdConfigMapPrefix, strippedClusterName)
 
 		cm := &v1.ConfigMap{}
-		err := k8sClient.Get(context.TODO(), types.NamespacedName{
+		err := p.k8sClient.Get(context.TODO(), types.NamespacedName{
 			Name:      cmName,
 			Namespace: bootstrapCloudDriveNamespace,
 		}, cm)
@@ -410,7 +410,7 @@ func GetKvdbMap(k8sClient client.Client,
 	return kvdbNodeMap
 }
 
-func (p *portworx) updateStorageNodes(
+func (p *Portworx) updateStorageNodes(
 	cluster *corev1.StorageCluster,
 ) error {
 	nodeClient := api.NewOpenStorageNodeClient(p.sdkConn)
@@ -427,7 +427,7 @@ func (p *portworx) updateStorageNodes(
 		return fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
-	kvdbNodeMap := GetKvdbMap(p.k8sClient, cluster)
+	kvdbNodeMap := p.getKvdbMap(cluster)
 	nodesToPods, err := p.getNodesToPortworxPods(cluster)
 	if err != nil {
 		return err
@@ -476,7 +476,7 @@ func (p *portworx) updateStorageNodes(
 	return p.updateRemainingStorageNodes(cluster, currentPxNodes)
 }
 
-func (p *portworx) updateRemainingStorageNodesWithoutError(
+func (p *Portworx) updateRemainingStorageNodesWithoutError(
 	cluster *corev1.StorageCluster,
 	currentPxNodes map[string]bool,
 ) {
@@ -485,7 +485,7 @@ func (p *portworx) updateRemainingStorageNodesWithoutError(
 	}
 }
 
-func (p *portworx) updateRemainingStorageNodes(
+func (p *Portworx) updateRemainingStorageNodes(
 	cluster *corev1.StorageCluster,
 	currentPxNodes map[string]bool,
 ) error {
@@ -552,7 +552,7 @@ func (p *portworx) updateRemainingStorageNodes(
 }
 
 // getNodesToPortworxPods find all k8s nodes where Portworx pods are running
-func (p *portworx) getNodesToPortworxPods(
+func (p *Portworx) getNodesToPortworxPods(
 	cluster *corev1.StorageCluster,
 ) (map[string][]*v1.Pod, error) {
 	pxLabels := p.GetSelectorLabels()
@@ -584,7 +584,7 @@ func (p *portworx) getNodesToPortworxPods(
 // 1. check if storage node is updated according to px pod hash
 // 2. check if storage node is updated according to StorageCluster hash
 // 3. hash is updated but still needs node update
-func (p *portworx) needsStorageNodeUpdate(
+func (p *Portworx) needsStorageNodeUpdate(
 	cluster *corev1.StorageCluster,
 	storageNode *corev1.StorageNode,
 	portworxPod *v1.Pod,
@@ -606,7 +606,7 @@ func (p *portworx) needsStorageNodeUpdate(
 	return storageNodeHash != "" && storageNodeHash != expectedHash
 }
 
-func (p *portworx) createOrUpdateStorageNode(
+func (p *Portworx) createOrUpdateStorageNode(
 	cluster *corev1.StorageCluster,
 	node *api.StorageNode,
 	pod *v1.Pod,
@@ -658,7 +658,7 @@ func (p *portworx) createOrUpdateStorageNode(
 	return storageNode, err
 }
 
-func (p *portworx) updateStorageNodeStatus(
+func (p *Portworx) updateStorageNodeStatus(
 	storageNode *corev1.StorageNode,
 	node *api.StorageNode,
 	kvdbNodeMap map[string]*kvdb_api.BootstrapEntry,
