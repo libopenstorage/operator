@@ -485,7 +485,7 @@ func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 		return check == "true"
 	}
 
-	if !preflight.RequiresCheck() { // Preflight is only supported on AWS, VSPHERE & Pure
+	if !preflight.RequiresCheck() { // Preflight is only supported on GKE, AWS, VSPHERE & Pure
 		return false
 	}
 
@@ -500,6 +500,10 @@ func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 		}
 
 		if preflight.IsAzure() { // Preflight runs on Azure & PX 3.1.0 or above
+			return true
+		}
+
+		if preflight.IsGKE() {
 			return true
 		}
 
