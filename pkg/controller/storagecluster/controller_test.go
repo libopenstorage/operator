@@ -7002,6 +7002,7 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(nil, nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
 	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
@@ -9620,6 +9621,8 @@ func TestStorageSpecValidation(t *testing.T) {
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(nil, nil).AnyTimes()
+
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name:      cluster.Name,
