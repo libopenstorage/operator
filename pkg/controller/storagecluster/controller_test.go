@@ -3869,6 +3869,113 @@ func TestRollingUpdateWithMinReadySeconds(t *testing.T) {
 	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 }
 
+func TestUpdateStorageClusterWithKVDBDown(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	cluster.Spec.Kvdb = &corev1.KvdbSpec{
+		Internal: true,
+	}
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	storageLabels := map[string]string{
+		constants.LabelKeyClusterName: cluster.Name,
+		constants.LabelKeyDriverName:  driverName,
+	}
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
+	}
+
+	var storageNodes []*storageapi.StorageNode
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-0", true))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-1", true))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", true))
+
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
+	var kvdbMap = map[string]bool{
+		"k8s-node-0": true,
+		"k8s-node-1": false,
+		"k8s-node-2": true,
+	}
+	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(kvdbMap, nil).Times(2)
+
+	var err error
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+	storageLabels[util.DefaultStorageClusterUniqueLabelKey] = rev1Hash
+
+	for i := 0; i < 3; i++ {
+		k8sNode := createK8sNode(fmt.Sprintf("k8s-node-%d", i), 10)
+		err = k8sClient.Create(context.TODO(), k8sNode)
+		require.NoError(t, err)
+
+		storagePod := createStoragePod(cluster, fmt.Sprintf("storage-pod-%d", i), k8sNode.Name, storageLabels)
+		storagePod.Status.Conditions = []v1.PodCondition{
+			{
+				Type:   v1.PodReady,
+				Status: v1.ConditionTrue,
+			},
+		}
+		err = k8sClient.Create(context.TODO(), storagePod)
+		require.NoError(t, err)
+	}
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	// Update Storage cluster by changing image spec
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Image = "new/image"
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	// No pod should be deleted as 1 kvdb member is down
+	require.Empty(t, podControl.DeletePodName)
+
+	// Make the KVDB member come up now
+	kvdbMap["k8s-node-1"] = true
+	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(kvdbMap, nil).Times(1)
+
+	// On reconciling the pods should be deleted to be updated
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.NotEmpty(t, podControl.DeletePodName)
+	require.Len(t, podControl.DeletePodName, 1)
+
+}
+
 func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -10009,6 +10116,7 @@ func createStorageNode(nodeName string, healthy bool) *storageapi.StorageNode {
 	return &storageapi.StorageNode{
 		Status:            status,
 		SchedulerNodeName: nodeName,
+		Id:                nodeName,
 	}
 }
 
