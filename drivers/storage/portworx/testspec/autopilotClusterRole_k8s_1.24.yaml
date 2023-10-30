@@ -14,7 +14,7 @@ rules:
     verbs: ["list"]
   - apiGroups: [""]
     resources: ["persistentvolumeclaims", "persistentvolumes"]
-    verbs: ["get", "list", "update"]
+    verbs: ["get", "list", "update", "watch"]
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list", "patch", "update"]
