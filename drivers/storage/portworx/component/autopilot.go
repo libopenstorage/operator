@@ -274,7 +274,7 @@ func (c *autopilot) createClusterRole() error {
 		{
 			APIGroups: []string{""},
 			Resources: []string{"persistentvolumeclaims", "persistentvolumes"},
-			Verbs:     []string{"get", "list", "update"},
+			Verbs:     []string{"get", "list", "update", "watch"},
 		},
 		{
 			APIGroups: []string{""},
