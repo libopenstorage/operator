@@ -17,7 +17,7 @@ rules:
     verbs: ["get", "list", "update", "watch"]
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "list", "patch", "update"]
+    verbs: ["get", "list", "patch", "update", "watch"]
   - apiGroups: ["autopilot.libopenstorage.org"]
     resources: ["actionapprovals", "autopilotrules", "autopilotruleobjects"]
     verbs: ["*"]
