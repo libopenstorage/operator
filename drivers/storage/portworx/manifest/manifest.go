@@ -22,38 +22,42 @@ const (
 	// default release manifest download URL
 	envKeyReleaseManifestURL             = pxutil.EnvKeyPXReleaseManifestURL
 	envKeyReleaseManifestRefreshInterval = "PX_RELEASE_MANIFEST_REFRESH_INTERVAL_MINS"
+
 	// DefaultPortworxVersion is the default portworx version that will be used
 	// if none specified and if version manifest could not be fetched
-	DefaultPortworxVersion     = "2.13.0"
-	defaultStorkImage          = "openstorage/stork:2.12.4"
-	defaultAutopilotImage      = "portworx/autopilot:1.3.7"
-	defaultLighthouseImage     = "portworx/px-lighthouse:2.0.7"
-	defaultNodeWiperImage      = "portworx/px-node-wiper:2.13.1"
-	defaultCCMJavaImage        = "purestorage/ccm-service:3.2.11"
-	defaultCollectorProxyImage = "envoyproxy/envoy:v1.21.4"
-	defaultCollectorImage      = "purestorage/realtime-metrics:1.0.1"
-	defaultCCMGoImage          = "purestorage/ccm-go:1.0.3"
-	defaultLogUploaderImage    = "purestorage/log-upload:1.0.0"
-	defaultCCMGoProxyImage     = "purestorage/telemetry-envoy:1.0.1"
+	DefaultPortworxVersion = "2.13.8"
+	defaultStorkImage      = "openstorage/stork:23.8.0"
+	defaultAutopilotImage  = "portworx/autopilot:1.3.11"
+	defaultNodeWiperImage  = "portworx/px-node-wiper:2.13.2"
 
 	// DefaultPrometheusOperatorImage is the default Prometheus operator image for k8s 1.21 and below
-	DefaultPrometheusOperatorImage = "quay.io/coreos/prometheus-operator:v0.34.0"
-	// DefaultPrometheusOperatorImage is the default grafana image to use
-	DefaultGrafanaImage                   = "grafana/grafana:7.5.17"
+	DefaultPrometheusOperatorImage        = "quay.io/coreos/prometheus-operator:v0.34.0"
 	defaultPrometheusImage                = "quay.io/prometheus/prometheus:v2.7.1"
 	defaultPrometheusConfigMapReloadImage = "quay.io/coreos/configmap-reload:v0.0.1"
 	defaultPrometheusConfigReloaderImage  = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
 	defaultAlertManagerImage              = "quay.io/prometheus/alertmanager:v0.17.0"
-
 	// Default new Prometheus images for k8s 1.22+
-	defaultNewPrometheusOperatorImage       = "quay.io/prometheus-operator/prometheus-operator:v0.56.3"
 	defaultNewPrometheusImage               = "quay.io/prometheus/prometheus:v2.35.0"
+	defaultNewPrometheusOperatorImage       = "quay.io/prometheus-operator/prometheus-operator:v0.56.3"
 	defaultNewPrometheusConfigReloaderImage = "quay.io/prometheus-operator/prometheus-config-reloader:v0.56.3"
 	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.24.0"
+	// DefaultGrafanaImage is the default grafana image to use
+	DefaultGrafanaImage = "grafana/grafana:7.5.17"
+
+	defaultCCMJavaImage        = "purestorage/ccm-service:3.2.11"
+	defaultCollectorProxyImage = "envoyproxy/envoy:v1.21.4"
+
+	defaultCCMGoImage       = "purestorage/ccm-go:1.0.3"
+	defaultCollectorImage   = "purestorage/realtime-metrics:1.0.15"
+	defaultCCMGoProxyImage  = "purestorage/telemetry-envoy:1.1.6"
+	defaultLogUploaderImage = "purestorage/log-upload:px-1.0.12"
 
 	// default dynamic plugin images
 	DefaultDynamicPluginImage      = "portworx/portworx-dynamic-plugin:1.1.0"
 	DefaultDynamicPluginProxyImage = "nginxinc/nginx-unprivileged:1.23"
+
+	// misc images
+	defaultLighthouseImage = "portworx/px-lighthouse:2.0.7"
 
 	defaultManifestRefreshInterval = 3 * time.Hour
 )
