@@ -1526,8 +1526,8 @@ func ValidateOpenshiftDynamicPlugin(pxImageList map[string]string, cluster *core
 	}
 	k8sVersion, _ := version.NewVersion(kbVer)
 
-	// Validate Dynamic plugin only if PX Operator 23.5.0+ and OCP 4.12+ (k8s v1.25+)
-	if opVersion.GreaterThanOrEqual(opVer23_5) && isOpenshift(cluster) && k8sVersion.GreaterThanOrEqual(minK8sVersionForDynamicPlugin) {
+	// Validate Dynamic plugin only if PX Operator 23.7.0+ (due to image inconsistency bug which is fixed in 23.7.0+) and OCP 4.12+ (k8s v1.25+)
+	if opVersion.GreaterThanOrEqual(opVer23_7) && isOpenshift(cluster) && k8sVersion.GreaterThanOrEqual(minK8sVersionForDynamicPlugin) {
 		logrus.Info("Openshift Dynamic Plugin should be deployed")
 		if err := ValidateOpenshiftDynamicPluginEnabled(pxImageList, cluster, timeout, interval); err != nil {
 			return fmt.Errorf("failed to validate Openshift Dynamic Plugin components, Err: %v", err)
