@@ -807,7 +807,7 @@ func TestValidateAzure(t *testing.T) {
 }
 
 func TestValidateGKE(t *testing.T) {
-	driver := portworx{}
+	driver := Portworx{}
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
