@@ -14,6 +14,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 	v1 "k8s.io/api/core/v1"
@@ -459,6 +460,34 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease(nil).Components, rel.Components)
 	require.Empty(t, rel.Components.CSIProvisioner)
+
+	// TestCase: No Nodewiper images
+	expected.PortworxVersion = "3.0.0"
+	expected.Components = Release{
+		Stork:          "image/stork:3.0.0",
+		Prometheus:     "image/prometheus:3.0.0",
+		CSIProvisioner: "image/csiprovisioner:3.0.0",
+	}
+	body, _ = yaml.Marshal(expected)
+	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
+	err = k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
+
+	m.Init(k8sClient, nil, k8sVersion)
+	rel = m.GetVersions(cluster, true)
+	assert.Equal(t, defaultNodeWiperImage, rel.Components.NodeWiper)
+
+	cluster.Spec.Image = "foo/bar:3.1.0"
+	rel = m.GetVersions(cluster, true)
+	assert.Equal(t, cluster.Spec.Image, rel.Components.NodeWiper)
+
+	expected.Components.NodeWiper = "image/specific-nodewiper:123"
+	body, _ = yaml.Marshal(expected)
+	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
+	err = k8sClient.Update(context.TODO(), versionsConfigMap)
+	require.NoError(t, err)
+	rel = m.GetVersions(cluster, true)
+	assert.Equal(t, expected.Components.NodeWiper, rel.Components.NodeWiper)
 }
 
 func TestManifestFillPrometheusDefaults(t *testing.T) {
