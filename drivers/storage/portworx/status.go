@@ -401,7 +401,7 @@ func (p *portworx) getKvdbMap(
 		// Get the bootstrap entries
 		entriesBlob, ok := cm.Data[pxEntriesKey]
 		if ok {
-			kvdbNodeMap, err = BlobToBootstrapEntries([]byte(entriesBlob))
+			kvdbNodeMap, err = blobToBootstrapEntries([]byte(entriesBlob))
 			if err != nil {
 				logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
 			}
@@ -883,7 +883,7 @@ func getStorageNodePhase(status *corev1.NodeStatus) string {
 	return string(nodeStateCondition.Status)
 }
 
-func BlobToBootstrapEntries(
+func blobToBootstrapEntries(
 	entriesBlob []byte,
 ) (map[string]*kvdb_api.BootstrapEntry, error) {
 

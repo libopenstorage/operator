@@ -36,6 +36,8 @@ import (
 
 	"github.com/libopenstorage/cloudops"
 	"github.com/libopenstorage/openstorage/api"
+
+	pxapi "github.com/libopenstorage/operator/api/px"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -11212,6 +11214,85 @@ func testClusterDefaultsMaxStorageNodesPerZoneValueSpecified(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, (*corev1.CloudStorageSpec)(nil), cluster.Spec.CloudStorage)
 	require.Equal(t, uint32(7), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
+}
+
+func TestGetKVDBMembers(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockServiceServer := mock.NewMockPortworxServiceServer(mockCtrl)
+
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		PortworxServer: mockServiceServer,
+	})
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateInit),
+		},
+	}
+
+	// Case 1: When GRPC server is not running or cannot connect to it
+	val, err := driver.GetKVDBMembers(cluster)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "error connecting to GRPC server")
+	require.Empty(t, val)
+
+	// Start the server
+	sdkError := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, sdkError)
+	defer mockSdk.Stop()
+
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+
+	// Case 2: When the portworx service server returns an error
+	expectedError := fmt.Errorf("test error from portworx service server")
+	mockServiceServer.EXPECT().GetKvdbMemberInfo(gomock.Any(), gomock.Any()).Return(nil, expectedError).Times(1)
+
+	val, err = driver.GetKVDBMembers(cluster)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), fmt.Sprintf("error in getting kvdb member info from sdk: rpc error: code = Unknown desc = %s", expectedError))
+	require.Empty(t, val)
+
+	// Case 3: When there is no error from the server
+	expectedKvdbresponse := &pxapi.PxKvdbMemberResponse{}
+	mockServiceServer.EXPECT().GetKvdbMemberInfo(gomock.Any(), gomock.Any()).Return(expectedKvdbresponse, nil).Times(1)
+
+	val, err = driver.GetKVDBMembers(cluster)
+	require.NoError(t, err)
+	require.Empty(t, val)
+
 }
 
 func getK8sClientWithNodesZones(
