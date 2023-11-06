@@ -96,9 +96,9 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 
 		// check if pod is running in a node which has internal kvdb running in it
 		if _, isKvdbNode := kvdbNodes[pod.Spec.NodeName]; cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal && isKvdbNode {
-			// if number of unavailable kvdb nodes is greater than 1, then dont restart portworx on this node
+			// if number of unavailable kvdb nodes is greater than or equal to 1, then dont restart portworx on this node
 			if numUnavailableKvdb > 0 {
-				logrus.Infof("Number of unavaliable KVDB members exceeds 1, temporarily stopping update for this node to prevent KVDB from going out of quorum ")
+				logrus.Infof("Number of unavaliable KVDB members exceeds 1, temporarily skipping update for this node to prevent KVDB from going out of quorum ")
 				continue
 			} else {
 				numUnavailableKvdb++
@@ -139,7 +139,7 @@ func (c *Controller) getKVDBNodeAvailability(cluster *corev1.StorageCluster) (in
 		var kvdbMap map[string]bool
 		kvdbMap, err = c.Driver.GetKVDBMembers(cluster)
 		if err != nil {
-			return -1, nil, err
+			return -1, nil, fmt.Errorf("couldn't get KVDB members due to %s", err)
 		}
 
 		for _, storageNode := range storageNodeList {
