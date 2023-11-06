@@ -3907,7 +3907,7 @@ func TestUpdateStorageClusterWithKVDBDown(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).Times(6)
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -3973,6 +3973,25 @@ func TestUpdateStorageClusterWithKVDBDown(t *testing.T) {
 	require.Empty(t, result)
 	require.NotEmpty(t, podControl.DeletePodName)
 	require.Len(t, podControl.DeletePodName, 1)
+
+	// When GetStorageNodes returns an error
+	getStorageNodeserr := fmt.Errorf("test error 1")
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, getStorageNodeserr).Times(1)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.Empty(t, result)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), fmt.Sprintf("couldn't get unavailable numbers: couldn't get list of storage nodes during rolling update of storage cluster %s/%s: %s", cluster.Namespace, cluster.Name, getStorageNodeserr))
+
+	// When GetKvdbMembers returns an error
+	getKvdbMemberserr := fmt.Errorf("test error 2")
+	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(nil, getKvdbMemberserr).Times(1)
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).AnyTimes()
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.Empty(t, result)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), fmt.Sprintf("couldn't get KVDB members due to %s", getKvdbMemberserr))
 
 }
 
