@@ -15,10 +15,10 @@ import (
 // SdkServers consists of different mock servers that the mock
 // sdk server can implement
 type SdkServers struct {
-	Cluster        *MockOpenStorageClusterServer
-	Node           *MockOpenStorageNodeServer
-	Role           *MockOpenStorageRoleServer
-	PortworxServer *MockPortworxServiceServer
+	Cluster         *MockOpenStorageClusterServer
+	Node            *MockOpenStorageNodeServer
+	Role            *MockOpenStorageRoleServer
+	PortworxService *MockPortworxServiceServer
 }
 
 // SdkServer can be used to create a sdk server which implements mock server
@@ -57,8 +57,8 @@ func (m *SdkServer) StartOnAddress(ip, port string) error {
 	if m.servers.Role != nil {
 		api.RegisterOpenStorageRoleServer(m.server, m.servers.Role)
 	}
-	if m.servers.PortworxServer != nil {
-		pxapi.RegisterPortworxServiceServer(m.server, m.servers.PortworxServer)
+	if m.servers.PortworxService != nil {
+		pxapi.RegisterPortworxServiceServer(m.server, m.servers.PortworxService)
 	}
 
 	reflection.Register(m.server)
