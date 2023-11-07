@@ -17,7 +17,6 @@ import (
 
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	ocpconfig "github.com/openshift/api/config/v1"
 	routev1 "github.com/openshift/api/route/v1"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -39,6 +38,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
@@ -266,6 +266,13 @@ const (
 	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
 	OpenshiftMonitoringNamespace = "openshift-monitoring"
 )
+const (
+	// pxEntriesKey is key which holds all the bootstrap entries
+	PxEntriesKey = "px-entries"
+)
+const (
+	BootstrapCloudDriveNamespace = "kube-system"
+)
 
 var (
 	// SpecsBaseDir functions returns the base directory for specs. This is extracted as
@@ -282,6 +289,9 @@ var (
 	MinimumPxVersionMetricsCollector, _ = version.NewVersion("2.9.1")
 	// MinimumPxVersionAutoTLS is a minimal PX version that supports "auto-TLS" setup
 	MinimumPxVersionAutoTLS, _ = version.NewVersion("4.0.0")
+	// MinimumPxVersionQuorumFlag is a minimal PX version that introduces the quorum member
+	// flag in the node object of the PX SDK response.
+	MinimumPxVersionQuorumFlag, _ = version.NewVersion("3.1.0")
 
 	// ConfigMapNameRegex regex of configMap.
 	ConfigMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -1124,6 +1134,28 @@ func CountStorageNodes(
 		}
 	}
 
+	// Use the quorum member flag from the node enumerate response if all the nodes are upgraded to the
+	// newer version. The Enumerate response could be coming from any node and we want to make sure that
+	// we are not talking to an old node when enumerating.
+	useQuorumFlag := true
+	for _, node := range nodeEnumerateResponse.Nodes {
+		if node.Status == api.Status_STATUS_DECOMMISSION {
+			continue
+		}
+		v := node.NodeLabels[NodeLabelPortworxVersion]
+		nodeVersion, err := version.NewVersion(v)
+		if err != nil {
+			logrus.Warnf("Failed to parse node version %s for node %s: %v", v, node.Id, err)
+			useQuorumFlag = false
+			break
+		}
+		if nodeVersion.LessThan(MinimumPxVersionQuorumFlag) {
+			logrus.Tracef("Node %s is older than %s. Not using quorum member flag", node.Id, MinimumPxVersionQuorumFlag.String())
+			useQuorumFlag = false
+			break
+		}
+	}
+
 	storageNodesCount := 0
 	for _, node := range nodeEnumerateResponse.Nodes {
 		if node.SchedulerNodeName == "" {
@@ -1136,10 +1168,23 @@ func CountStorageNodes(
 			}
 			node.SchedulerNodeName = k8sNode.Name
 		}
-		if len(node.Pools) > 0 && node.Pools[0] != nil {
+
+		var isQuorumMember bool
+		if useQuorumFlag {
+			isQuorumMember = !node.NonQuorumMember
+		} else {
+			// Older version of Portworx doesn't not have the quorum flag in the node response.
+			// So we rely on the pools to determine whether the node contributes to quorum. All
+			// storage nodes contribute to quorum of the cluster.
+			isQuorumMember = len(node.Pools) > 0 && node.Pools[0] != nil
+		}
+
+		if isQuorumMember {
 			if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
 				storageNodesCount++
 			}
+		} else {
+			logrus.Debugf("node %s is not a quorum member, node: %+v", node.Id, node)
 		}
 	}
 

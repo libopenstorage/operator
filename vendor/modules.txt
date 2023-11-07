@@ -232,7 +232,7 @@ github.com/libopenstorage/cloudops/pkg/storagedistribution
 github.com/libopenstorage/cloudops/pkg/utils
 github.com/libopenstorage/cloudops/specs/decisionmatrix
 github.com/libopenstorage/cloudops/unsupported
-# github.com/libopenstorage/openstorage v9.4.46+incompatible => github.com/libopenstorage/openstorage v1.0.1-0.20230511212757-41751b27d69f
+# github.com/libopenstorage/openstorage v9.4.46+incompatible => github.com/libopenstorage/openstorage v1.0.1-0.20231025225342-bd3d3ceba556
 ## explicit; go 1.17
 github.com/libopenstorage/openstorage/api
 github.com/libopenstorage/openstorage/pkg/auth
@@ -1040,7 +1040,7 @@ sigs.k8s.io/structured-merge-diff/v4/value
 sigs.k8s.io/yaml
 # github.com/coreos/prometheus-operator => github.com/prometheus-operator/prometheus-operator v0.46.0
 # github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
-# github.com/libopenstorage/openstorage => github.com/libopenstorage/openstorage v1.0.1-0.20230511212757-41751b27d69f
+# github.com/libopenstorage/openstorage => github.com/libopenstorage/openstorage v1.0.1-0.20231025225342-bd3d3ceba556
 # golang.org/x/tools => golang.org/x/tools v0.1.11
 # google.golang.org/grpc => google.golang.org/grpc v1.29.1
 # google.golang.org/grpc/examples/helloworld/helloworld => google.golang.org/grpc/examples/helloworld/helloworld v1.29.1

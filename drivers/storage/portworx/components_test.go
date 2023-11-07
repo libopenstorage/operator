@@ -12007,6 +12007,53 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
+
+	// TestCase: Use NonQuorumMember flag to determine storage node count
+	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
+		{NonQuorumMember: false, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
+		{NonQuorumMember: false, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.2.0"}},
+		{NonQuorumMember: false, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.3.0"}},
+		{NonQuorumMember: true, SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
+		// Node that does not return a scheduler node name, does not get counted towards quorum calculation as we cannot
+		// determine if it is part of the current k8s cluster or not.
+		{NonQuorumMember: false, NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
+		// Node that is not part of the cluster, does not get counted towards quorum calculation.
+		{NonQuorumMember: false, SchedulerNodeName: "node6", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
+		// Ignore node that is in Decommission state.
+		{NonQuorumMember: false, Status: osdapi.Status_STATUS_DECOMMISSION},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
+
+	// TestCase: Do not use NonQuorumMember flag if there is at least one old unsupported node
+	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
+		{NonQuorumMember: false, Pools: []*osdapi.StoragePool{{ID: 1}},
+			SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
+		{NonQuorumMember: false, Pools: []*osdapi.StoragePool{{ID: 2}},
+			SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.2.0"}},
+		{NonQuorumMember: false, Pools: []*osdapi.StoragePool{{ID: 3}},
+			SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.3.0"}},
+		{NonQuorumMember: false,
+			SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.0"}},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	// Although there are 4 quorum members according to the NonQuorumMember flag, we are only looking at the
+	// pools to determine the storage node count.
+	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
 }
 
 func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
