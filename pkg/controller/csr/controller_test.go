@@ -36,7 +36,7 @@ func TestInit(t *testing.T) {
 	mgr.EXPECT().GetClient().Return(k8sClient).AnyTimes()
 	mgr.EXPECT().GetScheme().Return(scheme.Scheme).AnyTimes()
 	mgr.EXPECT().GetEventRecorderFor(gomock.Any()).Return(recorder).AnyTimes()
-	mgr.EXPECT().SetFields(gomock.Any()).Return(nil).AnyTimes()
+	mgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 	mgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 	mgr.EXPECT().GetLogger().Return(log.Log.WithName("test")).AnyTimes()
 

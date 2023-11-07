@@ -61,7 +61,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	affinityhelper "k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
-	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -445,7 +445,7 @@ func GetPullPolicyForContainer(
 // ActivateCRDWhenCreated activates the given CRD by updating it's status. It waits for
 // CRD to be created for 1 minute before returning an error
 func ActivateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string) error {
-	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+	return wait.PollUntilContextTimeout(context.TODO(), 1*time.Second, 1*time.Minute, false, func(ctx context.Context) (bool, error) {
 		crd, err := fakeClient.ApiextensionsV1().
 			CustomResourceDefinitions().
 			Get(context.TODO(), crdName, metav1.GetOptions{})
@@ -471,7 +471,7 @@ func ActivateCRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string)
 // ActivateV1beta1CRDWhenCreated activates the given CRD by updating it's status. It waits for
 // CRD to be created for 1 minute before returning an error
 func ActivateV1beta1CRDWhenCreated(fakeClient *fakeextclient.Clientset, crdName string) error {
-	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+	return wait.PollUntilContextTimeout(context.TODO(), 1*time.Second, 1*time.Minute, false, func(ctx context.Context) (bool, error) {
 		crd, err := fakeClient.ApiextensionsV1beta1().
 			CustomResourceDefinitions().
 			Get(context.TODO(), crdName, metav1.GetOptions{})

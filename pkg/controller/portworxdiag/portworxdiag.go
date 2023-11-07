@@ -96,7 +96,7 @@ func (c *Controller) StartWatch() error {
 	}
 
 	err := c.ctrl.Watch(
-		&source.Kind{Type: &diagv1.PortworxDiag{}},
+		source.Kind(nil, &diagv1.PortworxDiag{}),
 		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
@@ -105,11 +105,8 @@ func (c *Controller) StartWatch() error {
 
 	// Watch for changes to Pods that belong to PortworxDiag object
 	err = c.ctrl.Watch(
-		&source.Kind{Type: &v1.Pod{}},
-		&handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &diagv1.PortworxDiag{},
-		},
+		source.Kind(nil, &v1.Pod{}),
+		handler.EnqueueRequestForOwner(nil, nil, &diagv1.PortworxDiag{}),
 	)
 	if err != nil {
 		return err

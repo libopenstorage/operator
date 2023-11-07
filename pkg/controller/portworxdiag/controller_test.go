@@ -144,7 +144,7 @@ func TestInit(t *testing.T) {
 	mgr.EXPECT().GetClient().Return(k8sClient).AnyTimes()
 	mgr.EXPECT().GetScheme().Return(scheme.Scheme).AnyTimes()
 	mgr.EXPECT().GetEventRecorderFor(gomock.Any()).Return(recorder).AnyTimes()
-	mgr.EXPECT().SetFields(gomock.Any()).Return(nil).AnyTimes()
+	mgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 	mgr.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 	mgr.EXPECT().GetLogger().Return(log.Log.WithName("test")).AnyTimes()
 	mgr.EXPECT().GetConfig().Return(&rest.Config{
@@ -283,7 +283,7 @@ func TestReconcileOfDeletedDiag(t *testing.T) {
 }
 
 func keepCRDActivated(fakeClient *fakeextclient.Clientset, crdName string) error {
-	return wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+	return wait.PollUntilContextTimeout(context.TODO(), 1*time.Second, 1*time.Minute, false, func(ctx context.Context) (bool, error) {
 		crd, err := fakeClient.ApiextensionsV1().
 			CustomResourceDefinitions().
 			Get(context.TODO(), crdName, metav1.GetOptions{})

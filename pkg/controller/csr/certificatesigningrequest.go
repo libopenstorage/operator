@@ -82,7 +82,7 @@ func (c *Controller) StartWatch() error {
 	}
 
 	err := c.ctrl.Watch(
-		&source.Kind{Type: &certv1.CertificateSigningRequest{}},
+		source.Kind(nil, &certv1.CertificateSigningRequest{}),
 		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
