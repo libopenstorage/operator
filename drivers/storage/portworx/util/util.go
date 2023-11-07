@@ -1592,7 +1592,7 @@ func GetKvdbMap(k8sClient client.Client,
 		cm := &v1.ConfigMap{}
 		err := k8sClient.Get(context.TODO(), types.NamespacedName{
 			Name:      cmName,
-			Namespace: "kube-system",
+			Namespace: BootstrapCloudDriveNamespace,
 		}, cm)
 		if err != nil {
 			logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
