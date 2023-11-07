@@ -116,7 +116,7 @@ func TestSetupContextWithToken(t *testing.T) {
 			}
 			coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 			reregisterComponents()
-			driver := Portworx{}
+			driver := portworx{}
 			err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 			require.NoError(t, err)
 			setSecuritySpecDefaults(cluster)
@@ -163,7 +163,7 @@ func TestSetupContextWithToken(t *testing.T) {
 				})
 			}
 			// setup context and assert
-			p := Portworx{
+			p := portworx{
 				k8sClient: k8sClient,
 			}
 			ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
@@ -516,7 +516,7 @@ func TestUpdateStorageNodePhase(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			driver := Portworx{
+			driver := portworx{
 				k8sClient: k8sClient,
 			}
 			err := k8sClient.Create(context.TODO(), tc.storageNode, &client.CreateOptions{})

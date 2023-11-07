@@ -26,7 +26,7 @@ func TestAlertManagerInstall(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(1)
-	driver := Portworx{}
+	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
@@ -104,7 +104,7 @@ func TestAlertManagerInstall(t *testing.T) {
 func TestRemoveAlertManager(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := Portworx{}
+	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
@@ -167,7 +167,7 @@ func TestRemoveAlertManager(t *testing.T) {
 func TestDisableAlertManager(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
-	driver := Portworx{}
+	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 

@@ -149,7 +149,7 @@ func newTemplate(
 	return t, nil
 }
 
-func (p *Portworx) generateCloudStorageSpecs(
+func (p *portworx) generateCloudStorageSpecs(
 	cluster *corev1.StorageCluster,
 	nodes []*corev1.StorageNode,
 ) (*cloudstorage.Config, error) {
@@ -209,7 +209,7 @@ func (p *Portworx) generateCloudStorageSpecs(
 	return cloudConfig, nil
 }
 
-func (p *Portworx) getNodeByName(nodeName string) (*v1.Node, error) {
+func (p *portworx) getNodeByName(nodeName string) (*v1.Node, error) {
 	node := &v1.Node{}
 	var err error
 	if p != nil && p.k8sClient != nil {
@@ -224,7 +224,7 @@ func (p *Portworx) getNodeByName(nodeName string) (*v1.Node, error) {
 	return node, err
 }
 
-func (p *Portworx) GetKVDBPodSpec(
+func (p *portworx) GetKVDBPodSpec(
 	cluster *corev1.StorageCluster, nodeName string,
 ) (v1.PodSpec, error) {
 	t, err := newTemplate(cluster, nodeName)
@@ -262,7 +262,7 @@ func (p *Portworx) GetKVDBPodSpec(
 	return podSpec, nil
 }
 
-func (p *Portworx) GetStoragePodSpec(
+func (p *portworx) GetStoragePodSpec(
 	cluster *corev1.StorageCluster, nodeName string,
 ) (v1.PodSpec, error) {
 	t, err := newTemplate(cluster, nodeName)
@@ -382,7 +382,7 @@ func (p *Portworx) GetStoragePodSpec(
 	return podSpec, nil
 }
 
-func (p *Portworx) pruneVolumes(spec *v1.PodSpec) {
+func (p *portworx) pruneVolumes(spec *v1.PodSpec) {
 	seenName := make(map[string]bool)
 	updatedMounts := false
 	for ci, container := range spec.Containers {
@@ -427,7 +427,7 @@ func (p *Portworx) pruneVolumes(spec *v1.PodSpec) {
 	}
 }
 
-func (p *Portworx) createStorageNode(cluster *corev1.StorageCluster, nodeName string, cloudConfig *cloudstorage.Config) error {
+func (p *portworx) createStorageNode(cluster *corev1.StorageCluster, nodeName string, cloudConfig *cloudstorage.Config) error {
 	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
 	storageNode := &corev1.StorageNode{
@@ -456,7 +456,7 @@ func (p *Portworx) createStorageNode(cluster *corev1.StorageCluster, nodeName st
 	return nil
 }
 
-func (p *Portworx) storageNodesList(cluster *corev1.StorageCluster) ([]*corev1.StorageNode, error) {
+func (p *portworx) storageNodesList(cluster *corev1.StorageCluster) ([]*corev1.StorageNode, error) {
 
 	nodes := &corev1.StorageNodeList{}
 	storageNodes := make([]*corev1.StorageNode, 0)
