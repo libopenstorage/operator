@@ -27,11 +27,6 @@ import (
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 )
 
-const (
-	// pxEntriesKey is key which holds all the bootstrap entries
-	pxEntriesKey = "px-entries"
-)
-
 func (p *portworx) UpdateStorageClusterStatus(
 	cluster *corev1.StorageCluster,
 	clusterHash string,

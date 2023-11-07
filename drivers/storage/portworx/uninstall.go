@@ -66,7 +66,6 @@ const (
 	pxNodeWiperDaemonSetName          = "px-node-wiper"
 	pxKvdbPrefix                      = "pwx/"
 	pureStorageCloudDriveConfigMap    = "px-pure-cloud-drive"
-	bootstrapCloudDriveNamespace      = "kube-system"
 )
 
 // UninstallPortworx provides a set of APIs to uninstall portworx
@@ -138,7 +137,7 @@ func (u *uninstallPortworx) WipeMetadata() error {
 		pureStorageCloudDriveConfigMap,
 	}
 	for _, cm := range configMaps {
-		err := k8sutil.DeleteConfigMap(u.k8sClient, cm, bootstrapCloudDriveNamespace)
+		err := k8sutil.DeleteConfigMap(u.k8sClient, cm, pxutil.BootstrapCloudDriveNamespace)
 		if err != nil {
 			return err
 		}

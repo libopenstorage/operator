@@ -251,7 +251,10 @@ const (
 )
 const (
 	// pxEntriesKey is key which holds all the bootstrap entries
-	pxEntriesKey = "px-entries"
+	PxEntriesKey = "px-entries"
+)
+const (
+	BootstrapCloudDriveNamespace = "kube-system"
 )
 
 // TLS related constants
@@ -1596,7 +1599,7 @@ func GetKvdbMap(k8sClient client.Client,
 		}
 
 		// Get the bootstrap entries
-		entriesBlob, ok := cm.Data[pxEntriesKey]
+		entriesBlob, ok := cm.Data[PxEntriesKey]
 		if ok {
 			kvdbNodeMap, err = blobToBootstrapEntries([]byte(entriesBlob))
 			if err != nil {
