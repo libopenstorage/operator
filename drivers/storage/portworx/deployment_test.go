@@ -94,7 +94,7 @@ func TestBasicRuncPodSpec(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
@@ -164,7 +164,7 @@ func TestPodSpecWithCustomKubeletDir(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
@@ -210,7 +210,7 @@ func TestPodSpecWithImagePullSecrets(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -286,7 +286,7 @@ func TestPodSpecWithTolerations(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	podSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	require.ElementsMatch(t, tolerations, podSpec.Tolerations)
@@ -310,7 +310,7 @@ func TestPodSpecWithPortworxContainerResources(t *testing.T) {
 	}
 
 	// Case 1: Empty resources during deployment
-	driver := Portworx{}
+	driver := portworx{}
 	podSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assert.Len(t, podSpec.Containers, 1)
@@ -396,7 +396,7 @@ func TestPodSpecWithEnvOverrides(t *testing.T) {
 
 	expected := getExpectedPodSpecFromDaemonset(t, "testspec/portworxPodEnvOverride.yaml")
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -411,7 +411,7 @@ func TestGetKVDBPodSpec(t *testing.T) {
 	}
 
 	nodeName := "testNode"
-	driver := Portworx{}
+	driver := portworx{}
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -452,7 +452,7 @@ func TestPodSpecWithCustomServiceAccount(t *testing.T) {
 	}
 
 	nodeName := "testNode"
-	driver := Portworx{}
+	driver := portworx{}
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -497,7 +497,7 @@ func TestAutoNodeRecoveryTimeoutEnvForPxVersion2_6(t *testing.T) {
 		Value: "1500",
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
 	require.Contains(t, actual.Containers[0].Env, recoveryEnv)
@@ -522,7 +522,7 @@ func TestVarLibOsdMountForPxVersion2_9_1(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
 
@@ -566,7 +566,7 @@ func TestExtraVolumeUnique(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
 
@@ -624,7 +624,7 @@ func TestExtraVolumeOverrideExisting(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
 
@@ -805,7 +805,7 @@ func TestPodSpecWithTLS(t *testing.T) {
 	serverCertFileName := stringPtr("/etc/pwx/testServer.crt")
 	serverKeyFileName := stringPtr("/etc/pwx/testServer.key")
 
-	driver := Portworx{}
+	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 
@@ -948,7 +948,7 @@ func TestPodSpecWithKvdbSpec(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	expectedArgs := []string{
 		"-c", "px-cluster",
@@ -1020,7 +1020,7 @@ func TestPodSpecForVsphere(t *testing.T) {
 	env[0].Value = "some.vcenter.server.com"
 	cluster.Spec.Env = env
 
-	driver := Portworx{}
+	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 
@@ -1047,7 +1047,7 @@ func TestPodSpecForVsphere(t *testing.T) {
 
 	// TestCase 2: VSPHERE_VCENTER  not found, don't expect -cloud_provider
 	cluster = originalSpec.DeepCopy()
-	driver = Portworx{}
+	driver = portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 
@@ -1072,7 +1072,7 @@ func TestPodSpecForVsphere(t *testing.T) {
 	cluster = originalSpec.DeepCopy()
 	provider := string(cloudops.AWS)
 	cluster.Spec.CloudStorage.Provider = &provider
-	driver = Portworx{}
+	driver = portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 
@@ -1119,7 +1119,7 @@ func TestPodSpecWithNetworkSpec(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	expectedArgs := []string{
 		"-c", "px-cluster",
@@ -1235,7 +1235,7 @@ func TestPodSpecWithStorageSpec(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	expectedArgs := []string{
 		"-c", "px-cluster",
@@ -1530,7 +1530,7 @@ func TestPodSpecWithCloudStorageSpec(t *testing.T) {
 	nodeName := "testNode"
 
 	zoneToInstancesMap := map[string]uint64{"a": 3, "b": 3, "c": 2}
-	driver := Portworx{
+	driver := portworx{
 		k8sClient:          k8sClient,
 		recorder:           record.NewFakeRecorder(0),
 		zoneToInstancesMap: zoneToInstancesMap,
@@ -1924,7 +1924,7 @@ func TestPodSpecWithCloudStorageSpecOnEKS(t *testing.T) {
 	err := preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
 
-	driver := Portworx{}
+	driver := portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 	driver.zoneToInstancesMap, err = cloudprovider.GetZoneMap(k8sClient, "", "")
@@ -2019,7 +2019,7 @@ func TestPodSpecWithCloudStorageSpecOnGCE(t *testing.T) {
 	c := preflight.Instance()
 	require.Equal(t, cloudops.GCE, c.ProviderName())
 
-	driver := Portworx{}
+	driver := portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 
@@ -2073,7 +2073,7 @@ func TestPodSpecWithCloudStorageSpecOnAzure(t *testing.T) {
 	c := preflight.Instance()
 	require.Equal(t, cloudops.Azure, c.ProviderName())
 
-	driver := Portworx{}
+	driver := portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 
@@ -2178,7 +2178,7 @@ func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 	}
 
 	zoneToInstancesMap := map[string]uint64{"a": 3, "b": 3, "c": 2}
-	driver := Portworx{
+	driver := portworx{
 		k8sClient:          k8sClient,
 		recorder:           record.NewFakeRecorder(0),
 		zoneToInstancesMap: zoneToInstancesMap,
@@ -2259,7 +2259,7 @@ func TestPodSpecWithStorageAndCloudStorageSpec(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	// Use storage spec over cloud storage spec if not empty
 	expectedArgs := []string{
@@ -2286,7 +2286,7 @@ func TestPodSpecWithSecretsProvider(t *testing.T) {
 			SecretsProvider: stringPtr("k8s"),
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	expectedArgs := []string{
 		"-c", "px-cluster",
@@ -2336,7 +2336,7 @@ func TestPodSpecWithCustomStartPort(t *testing.T) {
 			StartPort: &startPort,
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	expected := getExpectedPodSpecFromDaemonset(t, "testspec/portworxPodCustomPort.yaml")
 
@@ -2379,7 +2379,7 @@ func TestPodSpecWithDNSPolicy(t *testing.T) {
 			Annotations: map[string]string{},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	podSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
@@ -2414,7 +2414,7 @@ func TestPodSpecWithHostPid(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	podSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
@@ -2449,7 +2449,7 @@ func TestPodSpecWithLogAnnotation(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	expectedArgs := []string{
 		"-c", "px-cluster",
@@ -2484,7 +2484,7 @@ func TestPodSpecWithRuntimeOptions(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	expectedArgs := []string{
 		"-c", "px-cluster",
@@ -2537,7 +2537,7 @@ func TestPodSpecWithMiscArgs(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	expectedArgs := []string{
 		"-c", "px-cluster",
@@ -2568,7 +2568,7 @@ func TestPodSpecWithInvalidMiscArgs(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	// Don't add misc args if they are invalid
 	expectedArgs := []string{
@@ -2603,7 +2603,7 @@ func TestPodSpecWithEssentials(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	// TestCase: Replace existing oem value to use essentials
 	os.Setenv(pxutil.EnvKeyPortworxEssentials, "true")
@@ -2781,7 +2781,7 @@ func TestPodSpecWithImagePullPolicy(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	// Pass the image pull policy in the pod args
 	expectedArgs := []string{
@@ -2801,7 +2801,7 @@ func TestPodSpecWithImagePullPolicy(t *testing.T) {
 
 func TestPodSpecWithNilStorageCluster(t *testing.T) {
 	var cluster *corev1.StorageCluster
-	driver := Portworx{}
+	driver := portworx{}
 	nodeName := "testNode"
 
 	_, err := driver.GetStoragePodSpec(cluster, nodeName)
@@ -2823,7 +2823,7 @@ func TestPodSpecWithInvalidKubernetesVersion(t *testing.T) {
 			Namespace: "kube-system",
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	_, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.Error(t, err, "Expected an error on GetStoragePodSpec")
@@ -2883,7 +2883,7 @@ func TestPKSPodSpec(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -2982,7 +2982,7 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -3056,7 +3056,7 @@ func TestPodSpecForK3s(t *testing.T) {
 			Image: "portworx/oci-monitor:2.6.0",
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -3093,7 +3093,7 @@ func TestPodSpecForBottleRocketAMI(t *testing.T) {
 			Image: "portworx/oci-monitor:2.7.1",
 		},
 	}
-	driver := Portworx{
+	driver := portworx{
 		k8sClient: testutil.FakeK8sClient(
 			&v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
@@ -3184,7 +3184,7 @@ func TestPodWithTelemetry(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -3197,7 +3197,7 @@ func TestPodWithTelemetry(t *testing.T) {
 	// don't specify arcus location
 	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry.yaml")
 	delete(cluster.Annotations, "portworx.io/arcus-location")
-	driver = Portworx{}
+	driver = portworx{}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
@@ -3213,7 +3213,7 @@ func TestPodWithTelemetry(t *testing.T) {
 			Value: "https://username:password@hotstname:port",
 		},
 	}
-	driver = Portworx{}
+	driver = portworx{}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
@@ -3224,7 +3224,7 @@ func TestPodWithTelemetry(t *testing.T) {
 	// Remove the proxy for CCM service
 	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_telemetry.yaml")
 	cluster.Spec.Env = nil
-	driver = Portworx{}
+	driver = portworx{}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
@@ -3235,7 +3235,7 @@ func TestPodWithTelemetry(t *testing.T) {
 	// Now disable telemetry
 	expected = getExpectedPodSpecFromDaemonset(t, "testspec/px_disable_telemetry.yaml")
 	cluster.Spec.Monitoring.Telemetry.Enabled = false
-	driver = Portworx{}
+	driver = portworx{}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
@@ -3274,7 +3274,7 @@ func TestPodWithTelemetryUpgrade(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 	createTelemetrySecret(t, k8sClient, cluster.Namespace)
@@ -3334,7 +3334,7 @@ func TestPodWithTelemetryCCMVolume(t *testing.T) {
 			},
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 	createTelemetrySecret(t, k8sClient, cluster.Namespace)
@@ -3405,7 +3405,7 @@ func TestPodSpecWhenRunningOnMasterEnabled(t *testing.T) {
 			Image: "portworx/oci-monitor:2.6.0",
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -3446,7 +3446,7 @@ func TestPodSpecForCSIWithOlderCSIVersion(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -3491,7 +3491,7 @@ func TestPodSpecForCSIWithNewerCSIVersion(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -3544,7 +3544,7 @@ func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 	}
 	nodeName := "testNode"
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -3617,7 +3617,7 @@ func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 	}
 	nodeName := "testNode"
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err)
 
@@ -3628,7 +3628,7 @@ func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 
 	// If PORTWORX_USEDEPRECATED_CSIDRIVERNAME has true value, use old CSI driver name.
 	cluster.Spec.Env[0].Value = "1"
-	driver = Portworx{}
+	driver = portworx{}
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err)
 
@@ -3639,7 +3639,7 @@ func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 
 	// If PORTWORX_USEDEPRECATED_CSIDRIVERNAME is false, use new CSI driver name.
 	cluster.Spec.Env[0].Value = "false"
-	driver = Portworx{}
+	driver = portworx{}
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err)
 
@@ -3650,7 +3650,7 @@ func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {
 
 	// If PORTWORX_USEDEPRECATED_CSIDRIVERNAME is invalid, use new CSI driver name.
 	cluster.Spec.Env[0].Value = "invalid_boolean"
-	driver = Portworx{}
+	driver = portworx{}
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err)
 
@@ -3682,7 +3682,7 @@ func TestPodSpecForCSIWithIncorrectKubernetesVersion(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	_, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.Error(t, err, "Expected an error on GetStoragePodSpec")
 }
@@ -3724,7 +3724,7 @@ func TestPodSpecForKvdbAuthCerts(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -3761,7 +3761,7 @@ func TestPodSpecForPKSWithCSI(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -3804,7 +3804,7 @@ func TestPodSpecForKvdbAuthCertsWithoutCert(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -3847,7 +3847,7 @@ func TestPodSpecForKvdbAuthCertsWithoutCA(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -3890,7 +3890,7 @@ func TestPodSpecForKvdbAuthCertsWithoutKey(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -3926,7 +3926,7 @@ func TestPodSpecForKvdbAclToken(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -3972,7 +3972,7 @@ func TestPodSpecForKvdbUsernamePassword(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -4010,7 +4010,7 @@ func TestPodSpecForKvdbAuthErrorReadingSecret(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -4102,7 +4102,7 @@ func TestStorageNodeConfig(t *testing.T) {
 	nodeName3 := "testNode3"
 
 	zoneToInstancesMap := map[string]uint64{"a": 3, "b": 3, "c": 2}
-	driver := Portworx{
+	driver := portworx{
 		k8sClient:          k8sClient,
 		recorder:           record.NewFakeRecorder(0),
 		zoneToInstancesMap: zoneToInstancesMap,
@@ -4290,7 +4290,7 @@ func validateSecuritySetEnv(t *testing.T, cluster *corev1.StorageCluster) {
 
 	setSecuritySpecDefaults(cluster)
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -4495,7 +4495,7 @@ func TestPodSpecForIKS(t *testing.T) {
 		},
 	}
 
-	driver := Portworx{}
+	driver := portworx{}
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -4614,7 +4614,7 @@ func TestPruneVolumes(t *testing.T) {
 		},
 	}
 
-	testObj := &Portworx{}
+	testObj := &portworx{}
 	testObj.pruneVolumes(&spec)
 
 	expectedVolumes := []v1.Volume{
@@ -4676,7 +4676,7 @@ func TestPodSpecWithClusterIDOverwritten(t *testing.T) {
 			Image: "portworx/oci-monitor:2.0.3.4",
 		},
 	}
-	driver := Portworx{}
+	driver := portworx{}
 
 	expectedArgs := []string{
 		"-c", "cluster-id-overwritten",

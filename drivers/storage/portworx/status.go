@@ -2,7 +2,6 @@ package portworx
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -33,7 +32,7 @@ const (
 	pxEntriesKey = "px-entries"
 )
 
-func (p *Portworx) UpdateStorageClusterStatus(
+func (p *portworx) UpdateStorageClusterStatus(
 	cluster *corev1.StorageCluster,
 	clusterHash string,
 ) error {
@@ -126,7 +125,7 @@ func convertDeprecatedClusterStatus(
 	}
 }
 
-func (p *Portworx) updatePortworxRuntimeStatus(
+func (p *portworx) updatePortworxRuntimeStatus(
 	cluster *corev1.StorageCluster,
 ) error {
 	if !pxutil.IsPortworxEnabled(cluster) {
@@ -190,7 +189,7 @@ func (p *Portworx) updatePortworxRuntimeStatus(
 	return p.updateStorageNodes(cluster)
 }
 
-func (p *Portworx) updatePortworxMigrationStatus(
+func (p *portworx) updatePortworxMigrationStatus(
 	cluster *corev1.StorageCluster,
 ) {
 	// Mark migration as completed when portworx daemonset got deleted
@@ -215,7 +214,7 @@ func (p *Portworx) updatePortworxMigrationStatus(
 // updatePortworxInstallStatus updates portworx install status, expected status: InProgress, Completed
 // If there's 1 node that has Initializing status and portworx is not initialized, mark as PortworxInstallInProgress
 // If all nodes status are updated according to SDK server response and portworx is installing, mark as PortworxInstallCompleted
-func (p *Portworx) updatePortworxInstallStatus(
+func (p *portworx) updatePortworxInstallStatus(
 	cluster *corev1.StorageCluster,
 	storageNodes []corev1.StorageNode,
 ) {
@@ -260,7 +259,7 @@ func (p *Portworx) updatePortworxInstallStatus(
 // updatePortworxUpdateStatus updates portworx update status, expected status: InProgress, Completed
 // If there's 1 node that has NodeUpdateInProgress status, mark as PortworxUpdateInProgress
 // If all nodes status are updated according to SDK server response and portworx is updating, mark as PortworxUpdateCompleted
-func (p *Portworx) updatePortworxUpdateStatus(
+func (p *portworx) updatePortworxUpdateStatus(
 	cluster *corev1.StorageCluster,
 	storageNodes []corev1.StorageNode,
 	clusterHash string,
@@ -379,38 +378,13 @@ func getStorageClusterState(
 	return corev1.ClusterStateUnknown
 }
 
-func (p *Portworx) GetKvdbMap(
+func (p *portworx) getKvdbMap(
 	cluster *corev1.StorageCluster,
 ) map[string]*kvdb_api.BootstrapEntry {
-	// If cluster is running internal kvdb, get current bootstrap nodes
-	kvdbNodeMap := make(map[string]*kvdb_api.BootstrapEntry)
-	if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal {
-		clusterID := pxutil.GetClusterID(cluster)
-		strippedClusterName := strings.ToLower(pxutil.ConfigMapNameRegex.ReplaceAllString(clusterID, ""))
-		cmName := fmt.Sprintf("%s%s", pxutil.InternalEtcdConfigMapPrefix, strippedClusterName)
-
-		cm := &v1.ConfigMap{}
-		err := p.k8sClient.Get(context.TODO(), types.NamespacedName{
-			Name:      cmName,
-			Namespace: bootstrapCloudDriveNamespace,
-		}, cm)
-		if err != nil {
-			logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
-		}
-
-		// Get the bootstrap entries
-		entriesBlob, ok := cm.Data[pxEntriesKey]
-		if ok {
-			kvdbNodeMap, err = blobToBootstrapEntries([]byte(entriesBlob))
-			if err != nil {
-				logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
-			}
-		}
-	}
-	return kvdbNodeMap
+	return pxutil.GetKvdbMap(p.k8sClient, cluster)
 }
 
-func (p *Portworx) updateStorageNodes(
+func (p *portworx) updateStorageNodes(
 	cluster *corev1.StorageCluster,
 ) error {
 	nodeClient := api.NewOpenStorageNodeClient(p.sdkConn)
@@ -427,7 +401,7 @@ func (p *Portworx) updateStorageNodes(
 		return fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
-	kvdbNodeMap := p.GetKvdbMap(cluster)
+	kvdbNodeMap := p.getKvdbMap(cluster)
 	nodesToPods, err := p.getNodesToPortworxPods(cluster)
 	if err != nil {
 		return err
@@ -476,7 +450,7 @@ func (p *Portworx) updateStorageNodes(
 	return p.updateRemainingStorageNodes(cluster, currentPxNodes)
 }
 
-func (p *Portworx) updateRemainingStorageNodesWithoutError(
+func (p *portworx) updateRemainingStorageNodesWithoutError(
 	cluster *corev1.StorageCluster,
 	currentPxNodes map[string]bool,
 ) {
@@ -485,7 +459,7 @@ func (p *Portworx) updateRemainingStorageNodesWithoutError(
 	}
 }
 
-func (p *Portworx) updateRemainingStorageNodes(
+func (p *portworx) updateRemainingStorageNodes(
 	cluster *corev1.StorageCluster,
 	currentPxNodes map[string]bool,
 ) error {
@@ -552,7 +526,7 @@ func (p *Portworx) updateRemainingStorageNodes(
 }
 
 // getNodesToPortworxPods find all k8s nodes where Portworx pods are running
-func (p *Portworx) getNodesToPortworxPods(
+func (p *portworx) getNodesToPortworxPods(
 	cluster *corev1.StorageCluster,
 ) (map[string][]*v1.Pod, error) {
 	pxLabels := p.GetSelectorLabels()
@@ -584,7 +558,7 @@ func (p *Portworx) getNodesToPortworxPods(
 // 1. check if storage node is updated according to px pod hash
 // 2. check if storage node is updated according to StorageCluster hash
 // 3. hash is updated but still needs node update
-func (p *Portworx) needsStorageNodeUpdate(
+func (p *portworx) needsStorageNodeUpdate(
 	cluster *corev1.StorageCluster,
 	storageNode *corev1.StorageNode,
 	portworxPod *v1.Pod,
@@ -606,7 +580,7 @@ func (p *Portworx) needsStorageNodeUpdate(
 	return storageNodeHash != "" && storageNodeHash != expectedHash
 }
 
-func (p *Portworx) createOrUpdateStorageNode(
+func (p *portworx) createOrUpdateStorageNode(
 	cluster *corev1.StorageCluster,
 	node *api.StorageNode,
 	pod *v1.Pod,
@@ -658,7 +632,7 @@ func (p *Portworx) createOrUpdateStorageNode(
 	return storageNode, err
 }
 
-func (p *Portworx) updateStorageNodeStatus(
+func (p *portworx) updateStorageNodeStatus(
 	storageNode *corev1.StorageNode,
 	node *api.StorageNode,
 	kvdbNodeMap map[string]*kvdb_api.BootstrapEntry,
@@ -881,21 +855,4 @@ func getStorageNodePhase(status *corev1.NodeStatus) string {
 		return string(nodeInitCondition.Status)
 	}
 	return string(nodeStateCondition.Status)
-}
-
-func blobToBootstrapEntries(
-	entriesBlob []byte,
-) (map[string]*kvdb_api.BootstrapEntry, error) {
-
-	var bEntries []*kvdb_api.BootstrapEntry
-	if err := json.Unmarshal(entriesBlob, &bEntries); err != nil {
-		return nil, err
-	}
-
-	// return as a map by ID to facilitate callers
-	retMap := make(map[string]*kvdb_api.BootstrapEntry)
-	for _, e := range bEntries {
-		retMap[e.ID] = e
-	}
-	return retMap, nil
 }

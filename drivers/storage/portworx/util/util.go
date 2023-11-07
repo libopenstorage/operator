@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net"
@@ -19,6 +20,7 @@ import (
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/cloudops"
+	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -246,6 +248,10 @@ const (
 
 	// VsphereInstallModeLocal env value for Vsphere 'local' install
 	VsphereInstallModeLocal = "local"
+)
+const (
+	// pxEntriesKey is key which holds all the bootstrap entries
+	pxEntriesKey = "px-entries"
 )
 
 // TLS related constants
@@ -1569,4 +1575,50 @@ func GetTLSCipherSuites(cluster *corev1.StorageCluster) (string, error) {
 		}
 	}
 	return strings.Join(outList, ","), nil
+}
+func GetKvdbMap(k8sClient client.Client,
+	cluster *corev1.StorageCluster,
+) map[string]*kvdb_api.BootstrapEntry {
+	// If cluster is running internal kvdb, get current bootstrap nodes
+	kvdbNodeMap := make(map[string]*kvdb_api.BootstrapEntry)
+	if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal {
+		clusterID := GetClusterID(cluster)
+		strippedClusterName := strings.ToLower(ConfigMapNameRegex.ReplaceAllString(clusterID, ""))
+		cmName := fmt.Sprintf("%s%s", InternalEtcdConfigMapPrefix, strippedClusterName)
+
+		cm := &v1.ConfigMap{}
+		err := k8sClient.Get(context.TODO(), types.NamespacedName{
+			Name:      cmName,
+			Namespace: "kube-system",
+		}, cm)
+		if err != nil {
+			logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
+		}
+
+		// Get the bootstrap entries
+		entriesBlob, ok := cm.Data[pxEntriesKey]
+		if ok {
+			kvdbNodeMap, err = blobToBootstrapEntries([]byte(entriesBlob))
+			if err != nil {
+				logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
+			}
+		}
+	}
+	return kvdbNodeMap
+}
+func blobToBootstrapEntries(
+	entriesBlob []byte,
+) (map[string]*kvdb_api.BootstrapEntry, error) {
+
+	var bEntries []*kvdb_api.BootstrapEntry
+	if err := json.Unmarshal(entriesBlob, &bEntries); err != nil {
+		return nil, err
+	}
+
+	// return as a map by ID to facilitate callers
+	retMap := make(map[string]*kvdb_api.BootstrapEntry)
+	for _, e := range bEntries {
+		retMap[e.ID] = e
+	}
+	return retMap, nil
 }
