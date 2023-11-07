@@ -3227,7 +3227,7 @@ func TestAutopilotInstall(t *testing.T) {
 				},
 				Args: map[string]string{
 					"min_poll_interval": "4",
-					"log-level":         "debug",
+					"log-level":         "info",
 				},
 			},
 			Security: &corev1.SecuritySpec{
@@ -3992,7 +3992,7 @@ func TestAutopilotArgumentsChange(t *testing.T) {
 	)
 	require.Contains(t,
 		autopilotDeployment.Spec.Template.Spec.Containers[0].Command,
-		"--log-level=debug",
+		"--log-level=info",
 	)
 
 	// Overwrite existing argument with new value

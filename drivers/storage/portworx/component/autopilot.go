@@ -405,7 +405,7 @@ func (c *autopilot) createDeployment(
 
 	args := map[string]string{
 		"config":    "/etc/config/config.yaml",
-		"log-level": "debug",
+		"log-level": "info",
 	}
 	for k, v := range cluster.Spec.Autopilot.Args {
 		if _, exists := autopilotConfigParams[k]; exists {
