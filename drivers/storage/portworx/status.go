@@ -6,6 +6,9 @@ import (
 	"reflect"
 	"strings"
 
+	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -22,9 +25,6 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
-	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	operatorops "github.com/portworx/sched-ops/k8s/operator"
 )
 
 func (p *portworx) UpdateStorageClusterStatus(
@@ -607,7 +607,7 @@ func (p *portworx) createOrUpdateStorageNode(
 		storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey] = originalHash
 	}
 
-	if version, ok := node.NodeLabels[labelPortworxVersion]; ok {
+	if version, ok := node.NodeLabels[pxutil.NodeLabelPortworxVersion]; ok {
 		storageNode.Spec.Version = version
 	} else {
 		partitions := strings.Split(cluster.Spec.Image, ":")

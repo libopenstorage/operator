@@ -45,7 +45,6 @@ const (
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
-	labelPortworxVersion              = "PX Version"
 	labelOperatingSystem              = "OS"
 	labelKernelVersion                = "Kernel Version"
 	defaultEksCloudStorageType        = "gp3"
