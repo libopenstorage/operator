@@ -11220,12 +11220,12 @@ func TestGetKVDBMembers(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	mockServiceServer := mock.NewMockPortworxServiceServer(mockCtrl)
+	mockServiceService := mock.NewMockPortworxServiceServer(mockCtrl)
 
 	sdkServerIP := "127.0.0.1"
 	sdkServerPort := 21883
 	mockSdk := mock.NewSdkServer(mock.SdkServers{
-		PortworxServer: mockServiceServer,
+		PortworxService: mockServiceService,
 	})
 
 	// Create fake k8s client with fake service that will point the client
@@ -11278,7 +11278,7 @@ func TestGetKVDBMembers(t *testing.T) {
 
 	// Case 2: When the portworx service server returns an error
 	expectedError := fmt.Errorf("test error from portworx service server")
-	mockServiceServer.EXPECT().GetKvdbMemberInfo(gomock.Any(), gomock.Any()).Return(nil, expectedError).Times(1)
+	mockServiceService.EXPECT().GetKvdbMemberInfo(gomock.Any(), gomock.Any()).Return(nil, expectedError).Times(1)
 
 	val, err = driver.GetKVDBMembers(cluster)
 	require.Error(t, err)
@@ -11287,7 +11287,7 @@ func TestGetKVDBMembers(t *testing.T) {
 
 	// Case 3: When there is no error from the server
 	expectedKvdbresponse := &pxapi.PxKvdbMemberResponse{}
-	mockServiceServer.EXPECT().GetKvdbMemberInfo(gomock.Any(), gomock.Any()).Return(expectedKvdbresponse, nil).Times(1)
+	mockServiceService.EXPECT().GetKvdbMemberInfo(gomock.Any(), gomock.Any()).Return(expectedKvdbresponse, nil).Times(1)
 
 	val, err = driver.GetKVDBMembers(cluster)
 	require.NoError(t, err)
