@@ -21,7 +21,6 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/cloudops"
 
-	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
 	"github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/openstorage/pkg/auth"
 	"github.com/libopenstorage/openstorage/pkg/grpcserver"
@@ -30,6 +29,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
