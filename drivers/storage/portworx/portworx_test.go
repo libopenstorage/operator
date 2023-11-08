@@ -9258,13 +9258,13 @@ func TestReinstall(t *testing.T) {
 	etcdConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.InternalEtcdConfigMapPrefix + "pxcluster",
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	cloudDriveConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.CloudDriveConfigMapPrefix + "pxcluster",
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 
@@ -9346,19 +9346,19 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 	etcdConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.InternalEtcdConfigMapPrefix + "pxcluster",
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	cloudDriveConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.CloudDriveConfigMapPrefix + "pxcluster",
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	pureConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pureStorageCloudDriveConfigMap,
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap, pureConfigMap)
@@ -9430,19 +9430,19 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMapsWhenOverwri
 	etcdConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.InternalEtcdConfigMapPrefix + strippedClusterName,
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	cloudDriveConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.CloudDriveConfigMapPrefix + strippedClusterName,
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	pureConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pureStorageCloudDriveConfigMap,
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap, pureConfigMap)
@@ -9948,7 +9948,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			Namespace: clusterNS,
 		},
 		Data: map[string]string{
-			pxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-one","Index":0,"State":1,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-two","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
+			pxutil.PxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-one","Index":0,"State":1,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-two","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
 		},
 	}
 
@@ -9982,7 +9982,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	}
 
 	// TEST 2: Remove KVDB condition
-	cm.Data[pxEntriesKey] = `[{"IP":"10.0.1.2","ID":"node-three","Index":0,"State":3,"Type":0,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-four","Index":2,"State":0,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`
+	cm.Data[pxutil.PxEntriesKey] = `[{"IP":"10.0.1.2","ID":"node-three","Index":0,"State":3,"Type":0,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-four","Index":2,"State":0,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`
 	err = driver.k8sClient.Update(context.TODO(), cm)
 	require.NoError(t, err)
 	err = driver.UpdateStorageClusterStatus(cluster, "")
@@ -10052,7 +10052,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			Return(expectedNodeEnumerateResp, nil).
 			Times(1)
 
-		cm.Data[pxEntriesKey] = fmt.Sprintf(
+		cm.Data[pxutil.PxEntriesKey] = fmt.Sprintf(
 			`[{"IP":"10.0.1.2","ID":"node-one","State":%d,"Type":%d,"Version":"v2","peerport":"9018","clientport":"9019"}]`,
 			kvdbNodeStateTest.state, kvdbNodeStateTest.nodeType)
 		err = driver.k8sClient.Update(context.TODO(), cm)
@@ -10194,7 +10194,7 @@ func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
 			Namespace: clusterNS,
 		},
 		Data: map[string]string{
-			pxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-one","Index":0,"State":1,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-two","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
+			pxutil.PxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-one","Index":0,"State":1,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-two","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
 		},
 	}
 
