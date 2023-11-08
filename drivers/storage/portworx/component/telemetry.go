@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -117,9 +119,14 @@ const (
 	defaultCollectorPort               = 10000
 	defaultRegisterPort                = 12001
 	defaultPhonehomePort               = 12002
+	pxDefaultCOListeningPort           = 9030
 
 	arcusPingInterval = 6 * time.Second
 	arcusPingRetry    = 5
+)
+
+var (
+	certStoreTypeRegx = regexp.MustCompile(`certStoreType: .*`)
 )
 
 type telemetry struct {
@@ -580,6 +587,13 @@ func (t *telemetry) createCCMGoConfigMapRegister(
 	if err != nil {
 		return err
 	}
+
+	// Check PX version to update the config for "container orchestrator"
+	if pxutil.IsCOSupported(pxutil.GetPortworxVersion(cluster)) {
+		config = certStoreTypeRegx.ReplaceAllString(config,
+			"certStoreType: \"kvstore\"\nkvStore:\n  serverAddress: \"127.0.0.1:"+strconv.Itoa(GetPxCOListeningPort(cluster))+"\"")
+	}
+
 	_, err = k8sutil.CreateOrUpdateConfigMap(
 		t.k8sClient,
 		&v1.ConfigMap{
@@ -1223,6 +1237,14 @@ func GetCCMListeningPort(cluster *corev1.StorageCluster) int {
 		return defCCMPort
 	}
 	return startPort + 20
+}
+
+func GetPxCOListeningPort(cluster *corev1.StorageCluster) int {
+	startPort := pxutil.StartPort(cluster)
+	if startPort == pxutil.DefaultStartPort {
+		return pxDefaultCOListeningPort
+	}
+	return startPort + 21
 }
 
 func getCCMCloudSupportPorts(cluster *corev1.StorageCluster, port int) (int, int, int) {

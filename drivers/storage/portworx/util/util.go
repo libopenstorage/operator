@@ -293,6 +293,8 @@ var (
 	MinimumPxVersionMetricsCollector, _ = version.NewVersion("2.9.1")
 	// MinimumPxVersionAutoTLS is a minimal PX version that supports "auto-TLS" setup
 	MinimumPxVersionAutoTLS, _ = version.NewVersion("4.0.0")
+	// MinimumPxVersionCO minimum PX version to use 'container orchestrator'
+	MinimumPxVersionCO, _ = version.NewVersion("3.1")
 
 	// ConfigMapNameRegex regex of configMap.
 	ConfigMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -1200,6 +1202,11 @@ func IsCCMGoSupported(pxVersion *version.Version) bool {
 	return pxVersion.GreaterThanOrEqual(MinimumPxVersionCCMGO)
 }
 
+// IsCOSupported returns true if px version is higher than MinimumPxVersionCO
+func IsCOSupported(pxVersion *version.Version) bool {
+	return pxVersion.GreaterThanOrEqual(MinimumPxVersionCO)
+}
+
 // IsPxRepoEnabled returns true is pxRepo is enabled
 func IsPxRepoEnabled(spec corev1.StorageClusterSpec) bool {
 	return spec.PxRepo != nil &&
@@ -1232,6 +1239,19 @@ func ApplyStorageClusterSettingsToPodSpec(cluster *corev1.StorageCluster, podSpe
 			container.Image = util.GetImageURN(cluster, container.Image)
 		}
 		container.ImagePullPolicy = ImagePullPolicy(cluster)
+
+		// Check PX version to update the env for registration pod to use the "container orchestrator"
+		if container.Name == "registration" && IsCOSupported(GetPortworxVersion(cluster)) {
+			refreshTokenEnv := "REFRESH_TOKEN"
+			_, exists := GetClusterEnvValue(cluster, refreshTokenEnv)
+			if !exists {
+				container.Env = append(container.Env,
+					v1.EnvVar{
+						Name:  refreshTokenEnv,
+						Value: "",
+					})
+			}
+		}
 	}
 
 	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
