@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	storageapi "github.com/libopenstorage/openstorage/api"
+	pxapi "github.com/libopenstorage/operator/api/px"
 	"github.com/libopenstorage/operator/drivers/storage"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
@@ -974,6 +975,29 @@ func (p *portworx) GetStorageNodes(
 	p.sdkConn, storageNodes, err = pxutil.GetStorageNodes(cluster, p.k8sClient, p.sdkConn)
 	return storageNodes, err
 
+}
+
+func (p *portworx) GetKVDBMembers(cluster *corev1.StorageCluster) (map[string]bool, error) {
+	var err error
+	p.sdkConn, err = pxutil.GetPortworxConn(p.sdkConn, p.k8sClient, cluster.Namespace)
+	if err != nil {
+		return nil, fmt.Errorf("error in connecting to portworx sdk server: %s", err)
+	}
+	serviceClient := pxapi.NewPortworxServiceClient(p.sdkConn)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	members, err := serviceClient.GetKvdbMemberInfo(ctx, &pxapi.PxKvdbMemberRequest{})
+
+	if err != nil {
+		return nil, fmt.Errorf("error in getting kvdb member info from sdk: %s", err)
+	}
+
+	kvdbMap := make(map[string]bool)
+	for id, member := range members.GetKvdbMemberInfo() {
+		kvdbMap[id] = member.GetIsHealthy()
+	}
+	return kvdbMap, nil
 }
 
 func (p *portworx) DeleteStorage(

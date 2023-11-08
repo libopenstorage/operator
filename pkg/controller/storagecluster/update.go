@@ -28,11 +28,12 @@ import (
 	"strings"
 
 	storageapi "github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	operatorutil "github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
+
+	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
@@ -57,7 +58,6 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		return fmt.Errorf("couldn't get node to storage pod mapping for storage cluster %v: %v",
 			cluster.Name, err)
 	}
-
 	_, oldPods := c.groupStorageClusterPods(cluster, nodeToStoragePods, hash)
 	maxUnavailable, numUnavailable, err := c.getUnavailableNumbers(cluster, nodeToStoragePods)
 	if err != nil {
@@ -77,12 +77,32 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		oldPodsToDelete = append(oldPodsToDelete, pod.Name)
 	}
 
+	// TODO: Max unavaibable kvdb nodes has been set to 1 assuming default setup of 3 KVDB nodes.
+	// Need to generalise code for 5 KVDB nodes
+
+	// get the number of kvdb members which are unavailable in case of internal kvdb
+	numUnavailableKvdb, kvdbNodes, err := c.getKVDBNodeAvailability(cluster)
+	if err != nil {
+		return err
+	}
+
 	logrus.Debugf("Marking old pods for deletion")
 	for _, pod := range oldAvailablePods {
 		if numUnavailable >= maxUnavailable {
 			logrus.Infof("Number of unavailable StorageCluster pods: %d, is equal "+
 				"to or exceeds allowed maximum: %d", numUnavailable, maxUnavailable)
 			break
+		}
+
+		// check if pod is running in a node which has internal kvdb running in it
+		if _, isKvdbNode := kvdbNodes[pod.Spec.NodeName]; cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal && isKvdbNode {
+			// if number of unavailable kvdb nodes is greater than or equal to 1, then dont restart portworx on this node
+			if numUnavailableKvdb > 0 {
+				logrus.Infof("Number of unavaliable KVDB members exceeds 1, temporarily skipping update for this node to prevent KVDB from going out of quorum ")
+				continue
+			} else {
+				numUnavailableKvdb++
+			}
 		}
 		logrus.Infof("Marking pod %s/%s for deletion", cluster.Name, pod.Name)
 		oldPodsToDelete = append(oldPodsToDelete, pod.Name)
@@ -102,6 +122,41 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 	}
 
 	return c.syncNodes(cluster, oldPodsToDelete, []string{}, hash)
+}
+
+// function to return the number of unavailable kvdb members and a list of the nodes which should have kvdb running in them
+func (c *Controller) getKVDBNodeAvailability(cluster *corev1.StorageCluster) (int, map[string]bool, error) {
+
+	var kvdbStorageNodeList = make(map[string]bool)
+	unavailableKvdbNodes := 0
+	if storagePodsEnabled(cluster) {
+		storageNodeList, err := c.Driver.GetStorageNodes(cluster)
+		if err != nil {
+			return -1, nil, fmt.Errorf("couldn't get list of storage nodes during rolling "+
+				"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
+		}
+
+		var kvdbMap map[string]bool
+		kvdbMap, err = c.Driver.GetKVDBMembers(cluster)
+		if err != nil {
+			return -1, nil, fmt.Errorf("couldn't get KVDB members due to %s", err)
+		}
+
+		for _, storageNode := range storageNodeList {
+			isHealthy, present := kvdbMap[storageNode.Id]
+			if present {
+				if !isHealthy {
+					unavailableKvdbNodes++
+				}
+				kvdbStorageNodeList[storageNode.SchedulerNodeName] = true
+			}
+
+		}
+
+	}
+
+	return unavailableKvdbNodes, kvdbStorageNodeList, nil
+
 }
 
 // annotateStoragePod annotate storage pods with custom annotations along with known annotations,
