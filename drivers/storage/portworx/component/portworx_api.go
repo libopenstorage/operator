@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -264,6 +265,15 @@ func getPortworxAPIDaemonSetSpec(
 		},
 	}
 
+	// If CSI is enabled then run the csi-node-driver-registrar pods in the same daemonset
+	if pxutil.IsCSIEnabled(cluster) {
+		csiRegistrar := csiRegistrarContainer(cluster)
+		if csiRegistrar != nil {
+			newDaemonSet.Spec.Template.Spec.Containers = append(newDaemonSet.Spec.Template.Spec.Containers, *csiRegistrar)
+		}
+		newDaemonSet.Spec.Template.Spec.Volumes = GetCSIContainerVolume(cluster)
+	}
+
 	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
 		newDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
 			[]v1.LocalObjectReference{},
@@ -310,4 +320,129 @@ func RegisterPortworxAPIComponent() {
 
 func init() {
 	RegisterPortworxAPIComponent()
+}
+
+// Function to return container specs for csi-node-driver-registrar
+func csiRegistrarContainer(cluster *corev1.StorageCluster) *v1.Container {
+	k8sVersion, _, _ := k8sutil.GetFullVersion()
+	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
+	disableCSIAlpha := pxutil.DisableCSIAlpha(cluster)
+	kubeletPath := pxutil.KubeletPath(cluster)
+	includeSnapshotController := pxutil.IncludeCSISnapshotController(cluster)
+	pxVersion := pxutil.GetPortworxVersion(cluster)
+	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
+	csiGenerator := pxutil.NewCSIGenerator(*k8sVersion, *pxVersion,
+		deprecatedCSIDriverName, disableCSIAlpha, kubeletPath, includeSnapshotController)
+
+	var csiConfig *pxutil.CSIConfiguration
+	if pxutil.IsCSIEnabled(cluster) {
+		csiConfig = csiGenerator.GetCSIConfiguration()
+	} else {
+		csiConfig = csiGenerator.GetBasicCSIConfiguration()
+	}
+
+	container := v1.Container{
+		ImagePullPolicy: imagePullPolicy,
+		Env: []v1.EnvVar{
+			{
+				Name:  "ADDRESS",
+				Value: "/csi/csi.sock",
+			},
+			{
+				Name: "KUBE_NODE_NAME",
+				ValueFrom: &v1.EnvVarSource{
+					FieldRef: &v1.ObjectFieldSelector{
+						FieldPath: "spec.nodeName",
+					},
+				},
+			},
+		},
+		VolumeMounts: []v1.VolumeMount{
+			{
+				Name:      "csi-driver-path",
+				MountPath: "/csi",
+			},
+			{
+				Name:      "registration-dir",
+				MountPath: "/registration",
+			},
+		},
+	}
+
+	if cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {
+		container.Name = pxutil.CSIRegistrarContainerName
+		container.Image = util.GetImageURN(
+			cluster,
+			cluster.Status.DesiredImages.CSINodeDriverRegistrar,
+		)
+		container.Args = []string{
+			"--v=5",
+			"--csi-address=$(ADDRESS)",
+			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", csiConfig.DriverBasePath()),
+		}
+	} else if cluster.Status.DesiredImages.CSIDriverRegistrar != "" {
+		container.Name = "csi-driver-registrar"
+		container.Image = util.GetImageURN(
+			cluster,
+			cluster.Status.DesiredImages.CSIDriverRegistrar,
+		)
+		container.Args = []string{
+			"--v=5",
+			"--csi-address=$(ADDRESS)",
+			"--mode=node-register",
+			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", csiConfig.DriverBasePath()),
+		}
+	}
+
+	if container.Name == "" {
+		return nil
+	}
+	return &container
+}
+
+// Returns the volume specs for the csi container
+func GetCSIContainerVolume(cluster *corev1.StorageCluster) []v1.Volume {
+	k8sVersion, _, _ := k8sutil.GetFullVersion()
+	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
+	disableCSIAlpha := pxutil.DisableCSIAlpha(cluster)
+	kubeletPath := pxutil.KubeletPath(cluster)
+	includeSnapshotController := pxutil.IncludeCSISnapshotController(cluster)
+	pxVersion := pxutil.GetPortworxVersion(cluster)
+	csiGenerator := pxutil.NewCSIGenerator(*k8sVersion, *pxVersion,
+		deprecatedCSIDriverName, disableCSIAlpha, kubeletPath, includeSnapshotController)
+
+	if !pxutil.IsCSIEnabled(cluster) {
+		return []v1.Volume{}
+	}
+
+	csiConfig := csiGenerator.GetCSIConfiguration()
+	volumes := make([]v1.Volume, 0, 2)
+
+	volume1 := v1.Volume{
+		Name: "registration-dir",
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: kubeletPath + "/plugins_registry",
+				Type: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
+			},
+		},
+	}
+
+	if csiConfig.UseOlderPluginsDirAsRegistration {
+		volume1.HostPath.Path = kubeletPath + "/plugins"
+	}
+
+	volumes = append(volumes, volume1)
+
+	volume2 := v1.Volume{
+		Name: "csi-driver-path",
+		VolumeSource: v1.VolumeSource{
+			HostPath: &v1.HostPathVolumeSource{
+				Path: csiConfig.DriverBasePath(),
+				Type: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
+			},
+		},
+	}
+	volumes = append(volumes, volume2)
+	return volumes
 }
