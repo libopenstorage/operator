@@ -45,7 +45,6 @@ const (
 	storageClusterDeleteMsg           = "Portworx service NOT removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallMsg        = "Portworx service removed. Portworx drives and data NOT wiped."
 	storageClusterUninstallAndWipeMsg = "Portworx service removed. Portworx drives and data wiped."
-	labelPortworxVersion              = "PX Version"
 	labelOperatingSystem              = "OS"
 	labelKernelVersion                = "Kernel Version"
 	defaultEksCloudStorageType        = "gp3"
@@ -1032,6 +1031,8 @@ func (p *portworx) DeleteStorage(
 		removeData = true
 		completeMsg = storageClusterUninstallAndWipeMsg
 	}
+
+	logrus.WithField("removeData", removeData).Warnf("Deleting portworx cluster %s", cluster.Name)
 
 	u := NewUninstaller(cluster, p.k8sClient)
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
