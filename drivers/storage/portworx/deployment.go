@@ -297,13 +297,6 @@ func (p *portworx) GetStoragePodSpec(
 		podSpec.DNSPolicy = v1.DNSPolicy(cluster.Annotations[pxutil.AnnotationDNSPolicy])
 	}
 
-	if pxutil.IsCSIEnabled(t.cluster) {
-		csiRegistrar := t.csiRegistrarContainer()
-		if csiRegistrar != nil {
-			podSpec.Containers = append(podSpec.Containers, *csiRegistrar)
-		}
-	}
-
 	if pxutil.IsTelemetryEnabled(cluster.Spec) && !pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) {
 		telemetryContainer := t.telemetryContainer()
 		if telemetryContainer != nil {
@@ -558,66 +551,6 @@ func (t *template) kvdbContainer() v1.Container {
 			},
 		},
 	}
-}
-
-func (t *template) csiRegistrarContainer() *v1.Container {
-	container := v1.Container{
-		ImagePullPolicy: t.imagePullPolicy,
-		Env: []v1.EnvVar{
-			{
-				Name:  "ADDRESS",
-				Value: "/csi/csi.sock",
-			},
-			{
-				Name: "KUBE_NODE_NAME",
-				ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{
-						FieldPath: "spec.nodeName",
-					},
-				},
-			},
-		},
-		VolumeMounts: []v1.VolumeMount{
-			{
-				Name:      "csi-driver-path",
-				MountPath: "/csi",
-			},
-			{
-				Name:      "registration-dir",
-				MountPath: "/registration",
-			},
-		},
-	}
-
-	if t.cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {
-		container.Name = pxutil.CSIRegistrarContainerName
-		container.Image = util.GetImageURN(
-			t.cluster,
-			t.cluster.Status.DesiredImages.CSINodeDriverRegistrar,
-		)
-		container.Args = []string{
-			"--v=5",
-			"--csi-address=$(ADDRESS)",
-			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", t.csiConfig.DriverBasePath()),
-		}
-	} else if t.cluster.Status.DesiredImages.CSIDriverRegistrar != "" {
-		container.Name = "csi-driver-registrar"
-		container.Image = util.GetImageURN(
-			t.cluster,
-			t.cluster.Status.DesiredImages.CSIDriverRegistrar,
-		)
-		container.Args = []string{
-			"--v=5",
-			"--csi-address=$(ADDRESS)",
-			"--mode=node-register",
-			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", t.csiConfig.DriverBasePath()),
-		}
-	}
-
-	if container.Name == "" {
-		return nil
-	}
-	return &container
 }
 
 func (t *template) telemetryContainer() *v1.Container {
@@ -1309,7 +1242,7 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 func (t *template) getVolumes() []v1.Volume {
 	volumeInfoList := getDefaultVolumeInfoList(t.pxVersion)
 	extensions := []func() []volumeInfo{
-		t.getCSIVolumeInfoList,
+		//t.getCSIVolumeInfoList,
 		t.getTelemetryVolumeInfoList,
 		t.getK3sVolumeInfoList,
 		t.getIKSVolumeInfoList,
@@ -1414,32 +1347,6 @@ func (t *template) getVolumes() []v1.Volume {
 	}
 
 	return volumes
-}
-
-func (t *template) getCSIVolumeInfoList() []volumeInfo {
-	if !pxutil.IsCSIEnabled(t.cluster) {
-		return []volumeInfo{}
-	}
-
-	kubeletPath := pxutil.KubeletPath(t.cluster)
-	registrationVol := volumeInfo{
-		name:         "registration-dir",
-		hostPath:     kubeletPath + "/plugins_registry",
-		hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
-	}
-	if t.csiConfig.UseOlderPluginsDirAsRegistration {
-		registrationVol.hostPath = kubeletPath + "/plugins"
-	}
-
-	volumeInfoList := []volumeInfo{registrationVol}
-	volumeInfoList = append(volumeInfoList,
-		volumeInfo{
-			name:         "csi-driver-path",
-			hostPath:     t.csiConfig.DriverBasePath(),
-			hostPathType: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
-		},
-	)
-	return volumeInfoList
 }
 
 func (t *template) getTelemetryPhoneHomeVolumeInfoList() []volumeInfo {
