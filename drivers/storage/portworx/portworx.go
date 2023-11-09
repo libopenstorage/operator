@@ -822,6 +822,8 @@ func (p *portworx) DeleteStorage(
 		completeMsg = storageClusterUninstallAndWipeMsg
 	}
 
+	logrus.WithField("removeData", removeData).Warnf("Deleting portworx cluster %s", cluster.Name)
+
 	u := NewUninstaller(cluster, p.k8sClient)
 	completed, inProgress, total, err := u.GetNodeWiperStatus()
 	if err != nil && errors.IsNotFound(err) {

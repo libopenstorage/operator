@@ -63,8 +63,10 @@ const (
 )
 
 var (
-	instance Manifest
-	once     sync.Once
+	instance      Manifest
+	once          sync.Once
+	pxVer2_5_7, _ = version.NewVersion("2.5.7")
+	pxVer3_1_0, _ = version.NewVersion("3.1.0")
 )
 
 // Release is a single release object with images for different components
@@ -185,7 +187,6 @@ func (m *manifest) GetVersions(
 	ver := pxutil.GetImageTag(cluster.Spec.Image)
 	currPxVer, err := version.NewSemver(ver)
 	if err == nil {
-		pxVer2_5_7, _ := version.NewVersion("2.5.7")
 		if currPxVer.LessThan(pxVer2_5_7) {
 			provider = newDeprecatedManifest(ver)
 		}
@@ -213,6 +214,9 @@ func (m *manifest) GetVersions(
 		return defaultRelease(m.k8sVersion)
 	}
 
+	if currPxVer != nil && currPxVer.GreaterThanOrEqual(pxVer3_1_0) && rel.Components.NodeWiper == "" {
+		rel.Components.NodeWiper = cluster.Spec.Image
+	}
 	fillDefaults(rel, m.k8sVersion)
 	m.lastUpdated = time.Now()
 	m.cachedVersions = rel
