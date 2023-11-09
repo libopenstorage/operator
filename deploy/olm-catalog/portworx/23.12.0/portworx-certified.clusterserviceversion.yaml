@@ -62,7 +62,7 @@ spec:
   keywords: ["portworx", "persistent storage", "storage", "cloud native", "open source"]
   relatedImages:
     - name: portworx-operator
-      image: registry.connect.redhat.com/portworx/openstorage-operator@sha256:6c0d870d8573747f79cbebf41614258326131173668aa7be5638c8dd7846ea54
+      image: portworx/px-operator:23.12.0-dev
   labels:
     operated-by: portworx-operator
   selector:
@@ -219,7 +219,7 @@ spec:
                     topologyKey: kubernetes.io/hostname
               containers:
               - name: portworx-operator
-                image: registry.connect.redhat.com/portworx/openstorage-operator@sha256:6c0d870d8573747f79cbebf41614258326131173668aa7be5638c8dd7846ea54
+                image: portworx/px-operator:23.12.0-dev
                 imagePullPolicy: Always
                 command:
                 - /operator
