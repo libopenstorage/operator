@@ -3745,10 +3745,10 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	// Checking after first volume as autopilot deployment already has 1 volume
-	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	// Checking the 2nd volume as autopilot deployment already has the other two defined
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:2])
 	require.ElementsMatch(t, volumeMounts,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:2])
 
 	// Case: Updated volumes should be applied to the deployment
 	propagation := v1.MountPropagationBidirectional
@@ -3766,9 +3766,9 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	autopilotDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:2])
 	require.ElementsMatch(t, volumeMounts,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:2])
 
 	// Case: New volumes should be applied to the deployment
 	volumeSpecs = append(volumeSpecs, corev1.VolumeSpec{
@@ -3791,9 +3791,10 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	autopilotDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	// Newly added volume should follow the 2nd volume due to their naming
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:3])
 	require.ElementsMatch(t, volumeMounts,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:3])
 
 	// Case: Removed volumes should be removed from the deployment
 	volumeSpecs = []corev1.VolumeSpec{volumeSpecs[0]}
@@ -3808,9 +3809,9 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	autopilotDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:2])
 	require.ElementsMatch(t, volumeMounts,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:2])
 
 	// Case: If volumes are empty, should be removed from the deployment
 	cluster.Spec.Autopilot.Volumes = []corev1.VolumeSpec{}
@@ -3823,8 +3824,9 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	autopilotDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
-	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+	// Should contain at least two volumes from the defination
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Volumes[2:])
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[2:])
 
 	// Case: Volumes should be added back if not present in deployment
 	cluster.Spec.Autopilot.Volumes = volumeSpecs
@@ -3838,9 +3840,9 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	autopilotDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
+	require.ElementsMatch(t, volumes, autopilotDeployment.Spec.Template.Spec.Volumes[1:2])
 	require.ElementsMatch(t, volumeMounts,
-		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+		autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:2])
 
 	// Case: If volumes is nil, deployment should not have volumes
 	cluster.Spec.Autopilot.Volumes = nil
@@ -3853,8 +3855,8 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	autopilotDeployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Volumes[1:])
-	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1:])
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Volumes[2:])
+	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[2:])
 }
 
 func TestSecurityInstall(t *testing.T) {

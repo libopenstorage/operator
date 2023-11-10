@@ -71,6 +71,15 @@ var (
 				},
 			},
 		},
+		{
+			Name:      "varcores",
+			MountPath: "/var/cores",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/var/cores",
+				},
+			},
+		},
 	}
 )
 
@@ -251,6 +260,12 @@ func (c *autopilot) createClusterRole() error {
 			APIGroups: []string{"apiextensions.k8s.io"},
 			Resources: []string{"customresourcedefinitions"},
 			Verbs:     []string{"create", "get", "update"},
+		},
+		{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			ResourceNames: []string{"portworx-restricted"},
+			Verbs:         []string{"use"},
 		},
 	}
 	if c.k8sVersion.LessThan(k8sutil.K8sVer1_25) {
