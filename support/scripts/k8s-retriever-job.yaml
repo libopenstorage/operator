@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: px-k8s-retriever-job
+spec:
+  template:
+    spec:
+      serviceAccountName: portworx-operator
+      containers:
+        - name: k8s-retriever
+          image: calvarado2004/portworx-operator:23.11.1
+          command:
+            - /bin/sh
+            - -c
+            - /support/scripts/bin/retriever
+          env:
+            - name: "PX_NAMESPACE"
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: "RETRIEVER_OUTPUT_PATH"
+              value: "/var/cores/px-k8s-retriever"
+            - name: "RETRIEVER_POD_NAME"
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: "RETRIEVER_NODE_NAME"
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true
+            runAsUser: 0
+            runAsGroup: 0
+          volumeMounts:
+            - name: cores-volume
+              mountPath: /var/cores
+            - name: etc-volume
+              mountPath: /etc
+              readOnly: true
+      restartPolicy: OnFailure
+      volumes:
+        - name: cores-volume
+          hostPath:
+            path: /var/cores
+            type: Directory
+        - name: etc-volume
+          hostPath:
+            path: /etc
+            type: Directory

@@ -22,3 +22,4 @@ COPY manifests /manifests
 COPY bin/configs /configs
 COPY bin/operator /
 COPY bin/dryrun /
+COPY support/scripts/bin/retriever /support/scripts/bin
