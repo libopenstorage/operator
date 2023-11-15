@@ -36,7 +36,8 @@ const (
 	// DefCmetaData default metadata cloud device for DMthin AWS
 	DefCmetaAWS = "type=gp3,size=64"
 	// DefCmetaVsphere default metadata cloud device for DMthin Vsphere
-	DefCmetaVsphere = "type=eagerzeroedthick,size=64"
+	DefCmetaVsphere    = "type=eagerzeroedthick,size=64"
+	preFlightOutputLog = "/var/cores/px-pre-flight-output.log"
 )
 
 // PreFlightPortworx provides a set of APIs to uninstall portworx
@@ -170,7 +171,10 @@ func (u *preFlightPortworx) CreatePreFlightDaemonsetSpec(ownerRef *metav1.OwnerR
 		preflightDS.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Port = intstr.FromInt(preFltEndPtPort)
 		// Add pre-flight param w/--pre-flight-port
 		preflightDS.Spec.Template.Spec.Containers[0].Args = append(
-			[]string{"--pre-flight-port", fmt.Sprintf("%d", preFltEndPtPort)},
+			[]string{
+				"--pre-flight-port", fmt.Sprintf("%d", preFltEndPtPort),
+				"--log", preFlightOutputLog,
+			},
 			preflightDS.Spec.Template.Spec.Containers[0].Args...)
 	}
 
