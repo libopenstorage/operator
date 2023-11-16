@@ -5833,7 +5833,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.12.0",
+		GitVersion: "v1.13.0",
 	}
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
@@ -5844,7 +5844,6 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	driver := portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
-
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -5852,46 +5851,20 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/image:2.2",
-			FeatureGates: map[string]string{
-				string(pxutil.FeatureCSI): "true",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
 			},
 		},
 	}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
-
+	// There should be no StatefulSet and replaced it with Deployment
 	statefulSet := &appsv1.StatefulSet{}
 	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Len(t, statefulSet.Spec.Template.Spec.Containers, 2)
-	require.Equal(t, "quay.io/k8scsi/csi-provisioner:v1.2.3",
-		statefulSet.Spec.Template.Spec.Containers[0].Image)
-	require.Equal(t, "quay.io/k8scsi/csi-attacher:v1.2.3",
-		statefulSet.Spec.Template.Spec.Containers[1].Image)
-
+	require.True(t, errors.IsNotFound(err))
 	deployment := &appsv1.Deployment{}
-	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-
-	// Use kubernetes version 1.13. CSI sidecars should run as Deployment instead of StatefulSet
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.13.0",
-	}
-	driver.k8sVersion, _ = k8sutil.GetVersion()
-	driver.initializeComponents()
-
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	// We should remove the old StatefulSet and replaced it with Deployment
-	statefulSet = &appsv1.StatefulSet{}
-	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-
-	deployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 3)
@@ -5907,7 +5880,6 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers[2].Image)
 	require.Equal(t, "--leader-election-type=configmaps",
 		deployment.Spec.Template.Spec.Containers[2].Args[3])
-
 	// Use kubernetes version 1.14. We should use CSIDriverInfo instead of attacher sidecar
 	// and add the resizer sidecar
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
@@ -5915,14 +5887,11 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	}
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
-
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
-
 	statefulSet = &appsv1.StatefulSet{}
 	err = testutil.Get(k8sClient, statefulSet, component.CSIApplicationName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
-
 	deployment = &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.NoError(t, err)
@@ -6301,7 +6270,6 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.4",
 	}
-	nodeName := "testNode"
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -6379,12 +6347,12 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	}
 	require.True(t, validStatefulSetSocketPath)
 
-	spec, err := driver.GetStoragePodSpec(cluster, nodeName)
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
-	logrus.Infof("Volumes %+v", spec.Volumes)
+	logrus.Infof("Volumes %+v", ds.Spec.Template.Spec.Volumes)
 
-	// CSI driver path
-	for _, v := range spec.Volumes {
+	for _, v := range ds.Spec.Template.Spec.Volumes {
 		if v.Name == "csi-driver-path" && v.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
 			validCSIDriverPath = true
 		}

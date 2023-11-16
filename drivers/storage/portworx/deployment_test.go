@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/stretchr/testify/assert"
@@ -28,6 +29,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/preflight"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	appsv1 "k8s.io/api/apps/v1"
 )
 
 func TestBasicRuncPodSpec(t *testing.T) {
@@ -96,7 +98,7 @@ func TestBasicRuncPodSpec(t *testing.T) {
 func TestPodSpecWithCustomKubeletDir(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	// expected := getExpectedPodSpecFromDaemonset(t, "testspec/runc.yaml")
-	nodeName := "testNode"
+	reregisterComponents()
 	customKubeletPath := "/data/kubelet"
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -155,15 +157,26 @@ func TestPodSpecWithCustomKubeletDir(t *testing.T) {
 		},
 	}
 
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
 
-	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
-	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
 
 	// CSI driver path
 	var ok bool
-	for _, v := range actual.Volumes {
-		if v.Name == "csi-driver-path" && v.VolumeSource.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	logrus.Infof("Volumes %+v", ds.Spec.Template.Spec.Volumes)
+
+	for _, v := range ds.Spec.Template.Spec.Volumes {
+		if v.Name == "csi-driver-path" && v.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
 			ok = true
 		}
 	}
@@ -2521,9 +2534,8 @@ func TestPodSpecWithImagePullPolicy(t *testing.T) {
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
 	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
-	assert.Len(t, actual.Containers, 2)
+	assert.Len(t, actual.Containers, 1)
 	assert.Equal(t, v1.PullIfNotPresent, actual.Containers[0].ImagePullPolicy)
-	assert.Equal(t, v1.PullIfNotPresent, actual.Containers[1].ImagePullPolicy)
 }
 
 func TestPodSpecWithNilStorageCluster(t *testing.T) {
