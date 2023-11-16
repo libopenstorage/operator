@@ -6731,7 +6731,6 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
-	nodeName := "testNode"
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -6811,12 +6810,12 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	}
 	require.True(t, validStatefulSetSocketPath)
 
-	spec, err := driver.GetStoragePodSpec(cluster, nodeName)
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
-	logrus.Infof("Volumes %+v", spec.Volumes)
+	logrus.Infof("Volumes %+v", ds.Spec.Template.Spec.Volumes)
 
-	// CSI driver path
-	for _, v := range spec.Volumes {
+	for _, v := range ds.Spec.Template.Spec.Volumes {
 		if v.Name == "csi-driver-path" && v.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
 			validCSIDriverPath = true
 		}

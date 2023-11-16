@@ -44,5 +44,37 @@ spec:
               host: 127.0.0.1
               path: /status
               port: 10001
+        - args:
+          - --v=5
+          - --csi-address=$(ADDRESS)
+          - --kubelet-registration-path=/var/lib/kubelet/csi-plugins/pxd.portworx.com/csi.sock
+          env:
+          - name: ADDRESS
+            value: /csi/csi.sock
+          - name: KUBE_NODE_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: ""
+                fieldPath: spec.nodeName
+          image: quay.io/k8scsi/csi-node-driver-registrar:v1.2.3
+          imagePullPolicy: Always
+          name: csi-node-driver-registrar
+          resources: {}
+          terminationMessagePath: ""
+          terminationMessagePolicy: ""
+          volumeMounts:
+          - mountPath: /csi
+            name: csi-driver-path
+          - mountPath: /registration
+            name: registration-dir
       restartPolicy: Always
       serviceAccountName: portworx
+      volumes:
+      - hostPath:
+          path: /var/lib/kubelet/plugins
+          type: DirectoryOrCreate
+        name: registration-dir
+      - hostPath:
+          path: /var/lib/kubelet/csi-plugins/pxd.portworx.com
+          type: DirectoryOrCreate
+        name: csi-driver-path
