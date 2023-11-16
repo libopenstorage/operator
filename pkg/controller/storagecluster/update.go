@@ -33,6 +33,8 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	operatorutil "github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
+
+	"github.com/hashicorp/go-version"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
@@ -77,6 +79,16 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		oldPodsToDelete = append(oldPodsToDelete, pod.Name)
 	}
 
+	// If px version is greater than 2.15 then delete px-api pods along with px pods
+	pxVersion := util.GetPortworxVersion(cluster)
+	supportedPxVersion, _ := version.NewVersion("2.15")
+	restartPxApiPods := false
+	var pxApiPods []*v1.Pod
+	if pxVersion.GreaterThanOrEqual(supportedPxVersion) {
+		restartPxApiPods = true
+		pxApiPods = c.getPxApiPods(cluster)
+	}
+
 	logrus.Debugf("Marking old pods for deletion")
 	for _, pod := range oldAvailablePods {
 		if numUnavailable >= maxUnavailable {
@@ -84,6 +96,14 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 				"to or exceeds allowed maximum: %d", numUnavailable, maxUnavailable)
 			break
 		}
+		// If pxversion is greater than 2.15 then delete the portworx-api pods with csi-node-registrar containers as well when updating storage cluster
+		if restartPxApiPods {
+			apiPod := getPxAPiPodForNode(pod.Spec.NodeName, pxApiPods)
+			if apiPod != nil {
+				oldPodsToDelete = append(oldPodsToDelete, apiPod.Name)
+			}
+		}
+
 		logrus.Infof("Marking pod %s/%s for deletion", cluster.Name, pod.Name)
 		oldPodsToDelete = append(oldPodsToDelete, pod.Name)
 		numUnavailable++
@@ -102,6 +122,38 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 	}
 
 	return c.syncNodes(cluster, oldPodsToDelete, []string{}, hash)
+}
+
+func getPxAPiPodForNode(nodeName string, ApiPods []*v1.Pod) *v1.Pod {
+
+	for _, pod := range ApiPods {
+		fmt.Println("PXPOD 2", pod.Spec.NodeName)
+		if reflect.DeepEqual(pod.Spec.NodeName, nodeName) {
+			return pod
+		}
+	}
+	return nil
+}
+
+func (c *Controller) getPxApiPods(cluster *corev1.StorageCluster) []*v1.Pod {
+	podList := &v1.PodList{}
+	err := c.client.List(context.TODO(),
+		podList,
+		&client.ListOptions{
+			Namespace:     cluster.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{"name": "portworx-api"}),
+		},
+	)
+
+	if err != nil {
+		return nil
+	}
+	result := make([]*v1.Pod, 0)
+	for _, pod := range podList.Items {
+		result = append(result, pod.DeepCopy())
+	}
+	return result
+
 }
 
 // annotateStoragePod annotate storage pods with custom annotations along with known annotations,
