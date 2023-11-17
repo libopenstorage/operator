@@ -6379,7 +6379,24 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	}
 	require.True(t, validStatefulSetSocketPath)
 
+	// Case 1: When portworx version is less than 2.13
 	spec, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	logrus.Infof("Volumes %+v", spec.Volumes)
+
+	// CSI driver path
+	for _, v := range spec.Volumes {
+		if v.Name == "csi-driver-path" && v.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
+			validCSIDriverPath = true
+		}
+	}
+	require.True(t, validCSIDriverPath)
+
+	// Case 2: When px version is greater than or equal to 2.13, csi-node-driver-registrar becomes a part of the portworx-api daemonset instead of storage pod
+	// Hence even the CSI volumes are defined in the portworx-api daemonset
+	cluster.Spec.Image = "portworx/image:2.15.2"
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	logrus.Infof("Volumes %+v", spec.Volumes)
 

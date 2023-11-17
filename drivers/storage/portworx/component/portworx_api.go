@@ -9,6 +9,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -252,12 +253,17 @@ func getPortworxAPIDaemonSetSpec(
 	}
 
 	// If CSI is enabled then run the csi-node-driver-registrar pods in the same daemonset
-	if pxutil.IsCSIEnabled(cluster) {
+	// Do this only if portworx version is greater than 2.13
+	pxVersion := pxutil.GetPortworxVersion(cluster)
+	supportedPxVersion, _ := version.NewVersion("2.13")
+	if pxutil.IsCSIEnabled(cluster) && pxVersion.GreaterThanOrEqual(supportedPxVersion) {
 		csiRegistrar := csiRegistrarContainer(cluster)
 		if csiRegistrar != nil {
 			newDaemonSet.Spec.Template.Spec.Containers = append(newDaemonSet.Spec.Template.Spec.Containers, *csiRegistrar)
+			newDaemonSet.Spec.Template.Spec.Volumes = getCSIContainerVolume(cluster)
+		} else {
+			logrus.Warn("CSI enabled, but no CSI-Registrar container info")
 		}
-		newDaemonSet.Spec.Template.Spec.Volumes = GetCSIContainerVolume(cluster)
 	}
 
 	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
@@ -387,7 +393,7 @@ func csiRegistrarContainer(cluster *corev1.StorageCluster) *v1.Container {
 }
 
 // Returns the volume specs for the csi container
-func GetCSIContainerVolume(cluster *corev1.StorageCluster) []v1.Volume {
+func getCSIContainerVolume(cluster *corev1.StorageCluster) []v1.Volume {
 	k8sVersion, _, _ := k8sutil.GetFullVersion()
 	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
 	disableCSIAlpha := pxutil.DisableCSIAlpha(cluster)
