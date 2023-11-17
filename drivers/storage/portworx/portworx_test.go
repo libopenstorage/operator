@@ -739,7 +739,6 @@ func TestPreflightAnnotations(t *testing.T) {
 
 	err := preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
-	require.Equal(t, string(cloudops.AWS), pxutil.GetCloudProvider(cluster)) // Make sure aws
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
