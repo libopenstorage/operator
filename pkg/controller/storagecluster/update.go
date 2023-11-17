@@ -87,14 +87,14 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		return err
 	}
 
-	// If px version is greater than 2.15 then delete px-api pods along with px pods
+	// If px version is greater than 2.13 then delete px-api pods along with px pods
 	pxVersion := util.GetPortworxVersion(cluster)
-	supportedPxVersion, _ := version.NewVersion("2.15")
+	supportedPxVersion, _ := version.NewVersion("2.13")
 	restartPxApiPods := false
-	var pxApiPods []*v1.Pod
+	var pxApiPodsMap = make(map[string]string)
 	if pxVersion.GreaterThanOrEqual(supportedPxVersion) {
 		restartPxApiPods = true
-		pxApiPods = c.getPxApiPods(cluster)
+		pxApiPodsMap = c.getNodeToPxApiPodsMap(cluster)
 	}
 
 	logrus.Debugf("Marking old pods for deletion")
@@ -116,11 +116,11 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 			}
 		}
 
-		// If pxversion is greater than 2.15 then delete the portworx-api pods with csi-node-registrar containers as well when updating storage cluster
+		// If pxversion is greater than 2.13 then delete the portworx-api pods with csi-node-registrar containers as well when updating storage cluster
+		// This is done to re-register csi driver which gets removed when csi-node-driver-registrar is removed from px pods
 		if restartPxApiPods {
-			apiPod := getPxAPiPodForNode(pod.Spec.NodeName, pxApiPods)
-			if apiPod != nil {
-				oldPodsToDelete = append(oldPodsToDelete, apiPod.Name)
+			if apiPodName, ok := pxApiPodsMap[pod.Spec.NodeName]; ok {
+				oldPodsToDelete = append(oldPodsToDelete, apiPodName)
 			}
 		}
 
@@ -144,18 +144,8 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 	return c.syncNodes(cluster, oldPodsToDelete, []string{}, hash)
 }
 
-func getPxAPiPodForNode(nodeName string, ApiPods []*v1.Pod) *v1.Pod {
-
-	for _, pod := range ApiPods {
-		fmt.Println("PXPOD 2", pod.Spec.NodeName)
-		if reflect.DeepEqual(pod.Spec.NodeName, nodeName) {
-			return pod
-		}
-	}
-	return nil
-}
-
-func (c *Controller) getPxApiPods(cluster *corev1.StorageCluster) []*v1.Pod {
+// This function returns a map of Node name to its corresponding portworx-api pod name
+func (c *Controller) getNodeToPxApiPodsMap(cluster *corev1.StorageCluster) map[string]string {
 	podList := &v1.PodList{}
 	err := c.client.List(context.TODO(),
 		podList,
@@ -168,12 +158,11 @@ func (c *Controller) getPxApiPods(cluster *corev1.StorageCluster) []*v1.Pod {
 	if err != nil {
 		return nil
 	}
-	result := make([]*v1.Pod, 0)
+	result := make(map[string]string, len(podList.Items))
 	for _, pod := range podList.Items {
-		result = append(result, pod.DeepCopy())
+		result[pod.Spec.NodeName] = pod.Name
 	}
 	return result
-
 }
 
 // function to return the number of unavailable kvdb members and a list of the nodes which should have kvdb running in them
