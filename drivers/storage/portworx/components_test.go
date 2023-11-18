@@ -14317,6 +14317,8 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 		GitVersion: "v1.17.0",
 	}
 	coreops.SetInstance(coreops.New(versionClient))
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient(fakeNode)
 	driver := portworx{}
@@ -14332,6 +14334,7 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.6.1",
 			CSI: &corev1.CSISpec{
 				Enabled: true,
 			},
@@ -14385,6 +14388,8 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 		GitVersion: "v1.17.0",
 	}
 	coreops.SetInstance(coreops.New(versionClient))
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -14400,6 +14405,7 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.6.1",
 			CSI: &corev1.CSISpec{
 				Enabled: true,
 			},
