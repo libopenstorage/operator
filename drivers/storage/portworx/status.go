@@ -2,11 +2,13 @@ package portworx
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 
+	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -23,14 +25,6 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
-	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	operatorops "github.com/portworx/sched-ops/k8s/operator"
-)
-
-const (
-	// pxEntriesKey is key which holds all the bootstrap entries
-	pxEntriesKey = "px-entries"
 )
 
 func (p *portworx) UpdateStorageClusterStatus(
@@ -382,32 +376,7 @@ func getStorageClusterState(
 func (p *portworx) getKvdbMap(
 	cluster *corev1.StorageCluster,
 ) map[string]*kvdb_api.BootstrapEntry {
-	// If cluster is running internal kvdb, get current bootstrap nodes
-	kvdbNodeMap := make(map[string]*kvdb_api.BootstrapEntry)
-	if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal {
-		clusterID := pxutil.GetClusterID(cluster)
-		strippedClusterName := strings.ToLower(pxutil.ConfigMapNameRegex.ReplaceAllString(clusterID, ""))
-		cmName := fmt.Sprintf("%s%s", pxutil.InternalEtcdConfigMapPrefix, strippedClusterName)
-
-		cm := &v1.ConfigMap{}
-		err := p.k8sClient.Get(context.TODO(), types.NamespacedName{
-			Name:      cmName,
-			Namespace: bootstrapCloudDriveNamespace,
-		}, cm)
-		if err != nil {
-			logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
-		}
-
-		// Get the bootstrap entries
-		entriesBlob, ok := cm.Data[pxEntriesKey]
-		if ok {
-			kvdbNodeMap, err = blobToBootstrapEntries([]byte(entriesBlob))
-			if err != nil {
-				logrus.Warnf("failed to get internal kvdb bootstrap config map: %v", err)
-			}
-		}
-	}
-	return kvdbNodeMap
+	return pxutil.GetKvdbMap(p.k8sClient, cluster)
 }
 
 func (p *portworx) updateStorageNodes(
@@ -638,7 +607,7 @@ func (p *portworx) createOrUpdateStorageNode(
 		storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey] = originalHash
 	}
 
-	if version, ok := node.NodeLabels[labelPortworxVersion]; ok {
+	if version, ok := node.NodeLabels[pxutil.NodeLabelPortworxVersion]; ok {
 		storageNode.Spec.Version = version
 	} else {
 		partitions := strings.Split(cluster.Spec.Image, ":")
@@ -881,21 +850,4 @@ func getStorageNodePhase(status *corev1.NodeStatus) string {
 		return string(nodeInitCondition.Status)
 	}
 	return string(nodeStateCondition.Status)
-}
-
-func blobToBootstrapEntries(
-	entriesBlob []byte,
-) (map[string]*kvdb_api.BootstrapEntry, error) {
-
-	var bEntries []*kvdb_api.BootstrapEntry
-	if err := json.Unmarshal(entriesBlob, &bEntries); err != nil {
-		return nil, err
-	}
-
-	// return as a map by ID to facilitate callers
-	retMap := make(map[string]*kvdb_api.BootstrapEntry)
-	for _, e := range bEntries {
-		retMap[e.ID] = e
-	}
-	return retMap, nil
 }

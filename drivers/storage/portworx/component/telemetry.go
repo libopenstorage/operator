@@ -28,6 +28,7 @@ import (
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
@@ -920,6 +921,17 @@ func (t *telemetry) createDaemonSetTelemetryPhonehome(
 			break
 		}
 	}
+
+	if preflight.IsPKS() { // Volumes hostPath locations change for PKS
+		for _, v := range daemonset.Spec.Template.Spec.Volumes {
+			if v.Name == "etcpwx" {
+				v.VolumeSource.HostPath.Path = "/var/vcap/store/etc/pwx"
+			} else if v.Name == "varcores" {
+				v.VolumeSource.HostPath.Path = "/var/vcap/store/cores"
+			}
+		}
+	}
+
 	daemonset.Name = DaemonSetNameTelemetryPhonehome
 	daemonset.Namespace = cluster.Namespace
 	daemonset.OwnerReferences = []metav1.OwnerReference{*ownerRef}

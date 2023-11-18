@@ -66,7 +66,6 @@ const (
 	pxNodeWiperDaemonSetName          = "px-node-wiper"
 	pxKvdbPrefix                      = "pwx/"
 	pureStorageCloudDriveConfigMap    = "px-pure-cloud-drive"
-	bootstrapCloudDriveNamespace      = "kube-system"
 )
 
 // UninstallPortworx provides a set of APIs to uninstall portworx
@@ -138,7 +137,7 @@ func (u *uninstallPortworx) WipeMetadata() error {
 		pureStorageCloudDriveConfigMap,
 	}
 	for _, cm := range configMaps {
-		err := k8sutil.DeleteConfigMap(u.k8sClient, cm, bootstrapCloudDriveNamespace)
+		err := k8sutil.DeleteConfigMap(u.k8sClient, cm, pxutil.BootstrapCloudDriveNamespace)
 		if err != nil {
 			return err
 		}
@@ -237,7 +236,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 								Privileged: &trueVar,
 							},
 							ReadinessProbe: &v1.Probe{
-								InitialDelaySeconds: 30,
+								InitialDelaySeconds: 15,
 								ProbeHandler: v1.ProbeHandler{
 									Exec: &v1.ExecAction{
 										Command: []string{"cat", "/tmp/px-node-wipe-done"},
@@ -402,6 +401,11 @@ func (u *uninstallPortworx) RunNodeWiper(
 				},
 			},
 		},
+	}
+
+	if strings.Contains(wiperImage, "monitor") {
+		logrus.Warnf("Using oci-monitor %s as node-wiper image", wiperImage)
+		ds.Spec.Template.Spec.Containers[0].Command = []string{"/px-node-wiper"}
 	}
 
 	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {
