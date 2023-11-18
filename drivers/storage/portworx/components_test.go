@@ -258,6 +258,18 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, cluster.Name, ds.OwnerReferences[0].Name)
 	require.Equal(t, expectedDaemonSet.Spec, ds.Spec)
 
+	// When Portworx version is greater than 2.13, daemonset contains csi driver registrar as well
+	cluster.Spec.Image = "portworx/oci-monitor:2.16.0"
+	newExpectedDaemonSet := testutil.GetExpectedDaemonSet(t, "portworxAPIDaemonset_2_13.yaml")
+	newDs := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, newDs, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, newExpectedDaemonSet.Name, newDs.Name)
+	require.Equal(t, newExpectedDaemonSet.Namespace, newDs.Namespace)
+	require.Len(t, newDs.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, newDs.OwnerReferences[0].Name)
+	require.Equal(t, newExpectedDaemonSet.Spec, newDs.Spec)
+
 	// Portworx Proxy ServiceAccount
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.PxProxyServiceAccountName, api.NamespaceSystem)
