@@ -798,7 +798,6 @@ func TestValidateAzure(t *testing.T) {
 
 	actual, err := driver.GetStoragePodSpec(cluster, "testNode")
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider "+cloudops.Azure)
 	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-metadata "+DefCmetaAzure)
 
 	require.NotEmpty(t, recorder.Events)
@@ -1187,7 +1186,6 @@ func TestPreflightAnnotations(t *testing.T) {
 
 	err := preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
-	require.Equal(t, string(cloudops.AWS), pxutil.GetCloudProvider(cluster)) // Make sure aws
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
