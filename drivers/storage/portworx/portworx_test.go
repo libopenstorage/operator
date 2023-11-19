@@ -218,6 +218,8 @@ func TestValidate(t *testing.T) {
 
 	// When portworx version is lesser than 2.13 then storage pods have csi driver registrar container
 	cluster.Spec.Image = "portworx/oci-image:2.1.0"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	podSpec, err = driver.GetStoragePodSpec(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, 2, len(podSpec.Containers))

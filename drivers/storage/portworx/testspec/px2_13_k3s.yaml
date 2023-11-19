@@ -110,6 +110,8 @@ spec:
               mountPath: /run/containerd/containerd.sock
             - name: containerddir-k3s
               mountPath: /var/lib/rancher
+            - mountPath: /etc/ccm
+              name: ccm-phonehome-config
       restartPolicy: Always
       tolerations:
         - key: node-role.kubernetes.io/master
@@ -165,3 +167,28 @@ spec:
         - name: containerddir-k3s
           hostPath:
             path: /var/lib/rancher
+        - hostPath:
+            path: /var/cache
+          name: varcache
+        - hostPath:
+            path: /etc/timezone
+          name: timezone
+        - hostPath:
+            path: /etc/localtime
+          name: localtime
+        - configMap:
+            defaultMode: 420
+            items:
+            - key: ccm.properties
+              path: ccm.properties
+            - key: location
+              path: location
+            name: px-telemetry-config
+          name: ccm-config
+        - configMap:
+            defaultMode: 420
+            items:
+            - key: ccm.properties
+              path: ccm.properties
+            name: px-telemetry-phonehome
+          name: ccm-phonehome-config
