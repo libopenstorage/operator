@@ -2795,7 +2795,7 @@ func TestOpenshiftRuncPodSpec(t *testing.T) {
 	assertPodSpecEqual(t, expected_3_0_2, &actual)
 }
 
-func TestPodSpecForK3sLT2_13(t *testing.T) {
+func TestPodSpecForK3s(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
@@ -2826,48 +2826,6 @@ func TestPodSpecForK3sLT2_13(t *testing.T) {
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
-	assertPodSpecEqual(t, expected, &actual)
-
-	// retry w/ RKE2 version identifier0 -- should also default to K3s distro tweaks
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.21.4+rke2r2",
-	}
-	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
-	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-
-	assertPodSpecEqual(t, expected, &actual)
-}
-
-func TestPodSpecForK3sForPxVersionGTE2_13(t *testing.T) {
-	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.18.4+k3s1",
-	}
-	fakeExtClient := fakeextclient.NewSimpleClientset()
-	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
-	k8sClient := testutil.FakeK8sClient()
-	expected := getExpectedPodSpecFromDaemonset(t, "testspec/px2_13_k3s.yaml")
-
-	nodeName := "testNode"
-
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-system",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Image: "portworx/oci-monitor:2.17.0",
-		},
-	}
-	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
-	require.NoError(t, err)
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-
-	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
-	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 	assertPodSpecEqual(t, expected, &actual)
 
 	// retry w/ RKE2 version identifier0 -- should also default to K3s distro tweaks
