@@ -4032,6 +4032,15 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	err := k8sClient.Create(context.TODO(), k8sNode)
 	require.NoError(t, err)
 
+	// create portworx-api pod
+	pxApiPodName := "portworx-api"
+	m := map[string]string{
+		"name": pxApiPodName,
+	}
+	apipod := createPxApiPod(cluster, k8sNode.Name, m)
+	err = k8sClient.Create(context.TODO(), apipod)
+	require.NoError(t, err)
+
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name:      cluster.Name,
@@ -4061,7 +4070,8 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	// Also the pod should be changed with the updated spec
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	cluster.Spec.Image = "new/image"
+
+	cluster.Spec.Image = "new/image:2.17.3"
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 	oldPod, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[0], cluster, clusterRef)
@@ -4084,7 +4094,6 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
-
 	// New revision should be created for the updated cluster spec
 	revisions = &appsv1.ControllerRevisionList{}
 	err = testutil.List(k8sClient, revisions)
@@ -4093,12 +4102,12 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 
 	// validate revision 1 and revision 2 exist
 	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
-
 	// The old pod should be marked for deletion
+	// Since version of portworx is greater than 2.13, portworx-api pods are also deleted to register csi nodes.
 	require.Empty(t, podControl.Templates)
 	require.Empty(t, podControl.ControllerRefs)
-	require.Len(t, podControl.DeletePodName, 1)
-	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
+	require.Len(t, podControl.DeletePodName, 2)
+	require.Equal(t, []string{oldPod.Name, pxApiPodName}, podControl.DeletePodName)
 
 	// Test case: Running reconcile again should start a new pod with new
 	// revision hash.
@@ -10248,4 +10257,30 @@ func latestRevision(revs *appsv1.ControllerRevisionList) *appsv1.ControllerRevis
 		}
 	}
 	return latestRev
+}
+
+func createPxApiPod(
+	cluster *corev1.StorageCluster,
+	nodeName string,
+	labels map[string]string,
+) *v1.Pod {
+
+	return &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx-api",
+			Namespace: cluster.Namespace,
+			Labels:    labels,
+		},
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
+			Containers: []v1.Container{
+				{
+					Name: "portworx-api",
+				},
+				{
+					Name: "csi-node-driver-registrar",
+				},
+			},
+		},
+	}
 }
