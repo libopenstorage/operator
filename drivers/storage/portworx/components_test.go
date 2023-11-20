@@ -306,14 +306,14 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, expectedPxProxyService.Spec, pxProxyService.Spec)
 
 	// Portworx Proxy DaemonSet
-	// expectedDaemonSet = testutil.GetExpectedDaemonSet(t, "pxProxyDaemonSet.yaml")
-	// ds = &appsv1.DaemonSet{}
-	// err = testutil.Get(k8sClient, ds, component.PxProxyDaemonSetName, api.NamespaceSystem)
-	// require.NoError(t, err)
-	// require.Equal(t, expectedDaemonSet.Name, ds.Name)
-	// require.Equal(t, expectedDaemonSet.Namespace, ds.Namespace)
-	// require.Empty(t, ds.OwnerReferences)
-	// require.Equal(t, expectedDaemonSet.Spec, ds.Spec)
+	expectedDaemonSet = testutil.GetExpectedDaemonSet(t, "pxProxyDaemonSet.yaml")
+	ds = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxProxyDaemonSetName, api.NamespaceSystem)
+	require.NoError(t, err)
+	require.Equal(t, expectedDaemonSet.Name, ds.Name)
+	require.Equal(t, expectedDaemonSet.Namespace, ds.Namespace)
+	require.Empty(t, ds.OwnerReferences)
+	require.Equal(t, expectedDaemonSet.Spec, ds.Spec)
 
 	// Portworx CSI enabled by default
 	statefulset := &appsv1.StatefulSet{}
@@ -6412,7 +6412,7 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	}
 	require.True(t, validCSIDriverPath)
 
-	// Case 2: When px version is greater than or equal to 2.13, csi-node-driver-registrar becomes a part of the portworx-api daemonset instead of storage pod
+	// Case 2: When px version is greater than or equal to 2.13, csi-node-driver-registrar becomes a part of the portworx-api daemonset instead of px storage pod
 	// Hence even the CSI volumes are defined in the portworx-api daemonset
 	cluster.Spec.Image = "portworx/image:2.15.2"
 	ds := &appsv1.DaemonSet{}
