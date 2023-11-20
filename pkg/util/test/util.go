@@ -182,7 +182,8 @@ var (
 	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
 	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
 
-	pxVer3_0, _ = version.NewVersion("3.0")
+	pxVer3_0, _  = version.NewVersion("3.0")
+	pxVer2_13, _ = version.NewVersion("2.13")
 
 	// minimumPxVersionCCMJAVA minimum PX version to install ccm-java
 	minimumPxVersionCCMJAVA, _ = version.NewVersion("2.8")
@@ -2421,7 +2422,9 @@ func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCl
 
 	t := func() (interface{}, bool, error) {
 		logrus.Debug("CSI is enabled in StorageCluster")
-		if err := validateCsiContainerInPxPods(cluster.Namespace, true, timeout, interval); err != nil {
+
+		pxVersion, _ := version.NewVersion(getPxVersion(pxImageList, cluster))
+		if err := validateCsiContainerInPxPods(cluster.Namespace, true, timeout, interval, pxVersion); err != nil {
 			return nil, true, err
 		}
 		// Validate CSI container image inside Portworx OCI Monitor pods
@@ -2432,11 +2435,19 @@ func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCl
 			return nil, true, fmt.Errorf("failed to find image for csiNodeDriverRegistrar")
 		}
 
-		pods, err := coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx"})
-		if err != nil {
-			return nil, true, err
+		var pods *v1.PodList
+		var err error
+		if pxVersion.GreaterThanOrEqual(pxVer2_13) {
+			pods, err = coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx-api"})
+			if err != nil {
+				return nil, true, err
+			}
+		} else {
+			pods, err = coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx"})
+			if err != nil {
+				return nil, true, err
+			}
 		}
-
 		if err := validateContainerImageInsidePods(cluster, csiNodeDriverRegistrarImage, "csi-node-driver-registrar", pods); err != nil {
 			return nil, true, err
 		}
@@ -2481,7 +2492,7 @@ func ValidateCsiDisabled(cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deploym
 
 	t := func() (interface{}, bool, error) {
 		logrus.Debug("CSI is disabled in StorageCluster")
-		if err := validateCsiContainerInPxPods(cluster.Namespace, false, timeout, interval); err != nil {
+		if err := validateCsiContainerInPxPods(cluster.Namespace, false, timeout, interval, nil); err != nil {
 			return nil, true, err
 		}
 
@@ -2499,9 +2510,14 @@ func ValidateCsiDisabled(cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deploym
 	return nil
 }
 
-func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval time.Duration) error {
+func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval time.Duration, pxVersion *version.Version) error {
 	logrus.Debug("Validating CSI container inside Portworx OCI Monitor pods")
 	listOptions := map[string]string{"name": "portworx"}
+	listOptionsNew := map[string]string{"name": "portworx-api"}
+
+	if pxVersion == nil {
+		return fmt.Errorf("px version required")
+	}
 
 	t := func() (interface{}, bool, error) {
 		var pxPodsWithCsiContainer []string
@@ -2531,10 +2547,34 @@ func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval 
 				podsReady++
 			}
 
-			for _, container := range pod.Spec.Containers {
-				if container.Name == "csi-node-driver-registrar" {
-					pxPodsWithCsiContainer = append(pxPodsWithCsiContainer, pod.Name)
-					break
+			if pxVersion.LessThan(pxVer2_13) {
+				for _, container := range pod.Spec.Containers {
+					if container.Name == "csi-node-driver-registrar" {
+						pxPodsWithCsiContainer = append(pxPodsWithCsiContainer, pod.Name)
+						break
+					}
+				}
+			}
+
+		}
+
+		if pxVersion.GreaterThanOrEqual(pxVer2_13) {
+			apiPods, err := coreops.Instance().GetPods(namespace, listOptionsNew)
+			if err != nil {
+				return nil, false, err
+			}
+
+			for _, apiPod := range apiPods.Items {
+				for _, c := range apiPod.Status.ContainerStatuses {
+					if c.Ready {
+						continue
+					}
+				}
+				for _, container := range apiPod.Spec.Containers {
+					if container.Name == "csi-node-driver-registrar" {
+						pxPodsWithCsiContainer = append(pxPodsWithCsiContainer, apiPod.Name)
+						break
+					}
 				}
 			}
 		}
