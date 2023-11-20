@@ -160,7 +160,7 @@ func TestPodSpecWithCustomKubeletDir(t *testing.T) {
 
 	driver := portworx{}
 
-	//Case 1: When portworx version is lesser than 2.13
+	// Case 1: When portworx version is lesser than 2.13
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
