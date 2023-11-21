@@ -45,7 +45,7 @@ const (
 	AutopilotDefaultProviderEndpoint = "http://px-prometheus:9090"
 	// AutopilotDefaultReviewersKey is a key for default reviewers array in gitops config map
 	AutopilotDefaultReviewersKey = "defaultReviewers"
-	defaultAutopilotCPU = "0.1"
+	defaultAutopilotCPU          = "0.1"
 
 	defaultAutopilotCPULimit = "0.25"
 )
