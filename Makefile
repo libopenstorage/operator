@@ -82,7 +82,7 @@ LDFLAGS += "-s -w -X github.com/libopenstorage/operator/pkg/version.Version=$(VE
 BUILD_OPTIONS := -ldflags=$(LDFLAGS)
 
 .DEFAULT_GOAL=all
-.PHONY: operator deploy clean vendor vendor-update test
+.PHONY: operator deploy clean vendor vendor-update test generate manifests tools-check
 
 all: operator pretest downloads
 
@@ -115,12 +115,8 @@ $(GOPATH)/bin/staticcheck:
 vendor-tidy:
 	go mod tidy
 
-lint-version-check: $(GOPATH)/bin/golangci-lint
-	# golint version-check ...  (rm $< if fails)
-	@$(GOPATH)/bin/golangci-lint version | grep -q go1\.20\.
-
-lint: $(GOPATH)/bin/golangci-lint lint-version-check
-	# golint check ...
+lint: $(GOPATH)/bin/golangci-lint
+	# golangci-lint check ...
 	@$(GOPATH)/bin/golangci-lint run --timeout=5m ./...
 
 vet:
@@ -143,7 +139,17 @@ revive: $(GOPATH)/bin/revive
 	# revive check ...
 	@$(GOPATH)/bin/revive -formatter friendly $(PKGS)
 
-pretest: check-fmt lint vet staticcheck
+tools-check: $(GOPATH)/bin/mockgen $(GOPATH)/bin/golangci-lint $(GOPATH)/bin/errcheck $(GOPATH)/bin/staticcheck $(GOPATH)/bin/revive
+	# checking go-version on $^
+	$(eval VGO := $(shell go version | cut -d" " -f3))
+	@for t in $^; do \
+	  vt=$$(go version $$t | cut -d" " -f2) ; \
+	  if [ $$vt != $(VGO) ]; then \
+	    echo "WARNING: Tool $$t compiled with $$vt	 (you are using $(VGO))"; \
+	  fi; \
+	done
+
+pretest: tools-check check-fmt lint vet staticcheck
 
 test:
 	echo "" > coverage.txt
@@ -183,7 +189,7 @@ container:
 	@echo "Building operator image $(OPERATOR_IMG)"
 	docker build --pull --tag $(OPERATOR_IMG) -f build/Dockerfile .
 
-DOCK_BUILD_CNT	:= golang:1.20
+DOCK_BUILD_CNT	:= golang:1.21
 
 docker-build:
 	@echo "Building using docker"
