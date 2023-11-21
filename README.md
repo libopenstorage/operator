@@ -18,19 +18,18 @@ cd operator
 make downloads all
 ```
 
-Troubleshooting: 
+Troubleshooting:
 
-If you get errors like 
+Do not modify `$GOBIN` -- this build process depends on installing and using linter-tools (i.e. `staticcheck`) from the default `$GOPATH/bin`.
 
-```sh
-/usr/local/go/src/math/erf.go:189:6: Erf defined in both Go and assembly
-/usr/local/go/src/math/erf.go:274:6: Erfc defined in both Go and assembly
+
+Q: I'm getting the following warning during the build:
+
+```
+WARNING: Tool /go/bin/my-linter-tool compiled with go1.20.10	 (you are using go1.21.4)
 ```
 
-
-try to switch to go 1.19. 
-
-Make sure not only $GOPATH but also $GOPATH/bin are in your system $PATH, otherwise `staticcheck` would fail.
+A: To fix this, just remove the binary, and the build-process should automatically rebuild the tool using your current golang compiler.
 
 ## Build operator container
 
