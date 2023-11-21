@@ -313,4 +313,4 @@ clean: clean-release-manifest clean-bundle
 	@rm -rf $(BIN)
 	@go clean -i $(PKGS)
 	@echo "Deleting image "$(OPERATOR_IMG)
-	@docker rmi -f $(OPERATOR_IMG) registry.access.redhat.com/ubi8-minimal:latest
+	@docker rmi -f $(OPERATOR_IMG) registry.access.redhat.com/ubi9-minimal:latest
