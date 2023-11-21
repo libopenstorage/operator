@@ -161,6 +161,22 @@ spec:
                   rack:
                     type: string
                     description: Rack on which the storage node is placed.
+              operatingSystem:
+                type: string
+                description: Operating system of the underlying host.
+              kernelVersion:
+                type: string
+                description: Kernel version of the underlying host.
+              nodeAttributes:
+                type: object
+                description: Attributes of the storage node.
+                properties:
+                  storage:
+                    type: boolean
+                    description: Indicates whether the node is a storage node or not.
+                  kvdb:
+                    type: boolean
+                    description: Indicates whether the node is a kvdb node or not.
   - name: v1alpha1
     served: false
     storage: false
