@@ -944,7 +944,6 @@ spec:
                           cpu:
                             type: string
                             description: CPU limit.
-
               monitoring:
                 type: object
                 description: Contains monitoring configuration for the storage cluster.
