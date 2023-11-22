@@ -1,7 +1,7 @@
 apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
-  name: portworx-operator.v23.12.0
+  name: portworx-operator.v23.10.2
   namespace: placeholder
   annotations:
     capabilities: Auto Pilot
@@ -50,7 +50,7 @@ metadata:
       ]
 spec:
   displayName: Portworx Enterprise
-  version: 23.12.0
+  version: 23.10.2
   minKubeVersion: "1.21.0"
   maturity: stable
   replaces: portworx-operator.v23.10.1
@@ -62,7 +62,7 @@ spec:
   keywords: ["portworx", "persistent storage", "storage", "cloud native", "open source"]
   relatedImages:
     - name: portworx-operator
-      image: portworx/px-operator:23.12.0-dev
+      image: portworx/px-operator:23.10.2-dev
   labels:
     operated-by: portworx-operator
   selector:
@@ -219,7 +219,7 @@ spec:
                     topologyKey: kubernetes.io/hostname
               containers:
               - name: portworx-operator
-                image: portworx/px-operator:23.12.0-dev
+                image: portworx/px-operator:23.10.2-dev
                 imagePullPolicy: Always
                 command:
                 - /operator
