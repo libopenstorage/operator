@@ -130,6 +130,9 @@ const (
 	AnnotationRunOnMaster = pxAnnotationPrefix + "/run-on-master"
 	// AnnotationPodDisruptionBudget annotation indicating whether to create pod disruption budgets
 	AnnotationPodDisruptionBudget = pxAnnotationPrefix + "/pod-disruption-budget"
+	// AnnotationStoragePodDisruptionBudget annotation to specify the min available value of the px-storage
+	// pod disruption budget
+	AnnotationStoragePodDisruptionBudget = pxAnnotationPrefix + "/storage-pdb-min-available"
 	// AnnotationPodSecurityPolicy annotation indicating whether to enable creation
 	// of pod security policies
 	AnnotationPodSecurityPolicy = pxAnnotationPrefix + "/pod-security-policy"
@@ -1296,6 +1299,13 @@ func GetClusterID(cluster *corev1.StorageCluster) string {
 		return cluster.Annotations[AnnotationClusterID]
 	}
 	return cluster.Name
+}
+
+func MinAvailableForStoragePDB(cluster *corev1.StorageCluster) (int, error) {
+	if cluster.Annotations[AnnotationStoragePodDisruptionBudget] != "" {
+		return strconv.Atoi(cluster.Annotations[AnnotationStoragePodDisruptionBudget])
+	}
+	return -1, nil
 }
 
 // CountStorageNodes counts how many px storage node are there on given k8s cluster,
