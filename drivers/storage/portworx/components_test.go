@@ -3181,6 +3181,7 @@ func TestAutopilotInstallIncorrectSpec(t *testing.T) {
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.10.0",
 			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:1.1.1",
