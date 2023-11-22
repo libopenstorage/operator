@@ -100,23 +100,34 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	var err error
-	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.k8sClient, cluster.Namespace)
+	userProvidedMinValue, err := pxutil.MinAvailableForStoragePDB(cluster)
 	if err != nil {
-		return err
+		logrus.Warnf("Invalid value for annotation %s: %v", pxutil.AnnotationStoragePodDisruptionBudget, err)
+		userProvidedMinValue = -1
 	}
 
-	storageNodesCount, err := pxutil.CountStorageNodes(cluster, c.sdkConn, c.k8sClient)
-	if err != nil {
-		c.closeSdkConn()
-		return err
+	var minAvailable int
+	if err != nil || userProvidedMinValue < 0 {
+		c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.k8sClient, cluster.Namespace)
+		if err != nil {
+			return err
+		}
+
+		storageNodesCount, err := pxutil.CountStorageNodes(cluster, c.sdkConn, c.k8sClient)
+		if err != nil {
+			c.closeSdkConn()
+			return err
+		}
+		minAvailable = storageNodesCount - 1
+	} else {
+		minAvailable = userProvidedMinValue
 	}
 
-	// Create PDB only if there are at least 3 nodes. With 2 nodes are less, if 1
+	// Create PDB only if there are at least 3 nodes. With 2 nodes or less, if 1
 	// node goes down Portworx will lose quorum anyway. Such clusters would be
 	// non-prod clusters and there is no point in blocking the evictions.
-	if storageNodesCount > 2 {
-		minAvailable := intstr.FromInt(storageNodesCount - 1)
+	if minAvailable > 1 {
+		minAvailableIntStr := intstr.FromInt(minAvailable)
 		pdb := &policyv1.PodDisruptionBudget{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            StoragePodDisruptionBudgetName,
@@ -124,7 +135,7 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Spec: policyv1.PodDisruptionBudgetSpec{
-				MinAvailable: &minAvailable,
+				MinAvailable: &minAvailableIntStr,
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						constants.LabelKeyClusterName: cluster.Name,
