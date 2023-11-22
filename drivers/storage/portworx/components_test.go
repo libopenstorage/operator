@@ -13,29 +13,17 @@ import (
 	"testing"
 	"time"
 
-	ocpconfig "github.com/openshift/api/config/v1"
-
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/mock/gomock"
-	osdapi "github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
-	"github.com/libopenstorage/operator/pkg/mock"
-	"github.com/libopenstorage/operator/pkg/util"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	ocpconfig "github.com/openshift/api/config/v1"
 	ocp_secv1 "github.com/openshift/api/security/v1"
-	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
-	"golang.org/x/sys/unix"
-
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -56,6 +44,17 @@ import (
 	"k8s.io/client-go/tools/record"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	osdapi "github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/mock"
+	"github.com/libopenstorage/operator/pkg/util"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
 
 const (
@@ -11471,7 +11470,21 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
-	// TestCase: Create storage PDB if total nodes with storage is at least 3
+	// TestCase: Do not create storage PDB if storage pod annotation value is less than 2
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationStoragePodDisruptionBudget: "1",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// TestCase: Create storage PDB if total nodes with storage is at least 3.
+	// Also, ignore the annotation if the value is an invalid integer
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "invalid"
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
 		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
 		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
@@ -11492,7 +11505,9 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.Equal(t, cluster.Name, storagePDB.Spec.Selector.MatchLabels[constants.LabelKeyClusterName])
 	require.Equal(t, constants.LabelValueTrue, storagePDB.Spec.Selector.MatchLabels[constants.LabelKeyStoragePod])
 
-	// TestCase: Update storage PDB if count of nodes with storage changes
+	// TestCase: Update storage PDB if count of nodes with storage changes.
+	// Also, ignore the annotation if the value is an invalid integer
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "still_invalid"
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
 		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
 		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
