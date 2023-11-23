@@ -11540,7 +11540,21 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
-	// TestCase: Create storage PDB if total nodes with storage is at least 3
+	// TestCase: Do not create storage PDB if storage pod annotation value is less than 2
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationStoragePodDisruptionBudget: "1",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// TestCase: Create storage PDB if total nodes with storage is at least 3.
+	// Also, ignore the annotation if the value is an invalid integer
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "invalid"
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
 		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
 		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
@@ -11561,7 +11575,9 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.Equal(t, cluster.Name, storagePDB.Spec.Selector.MatchLabels[constants.LabelKeyClusterName])
 	require.Equal(t, constants.LabelValueTrue, storagePDB.Spec.Selector.MatchLabels[constants.LabelKeyStoragePod])
 
-	// TestCase: Update storage PDB if count of nodes with storage changes
+	// TestCase: Update storage PDB if count of nodes with storage changes.
+	// Also, ignore the annotation if the value is an invalid integer
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "still_invalid"
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
 		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
 		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
@@ -11581,7 +11597,20 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
 
+	// TestCase: Update storage PDB if overwritten using annotation
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "10"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, 10, storagePDB.Spec.MinAvailable.IntValue())
+
 	// TestCase: Use NonQuorumMember flag to determine storage node count
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = ""
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
 		{NonQuorumMember: false, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
 		{NonQuorumMember: false, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.2.0"}},
