@@ -178,6 +178,7 @@ var (
 	opVer23_5_1, _                    = version.NewVersion("23.5.1-")
 	opVer23_7, _                      = version.NewVersion("23.7.0-")
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
+	pxOperatorMasterVersion, _        = version.NewVersion("99.9.9")
 
 	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
 	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
@@ -2437,7 +2438,9 @@ func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCl
 
 		var pods *v1.PodList
 		var err error
-		if pxVersion.GreaterThanOrEqual(pxVer2_13) {
+
+		// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
+		if opVersion, _ := GetPxOperatorVersion(); pxVersion.LessThan(pxVer2_13) && opVersion.Equal(pxOperatorMasterVersion) {
 			pods, err = coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx-api"})
 			if err != nil {
 				return nil, true, err
@@ -2547,7 +2550,8 @@ func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval 
 				podsReady++
 			}
 
-			if pxVersion.LessThan(pxVer2_13) {
+			// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
+			if opVersion, _ := GetPxOperatorVersion(); pxVersion.LessThan(pxVer2_13) && opVersion.Equal(pxOperatorMasterVersion) {
 				for _, container := range pod.Spec.Containers {
 					if container.Name == "csi-node-driver-registrar" {
 						pxPodsWithCsiContainer = append(pxPodsWithCsiContainer, pod.Name)
@@ -2558,7 +2562,8 @@ func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval 
 
 		}
 
-		if pxVersion.GreaterThanOrEqual(pxVer2_13) {
+		// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
+		if opVersion, _ := GetPxOperatorVersion(); pxVersion.LessThan(pxVer2_13) && opVersion.Equal(pxOperatorMasterVersion) {
 			apiPods, err := coreops.Instance().GetPods(namespace, listOptionsNew)
 			if err != nil {
 				return nil, false, err
