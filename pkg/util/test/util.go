@@ -2408,26 +2408,33 @@ func ValidateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 			Namespace: cluster.Namespace,
 		},
 	}
-
+	pxVersion, _ := version.NewVersion(getPxVersion(pxImageList, cluster))
 	if cluster.Spec.CSI.Enabled {
 		logrus.Debug("CSI is enabled in StorageCluster")
-		return ValidateCsiEnabled(pxImageList, cluster, pxCsiDp, timeout, interval)
+		return ValidateCsiEnabled(pxImageList, cluster, pxCsiDp, timeout, interval, pxVersion)
 	}
 	logrus.Debug("CSI is disabled in StorageCluster")
-	return ValidateCsiDisabled(cluster, pxCsiDp, timeout, interval)
+	return ValidateCsiDisabled(cluster, pxCsiDp, timeout, interval, pxVersion)
 }
 
 // ValidateCsiEnabled validates that all CSI components are enabled/created
-func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deployment, timeout, interval time.Duration) error {
+func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deployment, timeout, interval time.Duration, pxVersion *version.Version) error {
 	logrus.Info("Validate CSI components are enabled")
 
 	t := func() (interface{}, bool, error) {
 		logrus.Debug("CSI is enabled in StorageCluster")
 
-		pxVersion, _ := version.NewVersion(getPxVersion(pxImageList, cluster))
-		if err := validateCsiContainerInPxPods(cluster.Namespace, true, timeout, interval, pxVersion); err != nil {
-			return nil, true, err
+		// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
+		if opVersion, _ := GetPxOperatorVersion(); pxVersion.GreaterThanOrEqual(pxVer2_13) && opVersion.GreaterThanOrEqual(pxOperatorMasterVersion) {
+			if err := validateCsiContainerInPxApiPods(cluster.Namespace, true, timeout, interval); err != nil {
+				return nil, true, err
+			}
+		} else {
+			if err := validateCsiContainerInPxPods(cluster.Namespace, true, timeout, interval); err != nil {
+				return nil, true, err
+			}
 		}
+
 		// Validate CSI container image inside Portworx OCI Monitor pods
 		var csiNodeDriverRegistrarImage string
 		if value, ok := pxImageList["csiNodeDriverRegistrar"]; ok {
@@ -2490,13 +2497,20 @@ func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCl
 }
 
 // ValidateCsiDisabled validates that all CSI components are disabled/deleted
-func ValidateCsiDisabled(cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deployment, timeout, interval time.Duration) error {
+func ValidateCsiDisabled(cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deployment, timeout, interval time.Duration, pxVersion *version.Version) error {
 	logrus.Info("Validate CSI components are disabled")
 
 	t := func() (interface{}, bool, error) {
 		logrus.Debug("CSI is disabled in StorageCluster")
-		if err := validateCsiContainerInPxPods(cluster.Namespace, false, timeout, interval, nil); err != nil {
-			return nil, true, err
+		// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
+		if opVersion, _ := GetPxOperatorVersion(); pxVersion.GreaterThanOrEqual(pxVer2_13) && opVersion.GreaterThanOrEqual(pxOperatorMasterVersion) {
+			if err := validateCsiContainerInPxApiPods(cluster.Namespace, false, timeout, interval); err != nil {
+				return nil, true, err
+			}
+		} else {
+			if err := validateCsiContainerInPxPods(cluster.Namespace, false, timeout, interval); err != nil {
+				return nil, true, err
+			}
 		}
 
 		// Validate px-csi-ext deployment doesn't exist
@@ -2513,14 +2527,68 @@ func ValidateCsiDisabled(cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deploym
 	return nil
 }
 
-func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval time.Duration, pxVersion *version.Version) error {
+func validateCsiContainerInPxApiPods(namespace string, csi bool, timeout, interval time.Duration) error {
+	logrus.Debug("Validating CSI container inside Portworx Api pods")
+	listOptions := map[string]string{"name": "portworx-api"}
+
+	t := func() (interface{}, bool, error) {
+		var pxPodsWithCsiContainer []string
+
+		// Get Portworx pods
+		pods, err := coreops.Instance().GetPods(namespace, listOptions)
+		if err != nil {
+			return nil, false, err
+		}
+		podsReady := 0
+		for _, pod := range pods.Items {
+			for _, c := range pod.Status.InitContainerStatuses {
+				if !c.Ready {
+					continue
+				}
+			}
+			containerReady := 0
+			for _, c := range pod.Status.ContainerStatuses {
+				if c.Ready {
+					containerReady++
+					continue
+				}
+			}
+
+			if len(pod.Spec.Containers) == containerReady {
+				podsReady++
+			}
+			for _, container := range pod.Spec.Containers {
+				if container.Name == "csi-node-driver-registrar" {
+					pxPodsWithCsiContainer = append(pxPodsWithCsiContainer, pod.Name)
+					break
+				}
+			}
+
+		}
+
+		if csi {
+			if len(pxPodsWithCsiContainer) != len(pods.Items) {
+				return nil, true, fmt.Errorf("failed to validate CSI containers in PX Api pods: expected %d, got %d, %d/%d Ready pods", len(pods.Items), len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
+			}
+		} else {
+			if len(pxPodsWithCsiContainer) > 0 || len(pods.Items) != podsReady {
+				return nil, true, fmt.Errorf("failed to validate CSI container in PX pods Api: expected: 0, got %d, %d/%d Ready pods", len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
+			}
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval time.Duration) error {
 	logrus.Debug("Validating CSI container inside Portworx OCI Monitor pods")
 	listOptions := map[string]string{"name": "portworx"}
-	listOptionsNew := map[string]string{"name": "portworx-api"}
-
-	if pxVersion == nil {
-		return fmt.Errorf("px version required")
-	}
 
 	t := func() (interface{}, bool, error) {
 		var pxPodsWithCsiContainer []string
@@ -2550,38 +2618,13 @@ func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval 
 				podsReady++
 			}
 
-			// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
-			if opVersion, _ := GetPxOperatorVersion(); pxVersion.LessThan(pxVer2_13) || opVersion.LessThan(pxOperatorMasterVersion) {
-				for _, container := range pod.Spec.Containers {
-					if container.Name == "csi-node-driver-registrar" {
-						pxPodsWithCsiContainer = append(pxPodsWithCsiContainer, pod.Name)
-						break
-					}
+			for _, container := range pod.Spec.Containers {
+				if container.Name == "csi-node-driver-registrar" {
+					pxPodsWithCsiContainer = append(pxPodsWithCsiContainer, pod.Name)
+					break
 				}
 			}
 
-		}
-
-		// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
-		if opVersion, _ := GetPxOperatorVersion(); pxVersion.GreaterThanOrEqual(pxVer2_13) && opVersion.GreaterThanOrEqual(pxOperatorMasterVersion) {
-			apiPods, err := coreops.Instance().GetPods(namespace, listOptionsNew)
-			if err != nil {
-				return nil, false, err
-			}
-
-			for _, apiPod := range apiPods.Items {
-				for _, c := range apiPod.Status.ContainerStatuses {
-					if c.Ready {
-						continue
-					}
-				}
-				for _, container := range apiPod.Spec.Containers {
-					if container.Name == "csi-node-driver-registrar" {
-						pxPodsWithCsiContainer = append(pxPodsWithCsiContainer, apiPod.Name)
-						break
-					}
-				}
-			}
 		}
 
 		if csi {
