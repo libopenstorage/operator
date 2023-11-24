@@ -173,12 +173,12 @@ spec:
         scrape_target_name: "{{$labels.node}}"
     - alert: PXKvdbNodeViewUnhealthy
       annotations:
-        description: Portworx node {{$labels.node_id}} from cluster {{$labels.cluster}} is unable to talk to kvdb. Please check the KVDB health and node's connection to KVDB.
-        summary: Portworx node {{$labels.node_id}} is unable to talk to kvdb.
+        description: Portworx node {{$labels.node}} from cluster {{$labels.cluster}} is unable to talk to kvdb. Please check the KVDB health and node's connection to KVDB.
+        summary: Portworx node {{$labels.node}} is unable to talk to kvdb.
       expr: px_kvdb_health_state_node_view == 2
       for: 5m
       labels:
-        issue: Portworx node {{$labels.node_id}} is unable to talk to kvdb.
+        issue: Portworx node {{$labels.node}} is unable to talk to kvdb.
         severity: critical
         resource_type: portworx-node
         resource_name: "{{$labels.node}}"
@@ -186,7 +186,7 @@ spec:
         scrape_target_name: "{{$labels.node}}"
     - alert: PXKvdbClusterViewUnhealthy
       annotations:
-        description: Portworx node {{$labels.node_id}} from cluster {{$labels.cluster}} is reporting that the cluster is unable to talk to kvdb. Please check KVDB health and the node's connection to KVDB and the other nodes in the cluster.
+        description: Portworx node {{$labels.node}} from cluster {{$labels.cluster}} is reporting that the cluster is unable to talk to kvdb. Please check KVDB health and the node's connection to KVDB and the other nodes in the cluster.
         summary: Portworx cluster {{$labels.cluster}} is unable to talk to kvdb.
       expr: px_kvdb_health_state_cluster_view == 2
       labels:
