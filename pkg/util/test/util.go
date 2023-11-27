@@ -2568,11 +2568,11 @@ func validateCsiContainerInPxApiPods(namespace string, csi bool, timeout, interv
 
 		if csi {
 			if len(pxPodsWithCsiContainer) != len(pods.Items) {
-				return nil, true, fmt.Errorf("failed to validate CSI containers in PX Api pods: expected %d, got %d, %d/%d Ready pods", len(pods.Items), len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
+				return nil, true, fmt.Errorf("failed to validate CSI containers in PX Api pods [portworx-api]: expected %d, got %d, %d/%d Ready pods", len(pods.Items), len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
 			}
 		} else {
 			if len(pxPodsWithCsiContainer) > 0 || len(pods.Items) != podsReady {
-				return nil, true, fmt.Errorf("failed to validate CSI container in PX pods Api: expected: 0, got %d, %d/%d Ready pods", len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
+				return nil, true, fmt.Errorf("failed to validate CSI container in PX Api pods [portworx-api]: expected: 0, got %d, %d/%d Ready pods", len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
 			}
 		}
 		return nil, false, nil
@@ -2629,11 +2629,11 @@ func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval 
 
 		if csi {
 			if len(pxPodsWithCsiContainer) != len(pods.Items) {
-				return nil, true, fmt.Errorf("failed to validate CSI containers in PX pods: expected %d, got %d, %d/%d Ready pods", len(pods.Items), len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
+				return nil, true, fmt.Errorf("failed to validate CSI containers in PX pods [portworx]: expected %d, got %d, %d/%d Ready pods", len(pods.Items), len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
 			}
 		} else {
 			if len(pxPodsWithCsiContainer) > 0 || len(pods.Items) != podsReady {
-				return nil, true, fmt.Errorf("failed to validate CSI container in PX pods: expected: 0, got %d, %d/%d Ready pods", len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
+				return nil, true, fmt.Errorf("failed to validate CSI container in PX pods: expected [portworx]: 0, got %d, %d/%d Ready pods", len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
 			}
 		}
 		return nil, false, nil
