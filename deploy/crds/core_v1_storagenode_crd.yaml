@@ -148,6 +148,9 @@ spec:
                     success:
                       type: boolean
                       description: If true, the check was successful
+                    result:
+                      type: string
+                      description: Result of the success or failure of the check
               geography:
                 type: object
                 description: Contains topology information for the storage node.

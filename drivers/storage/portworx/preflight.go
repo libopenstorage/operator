@@ -323,6 +323,8 @@ func (u *preFlightPortworx) processNodesChecks(recorder record.EventRecorder, st
 	}
 
 	passed := true
+	isFatal := false
+	fmsgs := []string{}
 	for _, node := range storageNodes {
 		// Process storageNode checks list for failures. Also make sure the "status" check entry
 		// exists, this indicates all the checks were submitted from the pre-flight pod.
@@ -346,6 +348,14 @@ func (u *preFlightPortworx) processNodesChecks(recorder record.EventRecorder, st
 				k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, msg)
 				continue
 			}
+
+			if check.Result == "fatal" {
+				// collect fatal msgs for output at end.
+				fmsgs = append(fmsgs, check.Reason)
+				isFatal = true
+				continue
+			}
+
 			msg = msg + "failed: " + check.Reason
 			k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, msg)
 			passed = false // pre-flight status check failed, keep going for logging
@@ -355,6 +365,13 @@ func (u *preFlightPortworx) processNodesChecks(recorder record.EventRecorder, st
 			logrus.Errorf("storageNodes checks list status entry not found, pre-flight did not complete")
 			passed = false
 		}
+	}
+
+	if isFatal { // Add events for fatal checks
+		for _, fmsg := range fmsgs {
+			k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, fmsg)
+		}
+		u.hardFail = true // Set hardFail to prevent PX startup
 	}
 
 	return passed
