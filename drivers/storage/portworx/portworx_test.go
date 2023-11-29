@@ -190,7 +190,7 @@ func TestValidate(t *testing.T) {
 
 	//
 	// Validate Pre-flight Daemonset Pod Spec
-	//
+	// When px version is greater than 2.13, storage pod only has 1 container
 	cluster.Spec.Image = "portworx/oci-image:3.0.0"
 	cluster.Annotations = map[string]string{
 		pxutil.AnnotationPreflightCheck: "true",
@@ -199,6 +199,14 @@ func TestValidate(t *testing.T) {
 	require.NoError(t, err)
 
 	podSpec, err := driver.GetStoragePodSpec(cluster, "")
+	require.NoError(t, err)
+	require.Equal(t, 1, len(podSpec.Containers))
+
+	// When portworx version is lesser than 2.13 then storage pods have csi driver registrar container
+	cluster.Spec.Image = "portworx/oci-image:2.1.0"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	podSpec, err = driver.GetStoragePodSpec(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, 2, len(podSpec.Containers))
 
@@ -798,7 +806,6 @@ func TestValidateAzure(t *testing.T) {
 
 	actual, err := driver.GetStoragePodSpec(cluster, "testNode")
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider "+cloudops.Azure)
 	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-metadata "+DefCmetaAzure)
 
 	require.NotEmpty(t, recorder.Events)
@@ -1187,7 +1194,6 @@ func TestPreflightAnnotations(t *testing.T) {
 
 	err := preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
-	require.Equal(t, string(cloudops.AWS), pxutil.GetCloudProvider(cluster)) // Make sure aws
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]

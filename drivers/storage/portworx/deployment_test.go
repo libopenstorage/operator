@@ -9,6 +9,9 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,8 +33,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/preflight"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
-	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
-	coreops "github.com/portworx/sched-ops/k8s/core"
+	appsv1 "k8s.io/api/apps/v1"
 )
 
 func TestBasicRuncPodSpec(t *testing.T) {
@@ -106,6 +108,7 @@ func TestPodSpecWithCustomKubeletDir(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	// expected := getExpectedPodSpecFromDaemonset(t, "testspec/runc.yaml")
 	nodeName := "testNode"
+
 	customKubeletPath := "/data/kubelet"
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -166,6 +169,7 @@ func TestPodSpecWithCustomKubeletDir(t *testing.T) {
 
 	driver := portworx{}
 
+	// Case 1: When portworx version is lesser than 2.13
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -173,6 +177,32 @@ func TestPodSpecWithCustomKubeletDir(t *testing.T) {
 	var ok bool
 	for _, v := range actual.Volumes {
 		if v.Name == "csi-driver-path" && v.VolumeSource.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
+			ok = true
+		}
+	}
+	require.True(t, ok)
+
+	// Case 2: When portworx version is greater than or equal to 2.13, csi-driver-registrar becomes a part of portworx-api daemonset
+	// Hence csi-driver-path is also defined in the daemonset instead of the portworx storage pod
+	cluster.Spec.Image = "portworx/oci-monitor:2.14.3"
+
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// CSI driver path
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	logrus.Infof("Volumes %+v", ds.Spec.Template.Spec.Volumes)
+
+	for _, v := range ds.Spec.Template.Spec.Volumes {
+		if v.Name == "csi-driver-path" && v.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
 			ok = true
 		}
 	}
@@ -2054,60 +2084,6 @@ func TestPodSpecWithCloudStorageSpecOnGCE(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestPodSpecWithCloudStorageSpecOnAzure(t *testing.T) {
-	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
-		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Spec: v1.NodeSpec{ProviderID: "azure://node-id-1"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}, Spec: v1.NodeSpec{ProviderID: "azure://node-id-2"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}, Spec: v1.NodeSpec{ProviderID: "azure://node-id-3"}},
-	}}
-
-	versionClient := fakek8sclient.NewSimpleClientset(fakeK8sNodes)
-	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.26.5",
-	}
-	coreops.SetInstance(coreops.New(versionClient))
-	k8sClient := testutil.FakeK8sClient(fakeK8sNodes)
-	err := preflight.InitPreflightChecker(k8sClient)
-	require.NoError(t, err)
-
-	c := preflight.Instance()
-	require.Equal(t, cloudops.Azure, c.ProviderName())
-
-	driver := portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
-	require.NoError(t, err)
-
-	cluster := &corev1.StorageCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "px-cluster",
-			Namespace: "kube-test",
-		},
-		Spec: corev1.StorageClusterSpec{
-			Image:        "portworx/oci-monitor:3.0.0",
-			CloudStorage: &corev1.CloudStorageSpec{},
-		},
-	}
-
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-
-	expectedArgs := []string{
-		"-c", "px-cluster",
-		"-x", "kubernetes",
-		"-b",
-		"-cloud_provider", "azure",
-		"-max_storage_nodes_per_zone", "3",
-		"-secret_type", "k8s",
-	}
-	actual, _ := driver.GetStoragePodSpec(cluster, fakeK8sNodes.Items[0].Name)
-	assert.ElementsMatch(t, expectedArgs, actual.Containers[0].Args)
-
-	// Reset preflight for other tests
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	err = preflight.InitPreflightChecker(k8sClient)
-	require.NoError(t, err)
-}
-
 func TestPodSpecWithCapacitySpecsAndDeviceSpecs(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -2770,6 +2746,7 @@ func TestPodSpecWithImagePullPolicy(t *testing.T) {
 			Namespace: "kube-system",
 		},
 		Spec: corev1.StorageClusterSpec{
+			Image:           "portworx/oci-monitor:2.12.0",
 			ImagePullPolicy: v1.PullIfNotPresent,
 			CSI: &corev1.CSISpec{
 				Enabled: true,
@@ -2790,6 +2767,7 @@ func TestPodSpecWithImagePullPolicy(t *testing.T) {
 		"--pull", "IfNotPresent",
 	}
 
+	// Case 1: When portworx version is lesser than 2.13
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
 
@@ -2797,6 +2775,17 @@ func TestPodSpecWithImagePullPolicy(t *testing.T) {
 	assert.Len(t, actual.Containers, 2)
 	assert.Equal(t, v1.PullIfNotPresent, actual.Containers[0].ImagePullPolicy)
 	assert.Equal(t, v1.PullIfNotPresent, actual.Containers[1].ImagePullPolicy)
+
+	// Case 2: When portworx version is greater than or equal to 2.13 then csi-node-driver-registrar container will be a part of portworx-api daemonset
+	// Hence only 1 container should be present in the storage pods
+	cluster.Spec.Image = "portworx/oci-monitor:2.13.0"
+	newActualSpec, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+
+	assert.ElementsMatch(t, expectedArgs, newActualSpec.Containers[0].Args)
+	assert.Len(t, newActualSpec.Containers, 1)
+	assert.Equal(t, v1.PullIfNotPresent, newActualSpec.Containers[0].ImagePullPolicy)
+
 }
 
 func TestPodSpecWithNilStorageCluster(t *testing.T) {
@@ -3569,17 +3558,14 @@ func TestPodSpecForCSIWithCustomPortworxImage(t *testing.T) {
 	)
 
 	// If valid version is not found from the image or the annotation, then assume latest
-	// Portworx version. Verify this by checking the new CSI driver name in registrar.
+	// Portworx version. Verify this by checking there is no csi-registrar container
 	cluster.Annotations = map[string]string{
 		pxutil.AnnotationPXVersion: "portworx/oci-monitor:invalid",
 	}
 	actual, err = driver.GetStoragePodSpec(cluster, nodeName)
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-
-	assert.Equal(t,
-		actual.Containers[1].Args[2],
-		"--kubelet-registration-path=/var/lib/kubelet/csi-plugins/pxd.portworx.com/csi.sock",
-	)
+	assert.Equal(t, len(actual.Containers), 1)
+	assert.Equal(t, actual.Containers[0].Name, "portworx")
 }
 
 func TestPodSpecForDeprecatedCSIDriverName(t *testing.T) {

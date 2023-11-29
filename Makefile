@@ -204,7 +204,7 @@ container:
 	@echo "Building operator image $(OPERATOR_IMG)"
 	docker build --pull --tag $(OPERATOR_IMG) -f build/Dockerfile .
 
-DOCK_BUILD_CNT	:= golang:1.20
+DOCK_BUILD_CNT	:= golang:1.21
 
 docker-build:
 	@echo "Building using docker"
@@ -317,4 +317,4 @@ clean: clean-release-manifest clean-bundle
 	@rm -rf $(BIN)
 	@go clean -i $(PKGS)
 	@echo "Deleting image "$(OPERATOR_IMG)
-	@docker rmi -f $(OPERATOR_IMG) registry.access.redhat.com/ubi8-minimal:latest
+	@docker rmi -f $(OPERATOR_IMG) registry.access.redhat.com/ubi9-minimal:latest

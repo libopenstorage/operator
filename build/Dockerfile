@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi8-minimal:latest
+FROM registry.access.redhat.com/ubi9-minimal:latest
 
 RUN microdnf clean all && \
     microdnf install -y tar && \

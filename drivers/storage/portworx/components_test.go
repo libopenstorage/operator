@@ -354,6 +354,26 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, cluster.Name, ds.OwnerReferences[0].Name)
 	require.Equal(t, expectedDaemonSet.Spec, ds.Spec)
 
+	// When Portworx version is greater than 2.13, daemonset contains csi driver registrar as well
+	cluster.Spec.Image = "portworx/oci-monitor:2.18.0"
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient = testutil.FakeK8sClient()
+	driver = portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	newExpectedDaemonSet := testutil.GetExpectedDaemonSet(t, "portworxAPIDaemonset_2_13.yaml")
+	newDs := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, newDs, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, newExpectedDaemonSet.Name, newDs.Name)
+	require.Equal(t, newExpectedDaemonSet.Namespace, newDs.Namespace)
+	require.Len(t, newDs.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, newDs.OwnerReferences[0].Name)
+	require.Equal(t, newExpectedDaemonSet.Spec, newDs.Spec)
+
 	// Portworx Proxy ServiceAccount
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.PxProxyServiceAccountName, api.NamespaceSystem)
@@ -6811,12 +6831,28 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	}
 	require.True(t, validStatefulSetSocketPath)
 
+	// Case 1: When portworx version is less than 2.13
 	spec, err := driver.GetStoragePodSpec(cluster, nodeName)
 	require.NoError(t, err)
 	logrus.Infof("Volumes %+v", spec.Volumes)
 
 	// CSI driver path
 	for _, v := range spec.Volumes {
+		if v.Name == "csi-driver-path" && v.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
+			validCSIDriverPath = true
+		}
+	}
+	require.True(t, validCSIDriverPath)
+
+	// Case 2: When px version is greater than or equal to 2.13, csi-node-driver-registrar becomes a part of the portworx-api daemonset instead of px storage pod
+	// Hence even the CSI volumes are defined in the portworx-api daemonset
+	cluster.Spec.Image = "portworx/image:2.15.2"
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	logrus.Infof("Volumes %+v", ds.Spec.Template.Spec.Volumes)
+
+	for _, v := range ds.Spec.Template.Spec.Volumes {
 		if v.Name == "csi-driver-path" && v.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
 			validCSIDriverPath = true
 		}
@@ -11504,7 +11540,21 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
-	// TestCase: Create storage PDB if total nodes with storage is at least 3
+	// TestCase: Do not create storage PDB if storage pod annotation value is less than 2
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationStoragePodDisruptionBudget: "1",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// TestCase: Create storage PDB if total nodes with storage is at least 3.
+	// Also, ignore the annotation if the value is an invalid integer
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "invalid"
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
 		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
 		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
@@ -11525,7 +11575,9 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.Equal(t, cluster.Name, storagePDB.Spec.Selector.MatchLabels[constants.LabelKeyClusterName])
 	require.Equal(t, constants.LabelValueTrue, storagePDB.Spec.Selector.MatchLabels[constants.LabelKeyStoragePod])
 
-	// TestCase: Update storage PDB if count of nodes with storage changes
+	// TestCase: Update storage PDB if count of nodes with storage changes.
+	// Also, ignore the annotation if the value is an invalid integer
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "still_invalid"
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
 		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
 		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
@@ -11545,7 +11597,20 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
 
+	// TestCase: Update storage PDB if overwritten using annotation
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "10"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, 10, storagePDB.Spec.MinAvailable.IntValue())
+
 	// TestCase: Use NonQuorumMember flag to determine storage node count
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = ""
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
 		{NonQuorumMember: false, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
 		{NonQuorumMember: false, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.2.0"}},
@@ -14178,6 +14243,8 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 		GitVersion: "v1.17.0",
 	}
 	coreops.SetInstance(coreops.New(versionClient))
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient(fakeNode)
 	driver := portworx{}
@@ -14193,6 +14260,7 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.6.1",
 			CSI: &corev1.CSISpec{
 				Enabled: true,
 			},
@@ -14246,6 +14314,8 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 		GitVersion: "v1.17.0",
 	}
 	coreops.SetInstance(coreops.New(versionClient))
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -14261,6 +14331,7 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.6.1",
 			CSI: &corev1.CSISpec{
 				Enabled: true,
 			},
