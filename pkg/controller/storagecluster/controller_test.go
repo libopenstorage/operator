@@ -36,7 +36,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
-	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -7077,7 +7077,7 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 
-	//Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs := &appsv1.ControllerRevisionList{}
 	err = k8sClient.List(context.TODO(), revs, &client.ListOptions{})
 	require.NoError(t, err)
@@ -9726,7 +9726,7 @@ func TestStorageSpecValidation(t *testing.T) {
 			Namespace: "ns",
 		},
 	}
-	//Testcase: Cluster has both storage types and no node specs
+	// Testcase: Cluster has both storage types and no node specs
 	useAllDevices := true
 	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAll: &useAllDevices,
@@ -9770,7 +9770,7 @@ func TestStorageSpecValidation(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, result)
 
-	//Testcase: Validate node having both storage and cloudstorage and cluster has cloudstorage
+	// Testcase: Validate node having both storage and cloudstorage and cluster has cloudstorage
 
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
@@ -9814,7 +9814,7 @@ func TestStorageSpecValidation(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, result)
 
-	//Testcase: Node has both specs and cluster has storage
+	// Testcase: Node has both specs and cluster has storage
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -9837,7 +9837,7 @@ func TestStorageSpecValidation(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, result)
 
-	//Testcase: Validate when cluster has both specs and node has cloud
+	// Testcase: Validate when cluster has both specs and node has cloud
 
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
@@ -9879,7 +9879,7 @@ func TestStorageSpecValidation(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, result)
 
-	//Testcase: When cluster has both and node has storage
+	// Testcase: When cluster has both and node has storage
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -9913,7 +9913,7 @@ func TestStorageSpecValidation(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, result)
 
-	//Update specs to have no error
+	// Update specs to have no error
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -9947,7 +9947,7 @@ func TestStorageSpecValidation(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result)
 
-	//Another valid case
+	// Another valid case
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
