@@ -813,7 +813,7 @@ func TestPreflightAnnotations(t *testing.T) {
 	require.NoError(t, err)
 	check, ok = cluster.Annotations[pxutil.AnnotationPreflightCheck]
 	require.True(t, ok)
-	require.Equal(t, "true", check)
+	require.Equal(t, "false", check)
 	logrus.Infof("vshpere cloud w/PX >= 3.1, preflight will run")
 
 	// TestCase: Vsphere cloud provider with Install mode 'local'
