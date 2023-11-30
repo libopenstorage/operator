@@ -361,6 +361,8 @@ func (u *preFlightPortworx) processNodesChecks(recorder record.EventRecorder, st
 				continue
 			}
 
+			passed = false // pre-flight status check failed, keep going for logging
+
 			if check.Result == "fatal" {
 				// collect fatal msgs for output at end.
 				fmsgs = append(fmsgs, check.Reason)
@@ -370,7 +372,6 @@ func (u *preFlightPortworx) processNodesChecks(recorder record.EventRecorder, st
 
 			msg = msg + "failed: " + check.Reason
 			k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, msg)
-			passed = false // pre-flight status check failed, keep going for logging
 		}
 
 		if !statusExists {
