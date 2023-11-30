@@ -285,6 +285,7 @@ func UpdateAndValidatePvcController(cluster *corev1.StorageCluster, f func(*core
 // UpdateAndValidateStork update StorageCluster, validates Stork components only and return latest version of live StorageCluster
 func UpdateAndValidateStork(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
 	var latestLiveCluster *corev1.StorageCluster
+	var updatedCluster *corev1.StorageCluster
 
 	for i := 0; i < 5; i++ {
 		liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
@@ -298,10 +299,11 @@ func UpdateAndValidateStork(cluster *corev1.StorageCluster, f func(*corev1.Stora
 			continue
 		}
 		require.NoError(t, err)
+		updatedCluster = newCluster
 		break
 	}
 
-	err := testutil.ValidateStork(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
+	err := testutil.ValidateStork(pxSpecImages, updatedCluster, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
 	require.NoError(t, err)
 	return latestLiveCluster
 }
@@ -309,6 +311,7 @@ func UpdateAndValidateStork(cluster *corev1.StorageCluster, f func(*corev1.Stora
 // UpdateAndValidateAutopilot update StorageCluster, validates Autopilot components only and return latest version of live StorageCluster
 func UpdateAndValidateAutopilot(cluster *corev1.StorageCluster, f func(*corev1.StorageCluster) *corev1.StorageCluster, pxSpecImages map[string]string, t *testing.T) *corev1.StorageCluster {
 	var latestLiveCluster *corev1.StorageCluster
+	var updatedCluster *corev1.StorageCluster
 
 	for i := 0; i < 5; i++ {
 		liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
@@ -322,10 +325,11 @@ func UpdateAndValidateAutopilot(cluster *corev1.StorageCluster, f func(*corev1.S
 			continue
 		}
 		require.NoError(t, err)
+		updatedCluster = newCluster
 		break
 	}
 
-	err := testutil.ValidateAutopilot(pxSpecImages, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
+	err := testutil.ValidateAutopilot(pxSpecImages, updatedCluster, latestLiveCluster, DefaultValidateComponentTimeout, DefaultValidateComponentRetryInterval)
 	require.NoError(t, err)
 	return latestLiveCluster
 }
