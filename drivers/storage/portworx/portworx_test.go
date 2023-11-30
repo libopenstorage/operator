@@ -92,6 +92,7 @@ func TestValidate(t *testing.T) {
 			Namespace: "kube-test",
 			Annotations: map[string]string{
 				pxutil.AnnotationPreflightCheck: "true",
+				pxutil.AnnotationIsEKS:          "true",
 			},
 		},
 	}
@@ -256,7 +257,8 @@ func TestValidate(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestValidateVsphere(t *testing.T) {
+// disabled preflight for all environments except EKS in 23.10.2
+/*func TestValidateVsphere(t *testing.T) {
 	driver := portworx{}
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -358,7 +360,7 @@ func TestValidateVsphere(t *testing.T) {
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Enabling PX-StoreV2"))
 	require.Contains(t, *cluster.Spec.CloudStorage.SystemMdDeviceSpec, DefCmetaVsphere)
-}
+}*/
 
 func TestValidateCheckFailure(t *testing.T) {
 	driver := portworx{}
@@ -368,6 +370,7 @@ func TestValidateCheckFailure(t *testing.T) {
 			Namespace: "kube-test",
 			Annotations: map[string]string{
 				pxutil.AnnotationPreflightCheck: "true",
+				pxutil.AnnotationIsEKS:          "true",
 			},
 		},
 	}
@@ -473,6 +476,7 @@ func TestValidateMissingRequiredCheck(t *testing.T) {
 			Namespace: "kube-test",
 			Annotations: map[string]string{
 				pxutil.AnnotationPreflightCheck: "true",
+				pxutil.AnnotationIsEKS:          "true",
 			},
 		},
 	}

@@ -140,6 +140,11 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		}
 	}
 
+	if !pxutil.IsEKS(cluster) {
+		logrus.Warnf("pre-flight is not enabled on this environment")
+		return nil
+	}
+
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
 	check = strings.TrimSpace(strings.ToLower(check))
 	if !ok || check == "skip" {
