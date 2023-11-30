@@ -646,8 +646,8 @@ func TestShouldPreflightRun(t *testing.T) {
 	require.NoError(t, err)
 
 	setPortworxStorageSpecDefaults(cluster)
-	require.True(t, driver.preflightShouldRun(cluster))
-	logrus.Infof("vshpere cloud w/PX >= 3.1, preflight will run")
+	require.False(t, driver.preflightShouldRun(cluster))
+	logrus.Infof("vshpere cloud w/PX >= 3.1, preflight will not run")
 
 	// TestCase: Vsphere cloud provider with Install mode 'local'
 	logrus.Infof("check vsphere cloud w/local install mode...")

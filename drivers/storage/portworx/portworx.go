@@ -308,29 +308,34 @@ func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 		return check == "true"
 	}
 
-	if !preflight.RequiresCheck() { // Preflight is only supported on AWS, VSPHERE & Pure
+	/*if !preflight.RequiresCheck() { // Preflight is only supported on AWS, VSPHERE & Pure
 		return false
 	}
+	*/
 
+	// PWX-35203 : Preflight should run only on AWS
 	if preflight.IsAWS() { // Preflight runs on AWS & PX 3.0.0 or above
 		return true
 	}
 
-	pxVer31, _ := version.NewVersion("3.1")
-	if clusterPXver.GreaterThanOrEqual(pxVer31) { // PX version is 3.1.0 or above
-		if pxutil.IsVsphere(toUpdate) {
-			if preflight.IsPKS() { // Don't run preflight on Vsphere w/PKS
-				return false
-			}
+	// disable Preflight for all environments other than AWS
+	/*
+		pxVer31, _ := version.NewVersion("3.1")
+		if clusterPXver.GreaterThanOrEqual(pxVer31) { // PX version is 3.1.0 or above
+			if pxutil.IsVsphere(toUpdate) {
+				if preflight.IsPKS() { // Don't run preflight on Vsphere w/PKS
+					return false
+				}
 
-			envValue, exists := pxutil.GetClusterEnvValue(toUpdate, "VSPHERE_INSTALL_MODE")
-			if exists && envValue == pxutil.VsphereInstallModeLocal { // Don't run preflight on Vsphere w/local install mode
-				return false
-			}
+				envValue, exists := pxutil.GetClusterEnvValue(toUpdate, "VSPHERE_INSTALL_MODE")
+				if exists && envValue == pxutil.VsphereInstallModeLocal { // Don't run preflight on Vsphere w/local install mode
+					return false
+				}
 
-			return true // Preflight runs on Vsphere & PX 3.1.0 or above
+				return true // Preflight runs on Vsphere & PX 3.1.0 or above
+			}
 		}
-	}
+	*/
 
 	return false // All else disable
 }
