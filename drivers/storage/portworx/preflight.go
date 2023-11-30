@@ -73,7 +73,7 @@ func GetPreFlightStorageCluster(cluster *corev1.StorageCluster) *corev1.StorageC
 	// capability for pre-flght pod without affecting original storage cluster
 	preFlightCluster := cluster.DeepCopy()
 
-	if pxutil.AuthEnabled(&preFlightCluster.Spec) { // Disable  security if its enabled
+	if pxutil.SecurityEnabled(preFlightCluster) { // Disable  security if its enabled
 		preFlightCluster.Spec.Security = nil
 	}
 
