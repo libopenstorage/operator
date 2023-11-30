@@ -84,6 +84,26 @@ func TestInit(t *testing.T) {
 	require.Equal(t, k8sClient, driver.k8sClient)
 }
 
+func TestValidatePreFlightDisableSecurity(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPreflightCheck: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+			},
+		},
+	}
+
+	preflightStorageCluster := GetPreFlightStorageCluster(cluster)
+	require.Nil(t, preflightStorageCluster.Spec.Security)
+}
+
 func TestValidate(t *testing.T) {
 	driver := portworx{}
 	cluster := &corev1.StorageCluster{
