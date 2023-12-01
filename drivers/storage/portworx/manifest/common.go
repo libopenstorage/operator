@@ -13,12 +13,13 @@ import (
 	"gopkg.in/yaml.v2"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	httpPrefix  = "http://"
-	httpsPrefix = "https://"
+	httpPrefix    = "http://"
+	httpsPrefix   = "https://"
+	secretName    = "custom-ca-cert"
+	secretKeyName = "rootCA.crt"
 )
 
 // Methods to override for testing
@@ -27,7 +28,7 @@ var (
 	CAfiles []string
 )
 
-func (m *remote) getManifestFromURL(manifestURL string, proxy string) ([]byte, error) {
+func getManifestFromURL(manifestURL string, proxy string) ([]byte, error) {
 	var resp *http.Response
 	var err error
 	if proxy == "" {
@@ -50,7 +51,7 @@ func (m *remote) getManifestFromURL(manifestURL string, proxy string) ([]byte, e
 			return nil, err
 		}
 
-		caCert, err := m.GetCACert(m.k8sClient, CAfiles[0], CAfiles[1])
+		caCert, err := GetCACert(secretName, secretKeyName)
 		caCertPool := x509.NewCertPool()
 		caCertPool.AppendCertsFromPEM(caCert)
 
@@ -87,13 +88,12 @@ func parseVersionManifest(content []byte) (*Version, error) {
 
 // read ca file from kubernetes secret using k8s client
 func (m *manifest) GetCACert(
-	k8sClient client.Client,
 	secretName,
 	secretKey string,
 ) ([]byte, error) {
 	ctx := context.Background()
 	secret := v1.Secret{}
-	err := k8sClient.Get(ctx,
+	err := m.k8sClient.Get(ctx,
 		types.NamespacedName{
 			Name: secretName,
 		},

@@ -66,7 +66,7 @@ func (m *remote) downloadVersionManifest(
 	u.RawQuery = params.Encode()
 
 	_, proxy := pxutil.GetPxProxyEnvVarValue(m.cluster)
-	body, err := m.getManifestFromURL(u.String(), proxy)
+	body, err := getManifestFromURL(u.String(), proxy)
 	if err != nil {
 		return nil, err
 	}

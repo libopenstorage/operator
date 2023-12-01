@@ -76,8 +76,8 @@ func (m *multiple) Get() (*Version, error) {
 	}, nil
 }
 
-func (m *remote) fetchCompleteManifest() (*releaseManifest, error) {
-	manifest, err := m.loadRemoteManifest()
+func fetchCompleteManifest() (*releaseManifest, error) {
+	manifest, err := loadRemoteManifest()
 	if err != nil {
 		logrus.Debugf("Using local release manifest as loading remote manifest failed due to: %v", err)
 		manifest, err = loadLocalManifest()
@@ -137,9 +137,9 @@ func loadLocalManifest() (*releaseManifest, error) {
 	return loadManifestFromFile(manifestPath)
 }
 
-func (m *remote) loadRemoteManifest() (*releaseManifest, error) {
+func loadRemoteManifest() (*releaseManifest, error) {
 	logrus.Debugf("Downloading latest release manifest.")
-	manifest, err := m.downloadManifest()
+	manifest, err := downloadManifest()
 	if err != nil {
 		// If download fails return the existing remote manifest if it exists
 		logrus.Debugf("Failed to get latest release manifest. %v", err)
@@ -149,13 +149,13 @@ func (m *remote) loadRemoteManifest() (*releaseManifest, error) {
 	return manifest, nil
 }
 
-func (m *remote) downloadManifest() (*releaseManifest, error) {
+func downloadManifest() (*releaseManifest, error) {
 	manifestURL := defaultReleaseManifestURL
 	if url, exists := os.LookupEnv(envKeyReleaseManifestURL); exists {
 		manifestURL = url
 	}
 
-	body, err := m.getManifestFromURL(manifestURL, "")
+	body, err := getManifestFromURL(manifestURL, "")
 	if err != nil {
 		return nil, err
 	}
