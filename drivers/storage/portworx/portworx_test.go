@@ -637,6 +637,12 @@ func TestShouldPreflightRun(t *testing.T) {
 	require.True(t, driver.preflightShouldRun(cluster))
 	logrus.Infof("eks cloud w/PX >= 3.0, preflight will run")
 
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	cluster.Spec.CloudStorage.Provider = nil
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
 	// TestCase: eks cloud provider with image < 3.0
 	logrus.Infof("check eks cloud w/PX < 3.0...")
 	cluster.Spec.Image = "portworx/oci-image:2.9.0"
