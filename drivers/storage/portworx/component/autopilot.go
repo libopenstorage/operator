@@ -391,6 +391,7 @@ func (c *autopilot) createDeployment(
 	command := append([]string{"/autopilot"}, argList...)
 
 	imageName = util.GetImageURN(cluster, imageName)
+	fmt.Println("test:: GetImageURN :: ", imageName)
 
 	envMap := make(map[string]*v1.EnvVar)
 	envMap[pxutil.EnvKeyPortworxNamespace] = &v1.EnvVar{
@@ -462,6 +463,7 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	cpuQuantity resource.Quantity,
 	cpuLimitQuantity resource.Quantity,
 ) *appsv1.Deployment {
+	fmt.Println("test::  getAutopilotDeploymentSpec")
 	deploymentLabels := map[string]string{
 		"tier": "control-plane",
 	}
@@ -586,21 +588,25 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	if len(envVars) > 0 {
 		deployment.Spec.Template.Spec.Containers[0].Env = envVars
 	}
-
+	fmt.Println("test:: image before", cluster.Spec.Autopilot.Image)
 	// If resources is specified in the spec, the resources specified by annotation (such as portworx.io/autopilot-cpu)
 	// will be overwritten.
 	if cluster.Spec.Autopilot.Resources != nil {
 		deployment.Spec.Template.Spec.Containers[0].Resources = *cluster.Spec.Autopilot.Resources
 	}
 	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
+	fmt.Println("test:: image after", cluster.Spec.Autopilot.Image)
 
 	return deployment
 }
 
 func (c *autopilot) getDesiredAutopilotImage(cluster *corev1.StorageCluster) string {
+	fmt.Println("test:: getDesiredAutopilotImage ")
 	if cluster.Spec.Autopilot.Image != "" {
+		fmt.Println("test:: cluster.Spec.Autopilot.Image :: ", cluster.Spec.Autopilot.Image)
 		return cluster.Spec.Autopilot.Image
 	} else if cluster.Status.DesiredImages != nil {
+		fmt.Println("test:: cluster.Status.DesiredImages.Autopilot :: ", cluster.Status.DesiredImages.Autopilot)
 		return cluster.Status.DesiredImages.Autopilot
 	}
 	return ""
