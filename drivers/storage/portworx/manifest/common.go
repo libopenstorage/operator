@@ -1,7 +1,6 @@
 package manifest
 
 import (
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"io"
@@ -9,10 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -51,7 +47,8 @@ func getManifestFromURL(manifestURL string, proxy string) ([]byte, error) {
 			return nil, err
 		}
 
-		caCert, err := GetCACert(secretName, secretKeyName)
+		m := Instance()
+		caCert, err := m.GetCACert(secretName, secretKeyName)
 		caCertPool := x509.NewCertPool()
 		caCertPool.AppendCertsFromPEM(caCert)
 
@@ -84,24 +81,4 @@ func parseVersionManifest(content []byte) (*Version, error) {
 		return nil, ErrReleaseNotFound
 	}
 	return manifest, nil
-}
-
-// read ca file from kubernetes secret using k8s client
-func (m *manifest) GetCACert(
-	secretName,
-	secretKey string,
-) ([]byte, error) {
-	ctx := context.Background()
-	secret := v1.Secret{}
-	err := m.k8sClient.Get(ctx,
-		types.NamespacedName{
-			Name: secretName,
-		},
-		&secret,
-	)
-	if err != nil {
-		logrus.Debugf("Can't load CA certificate due to: %v", err)
-		return nil, err
-	}
-	return secret.Data[secretKey], nil
 }
