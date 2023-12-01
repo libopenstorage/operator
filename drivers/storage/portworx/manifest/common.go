@@ -1,22 +1,19 @@
 package manifest
 
 import (
-	"crypto/md5"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
-	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
-	"path"
-	"sort"
 	"strings"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -30,7 +27,7 @@ var (
 	CAfiles []string
 )
 
-func getManifestFromURL(manifestURL string, proxy string) ([]byte, error) {
+func (m *remote) getManifestFromURL(manifestURL string, proxy string) ([]byte, error) {
 	var resp *http.Response
 	var err error
 	if proxy == "" {
@@ -53,8 +50,9 @@ func getManifestFromURL(manifestURL string, proxy string) ([]byte, error) {
 			return nil, err
 		}
 
+		caCert, err := m.GetCACert(m.k8sClient, CAfiles[0], CAfiles[1])
 		caCertPool := x509.NewCertPool()
-		caCertPool.AppendCertsFromPEM(addCAfiles(CAfiles))
+		caCertPool.AppendCertsFromPEM(caCert)
 
 		client := &http.Client{
 			Transport: &http.Transport{
@@ -87,63 +85,23 @@ func parseVersionManifest(content []byte) (*Version, error) {
 	return manifest, nil
 }
 
-func addCAfiles(files []string) error {
-	var (
-		cb        *certs.CertBundle
-		certFiles []string
-		basedir   string
-		certList  []*x509.Certificate
+// read ca file from kubernetes secret using k8s client
+func (m *manifest) GetCACert(
+	k8sClient client.Client,
+	secretName,
+	secretKey string,
+) ([]byte, error) {
+	ctx := context.Background()
+	secret := v1.Secret{}
+	err := k8sClient.Get(ctx,
+		types.NamespacedName{
+			Name: secretName,
+		},
+		&secret,
 	)
-
-	for _, s := range files {
-		buff, err := ioutil.ReadFile(s)
-		if err != nil {
-			return fmt.Errorf("could not read CA-file %s: %s", s, err)
-		} else if len(buff) <= 0 {
-			return fmt.Errorf("empty file provided: %s", s)
-		}
-		cb = certs.AppendPEM(cb, buff)
+	if err != nil {
+		logrus.Debugf("Can't load CA certificate due to: %v", err)
+		return nil, err
 	}
-	if errs := cb.Check(); len(errs) > 0 {
-		for _, err := range errs {
-			logrus.Error(err.Error())
-		}
-		return fmt.Errorf("errors processing CA certificates")
-	}
-
-	certList = cb.GetCertificates(true)
-	if len(certList) <= 0 {
-		logrus.Warn("No actual CA certificates found in passed CA files")
-		return nil
-	}
-
-	basedir = path.Join("rootfs/usr/share/ca-certificates/pwx")
-	if st, err := os.Stat(basedir); err != nil && os.IsNotExist(err) {
-		if err = os.MkdirAll(basedir, 0777); err != nil {
-			return fmt.Errorf("could not create %s dir: %s", basedir, err)
-		}
-	} else if err == nil && !st.IsDir() {
-		return fmt.Errorf("INTERNAL ERROR - %s exists, but not a directory", basedir)
-	} else if err != nil {
-		return fmt.Errorf("could not stat %s: %s", basedir, err)
-	}
-
-	// dump certificates
-	for _, cert := range certList {
-		hash := md5.Sum(cert.Raw)
-		fingerprint := hex.EncodeToString(hash[:])
-		fname := "pwx/" + fingerprint + ".crt"
-		fullpath := path.Join(basedir, fingerprint) + ".crt"
-		certFiles = append(certFiles, fname)
-		if _, err := os.Stat(fullpath); err == nil {
-			logrus.Infof("> CA cert already installed - subject: %s  fingerprint: %s", cert.Subject, fingerprint)
-			continue
-		}
-		if err := ioutil.WriteFile(fullpath, certs.CertToPEM(cert), 0444); err != nil {
-			return fmt.Errorf("error writing %s: %s", fullpath, err)
-		}
-		logrus.Infof("> Adding CA cert - subject: %s  fingerprint: %s", cert.Subject, fingerprint)
-	}
-	sort.Strings(certFiles)
-	return nil
+	return secret.Data[secretKey], nil
 }
