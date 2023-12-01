@@ -607,8 +607,56 @@ func TestShouldPreflightRun(t *testing.T) {
 	require.NoError(t, err)
 
 	setPortworxStorageSpecDefaults(cluster)
+	require.False(t, driver.preflightShouldRun(cluster))
+	logrus.Infof("aws cloud w/PX >= 3.0, preflight will not run")
+
+	// Reset preflight for other tests
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	cluster.Spec.CloudStorage.Provider = nil
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	// TestCase: eks cloud provider with image >= 3.0
+	logrus.Infof("check eks cloud w/PX >= 3.0...")
+	cluster.Spec.Image = "portworx/oci-image:3.0.0"
+
+	fakeK8sNodes = &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-3"}},
+	}}
+	versionClient := fakek8sclient.NewSimpleClientset(fakeK8sNodes)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.21.14-eks-ba74326",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	setPortworxStorageSpecDefaults(cluster)
 	require.True(t, driver.preflightShouldRun(cluster))
-	logrus.Infof("aws cloud w/PX >= 3.0, preflight will run")
+	logrus.Infof("eks cloud w/PX >= 3.0, preflight will run")
+
+	// TestCase: eks cloud provider with image < 3.0
+	logrus.Infof("check eks cloud w/PX < 3.0...")
+	cluster.Spec.Image = "portworx/oci-image:2.9.0"
+
+	fakeK8sNodes = &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}, Spec: v1.NodeSpec{ProviderID: "aws://node-id-3"}},
+	}}
+	versionClient = fakek8sclient.NewSimpleClientset(fakeK8sNodes)
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.21.14-eks-ba74326",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+	err = preflight.InitPreflightChecker(k8sClient)
+	require.NoError(t, err)
+
+	setPortworxStorageSpecDefaults(cluster)
+	require.False(t, driver.preflightShouldRun(cluster))
+	logrus.Infof("eks cloud w/PX < 3.0, preflight will not run")
 
 	// Reset preflight for other tests
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))

@@ -310,11 +310,10 @@ func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 
 	/*if !preflight.RequiresCheck() { // Preflight is only supported on AWS, VSPHERE & Pure
 		return false
-	}
-	*/
+	}*/
 
-	// PWX-35203 : Preflight should run only on AWS
-	if preflight.IsAWS() { // Preflight runs on AWS & PX 3.0.0 or above
+	// PWX-35203 : Preflight should run only on EKS
+	if preflight.IsEKS() { // Preflight runs on EKS & PX 3.0.0 or above
 		return true
 	}
 
