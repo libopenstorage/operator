@@ -68,6 +68,18 @@ type preFlightPortworx struct {
 // Existing dmThin strings
 var dmthinRegex = regexp.MustCompile("(?i)(PX-StoreV2|px-store-v2)")
 
+func GetPreFlightStorageCluster(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+	// Creates a copy of the existing storage cluster which can be  modified to enable/disable
+	// capability for pre-flght pod without affecting original storage cluster
+	preFlightCluster := cluster.DeepCopy()
+
+	if pxutil.SecurityEnabled(preFlightCluster) { // Disable  security if its enabled
+		preFlightCluster.Spec.Security = nil
+	}
+
+	return preFlightCluster
+}
+
 // NewPreFlighter returns an implementation of PreFlightPortworx interface
 func NewPreFlighter(
 	cluster *corev1.StorageCluster,

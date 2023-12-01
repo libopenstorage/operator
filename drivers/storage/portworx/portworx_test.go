@@ -84,6 +84,26 @@ func TestInit(t *testing.T) {
 	require.Equal(t, k8sClient, driver.k8sClient)
 }
 
+func TestValidatePreFlightDisableSecurity(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPreflightCheck: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+			},
+		},
+	}
+
+	preflightStorageCluster := GetPreFlightStorageCluster(cluster)
+	require.Nil(t, preflightStorageCluster.Spec.Security)
+}
+
 func TestValidate(t *testing.T) {
 	driver := portworx{}
 	cluster := &corev1.StorageCluster{
@@ -793,7 +813,6 @@ func TestPreflightAnnotations(t *testing.T) {
 
 	err := preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
-	require.Equal(t, string(cloudops.AWS), pxutil.GetCloudProvider(cluster)) // Make sure aws
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
