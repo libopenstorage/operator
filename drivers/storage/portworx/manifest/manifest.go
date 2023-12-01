@@ -129,7 +129,7 @@ type Manifest interface {
 	GetVersions(*corev1.StorageCluster, bool) *Version
 	// CanAccessRemoteManifest is used to test remote manifest to decide whether it's air-gapped env.
 	CanAccessRemoteManifest(cluster *corev1.StorageCluster) bool
-	// read ca file from kubernetes secret using k8s client
+	// GetCACert reads CA cert file from kubernetes secret
 	GetCACert(secretName, secretKey string) ([]byte, error)
 }
 
@@ -232,7 +232,7 @@ func (m *manifest) GetVersions(
 	return rel.DeepCopy()
 }
 
-// read ca file from kubernetes secret using k8s client
+// GetCACert reads CA cert file from kubernetes secret
 func (m *manifest) GetCACert(
 	secretName,
 	secretKey string,
@@ -246,7 +246,7 @@ func (m *manifest) GetCACert(
 		&secret,
 	)
 	if err != nil {
-		logrus.Debugf("Can't load CA certificate due to: %v", err)
+		logrus.Errorf("Can't get secret %s due to: %v", secretName, err)
 		return nil, err
 	}
 	return secret.Data[secretKey], nil

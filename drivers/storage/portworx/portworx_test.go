@@ -11502,6 +11502,12 @@ func (m *fakeManifest) CanAccessRemoteManifest(cluster *corev1.StorageCluster) b
 	return false
 }
 
+func (m *fakeManifest) GetCACert(secretName,
+	secretKey string,
+) ([]byte, error) {
+	return nil, nil
+}
+
 func compVersion() string {
 	return "2.3.4"
 }

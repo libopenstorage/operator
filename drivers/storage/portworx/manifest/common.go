@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
 
@@ -49,15 +50,20 @@ func getManifestFromURL(manifestURL string, proxy string) ([]byte, error) {
 
 		m := Instance()
 		caCert, err := m.GetCACert(secretName, secretKeyName)
+		if err != nil {
+			logrus.Errorf("Can't load CA certificate due to: %v", err)
+		}
 		caCertPool := x509.NewCertPool()
-		caCertPool.AppendCertsFromPEM(caCert)
+		ok := caCertPool.AppendCertsFromPEM(caCert)
+		var tlsConfig *tls.Config
+		if ok {
+			tlsConfig = &tls.Config{RootCAs: caCertPool}
+		}
 
 		client := &http.Client{
 			Transport: &http.Transport{
-				Proxy: http.ProxyURL(proxyURL),
-				TLSClientConfig: &tls.Config{
-					RootCAs: caCertPool,
-				},
+				Proxy:           http.ProxyURL(proxyURL),
+				TLSClientConfig: tlsConfig,
 			},
 		}
 
