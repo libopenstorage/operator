@@ -1,8 +1,6 @@
 package manifest
 
 import (
-	"bytes"
-	"context"
 	"crypto/md5"
 	"crypto/tls"
 	"crypto/x509"
@@ -13,12 +11,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"sort"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
@@ -100,11 +95,6 @@ func addCAfiles(files []string) error {
 		certList  []*x509.Certificate
 	)
 
-	if len(files) <= 0 {
-		// if no custom certs given, still check the CA-config if old certs need removing
-		goto lab_rewrite_conf
-	}
-
 	for _, s := range files {
 		buff, err := ioutil.ReadFile(s)
 		if err != nil {
@@ -155,64 +145,5 @@ func addCAfiles(files []string) error {
 		logrus.Infof("> Adding CA cert - subject: %s  fingerprint: %s", cert.Subject, fingerprint)
 	}
 	sort.Strings(certFiles)
-
-	// rewrite config
-lab_rewrite_conf:
-	confName := path.Join("rootfs/etc/ca-certificates.conf")
-	confContent, err := ioutil.ReadFile(confName)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("error reading %s: %s", confName, err)
-	}
-	outbuf := bytes.Buffer{}
-	lines := bytes.Split(confContent, []byte("\n"))
-	prefix := []byte("pwx/")
-	for _, line := range lines {
-		if bytes.HasPrefix(line, prefix) {
-			logrus.Debugf("> skipping line %q", line)
-			continue
-		} else if len(line) <= 0 {
-			logrus.Debug("> skipping empty line")
-			continue
-		}
-		outbuf.Write(line)
-		outbuf.WriteRune('\n')
-	}
-	for _, fname := range certFiles {
-		outbuf.WriteString(fname)
-		outbuf.WriteRune('\n')
-	}
-	newContent := outbuf.Bytes()
-	if bytes.Equal(confContent, newContent) {
-		logrus.Info("No change in CA certificates")
-		return nil
-	}
-	logrus.Info("Refreshing CA certificates")
-	newConfName := confName + ".tmp"
-	if err = ioutil.WriteFile(newConfName, newContent, 0444); err != nil {
-		return fmt.Errorf("error writing %s: %s", newConfName, err)
-	} else if err = os.Rename(newConfName, confName); err != nil {
-		return fmt.Errorf("error replacing %s: %s", confName, err)
-	}
-
-	// run update-ca-certificates under chroot
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-
-	outbuf.Reset()
-	cmd := exec.CommandContext(ctx, "/usr/sbin/update-ca-certificates")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Chroot:     path.Join("rootfs"),
-		Cloneflags: syscall.CLONE_NEWNS,
-	}
-	// note, the `chroot` command will do a "chdir(/)", but this shell-script can't, so we always get
-	// "sh: 0: getcwd() failed: No such file or directory" in the output -- therefore hiding the output unless errors
-	cmd.Stdout, cmd.Stderr = &outbuf, &outbuf
-
-	err = cmd.Run()
-	if err != nil {
-		logrus.WithError(err).Errorf("Error running update-ca-certificates in portworx.service container:")
-		fmt.Fprintf(logrus.StandardLogger().Out, "OUTPUT> %s\n", outbuf.Bytes())
-	}
-	return err
+	return nil
 }
