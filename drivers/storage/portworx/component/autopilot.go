@@ -602,11 +602,12 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 
 func (c *autopilot) getDesiredAutopilotImage(cluster *corev1.StorageCluster) string {
 	fmt.Println("test:: getDesiredAutopilotImage ")
+	fmt.Println("test:: cluster.Spec.Autopilot.Image :: ", cluster.Spec.Autopilot.Image)
+	fmt.Println("test:: cluster.Status.DesiredImages.Autopilot :: ", cluster.Status.DesiredImages.Autopilot)
+
 	if cluster.Spec.Autopilot.Image != "" {
-		fmt.Println("test:: cluster.Spec.Autopilot.Image :: ", cluster.Spec.Autopilot.Image)
 		return cluster.Spec.Autopilot.Image
 	} else if cluster.Status.DesiredImages != nil {
-		fmt.Println("test:: cluster.Status.DesiredImages.Autopilot :: ", cluster.Status.DesiredImages.Autopilot)
 		return cluster.Status.DesiredImages.Autopilot
 	}
 	return ""
