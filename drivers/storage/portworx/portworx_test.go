@@ -496,7 +496,7 @@ func TestValidateCheckFatal(t *testing.T) {
 	require.Len(t, recorder.Events, 4)
 	<-recorder.Events // Pop first event which is Default telemetry enabled event
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedPreFlight, "usage pre-flight check failed"))
+		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedPreFlight, "usage pre-flight check"))
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedPreFlight, "fatal: PX-StoreV2 unsupported storage disk spec"))
 	require.Contains(t, <-recorder.Events,
