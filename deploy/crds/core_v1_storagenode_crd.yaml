@@ -150,7 +150,7 @@ spec:
                       description: If true, the check was successful
                     result:
                       type: string
-                      description: Result of the check: fatal, warning, success
+                      description: Result of the check fatal, warning, success
               geography:
                 type: object
                 description: Contains topology information for the storage node.

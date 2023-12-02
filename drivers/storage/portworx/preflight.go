@@ -46,6 +46,8 @@ const (
 	DefCmetaGKE = "type=pd-ssd,size=64"
 	// preFlightOutputLog log location for pre-flight output
 	preFlightOutputLog = "/var/cores/px-pre-flight-output.log"
+	// Fatal result string from pre-flight check
+	Fatal = "fatal"
 )
 
 // PreFlightPortworx provides a set of APIs to uninstall portworx
@@ -354,7 +356,7 @@ func (u *preFlightPortworx) processNodesChecks(recorder record.EventRecorder, st
 				continue
 			}
 
-			msg := fmt.Sprintf("%s pre-flight check ", check.Type)
+			msg := fmt.Sprintf("%s pre-flight check: ", check.Type)
 			if check.Success {
 				msg = msg + "passed: " + check.Reason
 				k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, msg)
@@ -363,7 +365,7 @@ func (u *preFlightPortworx) processNodesChecks(recorder record.EventRecorder, st
 
 			passed = false // pre-flight status check failed, keep going for logging
 
-			if check.Result == "fatal" {
+			if check.Result == Fatal {
 				// This loop processes check results looking for any failures. However there
 				// is a difference between a failure and "fatal" failure.  So collect all
 				// fatal msgs so they can be outputted all at once instead of being intermixed
@@ -373,7 +375,7 @@ func (u *preFlightPortworx) processNodesChecks(recorder record.EventRecorder, st
 				continue
 			}
 
-			msg = msg + "failed: " + check.Reason
+			msg = msg + check.Reason
 			k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, msg)
 		}
 
