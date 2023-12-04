@@ -39,6 +39,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -1300,10 +1301,23 @@ func (c *Controller) podsShouldBeOnNode(
 	}
 
 	storagePods, exists := nodeToStoragePods[node.Name]
+	pxVersion := pxutil.GetPortworxVersion(cluster)
+	supportedPxVersion, _ := version.NewVersion("2.13")
 
 	switch {
 	case shouldRun && !exists:
 		nodesNeedingStoragePods = append(nodesNeedingStoragePods, node.Name)
+
+		// If pxversion is greater than 2.13 then delete the portworx-api pods with csi-node-registrar containers as well when creating the px pods
+		// This is done to re-register csi driver which gets removed when csi-node-driver-registrar is removed from px pods
+		if pxVersion.GreaterThanOrEqual(supportedPxVersion) {
+			apiPods := c.getApiPods(cluster, node.Name)
+			for _, pod := range apiPods {
+				podsToDelete = append(podsToDelete, pod.Name)
+			}
+
+		}
+
 	case shouldContinueRunning:
 		// If a storage pod failed, delete it.
 		// If there's no storage pod left on this node, we will create it in the next sync loop
@@ -1375,6 +1389,26 @@ func (c *Controller) nodeShouldRunStoragePod(
 	}
 
 	return k8s.CheckPredicatesForStoragePod(node, cluster, c.StorageClusterSelectorLabels(cluster))
+}
+
+// This function returns a list of portworx-api pods that belong to the given node
+func (c *Controller) getApiPods(cluster *corev1.StorageCluster, nodeName string) []v1.Pod {
+	podList := &v1.PodList{}
+	err := c.client.List(context.TODO(),
+		podList,
+		&client.ListOptions{
+			Namespace:     cluster.Namespace,
+			LabelSelector: labels.SelectorFromSet(map[string]string{"name": "portworx-api"}),
+			FieldSelector: fields.SelectorFromSet(map[string]string{"nodeName": nodeName}),
+		},
+	)
+
+	if err != nil {
+		logrus.Errorf("failed to list api pods for node %s", nodeName)
+		return nil
+	}
+	return podList.Items
+
 }
 
 // CreatePodTemplate creates a Portworx pod template spec.
