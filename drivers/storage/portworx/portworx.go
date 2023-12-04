@@ -406,6 +406,12 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Status.DesiredImages.Stork = release.Components.Stork
 		}
 
+		fmt.Println("test :: autoUpdateAutopilot(toUpdate) ", autoUpdateAutopilot(toUpdate))
+
+		fmt.Println("test :: toUpdate.Status.DesiredImages.Autopilot ", toUpdate.Status.DesiredImages.Autopilot)
+
+		fmt.Println("test :: autoUpdateComponents(toUpdate)", autoUpdateComponents(toUpdate))
+		fmt.Println("test :: autoUpdateComponents(toUpdate)) ", autoUpdateComponents(toUpdate))
 		if autoUpdateAutopilot(toUpdate) &&
 			(toUpdate.Status.DesiredImages.Autopilot == "" ||
 				pxVersionChanged ||
@@ -1389,6 +1395,12 @@ func removeDeprecatedFields(
 		}
 		cluster.Spec.Stork.LockImage = false
 	}
+	fmt.Println("test :: removeDeprecatedFields ")
+	fmt.Println("test :: cluster.Spec.Autopilot != nil ", cluster.Spec.Autopilot != nil)
+	fmt.Println("test :: existingCluster ", existingCluster)
+
+	fmt.Println("test :: alreadyDone ", !alreadyDone)
+	fmt.Println("cluster.Spec.Autopilot.LockImage ", !cluster.Spec.Autopilot.LockImage)
 
 	if cluster.Spec.Autopilot != nil {
 		if existingCluster && !alreadyDone && !cluster.Spec.Autopilot.LockImage {
@@ -1547,6 +1559,11 @@ func autoUpdateStork(cluster *corev1.StorageCluster) bool {
 }
 
 func autoUpdateAutopilot(cluster *corev1.StorageCluster) bool {
+	fmt.Println("cluster.Spec.Autopilot ", cluster.Spec.Autopilot)
+	fmt.Println("cluster.Spec.Autopilot.Enabled ", cluster.Spec.Autopilot.Enabled)
+
+	fmt.Println("cluster.Spec.Autopilot.Image", cluster.Spec.Autopilot.Image)
+
 	return cluster.Spec.Autopilot != nil &&
 		cluster.Spec.Autopilot.Enabled &&
 		cluster.Spec.Autopilot.Image == ""
