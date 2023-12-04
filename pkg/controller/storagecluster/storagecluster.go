@@ -228,6 +228,7 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 	// Fetch the StorageCluster instance
 	cluster := &corev1.StorageCluster{}
 	err := c.client.Get(context.TODO(), request.NamespacedName, cluster)
+
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -237,6 +238,7 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
+	fmt.Println("test:: cluster.Spec.Autopilot ", cluster.Spec.Autopilot)
 
 	if err := c.validate(cluster); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, err.Error())
@@ -245,6 +247,8 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 		return reconcile.Result{}, err
 	}
+
+	fmt.Println("test:: cluster.Spec.Autopilot after validation ", cluster.Spec.Autopilot)
 
 	if c.waitingForMigrationApproval(cluster) {
 		k8s.InfoEvent(
@@ -268,6 +272,7 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 		return reconcile.Result{}, err
 	}
+	fmt.Println("test:: cluster.Spec.Autopilot after syncStorageCluster ", cluster.Spec.Autopilot)
 
 	return reconcile.Result{}, nil
 }
