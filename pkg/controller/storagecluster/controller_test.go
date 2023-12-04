@@ -4284,11 +4284,10 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	require.Len(t, revisions.Items, 2)
 	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
 	// The old pod should be marked for deletion
-	// Since version of portworx is greater than 2.13, portworx-api pods are also deleted to register csi nodes.
 	require.Empty(t, podControl.Templates)
 	require.Empty(t, podControl.ControllerRefs)
-	require.Len(t, podControl.DeletePodName, 2)
-	require.ElementsMatch(t, []string{oldPod.Name, pxApiPodName}, podControl.DeletePodName)
+	require.Len(t, podControl.DeletePodName, 1)
+	require.Equal(t, []string{oldPod.Name}, podControl.DeletePodName)
 
 	// Test case: Running reconcile again should start a new pod with new
 	// revision hash.
@@ -4302,13 +4301,16 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result)
 
+	// Newer px pods are created
+	// Since version of portworx is greater than 2.13, portworx-api pods are deleted to re-register csi nodes driver
+	require.Len(t, podControl.DeletePodName, 1)
+	require.Equal(t, []string{pxApiPodName}, podControl.DeletePodName)
+
 	// New revision should not be created as the cluster spec is unchanged
 	revisions = &appsv1.ControllerRevisionList{}
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-
-	require.Empty(t, podControl.DeletePodName)
 
 	require.Len(t, podControl.ControllerRefs, 1)
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
