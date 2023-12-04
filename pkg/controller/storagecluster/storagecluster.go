@@ -238,7 +238,7 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-	fmt.Println("test:: cluster.Spec.Autopilot ", cluster.Spec.Autopilot)
+	fmt.Println("test:: 1 cluster.Spec.Autopilot ", cluster.Spec.Autopilot.Image)
 
 	if err := c.validate(cluster); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, err.Error())
@@ -248,7 +248,7 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	fmt.Println("test:: cluster.Spec.Autopilot after validation ", cluster.Spec.Autopilot)
+	fmt.Println("test:: 2 cluster.Spec.Autopilot ", cluster.Spec.Autopilot.Image)
 
 	if c.waitingForMigrationApproval(cluster) {
 		k8s.InfoEvent(
@@ -259,20 +259,27 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
+	fmt.Println("test:: 3 cluster.Spec.Autopilot ", cluster.Spec.Autopilot.Image)
+
 	if err := c.syncStorageCluster(cluster); err != nil {
 		// Ignore object revision conflict errors, as StorageCluster can be edited in different places,
 		// the next reconcile loop should be able to resolve the issue
 		if strings.Contains(err.Error(), k8s.UpdateRevisionConflictErr) {
 			logrus.Warnf("failed to sync StorageCluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
+			fmt.Println("test:: 4 cluster.Spec.Autopilot ", cluster.Spec.Autopilot.Image)
+
 			return reconcile.Result{}, nil
 		}
+
 		k8s.WarningEvent(c.recorder, cluster, util.FailedSyncReason, err.Error())
 		if updateErr := util.UpdateLiveStorageClusterLifecycle(c.client, cluster, corev1.ClusterStateDegraded); updateErr != nil {
 			logrus.Errorf("Failed to update StorageCluster status. %v", updateErr)
 		}
+		fmt.Println("test:: 5 cluster.Spec.Autopilot ", cluster.Spec.Autopilot.Image)
+
 		return reconcile.Result{}, err
 	}
-	fmt.Println("test:: cluster.Spec.Autopilot after syncStorageCluster ", cluster.Spec.Autopilot)
+	fmt.Println("test:: 6 cluster.Spec.Autopilot ", cluster.Spec.Autopilot.Image)
 
 	return reconcile.Result{}, nil
 }
