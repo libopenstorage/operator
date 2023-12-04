@@ -386,6 +386,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		force := pxVersionChanged || (toUpdate.Spec.AutoUpdateComponents != nil &&
 			*toUpdate.Spec.AutoUpdateComponents == corev1.OnceAutoUpdate)
 		release := manifest.Instance().GetVersions(toUpdate, force)
+		fmt.Println("test :: release details PortworxVersion", release.PortworxVersion)
+		fmt.Println("test :: release details Autopilot", release.Components.Autopilot)
 
 		if toUpdate.Spec.Version == "" && pxEnabled {
 			if toUpdate.Spec.Image == "" {

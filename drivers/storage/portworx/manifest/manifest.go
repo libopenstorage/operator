@@ -183,6 +183,7 @@ func (m *manifest) GetVersions(
 	cluster *corev1.StorageCluster,
 	force bool,
 ) *Version {
+	fmt.Println("test:: GetVersions")
 	var provider versionProvider
 	ver := pxutil.GetImageTag(cluster.Spec.Image)
 	currPxVer, err := version.NewSemver(ver)
@@ -211,6 +212,7 @@ func (m *manifest) GetVersions(
 		msg := fmt.Sprintf("Using default version due to: %v", err)
 		logrus.Error(msg)
 		m.recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, msg)
+		fmt.Println("test :: Bug: if it fails due to temporarily network issue, we should retry. ")
 		return defaultRelease(m.k8sVersion)
 	}
 
@@ -226,6 +228,7 @@ func (m *manifest) GetVersions(
 func defaultRelease(
 	k8sVersion *version.Version,
 ) *Version {
+	fmt.Println("test :: call default release")
 	rel := &Version{
 		PortworxVersion: DefaultPortworxVersion,
 		Components: Release{
@@ -248,6 +251,7 @@ func fillDefaults(
 	rel *Version,
 	k8sVersion *version.Version,
 ) {
+	fmt.Println("test :: call fillDefaults")
 	if rel.Components.Stork == "" {
 		rel.Components.Stork = defaultStorkImage
 	}
