@@ -137,6 +137,7 @@ func (h *Handler) Start() {
 }
 
 func (h *Handler) createStorageClusterIfAbsent(ds *appsv1.DaemonSet) (*corev1.StorageCluster, error) {
+	fmt.Println("test :: createStorageClusterIfAbsent")
 	clusterName := getPortworxClusterName(ds)
 	stc := &corev1.StorageCluster{}
 	err := h.client.Get(

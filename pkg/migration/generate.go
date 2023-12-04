@@ -82,6 +82,7 @@ var (
 func (h *Handler) createStorageCluster(
 	ds *appsv1.DaemonSet,
 ) (*corev1.StorageCluster, error) {
+	fmt.Println("test :: createStorageCluster")
 	stc, err := h.constructStorageCluster(ds)
 	if err != nil {
 		return nil, err
@@ -843,6 +844,7 @@ func (h *Handler) addStorkSpec(cluster *corev1.StorageCluster) error {
 }
 
 func (h *Handler) addAutopilotSpec(cluster *corev1.StorageCluster) error {
+	fmt.Println("test :: addAutopilotSpec")
 	dep, err := h.getDeployment(component.AutopilotDeploymentName, cluster.Namespace)
 	if err != nil {
 		return err
@@ -851,6 +853,7 @@ func (h *Handler) addAutopilotSpec(cluster *corev1.StorageCluster) error {
 		Enabled: dep != nil,
 	}
 
+	fmt.Println("test :: cluster.Spec.Autopilot ", cluster.Spec.Autopilot)
 	if dep != nil {
 		cluster.Status.DesiredImages.Autopilot = dep.Spec.Template.Spec.Containers[0].Image
 		container := dep.Spec.Template.Spec.Containers[0]
