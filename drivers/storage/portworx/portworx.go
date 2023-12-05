@@ -407,12 +407,6 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Status.DesiredImages.Stork = release.Components.Stork
 		}
 
-		fmt.Println("test :: autoUpdateAutopilot(toUpdate) ", autoUpdateAutopilot(toUpdate))
-
-		fmt.Println("test :: toUpdate.Status.DesiredImages.Autopilot ", toUpdate.Status.DesiredImages.Autopilot)
-
-		fmt.Println("test :: autoUpdateComponents(toUpdate)", autoUpdateComponents(toUpdate))
-		fmt.Println("test :: autoUpdateComponents(toUpdate)) ", autoUpdateComponents(toUpdate))
 		if autoUpdateAutopilot(toUpdate) &&
 			(toUpdate.Status.DesiredImages.Autopilot == "" ||
 				pxVersionChanged ||
@@ -1387,7 +1381,7 @@ func removeDeprecatedFields(
 	// as the user could have chosen to override the image manually.
 	// status.version is a newly introduced field and will be
 	// populated first time when this version of operator runs.
-	alreadyDone := cluster.Status.Version != "" // true !alreadyDone  true
+	alreadyDone := cluster.Status.Version != "" // false !alreadyDone  true
 
 	// Remove the deprecated lockImage flag from all components
 	if cluster.Spec.Stork != nil {
@@ -1397,11 +1391,10 @@ func removeDeprecatedFields(
 		cluster.Spec.Stork.LockImage = false
 	}
 	fmt.Println("test :: removeDeprecatedFields ")
-	fmt.Println("test :: cluster.Spec.Autopilot != nil ", cluster.Spec.Autopilot != nil)
-	fmt.Println("test :: existingCluster ", existingCluster)
+	fmt.Println()
+	fmt.Println("test :: existingCluster ", existingCluster, " cluster.Spec.Version ", cluster.Spec.Version)
 
-	fmt.Println("test :: alreadyDone ", !alreadyDone)
-	fmt.Println("cluster.Spec.Autopilot.Image before ", cluster.Spec.Autopilot.Image)
+	fmt.Println("test :: alreadyDone ", alreadyDone, "  cluster.Status.Version ", cluster.Status.Version)
 
 	if cluster.Spec.Autopilot != nil {
 		if existingCluster && !alreadyDone && !cluster.Spec.Autopilot.LockImage {
@@ -1409,7 +1402,6 @@ func removeDeprecatedFields(
 		}
 		cluster.Spec.Autopilot.LockImage = false
 	}
-	fmt.Println("cluster.Spec.Autopilot.Image after ", cluster.Spec.Autopilot.Image)
 
 	if cluster.Spec.UserInterface != nil {
 		if existingCluster && !alreadyDone && !cluster.Spec.UserInterface.LockImage {
