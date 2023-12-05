@@ -122,7 +122,7 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := c.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createClusterRole(); err != nil {
+	if err := c.createClusterRole(cluster); err != nil {
 		return err
 	}
 	if err := c.createClusterRoleBinding(cluster.Namespace); err != nil {
@@ -263,7 +263,7 @@ func (c *autopilot) createServiceAccount(
 	)
 }
 
-func (c *autopilot) createClusterRole() error {
+func (c *autopilot) createClusterRole(cluster *corev1.StorageCluster) error {
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{"", "events.k8s.io"},
@@ -313,6 +313,14 @@ func (c *autopilot) createClusterRole() error {
 			Resources:     []string{"podsecuritypolicies"},
 			ResourceNames: []string{constants.RestrictedPSPName},
 			Verbs:         []string{"use"},
+		},
+		)
+	}
+	if pxutil.IsOpenshift(cluster) {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups: []string{"autopilot.libopenstorage.org"},
+			Resources: []string{"autopilotrules/finalizers"},
+			Verbs:     []string{"update"},
 		},
 		)
 	}
