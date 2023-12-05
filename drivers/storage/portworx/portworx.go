@@ -373,6 +373,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 	} else if preflight.IsGKE() {
 		toUpdate.Annotations[pxutil.AnnotationIsGKE] = "true"
 	}
+	fmt.Println("test :: 0 toUpdate.Spec.Version ", toUpdate.Spec.Version, " toUpdate.Status.Version ", toUpdate.Status.Version)
 
 	removeDeprecatedFields(toUpdate)
 
@@ -396,8 +397,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Spec.Version = release.PortworxVersion
 		}
 		fmt.Println("test :: 2 toUpdate.Spec.Version ", toUpdate.Spec.Version, " toUpdate.Status.Version ", toUpdate.Status.Version)
-
-		toUpdate.Status.Version = toUpdate.Spec.Version
+		specVersion := toUpdate.Spec.Version
+		toUpdate.Status.Version = specVersion
 		fmt.Println("test :: 3 toUpdate.Spec.Version ", toUpdate.Spec.Version, " toUpdate.Status.Version ", toUpdate.Status.Version)
 
 		if autoUpdateStork(toUpdate) &&
@@ -1391,7 +1392,6 @@ func removeDeprecatedFields(
 		cluster.Spec.Stork.LockImage = false
 	}
 	fmt.Println("test :: removeDeprecatedFields ")
-	fmt.Println()
 	fmt.Println("test :: existingCluster ", existingCluster, " cluster.Spec.Version ", cluster.Spec.Version)
 
 	fmt.Println("test :: alreadyDone ", alreadyDone, "  cluster.Status.Version ", cluster.Status.Version)

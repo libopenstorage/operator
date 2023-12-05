@@ -643,6 +643,7 @@ func (p *portworx) createOrUpdateStorageNode(
 		storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey] = originalHash
 	}
 
+	fmt.Println("test :: storageNode.Spec.Version , ", storageNode.Spec.Version)
 	if version, ok := node.NodeLabels[labelPortworxVersion]; ok {
 		storageNode.Spec.Version = version
 	} else {
@@ -651,6 +652,7 @@ func (p *portworx) createOrUpdateStorageNode(
 			storageNode.Spec.Version = partitions[len(partitions)-1]
 		}
 	}
+	fmt.Println("test :: storageNode.Spec.Version , ", storageNode.Spec.Version)
 
 	var err error
 	if errors.IsNotFound(getErr) {

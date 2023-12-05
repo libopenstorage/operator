@@ -238,7 +238,6 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-	fmt.Println("test:: 1 cluster.Spec.Autopilot ", cluster.Spec.Autopilot.Image)
 
 	if err := c.validate(cluster); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, err.Error())
@@ -248,8 +247,6 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	fmt.Println("test:: 2 cluster.Spec.Autopilot ", cluster.Spec.Autopilot.Image)
-
 	if c.waitingForMigrationApproval(cluster) {
 		k8s.InfoEvent(
 			c.recorder, cluster, util.MigrationPendingReason,
@@ -258,8 +255,6 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		)
 		return reconcile.Result{}, nil
 	}
-
-	fmt.Println("test:: 3 cluster.Spec.Autopilot ", cluster.Spec.Autopilot.Image)
 
 	if err := c.syncStorageCluster(cluster); err != nil {
 		// Ignore object revision conflict errors, as StorageCluster can be edited in different places,
