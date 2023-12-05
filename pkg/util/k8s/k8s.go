@@ -1284,6 +1284,8 @@ func UpdateStorageClusterStatus(
 func UpdateStorageClusterStatusWithRetries(
 	k8sClient client.Client,
 	cluster *corev1.StorageCluster,
+	maxRetries int,
+	retryInterval time.Duration,
 ) error {
 	existingCluster := &corev1.StorageCluster{}
 	if err := k8sClient.Get(
@@ -1297,9 +1299,6 @@ func UpdateStorageClusterStatusWithRetries(
 		logrus.WithError(err).Errorf("error getting %s/%s", cluster.Namespace, cluster.Name)
 		return err
 	}
-
-	maxRetries := 2
-	retryInterval := 5 * time.Second
 
 	cluster.ResourceVersion = existingCluster.ResourceVersion
 
