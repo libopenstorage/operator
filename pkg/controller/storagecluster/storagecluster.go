@@ -1699,7 +1699,6 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 
 		// NOTE: race condition can happen when updating status right after spec,
 		// revision got from live cluster can become stale, so ignoring the error in syncStorageCluster
-		fmt.Println("test :: setStorageClusterDefaults 1 ", cluster.Status.Version)
 		cluster.Status = *toUpdate.Status.DeepCopy()
 		fmt.Println("test :: setStorageClusterDefaults 2 ", cluster.Status.Version)
 

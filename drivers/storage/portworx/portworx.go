@@ -400,7 +400,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		specVersion := toUpdate.Spec.Version
 		toUpdate.Status.Version = specVersion
 		fmt.Println("test :: 3 toUpdate.Spec.Version ", toUpdate.Spec.Version, " toUpdate.Status.Version ", toUpdate.Status.Version)
-
+		fmt.Println("test :: Status ", &toUpdate.Status, " spec ", &toUpdate.Spec, " stc ", &toUpdate)
 		if autoUpdateStork(toUpdate) &&
 			(toUpdate.Status.DesiredImages.Stork == "" ||
 				pxVersionChanged ||
