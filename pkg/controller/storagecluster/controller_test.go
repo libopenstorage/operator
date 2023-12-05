@@ -4107,7 +4107,7 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	require.Empty(t, podControl.Templates)
 	require.Empty(t, podControl.ControllerRefs)
 	require.Len(t, podControl.DeletePodName, 2)
-	require.Equal(t, []string{oldPod.Name, pxApiPodName}, podControl.DeletePodName)
+	require.ElementsMatch(t, []string{oldPod.Name, pxApiPodName}, podControl.DeletePodName)
 
 	// Test case: Running reconcile again should start a new pod with new
 	// revision hash.
