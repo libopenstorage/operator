@@ -1389,25 +1389,26 @@ func removeDeprecatedFields(
 	alreadyDone := cluster.Status.Version != ""
 
 	// Remove the deprecated lockImage flag from all components
-	/*if cluster.Spec.Stork != nil {
+	if cluster.Spec.Stork != nil {
 		if existingCluster && !alreadyDone && !cluster.Spec.Stork.LockImage {
 			cluster.Spec.Stork.Image = ""
 		}
 		cluster.Spec.Stork.LockImage = false
-	}*/
+	}
 	fmt.Println("test :: removeDeprecatedFields ")
 	fmt.Println("test :: cluster.Spec.Autopilot != nil ", cluster.Spec.Autopilot != nil)
 	fmt.Println("test :: existingCluster ", existingCluster)
 
 	fmt.Println("test :: alreadyDone ", !alreadyDone)
-	fmt.Println("cluster.Spec.Autopilot.LockImage ", !cluster.Spec.Autopilot.LockImage)
+	fmt.Println("cluster.Spec.Autopilot.Image before ", cluster.Spec.Autopilot.Image)
 
-	/*if cluster.Spec.Autopilot != nil {
+	if cluster.Spec.Autopilot != nil {
 		if existingCluster && !alreadyDone && !cluster.Spec.Autopilot.LockImage {
 			cluster.Spec.Autopilot.Image = ""
 		}
 		cluster.Spec.Autopilot.LockImage = false
-	}*/
+	}
+	fmt.Println("cluster.Spec.Autopilot.Image after ", cluster.Spec.Autopilot.Image)
 
 	if cluster.Spec.UserInterface != nil {
 		if existingCluster && !alreadyDone && !cluster.Spec.UserInterface.LockImage {
