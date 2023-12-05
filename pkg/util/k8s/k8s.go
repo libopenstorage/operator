@@ -1269,8 +1269,12 @@ func UpdateStorageClusterStatus(
 	}
 
 	cluster.ResourceVersion = existingCluster.ResourceVersion
+	fmt.Println("test :: UpdateStorageClusterStatus cluster.Status.Version ", cluster.Status.Version, "existingCluster.Status.Version ", existingCluster.Status.Version)
+	fmt.Println("test :: reflect.DeepEqual(cluster.Status, existingCluster.Status) ", reflect.DeepEqual(cluster.Status, existingCluster.Status))
+
 	if !reflect.DeepEqual(cluster.Status, existingCluster.Status) {
 		err := k8sClient.Status().Update(context.TODO(), cluster)
+		fmt.Println("test :: err : ", err)
 		if err != nil {
 			logrus.WithError(err).Errorf("error updating status for %s/%s", cluster.Namespace, cluster.Name)
 			return err

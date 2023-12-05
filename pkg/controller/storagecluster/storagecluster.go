@@ -959,6 +959,7 @@ func (c *Controller) updateStorageClusterStatus(
 	cluster *corev1.StorageCluster,
 	clusterHash string,
 ) error {
+	fmt.Println("test :: updating storage cluster status ")
 	toUpdate := cluster.DeepCopy()
 	if err := c.Driver.UpdateStorageClusterStatus(toUpdate, clusterHash); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedSyncReason, err.Error())

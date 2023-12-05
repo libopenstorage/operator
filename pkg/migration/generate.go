@@ -167,6 +167,7 @@ func parseCustomImageRegistry(pxImage string, componentImages []string) (string,
 }
 
 func (h *Handler) constructStorageCluster(ds *appsv1.DaemonSet) (*corev1.StorageCluster, error) {
+	fmt.Println("test :: constructStorageCluster")
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: ds.Namespace,
