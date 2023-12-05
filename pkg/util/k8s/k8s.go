@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/hashicorp/go-version"
 	consolev1 "github.com/openshift/api/console/v1"
@@ -1276,6 +1277,48 @@ func UpdateStorageClusterStatus(
 			return err
 		}
 	}
+	return nil
+}
+
+// UpdateStorageClusterStatus updates the status of given StorageCluster object on the latest copy
+func UpdateStorageClusterStatusWithRetries(
+	k8sClient client.Client,
+	cluster *corev1.StorageCluster,
+) error {
+	existingCluster := &corev1.StorageCluster{}
+	if err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+		existingCluster,
+	); err != nil {
+		logrus.WithError(err).Errorf("error getting %s/%s", cluster.Namespace, cluster.Name)
+		return err
+	}
+
+	maxRetries := 2
+	retryInterval := 5 * time.Second
+
+	cluster.ResourceVersion = existingCluster.ResourceVersion
+
+	if !reflect.DeepEqual(cluster.Status, existingCluster.Status) {
+		for retry := 1; retry <= maxRetries; retry++ {
+			err := k8sClient.Status().Update(context.TODO(), cluster)
+			if err != nil {
+				logrus.WithError(err).Errorf("error updating status for %s/%s (attempt %d/%d)", cluster.Namespace, cluster.Name, retry, maxRetries)
+				if retry < maxRetries {
+					time.Sleep(retryInterval)
+					continue // Retry
+				}
+				return err
+			}
+			// Update successful, break out of the loop
+			break
+		}
+	}
+
 	return nil
 }
 
