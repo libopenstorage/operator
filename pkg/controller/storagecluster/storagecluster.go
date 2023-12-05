@@ -1703,11 +1703,22 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		cluster.Status = *toUpdate.Status.DeepCopy()
 		fmt.Println("test :: setStorageClusterDefaults 2 ", cluster.Status.Version)
 
-		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
-			return err
+		maxRetries := 2
+		retryInterval := 5 * time.Second
+		for retry := 1; retry <= maxRetries; retry++ {
+			err := k8s.UpdateStorageClusterStatus(c.client, cluster)
+			if err != nil {
+				logrus.WithError(err).Errorf("error updating status for %s/%s (attempt %d/%d)", cluster.Namespace, cluster.Name, retry, maxRetries)
+				if retry < maxRetries {
+					time.Sleep(retryInterval)
+					continue // Retry
+				}
+				return err
+			}
+			// Update successful, break out of the loop
+			break
 		}
 		fmt.Println("test :: setStorageClusterDefaults 3 ", cluster.Status.Version)
-
 	}
 	return nil
 }
