@@ -1269,6 +1269,8 @@ func UpdateStorageClusterStatus(
 		return err
 	}
 
+	fmt.Println(" cluster resource version after :: ", cluster.ResourceVersion)
+
 	cluster.ResourceVersion = existingCluster.ResourceVersion
 	if !reflect.DeepEqual(cluster.Status, existingCluster.Status) {
 		err := k8sClient.Status().Update(context.TODO(), cluster)

@@ -1685,11 +1685,14 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 			return err
 		}
 
-		// NOTE: race condition can happen when updating status right after spec,
-		// revision got from live cluster can become stale, so ignoring the error in syncStorageCluster
+		fmt.Println(" cluster resource version before :: ", cluster.ResourceVersion)
+
 		cluster.Status = *toUpdate.Status.DeepCopy()
-		if err := k8s.UpdateStorageClusterStatusWithRetries(c.client, cluster, 5, 2*time.Second); err != nil {
-			return err
+		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
+			logrus.Errorf("error updating status for %s/%s trying again...", cluster.Namespace, cluster.Name)
+			if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
+				return fmt.Errorf("update storage cluster status failure, %v", err)
+			}
 		}
 	}
 	return nil
