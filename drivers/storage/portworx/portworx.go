@@ -386,9 +386,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		force := pxVersionChanged || (toUpdate.Spec.AutoUpdateComponents != nil &&
 			*toUpdate.Spec.AutoUpdateComponents == corev1.OnceAutoUpdate)
 		release := manifest.Instance().GetVersions(toUpdate, force)
-		fmt.Println("test :: release details PortworxVersion", release.PortworxVersion)
-		fmt.Println("test :: release details Autopilot", release.Components.Autopilot)
 
+		fmt.Println("test :: 1 toUpdate.Spec.Version ", toUpdate.Spec.Version, " toUpdate.Status.Version ", toUpdate.Status.Version)
 		if toUpdate.Spec.Version == "" && pxEnabled {
 			if toUpdate.Spec.Image == "" {
 				toUpdate.Spec.Image = defaultPortworxImage
@@ -396,8 +395,10 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Spec.Image = toUpdate.Spec.Image + ":" + release.PortworxVersion
 			toUpdate.Spec.Version = release.PortworxVersion
 		}
+		fmt.Println("test :: 2 toUpdate.Spec.Version ", toUpdate.Spec.Version, " toUpdate.Status.Version ", toUpdate.Status.Version)
 
 		toUpdate.Status.Version = toUpdate.Spec.Version
+		fmt.Println("test :: 3 toUpdate.Spec.Version ", toUpdate.Spec.Version, " toUpdate.Status.Version ", toUpdate.Status.Version)
 
 		if autoUpdateStork(toUpdate) &&
 			(toUpdate.Status.DesiredImages.Stork == "" ||
@@ -1381,12 +1382,12 @@ func removeDeprecatedFields(
 ) {
 	// For new clusters with this version of the operator we don't
 	// want to reset the images if they are present
-	existingCluster := cluster.Spec.Version != ""
+	existingCluster := cluster.Spec.Version != "" // false
 	// If the image has been reset once, we should not do it again,
 	// as the user could have chosen to override the image manually.
 	// status.version is a newly introduced field and will be
 	// populated first time when this version of operator runs.
-	alreadyDone := cluster.Status.Version != ""
+	alreadyDone := cluster.Status.Version != "" // true !alreadyDone  true
 
 	// Remove the deprecated lockImage flag from all components
 	if cluster.Spec.Stork != nil {

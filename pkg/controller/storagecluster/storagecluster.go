@@ -609,7 +609,10 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 			return err
 		}
 
+		fmt.Println("test ::runPreflightCheck 1", cluster.Status.Version)
+
 		cluster.Status = *toUpdate.Status.DeepCopy()
+		fmt.Println("test ::runPreflightCheck 2", cluster.Status.Version)
 		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
 			logrus.Errorf("preflight updateStorageClusterStatus failed trying again...")
 			if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
@@ -619,6 +622,8 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 			}
 		}
 	}
+	fmt.Println("test ::runPreflightCheck 3", cluster.Status.Version)
+
 	return err
 }
 
@@ -1699,10 +1704,15 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 
 		// NOTE: race condition can happen when updating status right after spec,
 		// revision got from live cluster can become stale, so ignoring the error in syncStorageCluster
+		fmt.Println("test :: setStorageClusterDefaults 1 ", cluster.Status.Version)
 		cluster.Status = *toUpdate.Status.DeepCopy()
+		fmt.Println("test :: setStorageClusterDefaults 2 ", cluster.Status.Version)
+
 		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
 			return err
 		}
+		fmt.Println("test :: setStorageClusterDefaults 3 ", cluster.Status.Version)
+
 	}
 	return nil
 }
