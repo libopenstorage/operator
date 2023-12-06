@@ -1685,8 +1685,7 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 			return err
 		}
 
-		fmt.Println(" cluster resource version before :: ", cluster.ResourceVersion)
-
+		// NOTE: race condition can happen when updating status right after spec,
 		cluster.Status = *toUpdate.Status.DeepCopy()
 		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
 			logrus.Errorf("error updating status for %s/%s trying again...", cluster.Namespace, cluster.Name)

@@ -3,13 +3,6 @@ package k8s
 import (
 	"context"
 	"fmt"
-	"os"
-	"path"
-	"reflect"
-	"regexp"
-	"strconv"
-	"time"
-
 	"github.com/hashicorp/go-version"
 	consolev1 "github.com/openshift/api/console/v1"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
@@ -32,7 +25,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"os"
+	"path"
+	"reflect"
+	"regexp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strconv"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -1269,8 +1267,6 @@ func UpdateStorageClusterStatus(
 		return err
 	}
 
-	fmt.Println(" cluster resource version after :: ", cluster.ResourceVersion)
-
 	cluster.ResourceVersion = existingCluster.ResourceVersion
 	if !reflect.DeepEqual(cluster.Status, existingCluster.Status) {
 		err := k8sClient.Status().Update(context.TODO(), cluster)
@@ -1279,47 +1275,6 @@ func UpdateStorageClusterStatus(
 			return err
 		}
 	}
-	return nil
-}
-
-// UpdateStorageClusterStatus updates the status of given StorageCluster object on the latest copy
-func UpdateStorageClusterStatusWithRetries(
-	k8sClient client.Client,
-	cluster *corev1.StorageCluster,
-	maxRetries int,
-	retryInterval time.Duration,
-) error {
-	existingCluster := &corev1.StorageCluster{}
-	if err := k8sClient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      cluster.Name,
-			Namespace: cluster.Namespace,
-		},
-		existingCluster,
-	); err != nil {
-		logrus.WithError(err).Errorf("error getting %s/%s", cluster.Namespace, cluster.Name)
-		return err
-	}
-
-	cluster.ResourceVersion = existingCluster.ResourceVersion
-
-	if !reflect.DeepEqual(cluster.Status, existingCluster.Status) {
-		for retry := 1; retry <= maxRetries; retry++ {
-			err := k8sClient.Status().Update(context.TODO(), cluster)
-			if err != nil {
-				logrus.WithError(err).Errorf("error updating status for %s/%s (attempt %d/%d)", cluster.Namespace, cluster.Name, retry, maxRetries)
-				if retry < maxRetries {
-					time.Sleep(retryInterval)
-					continue // Retry
-				}
-				return err
-			}
-			// Update successful, break out of the loop
-			break
-		}
-	}
-
 	return nil
 }
 
