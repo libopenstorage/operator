@@ -253,7 +253,7 @@ func (c *autopilot) createClusterRole() error {
 		},
 		{
 			APIGroups: []string{"autopilot.libopenstorage.org"},
-			Resources: []string{"actionapprovals", "autopilotrules", "autopilotruleobjects"},
+			Resources: []string{"actionapprovals", "autopilotrules", "autopilotruleobjects", "autopilotrules/finalizers"},
 			Verbs:     []string{"*"},
 		},
 		{
