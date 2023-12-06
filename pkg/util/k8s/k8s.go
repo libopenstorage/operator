@@ -3,6 +3,12 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"os"
+	"path"
+	"reflect"
+	"regexp"
+	"strconv"
+
 	"github.com/hashicorp/go-version"
 	consolev1 "github.com/openshift/api/console/v1"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
@@ -25,12 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"os"
-	"path"
-	"reflect"
-	"regexp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strconv"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
