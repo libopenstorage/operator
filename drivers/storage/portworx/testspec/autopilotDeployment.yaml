@@ -37,7 +37,7 @@ spec:
       - command:
         - /autopilot
         - --config=/etc/config/config.yaml
-        - --log-level=debug
+        - --log-level=info
         imagePullPolicy: Always
         image: docker.io/portworx/autopilot:1.1.1
         resources:
