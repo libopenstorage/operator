@@ -307,7 +307,7 @@ mockgen: $(GOPATH)/bin/mockgen
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controller.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/controller Controller
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controllercache.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/cache Cache
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/preflight.mock.go -package=mock github.com/libopenstorage/operator/pkg/preflight CheckerOps
-	$(GOPATH)/bin/mockgen -destination=drivers/storage/portworx/mock/manifest.mock.go -package=mock_manifest -source=./drivers/storage/portworx/manifest/manifest.go
+	$(GOPATH)/bin/mockgen -destination=drivers/storage/portworx/mock/manifest.mock.go -package=mock -source=./drivers/storage/portworx/manifest/manifest.go
 
 clean: clean-release-manifest clean-bundle
 	@echo "Cleaning up binaries"
