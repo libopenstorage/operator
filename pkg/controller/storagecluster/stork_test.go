@@ -104,10 +104,7 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 
 	require.NoError(t, err)
 
-	k8sMinVersionForKubeSchedulerConfiguration, err := version.NewVersion(minK8sVersionForKubeSchedulerConfiguration)
-	require.NoError(t, err)
-
-	if k8sVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {
+	if k8sVersion.GreaterThanOrEqual(k8s.MinVersionForKubeSchedulerConfiguration) {
 		// Stork ConfigMap
 		leaderElect := true
 		schedulerName := storkDeploymentName
@@ -313,7 +310,7 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 	require.Equal(t, expectedStorkDeployment.Spec, storkDeployment.Spec)
 
 	// Sched Scheduler Deployment
-	if k8sVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {
+	if k8sVersion.GreaterThanOrEqual(k8s.MinVersionForKubeSchedulerConfiguration) {
 		expectedSchedDeployment := testutil.GetExpectedDeployment(t, "storkSchedKubeSchedConfigDeployment.yaml")
 		schedDeployment := &appsv1.Deployment{}
 		err = testutil.Get(k8sClient, schedDeployment, storkSchedDeploymentName, cluster.Namespace)
@@ -327,7 +324,7 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 		schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
 		require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
 		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = strings.Replace(
-			expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, minK8sVersionForKubeSchedulerConfiguration, k8sVersionStr, -1)
+			expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, k8s.MinVersionForKubeSchedulerConfiguration.String(), k8sVersionStr, -1)
 		require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
 	} else {
 		expectedSchedDeployment := testutil.GetExpectedDeployment(t, "storkSchedDeployment.yaml")
@@ -496,7 +493,7 @@ func TestStorkSchedulerK8SVersions(t *testing.T) {
 	schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
 	require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
 	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = strings.Replace(
-		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, minK8sVersionForKubeSchedulerConfiguration, k8sVersionStr, -1)
+		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, k8s.MinVersionForKubeSchedulerConfiguration.String(), k8sVersionStr, -1)
 	require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
 
 	k8sVersionStr = "1.25.0"
@@ -515,7 +512,7 @@ func TestStorkSchedulerK8SVersions(t *testing.T) {
 	schedDeployment.Spec.Template.Spec.Containers[0].Resources.Requests = nil
 	require.Equal(t, expectedSchedDeployment.Labels, schedDeployment.Labels)
 	expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image = strings.Replace(
-		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, minK8sVersionForKubeSchedulerConfiguration, k8sVersionStr, -1)
+		expectedSchedDeployment.Spec.Template.Spec.Containers[0].Image, k8s.MinVersionForKubeSchedulerConfiguration.String(), k8sVersionStr, -1)
 	require.Equal(t, expectedSchedDeployment.Spec, schedDeployment.Spec)
 }
 
