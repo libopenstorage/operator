@@ -91,17 +91,17 @@ func (mr *MockManifestMockRecorder) CanAccessRemoteManifest(cluster interface{})
 }
 
 // GetVersions mocks base method.
-func (m *MockManifest) GetVersions(arg0 *v1.StorageCluster, arg1 bool) *manifest.Version {
+func (m *MockManifest) GetVersions(arg0 *v1.StorageCluster, arg1 bool) (*manifest.Version,error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVersions", arg0, arg1)
 	ret0, _ := ret[0].(*manifest.Version)
-	return ret0
+	return ret0,nil
 }
 
 // GetVersions indicates an expected call of GetVersions.
-func (mr *MockManifestMockRecorder) GetVersions(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockManifestMockRecorder) GetVersions(arg0, arg1 interface{}) (*gomock.Call,error) {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersions", reflect.TypeOf((*MockManifest)(nil).GetVersions), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersions", reflect.TypeOf((*MockManifest)(nil).GetVersions), arg0, arg1),nil
 }
 
 // Init mocks base method.

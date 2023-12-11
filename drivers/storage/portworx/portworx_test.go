@@ -10434,7 +10434,7 @@ func (m *fakeManifest) Init(_ client.Client, _ record.EventRecorder, k8sVersion 
 func (m *fakeManifest) GetVersions(
 	_ *corev1.StorageCluster,
 	force bool,
-) *manifest.Version {
+) (*manifest.Version, error) {
 	compVersion := compVersion()
 	if force {
 		compVersion = newCompVersion()
@@ -10478,7 +10478,7 @@ func (m *fakeManifest) GetVersions(
 		version.Components.PrometheusConfigReloader = "quay.io/prometheus-operator/prometheus-config-reloader:v0.50.0"
 		version.Components.AlertManager = "quay.io/prometheus/alertmanager:v0.22.2"
 	}
-	return version
+	return version, nil
 }
 
 func (m *fakeManifest) CanAccessRemoteManifest(cluster *corev1.StorageCluster) bool {

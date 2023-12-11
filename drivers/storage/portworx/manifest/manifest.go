@@ -119,7 +119,7 @@ type Manifest interface {
 	// Init initialize the manifest
 	Init(client.Client, record.EventRecorder, *version.Version)
 	// GetVersions return the correct release versions for given cluster
-	GetVersions(*corev1.StorageCluster, bool) *Version
+	GetVersions(*corev1.StorageCluster, bool) (*Version, error)
 	// CanAccessRemoteManifest is used to test remote manifest to decide whether it's air-gapped env.
 	CanAccessRemoteManifest(cluster *corev1.StorageCluster) bool
 }
@@ -182,7 +182,7 @@ func (m *manifest) CanAccessRemoteManifest(cluster *corev1.StorageCluster) bool 
 func (m *manifest) GetVersions(
 	cluster *corev1.StorageCluster,
 	force bool,
-) *Version {
+) (*Version, error) {
 	var provider versionProvider
 	ver := pxutil.GetImageTag(cluster.Spec.Image)
 	currPxVer, err := version.NewSemver(ver)
@@ -204,16 +204,16 @@ func (m *manifest) GetVersions(
 
 	cacheExpired := m.lastUpdated.Add(refreshInterval(cluster)).Before(time.Now())
 	if _, ok := provider.(*configMap); !ok && !cacheExpired && !force {
-		return m.cachedVersions.DeepCopy()
+		return m.cachedVersions.DeepCopy(), nil
 	}
 
 	// Bug: if it fails due to temporarily network issue, we should retry.
 	rel, err := provider.Get()
 	if err != nil {
-		msg := fmt.Sprintf("Using default version due to: %v", err)
+		msg := fmt.Sprintf("Portworx install stopped as versions from Configmap cannot be fetched and URL unreachable due to: %v", err)
 		logrus.Error(msg)
 		m.recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, msg)
-		return defaultRelease(m.k8sVersion)
+		return nil, fmt.Errorf(msg)
 	}
 
 	if currPxVer != nil && currPxVer.GreaterThanOrEqual(pxVer3_1_0) && rel.Components.NodeWiper == "" {
@@ -222,7 +222,7 @@ func (m *manifest) GetVersions(
 	fillDefaults(rel, m.k8sVersion)
 	m.lastUpdated = time.Now()
 	m.cachedVersions = rel
-	return rel.DeepCopy()
+	return rel.DeepCopy(), nil
 }
 
 func defaultRelease(

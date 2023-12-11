@@ -63,8 +63,9 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 
 	m := Instance()
 	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
-	rel := m.GetVersions(cluster, true)
+	rel, err := m.GetVersions(cluster, true)
 	require.Equal(t, expected, rel)
+	require.NoError(t, err)
 }
 
 func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
@@ -119,8 +120,9 @@ components:
 
 	m := Instance()
 	m.Init(k8sClient, nil, nil)
-	rel := m.GetVersions(cluster, true)
+	rel, err := m.GetVersions(cluster, true)
 	require.Equal(t, expected, rel)
+	require.NoError(t, err)
 }
 
 func TestManifestWithNewerPortworxVersionAndFailure(t *testing.T) {
@@ -138,12 +140,14 @@ func TestManifestWithNewerPortworxVersionAndFailure(t *testing.T) {
 
 	m := Instance()
 	m.Init(testutil.FakeK8sClient(), recorder, k8sVersion)
-	rel := m.GetVersions(cluster, true)
-	require.Equal(t, defaultRelease(k8sVersion), rel)
+	rel, err := m.GetVersions(cluster, true)
+	ErrReleaseNotFound := fmt.Errorf("Portworx install stopped as versions from Configmap cannot be fetched and URL unreachable due to:")
+	require.Empty(t, rel)
+	require.Error(t, ErrReleaseNotFound)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v Using default version",
-			v1.EventTypeWarning, util.FailedComponentReason))
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, err))
 }
 
 func TestManifestWithOlderPortworxVersion(t *testing.T) {
@@ -154,13 +158,11 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 	err := os.Symlink(linkPath, manifestDir)
 	require.NoError(t, err)
 	os.Remove(path.Join(linkPath, remoteReleaseManifest))
-
 	defer func() {
 		os.Remove(path.Join(linkPath, remoteReleaseManifest))
 		os.RemoveAll(manifestDir)
 		setupHTTPFailure()
 	}()
-
 	expected := &Version{
 		PortworxVersion: "2.5.0",
 		Components: Release{
@@ -192,7 +194,6 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			Body: io.NopCloser(bytes.NewReader(body)),
 		}, nil
 	}
-
 	cluster := &corev1.StorageCluster{
 		Spec: corev1.StorageClusterSpec{
 			Image: "px/image:" + expected.PortworxVersion,
@@ -201,8 +202,9 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 
 	m := Instance()
 	m.Init(testutil.FakeK8sClient(), nil, nil)
-	rel := m.GetVersions(cluster, true)
+	rel, err := m.GetVersions(cluster, true)
 	require.Equal(t, expected, rel)
+	require.NoError(t, err)
 }
 
 func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
@@ -242,12 +244,14 @@ func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
 
 	m := Instance()
 	m.Init(testutil.FakeK8sClient(), recorder, k8sVersion)
-	rel := m.GetVersions(cluster, true)
-	require.Equal(t, defaultRelease(k8sVersion), rel)
+	rel, err := m.GetVersions(cluster, true)
+	ErrReleaseNotFound := fmt.Errorf("Portworx install stopped as versions from Configmap cannot be fetched and URL unreachable due to:")
+	require.Empty(t, rel)
+	require.Error(t, ErrReleaseNotFound)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v Using default version",
-			v1.EventTypeWarning, util.FailedComponentReason))
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, err))
 }
 
 func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
@@ -300,7 +304,8 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 
 	m := Instance()
 	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
-	rel := m.GetVersions(cluster, true)
+	rel, err := m.GetVersions(cluster, true)
+	require.NoError(t, err)
 	require.Equal(t, expected, rel)
 }
 
@@ -370,12 +375,14 @@ func TestManifestWithUnknownNonSemvarPortworxVersion(t *testing.T) {
 
 	m := Instance()
 	m.Init(testutil.FakeK8sClient(), recorder, k8sVersion)
-	rel := m.GetVersions(cluster, true)
-	require.Equal(t, defaultRelease(k8sVersion), rel)
+	rel, err := m.GetVersions(cluster, true)
+	ErrReleaseNotFound := fmt.Errorf("Portworx install stopped as versions from Configmap cannot be fetched and URL unreachable due to:")
+	require.Empty(t, rel)
+	require.Error(t, ErrReleaseNotFound)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v Using default version",
-			v1.EventTypeWarning, util.FailedComponentReason))
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, err))
 }
 
 func TestManifestWithoutPortworxVersion(t *testing.T) {
@@ -419,7 +426,8 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 
 	m := Instance()
 	m.Init(k8sClient, nil, nil)
-	r := m.GetVersions(cluster, true)
+	r, err := m.GetVersions(cluster, true)
+	require.NoError(t, err)
 	require.Equal(t, expected, r)
 }
 
@@ -461,7 +469,8 @@ func TestManifestWithPartialComponents(t *testing.T) {
 
 	m := Instance()
 	m.Init(k8sClient, nil, k8sVersion)
-	rel := m.GetVersions(cluster, true)
+	rel, err := m.GetVersions(cluster, true)
+	require.NoError(t, err)
 	fillDefaults(expected, k8sVersion)
 	require.Equal(t, expected, rel)
 	require.Equal(t, "image/stork:3.0.0", rel.Components.Stork)
@@ -487,7 +496,8 @@ func TestManifestWithPartialComponents(t *testing.T) {
 
 	k8sVersion, _ = version.NewSemver("1.21.0")
 	m.Init(k8sClient, nil, k8sVersion)
-	rel = m.GetVersions(cluster, true)
+	rel, err = m.GetVersions(cluster, true)
+	require.NoError(t, err)
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease(k8sVersion).Components, rel.Components)
 	require.Equal(t, "registry.k8s.io/sig-storage/csi-provisioner:v3.5.0", rel.Components.CSIProvisioner)
@@ -500,7 +510,8 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	require.NoError(t, err)
 
 	m.Init(k8sClient, nil, nil)
-	rel = m.GetVersions(cluster, true)
+	rel, err = m.GetVersions(cluster, true)
+	require.NoError(t, err)
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	require.Equal(t, defaultRelease(nil).Components, rel.Components)
 	require.Empty(t, rel.Components.CSIProvisioner)
@@ -518,11 +529,11 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	require.NoError(t, err)
 
 	m.Init(k8sClient, nil, k8sVersion)
-	rel = m.GetVersions(cluster, true)
+	rel, _ = m.GetVersions(cluster, true)
 	assert.Equal(t, defaultNodeWiperImage, rel.Components.NodeWiper)
 
 	cluster.Spec.Image = "foo/bar:3.1.0"
-	rel = m.GetVersions(cluster, true)
+	rel, _ = m.GetVersions(cluster, true)
 	assert.Equal(t, cluster.Spec.Image, rel.Components.NodeWiper)
 
 	expected.Components.NodeWiper = "image/specific-nodewiper:123"
@@ -530,7 +541,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
 	err = k8sClient.Update(context.TODO(), versionsConfigMap)
 	require.NoError(t, err)
-	rel = m.GetVersions(cluster, true)
+	rel, _ = m.GetVersions(cluster, true)
 	assert.Equal(t, expected.Components.NodeWiper, rel.Components.NodeWiper)
 }
 
@@ -565,7 +576,8 @@ func TestManifestFillPrometheusDefaults(t *testing.T) {
 
 	m := Instance()
 	m.Init(k8sClient, nil, k8sVersion)
-	rel := m.GetVersions(cluster, true)
+	rel, err := m.GetVersions(cluster, true)
+	require.NoError(t, err)
 	fillDefaults(expected, k8sVersion)
 	require.Equal(t, expected, rel)
 	require.Equal(t, defaultPrometheusImage, rel.Components.Prometheus)
@@ -577,7 +589,7 @@ func TestManifestFillPrometheusDefaults(t *testing.T) {
 	// TestCase: For k8s 1.22, default Prometheus images should be updated
 	k8sVersion, _ = version.NewSemver("1.22.0")
 	m.Init(k8sClient, nil, k8sVersion)
-	rel = m.GetVersions(cluster, true)
+	rel, _ = m.GetVersions(cluster, true)
 	require.Equal(t, "quay.io/prometheus/prometheus:v2.35.0", rel.Components.Prometheus)
 	require.Equal(t, "quay.io/prometheus-operator/prometheus-operator:v0.56.3", rel.Components.PrometheusOperator)
 	require.Equal(t, "", rel.Components.PrometheusConfigMapReload)
@@ -616,7 +628,8 @@ func TestManifestFillGrafanaDefaults(t *testing.T) {
 
 	m := Instance()
 	m.Init(k8sClient, nil, k8sVersion)
-	rel := m.GetVersions(cluster, true)
+	rel, err := m.GetVersions(cluster, true)
+	require.NoError(t, err)
 	fillDefaults(expected, k8sVersion)
 	require.Equal(t, expected, rel)
 	require.Equal(t, DefaultGrafanaImage, rel.Components.Grafana)
@@ -647,16 +660,17 @@ func TestManifestWithForceFlagAndNewerManifest(t *testing.T) {
 	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
 
 	// TestCase: Should return the expected versions correct first time
-	rel := m.GetVersions(cluster, false)
+	rel, err := m.GetVersions(cluster, false)
+	require.NoError(t, err)
 	require.Equal(t, expected.Components.Stork, rel.Components.Stork)
 
 	// TestCase: Should not return the updated version if not forced
 	expected.Components.Stork = "image/stork:2.6.1"
-	rel = m.GetVersions(cluster, false)
+	rel, _ = m.GetVersions(cluster, false)
 	require.Equal(t, "image/stork:2.6.0", rel.Components.Stork)
 
 	// TestCase: Should return the updated version if forced
-	rel = m.GetVersions(cluster, true)
+	rel, _ = m.GetVersions(cluster, true)
 	require.Equal(t, "image/stork:2.6.1", rel.Components.Stork)
 }
 
@@ -703,16 +717,17 @@ func TestManifestWithForceFlagAndOlderManifest(t *testing.T) {
 	m.Init(testutil.FakeK8sClient(), nil, nil)
 
 	// TestCase: Should return the expected versions correct first time
-	rel := m.GetVersions(cluster, false)
+	rel, err := m.GetVersions(cluster, false)
+	require.NoError(t, err)
 	require.Equal(t, expected.Components.Stork, rel.Components.Stork)
 
 	// TestCase: Should not return the updated version if not forced
 	expected.Components.Stork = "image/stork:2.5.1"
-	rel = m.GetVersions(cluster, false)
+	rel, _ = m.GetVersions(cluster, false)
 	require.Equal(t, "image/stork:2.5.0", rel.Components.Stork)
 
 	// TestCase: Should return the updated version if forced
-	rel = m.GetVersions(cluster, true)
+	rel, _ = m.GetVersions(cluster, true)
 	require.Equal(t, "image/stork:2.5.1", rel.Components.Stork)
 }
 
@@ -746,7 +761,7 @@ func TestManifestWithForceFlagAndConfigMapManifest(t *testing.T) {
 	m.Init(k8sClient, nil, nil)
 
 	// TestCase: Should return the expected versions correct first time
-	rel := m.GetVersions(cluster, false)
+	rel, _ := m.GetVersions(cluster, false)
 	require.Equal(t, expected.Components.Stork, rel.Components.Stork)
 
 	// TestCase: Should return the updated version even if not forced
@@ -756,7 +771,7 @@ func TestManifestWithForceFlagAndConfigMapManifest(t *testing.T) {
 	err := k8sClient.Update(context.TODO(), versionsConfigMap)
 	require.NoError(t, err)
 
-	rel = m.GetVersions(cluster, true)
+	rel, _ = m.GetVersions(cluster, true)
 	require.Equal(t, "image/stork:2.5.1", rel.Components.Stork)
 }
 
@@ -786,12 +801,13 @@ func TestManifestOnCacheExpiryAndNewerVersion(t *testing.T) {
 	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
 
 	// TestCase: Should return the expected versions correct first time
-	rel := m.GetVersions(cluster, false)
+	rel, err := m.GetVersions(cluster, false)
+	require.NoError(t, err)
 	require.Equal(t, expected.Components.Stork, rel.Components.Stork)
 
 	// TestCase: Should not return the updated version if cache has not expired
 	expected.Components.Stork = "image/stork:2.6.1"
-	rel = m.GetVersions(cluster, false)
+	rel, _ = m.GetVersions(cluster, false)
 	require.Equal(t, "image/stork:2.6.0", rel.Components.Stork)
 
 	// TestCase: Should return the updated version if cache has expired
@@ -801,7 +817,7 @@ func TestManifestOnCacheExpiryAndNewerVersion(t *testing.T) {
 			Value: "0",
 		},
 	}
-	rel = m.GetVersions(cluster, false)
+	rel, _ = m.GetVersions(cluster, false)
 	require.Equal(t, "image/stork:2.6.1", rel.Components.Stork)
 }
 
@@ -848,12 +864,13 @@ func TestManifestOnCacheExpiryAndOlderVersion(t *testing.T) {
 	m.Init(testutil.FakeK8sClient(), nil, nil)
 
 	// TestCase: Should return the expected versions correct first time
-	rel := m.GetVersions(cluster, false)
+	rel, err := m.GetVersions(cluster, false)
+	require.NoError(t, err)
 	require.Equal(t, expected.Components.Stork, rel.Components.Stork)
 
 	// TestCase: Should not return the updated version if cache has not expired
 	expected.Components.Stork = "image/stork:2.5.1"
-	rel = m.GetVersions(cluster, false)
+	rel, _ = m.GetVersions(cluster, false)
 	require.Equal(t, "image/stork:2.5.0", rel.Components.Stork)
 
 	// TestCase: Should return the updated version if cache has expired
@@ -864,7 +881,7 @@ func TestManifestOnCacheExpiryAndOlderVersion(t *testing.T) {
 		},
 	}
 	os.Setenv(envKeyReleaseManifestRefreshInterval, "0")
-	rel = m.GetVersions(cluster, false)
+	rel, _ = m.GetVersions(cluster, false)
 	require.Equal(t, "image/stork:2.5.1", rel.Components.Stork)
 }
 
@@ -893,7 +910,7 @@ func TestManifestFillTelemetryDefaults(t *testing.T) {
 	// TestCase: default CCM Java images
 	m := Instance()
 	m.Init(k8sClient, nil, k8sVersion)
-	rel := m.GetVersions(cluster, true)
+	rel, _ := m.GetVersions(cluster, true)
 	require.Equal(t, defaultCCMJavaImage, rel.Components.Telemetry)
 	require.Equal(t, defaultCollectorProxyImage, rel.Components.MetricsCollectorProxy)
 	require.Equal(t, defaultCollectorImage, rel.Components.MetricsCollector)
@@ -909,7 +926,8 @@ func TestManifestFillTelemetryDefaults(t *testing.T) {
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
 	err := k8sClient.Update(context.TODO(), versionsConfigMap)
 	require.NoError(t, err)
-	rel = m.GetVersions(cluster, true)
+	rel, err = m.GetVersions(cluster, true)
+	require.NoError(t, err)
 	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
 	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)
 	require.Equal(t, defaultLogUploaderImage, rel.Components.LogUploader)
@@ -925,7 +943,7 @@ func TestManifestFillTelemetryDefaults(t *testing.T) {
 	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
 	err = k8sClient.Update(context.TODO(), versionsConfigMap)
 	require.NoError(t, err)
-	rel = m.GetVersions(cluster, true)
+	rel, _ = m.GetVersions(cluster, true)
 	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
 	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)
 	require.Equal(t, defaultLogUploaderImage, rel.Components.LogUploader)
