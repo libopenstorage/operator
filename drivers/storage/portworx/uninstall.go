@@ -183,7 +183,10 @@ func (u *uninstallPortworx) RunNodeWiper(
 
 	wiperImage := k8sutil.GetValueFromEnv(envKeyNodeWiperImage, u.cluster.Spec.Env)
 	if len(wiperImage) == 0 {
-		release := manifest.Instance().GetVersions(u.cluster, true)
+		release, err := manifest.Instance().GetVersions(u.cluster, true)
+		if err != nil {
+			logrus.Warnf("Failed to get release versions: %v", err)
+		}
 		wiperImage = release.Components.NodeWiper
 	}
 	wiperImage = util.GetImageURN(u.cluster, wiperImage)
