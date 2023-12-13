@@ -14,7 +14,7 @@ import (
 var PxNamespace = os.Getenv("PX_NAMESPACE")
 var outputPath = os.Getenv("RETRIEVER_OUTPUT_PATH")
 var kubeconfigPath = os.Getenv("KUBECONFIG")
-var hostname = os.Getenv("HOSTNAME")
+var nodeName = os.Getenv("RETRIEVER_NODE_NAME")
 
 // main function to run the retriever
 func main() {
@@ -38,15 +38,15 @@ func main() {
 		return
 	}
 
-	if hostname == "" {
-		hostname, err = os.Hostname()
+	if nodeName == "" {
+		nodeName, err = os.Hostname()
 		if err != nil {
-			hostname = "localhost"
+			nodeName = "localhost"
 		}
 	}
 
 	k8sRetriever.loggerToUse.Info("---Starting Kubernetes client!---")
-	k8sRetriever.loggerToUse.Infof("Job is running on Kubernetes Node: %s", hostname)
+	k8sRetriever.loggerToUse.Infof("Job is running on Kubernetes Node: %s", nodeName)
 	k8sRetriever.loggerToUse.Infof("Creating YAML files for all resources in namespace: %s", PxNamespace)
 	k8sRetriever.loggerToUse.Infof("YAML files will be created in: %s", outputPath)
 
@@ -236,7 +236,7 @@ func main() {
 		}
 	}
 
-	err = k8sRetriever.retrieveMultipathConf(hostname)
+	err = k8sRetriever.retrieveMultipathConf(nodeName)
 	if err != nil {
 		k8sRetriever.loggerToUse.Errorf("Failed to retrieve multipath.conf: %v", err)
 	}
