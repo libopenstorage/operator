@@ -127,7 +127,9 @@ func (p *portworx) Validate(cluster *corev1.StorageCluster) error {
 		util.UpdateStorageClusterCondition(cluster, condition)
 	}
 
-	podSpec, err := p.GetStoragePodSpec(cluster, "")
+	preFltCluster := GetPreFlightStorageCluster(cluster)
+
+	podSpec, err := p.GetStoragePodSpec(preFltCluster, "")
 	if err != nil {
 		err = fmt.Errorf("pre-flight: get storage pod spec: %v", err)
 		setClusterCondition(corev1.ClusterConditionStatusFailed, err.Error())

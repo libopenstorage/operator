@@ -46,6 +46,8 @@ const (
 	DefCmetaGKE = "type=pd-ssd,size=64"
 	// preFlightOutputLog log location for pre-flight output
 	preFlightOutputLog = "/var/cores/px-pre-flight-output.log"
+	// Fatal result string from pre-flight check
+	Fatal = "fatal"
 )
 
 // PreFlightPortworx provides a set of APIs to uninstall portworx
@@ -75,6 +77,18 @@ type preFlightPortworx struct {
 
 // Existing dmThin strings
 var dmthinRegex = regexp.MustCompile("(?i)(PX-StoreV2|px-store-v2)")
+
+func GetPreFlightStorageCluster(cluster *corev1.StorageCluster) *corev1.StorageCluster {
+	// Creates a copy of the existing storage cluster which can be  modified to enable/disable
+	// capability for pre-flght pod without affecting original storage cluster
+	preFlightCluster := cluster.DeepCopy()
+
+	if pxutil.AuthEnabled(&preFlightCluster.Spec) { // Disable  security if its enabled
+		preFlightCluster.Spec.Security = nil
+	}
+
+	return preFlightCluster
+}
 
 // NewPreFlighter returns an implementation of PreFlightPortworx interface
 func NewPreFlighter(
@@ -323,6 +337,8 @@ func (u *preFlightPortworx) processNodesChecks(recorder record.EventRecorder, st
 	}
 
 	passed := true
+	isFatal := false
+	fmsgs := []string{}
 	for _, node := range storageNodes {
 		// Process storageNode checks list for failures. Also make sure the "status" check entry
 		// exists, this indicates all the checks were submitted from the pre-flight pod.
@@ -340,21 +356,41 @@ func (u *preFlightPortworx) processNodesChecks(recorder record.EventRecorder, st
 				continue
 			}
 
-			msg := fmt.Sprintf("%s pre-flight check ", check.Type)
+			msg := fmt.Sprintf("%s pre-flight check: ", check.Type)
 			if check.Success {
 				msg = msg + "passed: " + check.Reason
 				k8sutil.InfoEvent(recorder, u.cluster, util.PassPreFlight, msg)
 				continue
 			}
-			msg = msg + "failed: " + check.Reason
-			k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, msg)
+
 			passed = false // pre-flight status check failed, keep going for logging
+
+			if check.Result == Fatal {
+				// This loop processes check results looking for any failures. However there
+				// is a difference between a failure and "fatal" failure.  So collect all
+				// fatal msgs so they can be outputted all at once instead of being intermixed
+				// with other failed events.
+				fmsgs = append(fmsgs, check.Reason)
+				isFatal = true
+				continue
+			}
+
+			msg = msg + check.Reason
+			k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, msg)
 		}
 
 		if !statusExists {
 			logrus.Errorf("storageNodes checks list status entry not found, pre-flight did not complete")
 			passed = false
 		}
+	}
+
+	if isFatal {
+		// Output all the "fatal" events collected above.  So they are not intermixed with other failed events.
+		for _, fmsg := range fmsgs {
+			k8sutil.WarningEvent(recorder, u.cluster, util.FailedPreFlight, fmsg)
+		}
+		u.hardFail = true // Set hardFail to prevent PX startup
 	}
 
 	return passed

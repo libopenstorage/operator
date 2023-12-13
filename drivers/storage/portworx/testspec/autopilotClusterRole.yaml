@@ -19,7 +19,7 @@ rules:
     resources: ["configmaps"]
     verbs: ["get", "list", "patch", "update", "watch"]
   - apiGroups: ["autopilot.libopenstorage.org"]
-    resources: ["actionapprovals", "autopilotrules", "autopilotruleobjects"]
+    resources: ["actionapprovals", "autopilotrules", "autopilotruleobjects", "autopilotrules/finalizers"]
     verbs: ["*"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
