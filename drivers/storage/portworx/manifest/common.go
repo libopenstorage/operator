@@ -1,22 +1,28 @@
 package manifest
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
 
 const (
-	httpPrefix  = "http://"
-	httpsPrefix = "https://"
+	httpPrefix    = "http://"
+	httpsPrefix   = "https://"
+	secretName    = "custom-ca-cert"
+	secretKeyName = "rootCA.crt"
 )
 
 // Methods to override for testing
 var (
 	httpGet = http.Get
+	CAfiles []string
 )
 
 func getManifestFromURL(manifestURL string, proxy string) ([]byte, error) {
@@ -42,9 +48,22 @@ func getManifestFromURL(manifestURL string, proxy string) ([]byte, error) {
 			return nil, err
 		}
 
+		m := Instance()
+		caCert, err := m.GetCACert(secretName, secretKeyName)
+		if err != nil {
+			logrus.Errorf("Can't load CA certificate due to: %v", err)
+		}
+		caCertPool := x509.NewCertPool()
+		ok := caCertPool.AppendCertsFromPEM(caCert)
+		var tlsConfig *tls.Config
+		if ok {
+			tlsConfig = &tls.Config{RootCAs: caCertPool}
+		}
+
 		client := &http.Client{
 			Transport: &http.Transport{
-				Proxy: http.ProxyURL(proxyURL),
+				Proxy:           http.ProxyURL(proxyURL),
+				TLSClientConfig: tlsConfig,
 			},
 		}
 

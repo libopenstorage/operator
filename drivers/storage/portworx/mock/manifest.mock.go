@@ -115,3 +115,18 @@ func (mr *MockManifestMockRecorder) Init(arg0, arg1, arg2 interface{}) *gomock.C
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Init", reflect.TypeOf((*MockManifest)(nil).Init), arg0, arg1, arg2)
 }
+
+// GetCACert mocks base method.
+func (m *MockManifest) GetCACert(arg0, arg1 string) ([]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCACert", arg0, arg1)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCACert indicates an expected call of GetCACert.
+func (mr *MockManifestMockRecorder) GetCACert(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCACert", reflect.TypeOf((*MockManifest)(nil).GetCACert), arg0, arg1)
+}

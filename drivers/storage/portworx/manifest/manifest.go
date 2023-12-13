@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -127,6 +129,8 @@ type Manifest interface {
 	GetVersions(*corev1.StorageCluster, bool) *Version
 	// CanAccessRemoteManifest is used to test remote manifest to decide whether it's air-gapped env.
 	CanAccessRemoteManifest(cluster *corev1.StorageCluster) bool
+	// GetCACert reads CA cert file from kubernetes secret
+	GetCACert(secretName, secretKey string) ([]byte, error)
 }
 
 // Instance returns a single instance of Manifest if present, else
@@ -226,6 +230,26 @@ func (m *manifest) GetVersions(
 	m.lastUpdated = time.Now()
 	m.cachedVersions = rel
 	return rel.DeepCopy()
+}
+
+// GetCACert reads CA cert file from kubernetes secret
+func (m *manifest) GetCACert(
+	secretName,
+	secretKey string,
+) ([]byte, error) {
+	ctx := context.Background()
+	secret := v1.Secret{}
+	err := m.k8sClient.Get(ctx,
+		types.NamespacedName{
+			Name: secretName,
+		},
+		&secret,
+	)
+	if err != nil {
+		logrus.Errorf("Can't get secret %s due to: %v", secretName, err)
+		return nil, err
+	}
+	return secret.Data[secretKey], nil
 }
 
 func defaultRelease(
