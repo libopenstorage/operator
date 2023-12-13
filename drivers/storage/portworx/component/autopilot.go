@@ -206,10 +206,12 @@ func (c *autopilot) createConfigMap(
 				params += fmt.Sprintf(`
     %s:`, AutopilotDefaultReviewersKey)
 				var reviewers []interface{} = val.([]interface{})
-				for _, r := range reviewers {
-					r = strings.TrimSpace(r.(string))
-					params += fmt.Sprintf(`
+				for _, reviewer := range reviewers {
+					if r, ok := reviewer.(string); ok {
+						r = strings.TrimSpace(r)
+						params += fmt.Sprintf(`
       - "%s"`, r)
+					}
 				}
 				continue
 			}
