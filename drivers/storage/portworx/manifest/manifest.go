@@ -210,7 +210,7 @@ func (m *manifest) GetVersions(
 	// Bug: if it fails due to temporarily network issue, we should retry.
 	rel, err := provider.Get()
 	if err != nil {
-		msg := fmt.Sprintf("Portworx install stopped as versions from Configmap cannot be fetched and URL unreachable due to: %v", err)
+		msg := fmt.Sprintf("StorageCluster reconciliation paused as versions from px-versions ConfigMap cannot be fetched and URL is unreachable due to: %v", err)
 		logrus.Error(msg)
 		m.recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, msg)
 		return nil, fmt.Errorf(msg)
@@ -223,29 +223,6 @@ func (m *manifest) GetVersions(
 	m.lastUpdated = time.Now()
 	m.cachedVersions = rel
 	return rel.DeepCopy(), nil
-}
-
-func defaultRelease(
-	k8sVersion *version.Version,
-) *Version {
-	rel := &Version{
-		PortworxVersion: DefaultPortworxVersion,
-		Components: Release{
-			Stork:              defaultStorkImage,
-			Autopilot:          defaultAutopilotImage,
-			Lighthouse:         defaultLighthouseImage,
-			NodeWiper:          defaultNodeWiperImage,
-			DynamicPlugin:      DefaultDynamicPluginImage,
-			DynamicPluginProxy: DefaultDynamicPluginProxyImage,
-		},
-	}
-	fillStorkDefaults(rel, k8sVersion)
-	fillCSIDefaults(rel, k8sVersion)
-	fillPrometheusDefaults(rel, k8sVersion)
-	fillGrafanaDefaults(rel, k8sVersion)
-	fillTelemetryDefaults(rel)
-	fillK8sDefaults(rel, k8sVersion)
-	return rel
 }
 
 func fillDefaults(
