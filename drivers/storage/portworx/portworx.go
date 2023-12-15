@@ -370,7 +370,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			*toUpdate.Spec.AutoUpdateComponents == corev1.OnceAutoUpdate)
 		release, err := manifest.Instance().GetVersions(toUpdate, force)
 		if err != nil {
-			return err
+			return fmt.Errorf("StorageCluster reconciliation paused as %v", err)
 		}
 
 		if toUpdate.Spec.Version == "" && pxEnabled {

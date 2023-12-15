@@ -187,7 +187,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 	if len(wiperImage) == 0 {
 		release, err := manifest.Instance().GetVersions(u.cluster, true)
 		if err != nil {
-			logrus.Warnf("Failed to get release versions: %v. Using default NodeWiper image", err)
+			logrus.Warnf("Failed to get release versions as %v. Using default NodeWiper image", err)
 			wiperImage = defaultNodeWiperImage
 		} else {
 			wiperImage = release.Components.NodeWiper
