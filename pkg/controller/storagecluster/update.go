@@ -33,7 +33,6 @@ import (
 	operatorutil "github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 
-	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
@@ -86,17 +85,6 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 	if err != nil {
 		return err
 	}
-
-	// If px version is greater than 2.13 then delete px-api pods along with px pods
-	pxVersion := util.GetPortworxVersion(cluster)
-	supportedPxVersion, _ := version.NewVersion("2.13")
-	restartPxApiPods := false
-	var pxApiPodsMap = make(map[string]string)
-	if pxVersion.GreaterThanOrEqual(supportedPxVersion) {
-		restartPxApiPods = true
-		pxApiPodsMap = c.getNodeToPxApiPodsMap(cluster)
-	}
-
 	logrus.Debugf("Marking old pods for deletion")
 	for _, pod := range oldAvailablePods {
 		if numUnavailable >= maxUnavailable {
@@ -113,14 +101,6 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 				continue
 			} else {
 				numUnavailableKvdb++
-			}
-		}
-
-		// If pxversion is greater than 2.13 then delete the portworx-api pods with csi-node-registrar containers as well when updating storage cluster
-		// This is done to re-register csi driver which gets removed when csi-node-driver-registrar is removed from px pods
-		if restartPxApiPods {
-			if apiPodName, ok := pxApiPodsMap[pod.Spec.NodeName]; ok {
-				oldPodsToDelete = append(oldPodsToDelete, apiPodName)
 			}
 		}
 
@@ -142,27 +122,6 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 	}
 
 	return c.syncNodes(cluster, oldPodsToDelete, []string{}, hash)
-}
-
-// This function returns a map of Node name to its corresponding portworx-api pod name
-func (c *Controller) getNodeToPxApiPodsMap(cluster *corev1.StorageCluster) map[string]string {
-	podList := &v1.PodList{}
-	err := c.client.List(context.TODO(),
-		podList,
-		&client.ListOptions{
-			Namespace:     cluster.Namespace,
-			LabelSelector: labels.SelectorFromSet(map[string]string{"name": "portworx-api"}),
-		},
-	)
-
-	if err != nil {
-		return nil
-	}
-	result := make(map[string]string, len(podList.Items))
-	for _, pod := range podList.Items {
-		result[pod.Spec.NodeName] = pod.Name
-	}
-	return result
 }
 
 // function to return the number of unavailable kvdb members and a list of the nodes which should have kvdb running in them
