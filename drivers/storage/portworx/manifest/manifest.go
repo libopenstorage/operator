@@ -213,9 +213,10 @@ func (m *manifest) GetVersions(
 	// Bug: if it fails due to temporarily network issue, we should retry.
 	rel, err := provider.Get()
 	if err != nil {
-		msg := fmt.Sprintf("StorageCluster reconciliation paused as versions from px-versions ConfigMap cannot be fetched and URL is unreachable due to: %v", err)
-		logrus.Error(msg)
-		m.recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, msg)
+		msg := fmt.Sprintf("versions from px-versions ConfigMap cannot be fetched and URL is unreachable due to: %v", err)
+		errmsg := fmt.Sprintf("StorageCluster reconciliation paused as %v", msg)
+		logrus.Error(errmsg)
+		m.recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, errmsg)
 		return nil, fmt.Errorf(msg)
 	}
 
