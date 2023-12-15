@@ -124,7 +124,7 @@ type Manifest interface {
 	// Init initialize the manifest
 	Init(client.Client, record.EventRecorder, *version.Version)
 	// GetVersions return the correct release versions for given cluster
-	GetVersions(*corev1.StorageCluster, bool) *Version
+	GetVersions(*corev1.StorageCluster, bool) (*Version, error)
 	// CanAccessRemoteManifest is used to test remote manifest to decide whether it's air-gapped env.
 	CanAccessRemoteManifest(cluster *corev1.StorageCluster) bool
 }
@@ -187,7 +187,7 @@ func (m *manifest) CanAccessRemoteManifest(cluster *corev1.StorageCluster) bool 
 func (m *manifest) GetVersions(
 	cluster *corev1.StorageCluster,
 	force bool,
-) *Version {
+) (*Version, error) {
 	var provider versionProvider
 	ver := pxutil.GetImageTag(cluster.Spec.Image)
 	currPxVer, err := version.NewSemver(ver)
@@ -207,16 +207,17 @@ func (m *manifest) GetVersions(
 
 	cacheExpired := m.lastUpdated.Add(refreshInterval(cluster)).Before(time.Now())
 	if _, ok := provider.(*configMap); !ok && !cacheExpired && !force {
-		return m.cachedVersions.DeepCopy()
+		return m.cachedVersions.DeepCopy(), nil
 	}
 
 	// Bug: if it fails due to temporarily network issue, we should retry.
 	rel, err := provider.Get()
 	if err != nil {
-		msg := fmt.Sprintf("Using default version due to: %v", err)
-		logrus.Error(msg)
-		m.recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, msg)
-		return defaultRelease(m.k8sVersion)
+		msg := fmt.Sprintf("versions from px-versions ConfigMap cannot be fetched and URL is unreachable due to: %v", err)
+		errmsg := fmt.Sprintf("StorageCluster reconciliation paused as %v", msg)
+		logrus.Error(errmsg)
+		m.recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, errmsg)
+		return nil, fmt.Errorf(msg)
 	}
 
 	if currPxVer != nil && currPxVer.GreaterThanOrEqual(pxVer3_1_0) && rel.Components.NodeWiper == "" {
@@ -225,29 +226,7 @@ func (m *manifest) GetVersions(
 	fillDefaults(rel, m.k8sVersion)
 	m.lastUpdated = time.Now()
 	m.cachedVersions = rel
-	return rel.DeepCopy()
-}
-
-func defaultRelease(
-	k8sVersion *version.Version,
-) *Version {
-	rel := &Version{
-		PortworxVersion: DefaultPortworxVersion,
-		Components: Release{
-			Stork:              defaultStorkImage,
-			Autopilot:          defaultAutopilotImage,
-			Lighthouse:         defaultLighthouseImage,
-			NodeWiper:          defaultNodeWiperImage,
-			PxRepo:             defaultPxRepoImage,
-			DynamicPlugin:      DefaultDynamicPluginImage,
-			DynamicPluginProxy: DefaultDynamicPluginProxyImage,
-		},
-	}
-	fillCSIDefaults(rel, k8sVersion)
-	fillPrometheusDefaults(rel, k8sVersion)
-	fillGrafanaDefaults(rel, k8sVersion)
-	fillTelemetryDefaults(rel)
-	return rel
+	return rel.DeepCopy(), nil
 }
 
 func fillDefaults(
