@@ -139,13 +139,13 @@ func TestManifestWithNewerPortworxVersionAndFailure(t *testing.T) {
 	m := Instance()
 	m.Init(testutil.FakeK8sClient(), recorder, k8sVersion)
 	rel, err := m.GetVersions(cluster, true)
-	ErrReleaseNotFound := fmt.Errorf("StorageCluster reconciliation paused as versions from px-versions ConfigMap cannot be fetched and URL is unreachable due to:")
+	ErrReleaseNotFound := fmt.Errorf("StorageCluster reconciliation paused as %v", err)
 	require.Empty(t, rel)
 	require.Error(t, ErrReleaseNotFound)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %v",
-			v1.EventTypeWarning, util.FailedComponentReason, err))
+			v1.EventTypeWarning, util.FailedComponentReason, ErrReleaseNotFound))
 }
 
 func TestManifestWithOlderPortworxVersion(t *testing.T) {
@@ -243,13 +243,13 @@ func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
 	m := Instance()
 	m.Init(testutil.FakeK8sClient(), recorder, k8sVersion)
 	rel, err := m.GetVersions(cluster, true)
-	ErrReleaseNotFound := fmt.Errorf("StorageCluster reconciliation paused as versions from px-versions ConfigMap cannot be fetched and URL is unreachable due to")
+	ErrReleaseNotFound := fmt.Errorf("StorageCluster reconciliation paused as %v", err)
 	require.Empty(t, rel)
 	require.Error(t, ErrReleaseNotFound)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %v",
-			v1.EventTypeWarning, util.FailedComponentReason, err))
+			v1.EventTypeWarning, util.FailedComponentReason, ErrReleaseNotFound))
 }
 
 func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
@@ -332,13 +332,13 @@ func TestManifestWithUnknownNonSemvarPortworxVersion(t *testing.T) {
 	m := Instance()
 	m.Init(testutil.FakeK8sClient(), recorder, k8sVersion)
 	rel, err := m.GetVersions(cluster, true)
-	ErrReleaseNotFound := fmt.Errorf("StorageCluster reconciliation paused as versions from px-versions ConfigMap cannot be fetched and URL is unreachable due to")
+	ErrReleaseNotFound := fmt.Errorf("StorageCluster reconciliation paused as %v", err)
 	require.Empty(t, rel)
 	require.Error(t, ErrReleaseNotFound)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %v",
-			v1.EventTypeWarning, util.FailedComponentReason, err))
+			v1.EventTypeWarning, util.FailedComponentReason, ErrReleaseNotFound))
 }
 
 func TestManifestWithoutPortworxVersion(t *testing.T) {
@@ -460,13 +460,13 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	m.Init(testutil.FakeK8sClient(), recorder, k8sVersion)
 	rel, err = m.GetVersions(cluster, true)
-	ErrReleaseNotFound := fmt.Errorf("StorageCluster reconciliation paused as versions from px-versions ConfigMap cannot be fetched and URL is unreachable due to")
+	ErrReleaseNotFound := fmt.Errorf("StorageCluster reconciliation paused as %v", err)
 	require.Empty(t, rel)
 	require.Error(t, ErrReleaseNotFound)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %v",
-			v1.EventTypeWarning, util.FailedComponentReason, err))
+			v1.EventTypeWarning, util.FailedComponentReason, ErrReleaseNotFound))
 
 	// TestCase: No components at all, without k8s version
 	expected.Components = Release{}
@@ -480,13 +480,13 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expected.PortworxVersion, rel.PortworxVersion)
 	m.Init(testutil.FakeK8sClient(), recorder, k8sVersion)
-	rel, err = m.GetVersions(cluster, true)
+	rel, _ = m.GetVersions(cluster, true)
 	require.Empty(t, rel)
 	require.Error(t, ErrReleaseNotFound)
 	require.Len(t, recorder.Events, 1)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %v",
-			v1.EventTypeWarning, util.FailedComponentReason, err))
+			v1.EventTypeWarning, util.FailedComponentReason, ErrReleaseNotFound))
 	// TestCase: No Nodewiper images
 	expected.PortworxVersion = "3.0.0"
 	expected.Components = Release{
