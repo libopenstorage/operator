@@ -1271,6 +1271,15 @@ func defaultPxNodeAffinityRules(runOnMaster bool) *v1.NodeAffinity {
 		)
 	}
 
+	// Do not expect Portworx pods to be deployed on infra nodes
+	selectorRequirements = append(
+		selectorRequirements,
+		v1.NodeSelectorRequirement{
+			Key:      "node-role.kubernetes.io/infra",
+			Operator: v1.NodeSelectorOpDoesNotExist,
+		},
+	)
+
 	nodeAffinity := &v1.NodeAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 			NodeSelectorTerms: []v1.NodeSelectorTerm{
