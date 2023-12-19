@@ -23,7 +23,7 @@ spec:
         securityContext:
           privileged: true
         readinessProbe:
-          initialDelaySeconds: 30
+          initialDelaySeconds: 15
           exec:
             command:
             - cat

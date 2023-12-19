@@ -49,13 +49,14 @@ const (
 )
 
 var (
-	pxVer2_3_2, _  = version.NewVersion("2.3.2")
-	pxVer2_5_5, _  = version.NewVersion("2.5.5")
-	pxVer2_6, _    = version.NewVersion("2.6")
-	pxVer2_8, _    = version.NewVersion("2.8")
-	pxVer2_9_1, _  = version.NewVersion("2.9.1")
-	pxVer2_13_8, _ = version.NewVersion("2.13.8")
-	pxVer3_0_1, _  = version.NewVersion("3.0.1")
+	pxVer2_3_2, _          = version.NewVersion("2.3.2")
+	pxVer2_5_5, _          = version.NewVersion("2.5.5")
+	pxVer2_6, _            = version.NewVersion("2.6")
+	pxVer2_8, _            = version.NewVersion("2.8")
+	pxVer2_9_1, _          = version.NewVersion("2.9.1")
+	pxVer2_13_8, _         = version.NewVersion("2.13.8")
+	pxVer3_0_1, _          = version.NewVersion("3.0.1")
+	csiRemovalPxVersion, _ = version.NewVersion("2.13")
 )
 
 type volumeInfo struct {
@@ -323,7 +324,7 @@ func (p *portworx) GetStoragePodSpec(
 		podSpec.DNSPolicy = v1.DNSPolicy(cluster.Annotations[pxutil.AnnotationDNSPolicy])
 	}
 
-	if pxutil.IsCSIEnabled(t.cluster) {
+	if pxutil.IsCSIEnabled(cluster) && t.pxVersion.LessThan(csiRemovalPxVersion) {
 		csiRegistrar := t.csiRegistrarContainer()
 		if csiRegistrar != nil {
 			podSpec.Containers = append(podSpec.Containers, *csiRegistrar)
@@ -375,6 +376,12 @@ func (p *portworx) GetStoragePodSpec(
 				Level: "s0",
 			},
 		}
+	}
+
+	// If priorityClassName has been set by the user then pass it to the portworx pods
+	if t.cluster.Spec.PriorityClassName != "" {
+		podSpec.PriorityClassName = t.cluster.Spec.PriorityClassName
+
 	}
 
 	p.pruneVolumes(&podSpec)
@@ -1319,6 +1326,7 @@ func (t *template) getVolumeMounts() []v1.VolumeMount {
 		t.getBottleRocketVolumeInfoList,
 		t.GetVolumeInfoForTLSCerts,
 	}
+
 	// Only add telemetry phonehome volume mount if PX is at least 3.0
 	preFltCheck := ""
 	if t.cluster.Annotations != nil {
@@ -1407,13 +1415,16 @@ func (t *template) mountsFromVolInfo(vols []volumeInfo) []v1.VolumeMount {
 func (t *template) getVolumes() []v1.Volume {
 	volumeInfoList := getDefaultVolumeInfoList(t.pxVersion)
 	extensions := []func() []volumeInfo{
-		t.getCSIVolumeInfoList,
-		t.getTelemetryVolumeInfoList,
 		t.getK3sVolumeInfoList,
+		t.getTelemetryVolumeInfoList,
 		t.getIKSVolumeInfoList,
 		t.getPKSVolumeInfoList,
 		t.getBottleRocketVolumeInfoList,
 		t.GetVolumeInfoForTLSCerts,
+	}
+
+	if t.pxVersion.LessThan(csiRemovalPxVersion) {
+		extensions = append(extensions, t.getCSIVolumeInfoList)
 	}
 	// Only add telemetry phonehome volume if PX is at least 3.0
 	preFltCheck := ""

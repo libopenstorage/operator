@@ -200,7 +200,7 @@ container:
 	@echo "Building operator image $(OPERATOR_IMG)"
 	docker build --pull --tag $(OPERATOR_IMG) -f build/Dockerfile .
 
-DOCK_BUILD_CNT	:= golang:1.20
+DOCK_BUILD_CNT	:= golang:1.21
 
 docker-build:
 	@echo "Building using docker"
@@ -300,16 +300,18 @@ get-release-manifest: clean-release-manifest
 	wget -q --no-check-certificate '$(PX_INSTALLER_HOST)/versions' -O manifests/portworx-releases-local.yaml
 
 mockgen: $(GOPATH)/bin/mockgen
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/portworxsdk.mock.go -package=mock github.com/libopenstorage/operator/api/px PortworxServiceServer
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer,OpenStorageNodeClient,OpenStorageVolumeServer
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/storagedriver.mock.go -package=mock github.com/libopenstorage/operator/drivers/storage Driver
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controllermanager.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/manager Manager
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controller.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/controller Controller
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controllercache.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/cache Cache
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/preflight.mock.go -package=mock github.com/libopenstorage/operator/pkg/preflight CheckerOps
+	$(GOPATH)/bin/mockgen -destination=drivers/storage/portworx/mock/manifest.mock.go -package=mock -source=./drivers/storage/portworx/manifest/manifest.go
 
 clean: clean-release-manifest clean-bundle
 	@echo "Cleaning up binaries"
 	@rm -rf $(BIN)
 	@go clean -i $(PKGS)
 	@echo "Deleting image "$(OPERATOR_IMG)
-	@docker rmi -f $(OPERATOR_IMG) registry.access.redhat.com/ubi8-minimal:latest
+	@docker rmi -f $(OPERATOR_IMG) registry.access.redhat.com/ubi9-minimal:latest

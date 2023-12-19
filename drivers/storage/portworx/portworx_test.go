@@ -36,6 +36,8 @@ import (
 
 	"github.com/libopenstorage/cloudops"
 	"github.com/libopenstorage/openstorage/api"
+
+	pxapi "github.com/libopenstorage/operator/api/px"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -85,6 +87,26 @@ func TestInit(t *testing.T) {
 	err = driver.Init(k8sClient, scheme, recorder)
 	require.NoError(t, err)
 	require.Equal(t, k8sClient, driver.k8sClient)
+}
+
+func TestValidatePreFlightDisableSecurity(t *testing.T) {
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPreflightCheck: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+			},
+		},
+	}
+
+	preflightStorageCluster := GetPreFlightStorageCluster(cluster)
+	require.Nil(t, preflightStorageCluster.Spec.Security)
 }
 
 func TestValidate(t *testing.T) {
@@ -188,7 +210,7 @@ func TestValidate(t *testing.T) {
 
 	//
 	// Validate Pre-flight Daemonset Pod Spec
-	//
+	// When px version is greater than 2.13, storage pod only has 1 container
 	cluster.Spec.Image = "portworx/oci-image:3.0.0"
 	cluster.Annotations = map[string]string{
 		pxutil.AnnotationPreflightCheck: "true",
@@ -197,6 +219,14 @@ func TestValidate(t *testing.T) {
 	require.NoError(t, err)
 
 	podSpec, err := driver.GetStoragePodSpec(cluster, "")
+	require.NoError(t, err)
+	require.Equal(t, 1, len(podSpec.Containers))
+
+	// When portworx version is lesser than 2.13 then storage pods have csi driver registrar container
+	cluster.Spec.Image = "portworx/oci-image:2.1.0"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	podSpec, err = driver.GetStoragePodSpec(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, 2, len(podSpec.Containers))
 
@@ -355,9 +385,122 @@ func TestValidateCheckFailure(t *testing.T) {
 	require.Len(t, recorder.Events, 3)
 	<-recorder.Events // Pop first event which is Default telemetry enabled event
 	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedPreFlight, "usage pre-flight check failed"))
+		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedPreFlight, "usage pre-flight check"))
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %s", v1.EventTypeNormal, util.PassPreFlight, "Not enabling PX-StoreV2"))
+}
+
+func TestValidateCheckFatal(t *testing.T) {
+	driver := portworx{}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPreflightCheck: "true",
+			},
+		},
+	}
+
+	labels := map[string]string{
+		"name": pxPreFlightDaemonSetName,
+	}
+
+	clusterRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	preflightDS := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pxPreFlightDaemonSetName,
+			Namespace:       cluster.Namespace,
+			Labels:          labels,
+			UID:             types.UID("preflight-ds-uid"),
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
+	}
+
+	checks := []corev1.CheckResult{
+		{
+			Type:    "usage",
+			Reason:  "fatal: PX-StoreV2 unsupported storage disk spec: unsupported cloud spec drive type found type=io2,size=100,iops=4000, only support [\"gp3\" \"io1\"]",
+			Success: false,
+			Result:  "fatal",
+		},
+		{
+			Type:    "usage",
+			Reason:  "px-runc: PX-StoreV2 unsupported storage disk spec: 'consume unused' (-A/-a) options not valid with PX-StoreV2",
+			Success: false,
+		},
+		{
+			Type:    "status",
+			Reason:  "oci-mon: pre-flight completed",
+			Success: true,
+		},
+	}
+
+	status := corev1.NodeStatus{
+		Checks: checks,
+	}
+
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: status,
+	}
+
+	preFlightPod1 := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "preflight-1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: preflightDS.UID}},
+		},
+		Status: v1.PodStatus{
+			ContainerStatuses: []v1.ContainerStatus{
+				{
+					Name:  "portworx",
+					Ready: true,
+				},
+			},
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sClient := testutil.FakeK8sClient(preflightDS)
+
+	err := k8sClient.Create(context.TODO(), preFlightPod1)
+	require.NoError(t, err)
+
+	preflightDS.Status.DesiredNumberScheduled = int32(1)
+	err = k8sClient.Status().Update(context.TODO(), preflightDS)
+	require.NoError(t, err)
+
+	recorder := record.NewFakeRecorder(100)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = k8sClient.Create(context.TODO(), storageNode)
+	require.NoError(t, err)
+
+	err = driver.Validate(cluster)
+	require.Error(t, err)
+	require.NotEmpty(t, recorder.Events)
+	require.Len(t, recorder.Events, 4)
+	<-recorder.Events // Pop first event which is Default telemetry enabled event
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedPreFlight, "usage pre-flight check"))
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedPreFlight, "fatal: PX-StoreV2 unsupported storage disk spec"))
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedPreFlight, "PX-StoreV2 pre-check failed"))
 }
 
 func TestValidateMissingRequiredCheck(t *testing.T) {
@@ -796,7 +939,6 @@ func TestValidateAzure(t *testing.T) {
 
 	actual, err := driver.GetStoragePodSpec(cluster, "testNode")
 	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
-	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-cloud_provider "+cloudops.Azure)
 	require.Contains(t, strings.Join(actual.Containers[0].Args, " "), "-metadata "+DefCmetaAzure)
 
 	require.NotEmpty(t, recorder.Events)
@@ -1185,7 +1327,6 @@ func TestPreflightAnnotations(t *testing.T) {
 
 	err := preflight.InitPreflightChecker(k8sClient)
 	require.NoError(t, err)
-	require.Equal(t, string(cloudops.AWS), pxutil.GetCloudProvider(cluster)) // Make sure aws
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	check, ok := cluster.Annotations[pxutil.AnnotationPreflightCheck]
@@ -9256,13 +9397,13 @@ func TestReinstall(t *testing.T) {
 	etcdConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.InternalEtcdConfigMapPrefix + "pxcluster",
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	cloudDriveConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.CloudDriveConfigMapPrefix + "pxcluster",
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 
@@ -9344,19 +9485,19 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMaps(t *testing
 	etcdConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.InternalEtcdConfigMapPrefix + "pxcluster",
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	cloudDriveConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.CloudDriveConfigMapPrefix + "pxcluster",
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	pureConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pureStorageCloudDriveConfigMap,
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap, pureConfigMap)
@@ -9428,19 +9569,19 @@ func TestDeleteClusterWithUninstallWipeStrategyShouldRemoveConfigMapsWhenOverwri
 	etcdConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.InternalEtcdConfigMapPrefix + strippedClusterName,
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	cloudDriveConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.CloudDriveConfigMapPrefix + strippedClusterName,
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	pureConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pureStorageCloudDriveConfigMap,
-			Namespace: bootstrapCloudDriveNamespace,
+			Namespace: pxutil.BootstrapCloudDriveNamespace,
 		},
 	}
 	k8sClient := testutil.FakeK8sClient(wiperDS, wiperPod, etcdConfigMap, cloudDriveConfigMap, pureConfigMap)
@@ -9946,7 +10087,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			Namespace: clusterNS,
 		},
 		Data: map[string]string{
-			pxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-one","Index":0,"State":1,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-two","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
+			pxutil.PxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-one","Index":0,"State":1,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-two","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
 		},
 	}
 
@@ -9980,7 +10121,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 	}
 
 	// TEST 2: Remove KVDB condition
-	cm.Data[pxEntriesKey] = `[{"IP":"10.0.1.2","ID":"node-three","Index":0,"State":3,"Type":0,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-four","Index":2,"State":0,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`
+	cm.Data[pxutil.PxEntriesKey] = `[{"IP":"10.0.1.2","ID":"node-three","Index":0,"State":3,"Type":0,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-four","Index":2,"State":0,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`
 	err = driver.k8sClient.Update(context.TODO(), cm)
 	require.NoError(t, err)
 	err = driver.UpdateStorageClusterStatus(cluster, "")
@@ -10050,7 +10191,7 @@ func TestUpdateStorageNodeKVDB(t *testing.T) {
 			Return(expectedNodeEnumerateResp, nil).
 			Times(1)
 
-		cm.Data[pxEntriesKey] = fmt.Sprintf(
+		cm.Data[pxutil.PxEntriesKey] = fmt.Sprintf(
 			`[{"IP":"10.0.1.2","ID":"node-one","State":%d,"Type":%d,"Version":"v2","peerport":"9018","clientport":"9019"}]`,
 			kvdbNodeStateTest.state, kvdbNodeStateTest.nodeType)
 		err = driver.k8sClient.Update(context.TODO(), cm)
@@ -10192,7 +10333,7 @@ func TestUpdateStorageNodeKVDBWhenOverwriteClusterID(t *testing.T) {
 			Namespace: clusterNS,
 		},
 		Data: map[string]string{
-			pxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-one","Index":0,"State":1,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-two","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
+			pxutil.PxEntriesKey: `[{"IP":"10.0.1.2","ID":"node-one","Index":0,"State":1,"Type":1,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-1.internal.kvdb","DataDirType":"KvdbDevice"},{"IP":"10.0.2.2","ID":"node-two","Index":2,"State":2,"Type":2,"Version":"v2","peerport":"9018","clientport":"9019","Domain":"portworx-3.internal.kvdb","DataDirType":"KvdbDevice"}]`,
 		},
 	}
 
@@ -11214,6 +11355,85 @@ func testClusterDefaultsMaxStorageNodesPerZoneValueSpecified(t *testing.T) {
 	require.Equal(t, uint32(7), *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 }
 
+func TestGetKVDBMembers(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockServiceService := mock.NewMockPortworxServiceServer(mockCtrl)
+
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		PortworxService: mockServiceService,
+	})
+
+	// Create fake k8s client with fake service that will point the client
+	// to the mock sdk server address
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+
+	// Create driver object with the fake k8s client
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateInit),
+		},
+	}
+
+	// Case 1: When GRPC server is not running or cannot connect to it
+	val, err := driver.GetKVDBMembers(cluster)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "error connecting to GRPC server")
+	require.Empty(t, val)
+
+	// Start the server
+	sdkError := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, sdkError)
+	defer mockSdk.Stop()
+
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+
+	// Case 2: When the portworx service server returns an error
+	expectedError := fmt.Errorf("test error from portworx service server")
+	mockServiceService.EXPECT().GetKvdbMemberInfo(gomock.Any(), gomock.Any()).Return(nil, expectedError).Times(1)
+
+	val, err = driver.GetKVDBMembers(cluster)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), fmt.Sprintf("error in getting kvdb member info from sdk: rpc error: code = Unknown desc = %s", expectedError))
+	require.Empty(t, val)
+
+	// Case 3: When there is no error from the server
+	expectedKvdbresponse := &pxapi.PxKvdbMemberResponse{}
+	mockServiceService.EXPECT().GetKvdbMemberInfo(gomock.Any(), gomock.Any()).Return(expectedKvdbresponse, nil).Times(1)
+
+	val, err = driver.GetKVDBMembers(cluster)
+	require.NoError(t, err)
+	require.Empty(t, val)
+
+}
+
 func getK8sClientWithNodesZones(
 	t *testing.T,
 	nodeCount uint32,
@@ -11342,7 +11562,7 @@ func (m *fakeManifest) Init(_ client.Client, _ record.EventRecorder, k8sVersion 
 func (m *fakeManifest) GetVersions(
 	_ *corev1.StorageCluster,
 	force bool,
-) *manifest.Version {
+) (*manifest.Version, error) {
 	compVersion := compVersion()
 	if force {
 		compVersion = newCompVersion()
@@ -11388,7 +11608,7 @@ func (m *fakeManifest) GetVersions(
 		version.Components.PrometheusConfigReloader = "quay.io/prometheus-operator/prometheus-config-reloader:v0.50.0"
 		version.Components.AlertManager = "quay.io/prometheus/alertmanager:v0.22.2"
 	}
-	return version
+	return version, nil
 }
 
 func (m *fakeManifest) CanAccessRemoteManifest(cluster *corev1.StorageCluster) bool {

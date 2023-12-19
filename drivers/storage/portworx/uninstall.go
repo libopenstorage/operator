@@ -66,7 +66,7 @@ const (
 	pxNodeWiperDaemonSetName          = "px-node-wiper"
 	pxKvdbPrefix                      = "pwx/"
 	pureStorageCloudDriveConfigMap    = "px-pure-cloud-drive"
-	bootstrapCloudDriveNamespace      = "kube-system"
+	defaultNodeWiperImage             = "portworx/px-node-wiper:2.13.2"
 )
 
 // UninstallPortworx provides a set of APIs to uninstall portworx
@@ -138,7 +138,7 @@ func (u *uninstallPortworx) WipeMetadata() error {
 		pureStorageCloudDriveConfigMap,
 	}
 	for _, cm := range configMaps {
-		err := k8sutil.DeleteConfigMap(u.k8sClient, cm, bootstrapCloudDriveNamespace)
+		err := k8sutil.DeleteConfigMap(u.k8sClient, cm, pxutil.BootstrapCloudDriveNamespace)
 		if err != nil {
 			return err
 		}
@@ -184,8 +184,13 @@ func (u *uninstallPortworx) RunNodeWiper(
 
 	wiperImage := k8sutil.GetValueFromEnv(envKeyNodeWiperImage, u.cluster.Spec.Env)
 	if len(wiperImage) == 0 {
-		release := manifest.Instance().GetVersions(u.cluster, true)
-		wiperImage = release.Components.NodeWiper
+		release, err := manifest.Instance().GetVersions(u.cluster, true)
+		if err != nil {
+			logrus.Warnf("Failed to get release versions as %v. Using default NodeWiper image", err)
+			wiperImage = defaultNodeWiperImage
+		} else {
+			wiperImage = release.Components.NodeWiper
+		}
 	}
 	wiperImage = util.GetImageURN(u.cluster, wiperImage)
 
@@ -237,7 +242,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 								Privileged: &trueVar,
 							},
 							ReadinessProbe: &v1.Probe{
-								InitialDelaySeconds: 30,
+								InitialDelaySeconds: 15,
 								ProbeHandler: v1.ProbeHandler{
 									Exec: &v1.ExecAction{
 										Command: []string{"cat", "/tmp/px-node-wipe-done"},
@@ -402,6 +407,11 @@ func (u *uninstallPortworx) RunNodeWiper(
 				},
 			},
 		},
+	}
+
+	if strings.Contains(wiperImage, "monitor") {
+		logrus.Warnf("Using oci-monitor %s as node-wiper image", wiperImage)
+		ds.Spec.Template.Spec.Containers[0].Command = []string{"/px-node-wiper"}
 	}
 
 	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {

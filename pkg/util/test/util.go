@@ -178,11 +178,13 @@ var (
 	opVer23_5_1, _                    = version.NewVersion("23.5.1-")
 	opVer23_7, _                      = version.NewVersion("23.7.0-")
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
+	pxOperatorMasterVersion, _        = version.NewVersion(PxOperatorMasterVersion)
 
 	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
 	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
 
-	pxVer3_0, _ = version.NewVersion("3.0")
+	pxVer3_0, _  = version.NewVersion("3.0")
+	pxVer2_13, _ = version.NewVersion("2.13")
 
 	// minimumPxVersionCCMJAVA minimum PX version to install ccm-java
 	minimumPxVersionCCMJAVA, _ = version.NewVersion("2.8")
@@ -1464,12 +1466,12 @@ func validateComponents(pxImageList map[string]string, originalClusterSpec, clus
 	}
 
 	// Validate Stork components and images
-	if err := ValidateStork(pxImageList, cluster, timeout, interval); err != nil {
+	if err := ValidateStork(pxImageList, originalClusterSpec, cluster, timeout, interval); err != nil {
 		return err
 	}
 
 	// Validate Autopilot components and images
-	if err := ValidateAutopilot(pxImageList, cluster, timeout, interval); err != nil {
+	if err := ValidateAutopilot(pxImageList, originalClusterSpec, cluster, timeout, interval); err != nil {
 		return err
 	}
 
@@ -1861,49 +1863,56 @@ func ValidatePvcControllerDisabled(pvcControllerDp *appsv1.Deployment, timeout, 
 }
 
 // ValidateStork validates Stork components and images
-func ValidateStork(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func ValidateStork(pxImageList map[string]string, originalClusterSpec, liveCluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Stork components")
 
 	storkDp := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stork",
-			Namespace: cluster.Namespace,
+			Namespace: liveCluster.Namespace,
 		},
 	}
 
 	storkSchedulerDp := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stork-scheduler",
-			Namespace: cluster.Namespace,
+			Namespace: liveCluster.Namespace,
 		},
 	}
 
-	if cluster.Spec.Stork != nil && cluster.Spec.Stork.Enabled {
+	if liveCluster.Spec.Stork != nil && liveCluster.Spec.Stork.Enabled {
 		logrus.Debug("Stork is enabled in StorageCluster")
-		return ValidateStorkEnabled(pxImageList, cluster, storkDp, storkSchedulerDp, timeout, interval)
+		return ValidateStorkEnabled(pxImageList, originalClusterSpec, liveCluster, storkDp, storkSchedulerDp, timeout, interval)
 	}
 	logrus.Debug("Stork is disabled in StorageCluster")
-	return ValidateStorkDisabled(cluster, storkDp, storkSchedulerDp, timeout, interval)
+	return ValidateStorkDisabled(liveCluster, storkDp, storkSchedulerDp, timeout, interval)
 }
 
 // ValidateStorkEnabled validates that all Stork components are enabled/created
-func ValidateStorkEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, storkDp, storkSchedulerDp *appsv1.Deployment, timeout, interval time.Duration) error {
+func ValidateStorkEnabled(pxImageList map[string]string, originalClusterSpec, cluster *corev1.StorageCluster, storkDp, storkSchedulerDp *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Info("Validate Stork components are enabled")
+	var storkImage string
+
+	// See if original spec had stork image specified
+	if originalClusterSpec.Spec.Stork != nil && originalClusterSpec.Spec.Stork.Image != "" {
+		storkImage = originalClusterSpec.Spec.Stork.Image
+	}
 
 	t := func() (interface{}, bool, error) {
 		if err := validateDeployment(storkDp, timeout, interval); err != nil {
 			return nil, true, err
 		}
 
-		var storkImage string
-		if cluster.Spec.Stork.Image == "" {
+		// If no Stork image was specified in both original and live StorageCluster specs, then take image from the versions URL
+		if cluster.Spec.Stork.Image == "" && storkImage == "" {
 			if value, ok := pxImageList["stork"]; ok {
 				storkImage = value
 			} else {
-				return nil, true, fmt.Errorf("failed to find image for stork")
+				return nil, true, fmt.Errorf("failed to find image for Stork")
 			}
+			logrus.Debugf("Using Stork image from PX endpoint version list [%s]", storkImage)
 		} else {
-			storkImage = cluster.Spec.Stork.Image
+			logrus.Debugf("Custom Stork image was specified in the spec [%s], custom image in the live spec [%s]", storkImage, cluster.Spec.Stork.Image)
 		}
 
 		pods, err := coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "stork"})
@@ -2054,27 +2063,33 @@ func ValidateStorkDisabled(cluster *corev1.StorageCluster, storkDp, storkSchedul
 }
 
 // ValidateAutopilot validates Autopilot components and images
-func ValidateAutopilot(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+func ValidateAutopilot(pxImageList map[string]string, originalClusterSpec, liveCluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Autopilot components")
 
 	autopilotDp := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "autopilot",
-			Namespace: cluster.Namespace,
+			Namespace: liveCluster.Namespace,
 		},
 	}
 
-	if cluster.Spec.Autopilot != nil && cluster.Spec.Autopilot.Enabled {
+	if liveCluster.Spec.Autopilot != nil && liveCluster.Spec.Autopilot.Enabled {
 		logrus.Debug("Autopilot is Enabled in StorageCluster")
-		return ValidateAutopilotEnabled(pxImageList, cluster, autopilotDp, timeout, interval)
+		return ValidateAutopilotEnabled(pxImageList, originalClusterSpec, liveCluster, autopilotDp, timeout, interval)
 	}
 	logrus.Debug("Autopilot is Disabled in StorageCluster")
-	return ValidateAutopilotDisabled(cluster, autopilotDp, timeout, interval)
+	return ValidateAutopilotDisabled(liveCluster, autopilotDp, timeout, interval)
 }
 
 // ValidateAutopilotEnabled validates that all Autopilot components are enabled/created
-func ValidateAutopilotEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, autopilotDp *appsv1.Deployment, timeout, interval time.Duration) error {
+func ValidateAutopilotEnabled(pxImageList map[string]string, originalClusterSpec, cluster *corev1.StorageCluster, autopilotDp *appsv1.Deployment, timeout, interval time.Duration) error {
 	logrus.Info("Validate Autopilot components are enabled")
+	var autopilotImage string
+
+	// See if original spec had Autopilot image specified
+	if originalClusterSpec.Spec.Autopilot != nil && originalClusterSpec.Spec.Autopilot.Image != "" {
+		autopilotImage = originalClusterSpec.Spec.Autopilot.Image
+	}
 
 	t := func() (interface{}, bool, error) {
 		// Validate autopilot deployment and pods
@@ -2082,15 +2097,16 @@ func ValidateAutopilotEnabled(pxImageList map[string]string, cluster *corev1.Sto
 			return nil, true, err
 		}
 
-		var autopilotImage string
-		if cluster.Spec.Autopilot.Image == "" {
+		// If no Autopilot image was specified in both original and live StorageCluster specs, then take image from the versions URL
+		if cluster.Spec.Autopilot.Image == "" && autopilotImage == "" {
 			if value, ok := pxImageList[autopilotDp.Name]; ok {
 				autopilotImage = value
 			} else {
 				return nil, true, fmt.Errorf("failed to find image for %s", autopilotDp.Name)
 			}
+			logrus.Debugf("Using Autopilot image from PX endpoint versions list [%s]", autopilotImage)
 		} else {
-			autopilotImage = cluster.Spec.Autopilot.Image
+			logrus.Debugf("Custom Autopilot image was specified in the spec [%s], custom image in the live spec [%s]", autopilotImage, cluster.Spec.Autopilot.Image)
 		}
 
 		pods, err := coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": autopilotDp.Name})
@@ -2104,25 +2120,25 @@ func ValidateAutopilotEnabled(pxImageList map[string]string, cluster *corev1.Sto
 		// Validate Autopilot ClusterRole
 		_, err = rbacops.Instance().GetClusterRole(autopilotDp.Name)
 		if errors.IsNotFound(err) {
-			return nil, true, fmt.Errorf("failed to validate ClusterRole %s, Err: %v", autopilotDp.Name, err)
+			return nil, true, fmt.Errorf("failed to validate ClusterRole [%s], Err: %v", autopilotDp.Name, err)
 		}
 
 		// Validate Autopilot ClusterRoleBinding
 		_, err = rbacops.Instance().GetClusterRoleBinding(autopilotDp.Name)
 		if errors.IsNotFound(err) {
-			return nil, true, fmt.Errorf("failed to validate ClusterRoleBinding %s, Err: %v", autopilotDp.Name, err)
+			return nil, true, fmt.Errorf("failed to validate ClusterRoleBinding [%s], Err: %v", autopilotDp.Name, err)
 		}
 
 		// Validate Autopilot ConfigMap
 		_, err = coreops.Instance().GetConfigMap("autopilot-config", autopilotDp.Namespace)
 		if errors.IsNotFound(err) {
-			return nil, true, fmt.Errorf("failed to validate autopilot-config, Err: %v", err)
+			return nil, true, fmt.Errorf("failed to validate ConfigMap [autopilot-config], Err: %v", err)
 		}
 
 		// Validate Autopilot ServiceAccount
 		_, err = coreops.Instance().GetServiceAccount(autopilotDp.Name, autopilotDp.Namespace)
 		if errors.IsNotFound(err) {
-			return nil, true, fmt.Errorf("failed to validate ServiceAccount %s, Err: %v", autopilotDp.Name, err)
+			return nil, true, fmt.Errorf("failed to validate ServiceAccount [%s], Err: %v", autopilotDp.Name, err)
 		}
 
 		return nil, false, nil
@@ -2147,25 +2163,25 @@ func ValidateAutopilotDisabled(cluster *corev1.StorageCluster, autopilotDp *apps
 		// Validate Autopilot ClusterRole doesn't exist
 		_, err := rbacops.Instance().GetClusterRole(autopilotDp.Name)
 		if !errors.IsNotFound(err) {
-			return nil, true, fmt.Errorf("failed to validate ClusterRole %s, is found when shouldn't be", autopilotDp.Name)
+			return nil, true, fmt.Errorf("failed to validate ClusterRole [%s], is found when shouldn't be", autopilotDp.Name)
 		}
 
 		// Validate Autopilot ClusterRoleBinding doesn't exist
 		_, err = rbacops.Instance().GetClusterRoleBinding(autopilotDp.Name)
 		if !errors.IsNotFound(err) {
-			return nil, true, fmt.Errorf("failed to validate ClusterRoleBinding %s, is found when shouldn't be", autopilotDp.Name)
+			return nil, true, fmt.Errorf("failed to validate ClusterRoleBinding [%s], is found when shouldn't be", autopilotDp.Name)
 		}
 
 		// Validate Autopilot ConfigMap doesn't exist
 		_, err = coreops.Instance().GetConfigMap("autopilot-config", autopilotDp.Namespace)
 		if !errors.IsNotFound(err) {
-			return nil, true, fmt.Errorf("failed to validate autopilot-config, is found when shouldn't be")
+			return nil, true, fmt.Errorf("failed to validate ConfigMap [autopilot-config], is found when shouldn't be")
 		}
 
 		// Validate Autopilot ServiceAccount doesn't exist
 		_, err = coreops.Instance().GetServiceAccount(autopilotDp.Name, autopilotDp.Namespace)
 		if !errors.IsNotFound(err) {
-			return nil, true, fmt.Errorf("failed to validate ServiceAccount %s, is found when shouldn't be", autopilotDp.Name)
+			return nil, true, fmt.Errorf("failed to validate ServiceAccount [%s], is found when shouldn't be", autopilotDp.Name)
 		}
 
 		return nil, true, nil
@@ -2406,24 +2422,33 @@ func ValidateCSI(pxImageList map[string]string, cluster *corev1.StorageCluster, 
 			Namespace: cluster.Namespace,
 		},
 	}
-
+	pxVersion, _ := version.NewVersion(getPxVersion(pxImageList, cluster))
 	if cluster.Spec.CSI.Enabled {
 		logrus.Debug("CSI is enabled in StorageCluster")
-		return ValidateCsiEnabled(pxImageList, cluster, pxCsiDp, timeout, interval)
+		return ValidateCsiEnabled(pxImageList, cluster, pxCsiDp, timeout, interval, pxVersion)
 	}
 	logrus.Debug("CSI is disabled in StorageCluster")
-	return ValidateCsiDisabled(cluster, pxCsiDp, timeout, interval)
+	return ValidateCsiDisabled(cluster, pxCsiDp, timeout, interval, pxVersion)
 }
 
 // ValidateCsiEnabled validates that all CSI components are enabled/created
-func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deployment, timeout, interval time.Duration) error {
+func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deployment, timeout, interval time.Duration, pxVersion *version.Version) error {
 	logrus.Info("Validate CSI components are enabled")
 
 	t := func() (interface{}, bool, error) {
 		logrus.Debug("CSI is enabled in StorageCluster")
-		if err := validateCsiContainerInPxPods(cluster.Namespace, true, timeout, interval); err != nil {
-			return nil, true, err
+
+		// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
+		if opVersion, _ := GetPxOperatorVersion(); pxVersion.GreaterThanOrEqual(pxVer2_13) && opVersion.GreaterThanOrEqual(pxOperatorMasterVersion) {
+			if err := validateCsiContainerInPxApiPods(cluster.Namespace, true, timeout, interval); err != nil {
+				return nil, true, err
+			}
+		} else {
+			if err := validateCsiContainerInPxPods(cluster.Namespace, true, timeout, interval); err != nil {
+				return nil, true, err
+			}
 		}
+
 		// Validate CSI container image inside Portworx OCI Monitor pods
 		var csiNodeDriverRegistrarImage string
 		if value, ok := pxImageList["csiNodeDriverRegistrar"]; ok {
@@ -2432,11 +2457,21 @@ func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCl
 			return nil, true, fmt.Errorf("failed to find image for csiNodeDriverRegistrar")
 		}
 
-		pods, err := coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx"})
-		if err != nil {
-			return nil, true, err
-		}
+		var pods *v1.PodList
+		var err error
 
+		// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
+		if opVersion, _ := GetPxOperatorVersion(); pxVersion.GreaterThanOrEqual(pxVer2_13) && opVersion.GreaterThanOrEqual(pxOperatorMasterVersion) {
+			pods, err = coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx-api"})
+			if err != nil {
+				return nil, true, err
+			}
+		} else {
+			pods, err = coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx"})
+			if err != nil {
+				return nil, true, err
+			}
+		}
 		if err := validateContainerImageInsidePods(cluster, csiNodeDriverRegistrarImage, "csi-node-driver-registrar", pods); err != nil {
 			return nil, true, err
 		}
@@ -2476,13 +2511,20 @@ func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCl
 }
 
 // ValidateCsiDisabled validates that all CSI components are disabled/deleted
-func ValidateCsiDisabled(cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deployment, timeout, interval time.Duration) error {
+func ValidateCsiDisabled(cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deployment, timeout, interval time.Duration, pxVersion *version.Version) error {
 	logrus.Info("Validate CSI components are disabled")
 
 	t := func() (interface{}, bool, error) {
 		logrus.Debug("CSI is disabled in StorageCluster")
-		if err := validateCsiContainerInPxPods(cluster.Namespace, false, timeout, interval); err != nil {
-			return nil, true, err
+		// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
+		if opVersion, _ := GetPxOperatorVersion(); pxVersion.GreaterThanOrEqual(pxVer2_13) && opVersion.GreaterThanOrEqual(pxOperatorMasterVersion) {
+			if err := validateCsiContainerInPxApiPods(cluster.Namespace, false, timeout, interval); err != nil {
+				return nil, true, err
+			}
+		} else {
+			if err := validateCsiContainerInPxPods(cluster.Namespace, false, timeout, interval); err != nil {
+				return nil, true, err
+			}
 		}
 
 		// Validate px-csi-ext deployment doesn't exist
@@ -2497,6 +2539,65 @@ func ValidateCsiDisabled(cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deploym
 	}
 
 	return nil
+}
+
+func validateCsiContainerInPxApiPods(namespace string, csi bool, timeout, interval time.Duration) error {
+	logrus.Debug("Validating CSI container inside Portworx Api pods")
+	listOptions := map[string]string{"name": "portworx-api"}
+
+	t := func() (interface{}, bool, error) {
+		var pxPodsWithCsiContainer []string
+
+		// Get Portworx pods
+		pods, err := coreops.Instance().GetPods(namespace, listOptions)
+		if err != nil {
+			return nil, false, err
+		}
+		podsReady := 0
+		for _, pod := range pods.Items {
+			for _, c := range pod.Status.InitContainerStatuses {
+				if !c.Ready {
+					continue
+				}
+			}
+			containerReady := 0
+			for _, c := range pod.Status.ContainerStatuses {
+				if c.Ready {
+					containerReady++
+					continue
+				}
+			}
+
+			if len(pod.Spec.Containers) == containerReady {
+				podsReady++
+			}
+			for _, container := range pod.Spec.Containers {
+				if container.Name == "csi-node-driver-registrar" {
+					pxPodsWithCsiContainer = append(pxPodsWithCsiContainer, pod.Name)
+					break
+				}
+			}
+
+		}
+
+		if csi {
+			if len(pxPodsWithCsiContainer) != len(pods.Items) {
+				return nil, true, fmt.Errorf("failed to validate CSI containers in PX Api pods [portworx-api]: expected %d, got %d, %d/%d Ready pods", len(pods.Items), len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
+			}
+		} else {
+			if len(pxPodsWithCsiContainer) > 0 || len(pods.Items) != podsReady {
+				return nil, true, fmt.Errorf("failed to validate CSI container in PX Api pods [portworx-api]: expected: 0, got %d, %d/%d Ready pods", len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
+			}
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	return nil
+
 }
 
 func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval time.Duration) error {
@@ -2537,15 +2638,16 @@ func validateCsiContainerInPxPods(namespace string, csi bool, timeout, interval 
 					break
 				}
 			}
+
 		}
 
 		if csi {
 			if len(pxPodsWithCsiContainer) != len(pods.Items) {
-				return nil, true, fmt.Errorf("failed to validate CSI containers in PX pods: expected %d, got %d, %d/%d Ready pods", len(pods.Items), len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
+				return nil, true, fmt.Errorf("failed to validate CSI containers in PX pods [portworx]: expected %d, got %d, %d/%d Ready pods", len(pods.Items), len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
 			}
 		} else {
 			if len(pxPodsWithCsiContainer) > 0 || len(pods.Items) != podsReady {
-				return nil, true, fmt.Errorf("failed to validate CSI container in PX pods: expected: 0, got %d, %d/%d Ready pods", len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
+				return nil, true, fmt.Errorf("failed to validate CSI container in PX pods: expected [portworx]: 0, got %d, %d/%d Ready pods", len(pxPodsWithCsiContainer), podsReady, len(pods.Items))
 			}
 		}
 		return nil, false, nil
