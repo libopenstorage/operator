@@ -10,7 +10,7 @@ metadata:
     containerImage: portworx/px-operator:master
     repository: https://github.com/libopenstorage/operator
     createdAt: 2022-01-01T08:00:00Z
-    support: Portworx, Inc
+    support: https://docs.portworx.com/portworx-enterprise/support/contact-support
     certified: "true"
     console.openshift.io/plugins: '["portworx"]'
     operatorframework.io/initialization-resource: |-
@@ -58,7 +58,7 @@ spec:
   - name: Portworx
     email: support@portworx.com
   provider:
-    name: Portworx
+    name: Portworx by PureStorage
   keywords: ["portworx", "persistent storage", "storage", "cloud native", "open source"]
   labels:
     operated-by: portworx-operator
@@ -71,7 +71,7 @@ spec:
   - name: Documentation
     url: https://docs.portworx.com/portworx-install-with-kubernetes/on-premise/openshift/operator
   - name: Support
-    url: https://docs.portworx.com/support
+    url: https://docs.portworx.com/portworx-enterprise/support/contact-support
   - name: Source Code
     url: https://github.com/libopenstorage/operator
   icon:
