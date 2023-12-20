@@ -169,27 +169,34 @@ func (c *portworxAPI) createDaemonSet(
 		return getErr
 	}
 
-	var existingImageName string
+	var existingPauseImageName string
+	var existingCsiDriverRegistrarImageName string
 	if len(existingDaemonSet.Spec.Template.Spec.Containers) > 0 {
-		existingImageName = existingDaemonSet.Spec.Template.Spec.Containers[0].Image
+		existingPauseImageName = existingDaemonSet.Spec.Template.Spec.Containers[0].Image
+		existingCsiDriverRegistrarImageName = existingDaemonSet.Spec.Template.Spec.Containers[1].Image
 	}
 
-	imageName := pxutil.ImageNamePause
+	pauseImageName := pxutil.ImageNamePause
+
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.Pause != "" {
-		imageName = cluster.Status.DesiredImages.Pause
+		pauseImageName = cluster.Status.DesiredImages.Pause
 	}
-	imageName = util.GetImageURN(cluster, imageName)
+
+	csiNodeRegistrarImageName := cluster.Status.DesiredImages.CSINodeDriverRegistrar
+	pauseImageName = util.GetImageURN(cluster, pauseImageName)
+	csiNodeRegistrarImageName = util.GetImageURN(cluster, csiNodeRegistrarImageName)
 	serviceAccount := pxutil.PortworxServiceAccountName(cluster)
 	existingServiceAccount := existingDaemonSet.Spec.Template.Spec.ServiceAccountName
 
-	modified := existingImageName != imageName ||
+	modified := existingPauseImageName != pauseImageName ||
+		existingCsiDriverRegistrarImageName != csiNodeRegistrarImageName ||
 		existingServiceAccount != serviceAccount ||
 		util.HasPullSecretChanged(cluster, existingDaemonSet.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDaemonSet.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDaemonSet.Spec.Template.Spec.Tolerations)
 
 	if !c.isCreated || errors.IsNotFound(getErr) || modified {
-		daemonSet := getPortworxAPIDaemonSetSpec(cluster, ownerRef, imageName)
+		daemonSet := getPortworxAPIDaemonSetSpec(cluster, ownerRef, pauseImageName)
 		if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, daemonSet, ownerRef); err != nil {
 			return err
 		}
