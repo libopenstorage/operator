@@ -338,7 +338,8 @@ func TestManifestWithDevelopmentPortworxVersion(t *testing.T) {
 
 	m := Instance()
 	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
-	rel := m.GetVersions(cluster, true)
+	rel, err := m.GetVersions(cluster, true)
+	require.NoError(t, err)
 	assert.Equal(t, rel.PortworxVersion, expected.PortworxVersion)
 	assert.Equal(t, rel.Components.Stork, expected.Components.Stork)
 	assert.Equal(t, rel.Components.Autopilot, expected.Components.Autopilot)
