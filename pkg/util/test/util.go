@@ -56,6 +56,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -139,6 +140,10 @@ const (
 	stagingArcusRegisterProxyURL    = "register.staging-cloud-support.purestorage.com"
 	arcusPingInterval               = 6 * time.Second
 	arcusPingRetry                  = 5
+
+	// OCP Plugin
+	clusterOperatorKind    = "ClusterOperator"
+	clusterOperatorVersion = "config.openshift.io/v1"
 
 	defaultTelemetrySecretValidationTimeout  = 30 * time.Second
 	defaultTelemetrySecretValidationInterval = time.Second
@@ -1538,7 +1543,7 @@ func ValidateOpenshiftDynamicPlugin(pxImageList map[string]string, cluster *core
 	k8sVersion, _ := version.NewVersion(kbVer)
 
 	// Validate Dynamic plugin only if PX Operator 23.7.0+ (due to image inconsistency bug which is fixed in 23.7.0+) and OCP 4.12+ (k8s v1.25+)
-	if opVersion.GreaterThanOrEqual(opVer23_7) && isOpenshift(cluster) && k8sVersion.GreaterThanOrEqual(minK8sVersionForDynamicPlugin) {
+	if opVersion.GreaterThanOrEqual(opVer23_7) && isOpenshift(cluster) && k8sVersion.GreaterThanOrEqual(minK8sVersionForDynamicPlugin) && isPluginSupported() {
 		logrus.Info("Openshift Dynamic Plugin should be deployed")
 		if err := ValidateOpenshiftDynamicPluginEnabled(pxImageList, cluster, timeout, interval); err != nil {
 			return fmt.Errorf("failed to validate Openshift Dynamic Plugin components, Err: %v", err)
@@ -1549,6 +1554,20 @@ func ValidateOpenshiftDynamicPlugin(pxImageList map[string]string, cluster *core
 
 	logrus.Info("Openshift Dynamic Plugin is not supported, will skip validation")
 	return nil
+}
+
+// isPluginSupported checks if plugin resource exists and returns true or false
+func isPluginSupported() bool {
+	gvk := schema.GroupVersionKind{
+		Kind:    clusterOperatorKind,
+		Version: clusterOperatorVersion,
+	}
+	exists, err := coreops.Instance().ResourceExists(gvk)
+	if err != nil {
+		logrus.Error(err)
+		return false
+	}
+	return exists
 }
 
 // ValidateOpenshiftDynamicPluginEnabled validates that all Openshift Dynamic Plugin components are enabled/created
