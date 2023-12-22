@@ -186,10 +186,12 @@ func (m *manifest) GetVersions(
 	var provider versionProvider
 	ver := pxutil.GetImageTag(cluster.Spec.Image)
 	currPxVer, err := version.NewSemver(ver)
-	if err == nil {
-		if currPxVer.LessThan(pxVer2_5_7) {
-			provider = newDeprecatedManifest(ver)
-		}
+	if currPxVer == nil || err != nil {
+		// note, dev-bulids like `c2bb2a0_14e4543` won't parse correctly, so adding this as a failback
+		currPxVer = pxutil.GetPortworxVersion(cluster)
+	}
+	if currPxVer != nil && currPxVer.LessThan(pxVer2_5_7) {
+		provider = newDeprecatedManifest(ver)
 	}
 
 	if provider == nil {
