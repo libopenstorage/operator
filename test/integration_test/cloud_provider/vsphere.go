@@ -21,5 +21,5 @@ func (vsphereProvider) GetDefaultKvdbDrive() *string {
 }
 
 func (vsphereProvider) GetDefaultJournalDrive() *string {
-	return stringPtr("type=zeroedthick,size=32")
+	return stringPtr("type=zeroedthick,size=3")
 }
