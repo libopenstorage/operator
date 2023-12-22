@@ -13221,7 +13221,7 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 1)
 
 	// Compatible PX & Incompatible Telemetry Images
-	cluster.Spec.Image = "portworx/image:3.1.0"
+	cluster.Spec.Image = "portworx/image:3.2.0"
 	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.0.3"
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
@@ -13239,7 +13239,7 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 
 	// Incompatible PX & compatible Telemetry Images
 	cluster.Spec.Image = "portworx/image:3.0.0"
-	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.1.3"
+	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.2.5"
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
@@ -13255,8 +13255,8 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 1)
 
 	// Compatible PX & Telemetry Images
-	cluster.Spec.Image = "portworx/image:3.1.0"
-	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.2.3"
+	cluster.Spec.Image = "portworx/image:3.2.0"
+	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.2.5"
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
@@ -13273,6 +13273,19 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
 	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[1].Name, "REFRESH_TOKEN")
 	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[1].Value, "")
+
+	// Port shift on OCP
+	cluster.Annotations[pxutil.AnnotationIsOpenshift] = "true"
+	cluster.Spec.StartPort = nil
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	supported = pxutil.IsCOSupported(cluster)
+	require.True(t, supported)
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, configMap.Data["config_properties_px.yaml"], "serverAddress: \"127.0.0.1:17022\"")
 }
 
 func TestValidateTelemetryEnabled(t *testing.T) {

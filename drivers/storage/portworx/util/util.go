@@ -309,9 +309,9 @@ var (
 	// MinimumPxVersionAutoTLS is a minimal PX version that supports "auto-TLS" setup
 	MinimumPxVersionAutoTLS, _ = version.NewVersion("4.0.0")
 	// MinimumPxVersionCO minimum PX version to use 'container orchestrator'
-	MinimumPxVersionCO, _ = version.NewVersion("3.1")
+	MinimumPxVersionCO, _ = version.NewVersion("3.2")
 	// MinimumCcmGoVersionCO minimum ccm-go version to use 'container orchestrator'
-	MinimumCcmGoVersionCO, _ = version.NewVersion("1.1.3")
+	MinimumCcmGoVersionCO, _ = version.NewVersion("1.2.5")
 	// MinimumPxVersionQuorumFlag is a minimal PX version that introduces the quorum member
 	// flag in the node object of the PX SDK response.
 	MinimumPxVersionQuorumFlag, _ = version.NewVersion("3.1.0")
