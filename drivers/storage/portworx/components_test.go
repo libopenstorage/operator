@@ -13174,6 +13174,99 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
 }
 
+func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.12.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
+	}
+
+	// Incompatible PX & Telemetry Images
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	configMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, configMap.Data["config_properties_px.yaml"], "certStoreType: \"k8s\"")
+	// Validate deployments
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 1)
+
+	// Compatible PX & Incompatible Telemetry Images
+	cluster.Spec.Image = "portworx/image:3.1.0"
+	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.0.3"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, configMap.Data["config_properties_px.yaml"], "certStoreType: \"k8s\"")
+	// Validate deployments
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 1)
+
+	// Incompatible PX & compatible Telemetry Images
+	cluster.Spec.Image = "portworx/image:3.0.0"
+	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.1.3"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, configMap.Data["config_properties_px.yaml"], "certStoreType: \"k8s\"")
+	// Validate deployments
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 1)
+
+	// Compatible PX & Telemetry Images
+	cluster.Spec.Image = "portworx/image:3.1.0"
+	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.2.3"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, configMap.Data["config_properties_px.yaml"], "certStoreType: \"kvstore\"")
+	require.Contains(t, configMap.Data["config_properties_px.yaml"], "serverAddress: \"127.0.0.1:9030\"")
+	// Validate deployments
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[1].Name, "REFRESH_TOKEN")
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[1].Value, "")
+}
+
 func TestValidateTelemetryEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()

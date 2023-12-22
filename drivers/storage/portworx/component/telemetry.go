@@ -590,7 +590,7 @@ func (t *telemetry) createCCMGoConfigMapRegister(
 	}
 
 	// Check PX version to update the config for "container orchestrator"
-	if pxutil.IsCOSupported(pxutil.GetPortworxVersion(cluster)) {
+	if pxutil.IsCOSupported(cluster) {
 		config = certStoreTypeRegx.ReplaceAllString(config,
 			"certStoreType: \"kvstore\"\nkvStore:\n  serverAddress: \"127.0.0.1:"+strconv.Itoa(GetPxCOListeningPort(cluster))+"\"")
 	}
