@@ -20,5 +20,5 @@ func (pureProvider) GetDefaultKvdbDrive() *string {
 }
 
 func (pureProvider) GetDefaultJournalDrive() *string {
-	return stringPtr("type=pure-block,size=32")
+	return stringPtr("type=pure-block,size=3")
 }
