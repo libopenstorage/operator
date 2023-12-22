@@ -296,6 +296,46 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 	require.Equal(t, expected, rel)
 }
 
+func TestManifestWithDevelopmentPortworxVersion(t *testing.T) {
+	k8sVersion, _ := version.NewSemver("1.28.4")
+	expected := &Version{
+		PortworxVersion: "c2bb2a0_14e4543",
+		Components: Release{
+			Stork:     "image/stork:22.33.44",
+			Autopilot: "image/autopi:55.666.777",
+		},
+	}
+	httpGet = func(url string) (*http.Response, error) {
+		body, _ := yaml.Marshal(expected)
+		return &http.Response{
+			Body: io.NopCloser(bytes.NewReader(body)),
+		}, nil
+	}
+
+	expected_ociMon := "px/image:" + expected.PortworxVersion
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
+			Image: expected_ociMon,
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  envKeyReleaseManifestURL,
+						Value: "https://edge-install.portworx.com/3.1.0/version",
+					},
+				},
+			},
+		},
+	}
+
+	m := Instance()
+	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
+	rel := m.GetVersions(cluster, true)
+	assert.Equal(t, rel.PortworxVersion, expected.PortworxVersion)
+	assert.Equal(t, rel.Components.Stork, expected.Components.Stork)
+	assert.Equal(t, rel.Components.Autopilot, expected.Components.Autopilot)
+	assert.Equal(t, rel.Components.NodeWiper, expected_ociMon)
+}
+
 func TestManifestWithUnknownNonSemvarPortworxVersion(t *testing.T) {
 	httpGet = func(url string) (*http.Response, error) {
 		// Return empty response without any versions
