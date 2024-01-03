@@ -66,6 +66,7 @@ const (
 	pxNodeWiperDaemonSetName          = "px-node-wiper"
 	pxKvdbPrefix                      = "pwx/"
 	pureStorageCloudDriveConfigMap    = "px-pure-cloud-drive"
+	defaultNodeWiperImage             = "portworx/px-node-wiper:2.13.2"
 )
 
 // UninstallPortworx provides a set of APIs to uninstall portworx
@@ -183,8 +184,13 @@ func (u *uninstallPortworx) RunNodeWiper(
 
 	wiperImage := k8sutil.GetValueFromEnv(envKeyNodeWiperImage, u.cluster.Spec.Env)
 	if len(wiperImage) == 0 {
-		release := manifest.Instance().GetVersions(u.cluster, true)
-		wiperImage = release.Components.NodeWiper
+		release, err := manifest.Instance().GetVersions(u.cluster, true)
+		if err != nil {
+			logrus.Warnf("Failed to get release versions as %v. Using default NodeWiper image", err)
+			wiperImage = defaultNodeWiperImage
+		} else {
+			wiperImage = release.Components.NodeWiper
+		}
 	}
 	wiperImage = util.GetImageURN(u.cluster, wiperImage)
 
