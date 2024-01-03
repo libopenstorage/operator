@@ -8,7 +8,6 @@ import (
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
-	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -1825,92 +1824,6 @@ func TestHandleKubernetesObjects(t *testing.T) {
 					t.Fatalf("Expected no error, got %s", err)
 				}
 			}
-		})
-	}
-}
-
-func TestRetrieveMultipathConf(t *testing.T) {
-	appFS := afero.NewOsFs()
-	logger := logrus.New()
-
-	tests := []struct {
-		name              string
-		fileExists        bool
-		createDirError    bool
-		writeFileError    bool
-		expectError       bool
-		expectedLogOutput string
-		saveFilesPath     string
-	}{
-		{
-			name:              "File exists and successfully retrieved",
-			fileExists:        true,
-			expectError:       false,
-			expectedLogOutput: "Successfully saved multipath config to",
-			saveFilesPath:     "/tmp",
-		},
-		{
-			name:              "File does not exist",
-			fileExists:        false,
-			expectError:       false,
-			expectedLogOutput: "File is not present /etc/multipath.conf",
-			saveFilesPath:     "/tmp",
-		},
-		{
-			name:              "Error saving file",
-			fileExists:        true,
-			writeFileError:    true,
-			expectError:       true,
-			expectedLogOutput: "Error saving multipath config to",
-			saveFilesPath:     "/proc",
-		},
-		{
-			name:              "Error reading file",
-			fileExists:        true,
-			createDirError:    true,
-			expectError:       true,
-			expectedLogOutput: "Error reading multipath config from",
-			saveFilesPath:     "/tmp",
-		},
-		{
-			name:              "Error creating directory",
-			fileExists:        true,
-			createDirError:    true,
-			expectError:       true,
-			expectedLogOutput: "Error creating directory",
-			saveFilesPath:     "/proc",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			// Setup
-			k8s := &k8sRetriever{
-				fs:          appFS,
-				loggerToUse: logger,
-			}
-
-			if tc.fileExists {
-				err := afero.WriteFile(appFS, "/etc/multipath.conf", []byte("test content"), 0644)
-				if err != nil {
-					return
-				}
-			}
-
-			if tc.createDirError {
-				appFS = afero.NewReadOnlyFs(appFS)
-			}
-
-			// Execute
-			err := k8s.retrieveMultipathConf("testNode")
-
-			// Assertions
-			if tc.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-
 		})
 	}
 }

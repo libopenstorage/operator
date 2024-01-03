@@ -1,3 +1,39 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: retrieve-multipath-conf
+  labels:
+    app: retrieve-multipath-conf
+spec:
+  selector:
+    matchLabels:
+      name: retrieve-multipath-conf
+  template:
+    metadata:
+      labels:
+        name: retrieve-multipath-conf
+    spec:
+      containers:
+        - name: retrieve-multipath-conf
+          image: busybox:latest
+          command: ["/bin/sh"]
+          args: ["-c", "while true; do echo Node: $NODE_NAME; echo ========================; echo File: /etc/multipath.conf; echo ' '; cat /etc/multipath.conf; echo ========================; sleep 3600; done"]
+          env:
+            - name: "NODE_NAME"
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - mountPath: /etc
+              name: etc
+              readOnly: true
+      volumes:
+        - hostPath:
+            path: /etc
+            type: Directory
+          name: etc
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -36,16 +72,9 @@ spec:
           volumeMounts:
             - name: cores-volume
               mountPath: /var/cores
-            - name: etc-volume
-              mountPath: /etc
-              readOnly: true
       restartPolicy: OnFailure
       volumes:
         - name: cores-volume
           hostPath:
             path: /var/cores
-            type: Directory
-        - name: etc-volume
-          hostPath:
-            path: /etc
             type: Directory

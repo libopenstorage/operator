@@ -509,30 +509,3 @@ func (k8s *k8sRetriever) HandleKubernetesObjects(obj *unstructured.Unstructured,
 	}
 	return nil
 }
-
-// retrieveMultipathConf retrieves the multipath.conf file from the given node and saves it to a file in the output directory
-func (k8s *k8sRetriever) retrieveMultipathConf(nodeName string) error {
-	sourcePath := "/etc/multipath.conf"
-
-	// Read the source file content
-	content, err := os.ReadFile(sourcePath)
-	//check that the file exists if not return nil
-	if err != nil && os.IsNotExist(err) {
-		k8s.loggerToUse.Infof("File is not present %s", sourcePath)
-		return nil
-	}
-
-	saveFilesPath := outputPath
-	if err := k8s.ensureDirectory(saveFilesPath); err != nil {
-		return err
-	}
-
-	k8s.loggerToUse.Infof("Writing multipath.conf to %s", saveFilesPath)
-	if err := k8s.writeToFileVar.writeToFile("multipath", "config-file", string(content), saveFilesPath, ".conf"); err != nil {
-		k8s.loggerToUse.Errorf("error writing storage cluster YAML to file: %s", err.Error())
-		return err
-	}
-
-	k8s.loggerToUse.Infof("Successfully saved multipath config to %s", saveFilesPath)
-	return nil
-}

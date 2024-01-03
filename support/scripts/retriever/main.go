@@ -236,11 +236,6 @@ func main() {
 		}
 	}
 
-	err = k8sRetriever.retrieveMultipathConf(nodeName)
-	if err != nil {
-		k8sRetriever.loggerToUse.Errorf("Failed to retrieve multipath.conf: %v", err)
-	}
-
 	k8sRetriever.loggerToUse.Info("---Finished Kubernetes client!---")
 
 }
