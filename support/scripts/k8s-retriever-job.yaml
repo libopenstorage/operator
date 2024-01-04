@@ -14,6 +14,37 @@ spec:
       labels:
         name: retrieve-multipath-conf
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - 'false'
+                  - key: node-role.kubernetes.io/master
+                    operator: DoesNotExist
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - 'false'
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
+                  - key: node-role.kubernetes.io/worker
+                    operator: Exists
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - 'false'
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+                  - key: node-role.kubernetes.io/worker
+                    operator: Exists
       containers:
         - name: retrieve-multipath-conf
           image: busybox:latest
@@ -28,6 +59,13 @@ spec:
             - mountPath: /etc
               name: etc
               readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+            limits:
+              cpu: 200m
+              memory: 150Mi
       volumes:
         - hostPath:
             path: /etc
@@ -38,9 +76,42 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: px-k8s-retriever-job
+  labels:
+    app: px-k8s-retriever-job
 spec:
   template:
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - 'false'
+                  - key: node-role.kubernetes.io/master
+                    operator: DoesNotExist
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - 'false'
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
+                  - key: node-role.kubernetes.io/worker
+                    operator: Exists
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - 'false'
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+                  - key: node-role.kubernetes.io/worker
+                    operator: Exists
       serviceAccountName: portworx-operator
       containers:
         - name: k8s-retriever
@@ -72,6 +143,13 @@ spec:
           volumeMounts:
             - name: cores-volume
               mountPath: /var/cores
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+            limits:
+              cpu: 900m
+              memory: 1Gi
       restartPolicy: OnFailure
       volumes:
         - name: cores-volume
