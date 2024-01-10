@@ -131,6 +131,9 @@ const (
 	// that CCM should use
 	AnnotationTelemetryArcusLocation = pxAnnotationPrefix + "/arcus-location"
 
+	// AnnotationIsPKS annotation indicating whether it is a PKS cluster
+	AnnotationIsPKS = pxAnnotationPrefix + "/is-pks"
+
 	// Telemetry default params
 	productionArcusLocation         = "external"
 	productionArcusRestProxyURL     = "rest.cloud-support.purestorage.com"
@@ -1195,11 +1198,17 @@ func validateStorageClusterPods(
 	return nil
 }
 
-// validateDmthinOnPxNodes greps for dmthin in the /etc/pwx/config.json on each PX pods
+// validateDmthinOnPxNodes greps for dmthin in the config.json on each PX pod
 // and makes sure its there, if dmthin misc-args annotation is found
 func validateDmthinOnPxNodes(cluster *corev1.StorageCluster) error {
 	listOptions := map[string]string{"name": "portworx"}
+
+	// Check if px-storev2 exists in config.json
 	cmd := "grep -i px-storev2 /etc/pwx/config.json"
+	if IsPKS(cluster) {
+		cmd = "grep -i px-storev2 /var/vcap/store/etc/pwx/config.json"
+	}
+
 	miscArgAnnotation := cluster.Annotations["portworx.io/misc-args"]
 
 	if !strings.Contains(strings.ToLower(miscArgAnnotation), "-t px-storev2") {
@@ -1236,6 +1245,12 @@ func validateDmthinOnPxNodes(cluster *corev1.StorageCluster) error {
 
 	logrus.Info("Validated PX-StoreV2 is enabled on all PX pods")
 	return nil
+}
+
+// IsPKS returns true if the annotation has a PKS annotation and is true value
+func IsPKS(cluster *corev1.StorageCluster) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[AnnotationIsPKS])
+	return err == nil && enabled
 }
 
 // validateDmthinViaPodCmd runs command on PX pod and returns true if dmthin is enabled on that PX node
