@@ -495,7 +495,7 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
 	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
@@ -503,8 +503,16 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.18.0",
+		},
 	}
-
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -537,6 +545,34 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "registry.k8s.io/pause:3.1", ds.Spec.Template.Spec.Containers[0].Image)
 
+	cluster.Status.DesiredImages.Pause = "private.repo.org/foo/bar:1.2.3"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "private.repo.org/foo/bar:1.2.3", ds.Spec.Template.Spec.Containers[0].Image)
+
+	// Case: Change image of csi-registrar-driver container in daemonset, daemonset should be recreated
+	// it is already deployed
+	ds.Spec.Template.Spec.Containers[1].Image = "new/csi-driver-image"
+	err = k8sClient.Update(context.TODO(), ds)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	ds = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3", ds.Spec.Template.Spec.Containers[1].Image)
+
+	cluster.Status.DesiredImages.CSINodeDriverRegistrar = "docker.io/repo/latest/image:1.2.3"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "docker.io/repo/latest/image:1.2.3", ds.Spec.Template.Spec.Containers[1].Image)
+
 	// Case: If the daemon set was marked as deleted, the it should be recreated,
 	// even if it is already present
 	pxAPIComponent, _ := component.Get(component.PortworxAPIComponentName)
@@ -549,6 +585,8 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.NotEqual(t, "new/image", ds.Spec.Template.Spec.Containers[0].Image)
+	require.NotEqual(t, "new/csi-driver-image", ds.Spec.Template.Spec.Containers[1].Image)
+
 }
 
 func TestPortworxProxyIsNotDeployedWhenClusterInKubeSystem(t *testing.T) {
