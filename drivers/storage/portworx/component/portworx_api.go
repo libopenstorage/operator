@@ -200,7 +200,7 @@ func (c *portworxAPI) createDaemonSet(
 		pauseImageName = cluster.Status.DesiredImages.Pause
 	}
 
-	//If px version is greater than 2.13 then update daemonset when csi-node-driver-registrar image changes if CSI is enabled
+	//  If px version is greater than 2.13 then update daemonset when csi-node-driver-registrar image changes if CSI is enabled
 	pxVersion := pxutil.GetPortworxVersion(cluster)
 	checkCSIDriverRegistrarChange := false
 	if pxutil.IsCSIEnabled(cluster) && pxVersion.GreaterThanOrEqual(csiRegistrarAdditionPxVersion) && len(existingDaemonSet.Spec.Template.Spec.Containers) > 1 {
