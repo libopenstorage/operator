@@ -30,6 +30,10 @@ const (
 	PxAPIDaemonSetName = "portworx-api"
 )
 
+var (
+	csiRegistrarAdditionPxVersion, _ = version.NewVersion("2.13")
+)
+
 type portworxAPI struct {
 	isCreated bool
 	k8sClient client.Client
@@ -183,27 +187,41 @@ func (c *portworxAPI) createDaemonSet(
 		return getErr
 	}
 
-	var existingImageName string
+	var existingPauseImageName string
+	var csiNodeRegistrarImageName string
+	var existingCsiDriverRegistrarImageName string
 	if len(existingDaemonSet.Spec.Template.Spec.Containers) > 0 {
-		existingImageName = existingDaemonSet.Spec.Template.Spec.Containers[0].Image
+		existingPauseImageName = existingDaemonSet.Spec.Template.Spec.Containers[0].Image
 	}
 
-	imageName := pxutil.ImageNamePause
+	pauseImageName := pxutil.ImageNamePause
+
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.Pause != "" {
-		imageName = cluster.Status.DesiredImages.Pause
+		pauseImageName = cluster.Status.DesiredImages.Pause
 	}
-	imageName = util.GetImageURN(cluster, imageName)
+
+	//  If px version is greater than 2.13 then update daemonset when csi-node-driver-registrar image changes if CSI is enabled
+	pxVersion := pxutil.GetPortworxVersion(cluster)
+	checkCSIDriverRegistrarChange := false
+	if pxutil.IsCSIEnabled(cluster) && pxVersion.GreaterThanOrEqual(csiRegistrarAdditionPxVersion) && len(existingDaemonSet.Spec.Template.Spec.Containers) > 1 {
+		existingCsiDriverRegistrarImageName = existingDaemonSet.Spec.Template.Spec.Containers[1].Image
+		csiNodeRegistrarImageName = cluster.Status.DesiredImages.CSINodeDriverRegistrar
+		csiNodeRegistrarImageName = util.GetImageURN(cluster, csiNodeRegistrarImageName)
+		checkCSIDriverRegistrarChange = true
+	}
+
+	pauseImageName = util.GetImageURN(cluster, pauseImageName)
 	serviceAccount := pxutil.PortworxServiceAccountName(cluster)
 	existingServiceAccount := existingDaemonSet.Spec.Template.Spec.ServiceAccountName
 
-	modified := existingImageName != imageName ||
+	modified := existingPauseImageName != pauseImageName ||
+		(checkCSIDriverRegistrarChange && (existingCsiDriverRegistrarImageName != csiNodeRegistrarImageName)) ||
 		existingServiceAccount != serviceAccount ||
 		util.HasPullSecretChanged(cluster, existingDaemonSet.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDaemonSet.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDaemonSet.Spec.Template.Spec.Tolerations)
-
 	if !c.isCreated || errors.IsNotFound(getErr) || modified {
-		daemonSet := getPortworxAPIDaemonSetSpec(cluster, ownerRef, imageName)
+		daemonSet := getPortworxAPIDaemonSetSpec(cluster, ownerRef, pauseImageName)
 		if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, daemonSet, ownerRef); err != nil {
 			return err
 		}
@@ -269,8 +287,7 @@ func getPortworxAPIDaemonSetSpec(
 	// If CSI is enabled then run the csi-node-driver-registrar pods in the same daemonset
 	// Do this only if portworx version is greater than 2.13
 	pxVersion := pxutil.GetPortworxVersion(cluster)
-	supportedPxVersion, _ := version.NewVersion("2.13")
-	if pxutil.IsCSIEnabled(cluster) && pxVersion.GreaterThanOrEqual(supportedPxVersion) {
+	if pxutil.IsCSIEnabled(cluster) && pxVersion.GreaterThanOrEqual(csiRegistrarAdditionPxVersion) {
 		csiRegistrar := csiRegistrarContainer(cluster)
 		if csiRegistrar != nil {
 			newDaemonSet.Spec.Template.Spec.Containers = append(newDaemonSet.Spec.Template.Spec.Containers, *csiRegistrar)
