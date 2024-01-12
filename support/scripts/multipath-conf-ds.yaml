@@ -1,12 +1,18 @@
 ---
-apiVersion: batch/v1
-kind: Job
+apiVersion: apps/v1
+kind: DaemonSet
 metadata:
-  name: px-k8s-retriever-job
+  name: retrieve-multipath-conf
   labels:
-    app: px-k8s-retriever-job
+    app: retrieve-multipath-conf
 spec:
+  selector:
+    matchLabels:
+      name: retrieve-multipath-conf
   template:
+    metadata:
+      labels:
+        name: retrieve-multipath-conf
     spec:
       affinity:
         nodeAffinity:
@@ -39,47 +45,29 @@ spec:
                     operator: Exists
                   - key: node-role.kubernetes.io/worker
                     operator: Exists
-      serviceAccountName: portworx-operator
       containers:
-        - name: k8s-retriever
-          image: calvarado2004/portworx-operator:23.12.0
-          command:
-            - /bin/sh
-            - -c
-            - /support/scripts/bin/retriever
+        - name: retrieve-multipath-conf
+          image: busybox:latest
+          command: ["/bin/sh"]
+          args: ["-c", "while true; do echo Node: $NODE_NAME; echo ========================; echo File: /etc/multipath.conf; echo ' '; cat /etc/multipath.conf; echo ========================; sleep 10; done"]
           env:
-            - name: "PX_NAMESPACE"
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-            - name: "RETRIEVER_OUTPUT_PATH"
-              value: "/var/cores/px-k8s-retriever"
-            - name: "RETRIEVER_POD_NAME"
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: "RETRIEVER_NODE_NAME"
+            - name: "NODE_NAME"
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-          imagePullPolicy: Always
-          securityContext:
-            privileged: true
-            runAsUser: 0
-            runAsGroup: 0
           volumeMounts:
-            - name: cores-volume
-              mountPath: /var/cores
+            - mountPath: /etc
+              name: etc
+              readOnly: true
           resources:
             requests:
               cpu: 100m
               memory: 100Mi
             limits:
-              cpu: 900m
-              memory: 1Gi
-      restartPolicy: OnFailure
+              cpu: 200m
+              memory: 150Mi
       volumes:
-        - name: cores-volume
-          hostPath:
-            path: /var/cores
+        - hostPath:
+            path: /etc
             type: Directory
+          name: etc

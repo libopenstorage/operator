@@ -49,6 +49,17 @@ func TestConvertToYaml(t *testing.T) {
 			setUp: func() {
 				k8s.yamlConverter = &mockYamlConverter{err: errors.New("simulated error")}
 			},
+		}, {
+			name: "Error marshalling object",
+			object: func() interface{} {
+				var i int
+				return i
+			},
+			expected: "",
+			hasError: true,
+			setUp: func() {
+				k8s.yamlConverter = &RealYamlConverter{}
+			},
 		},
 	}
 
@@ -126,6 +137,16 @@ func TestWriteToFile(t *testing.T) {
 			hasError:     true,
 			setup: func() {
 				k8s.writeToFileVar = &mockWriteToFile{err: errors.New("simulated error")}
+			},
+		}, {
+			name:         "Error creating file",
+			fileName:     "",
+			data:         "",
+			resourceType: "test",
+			basePath:     "/proc/test",
+			hasError:     true,
+			setup: func() {
+				k8s.writeToFileVar = &RealWriteToFile{}
 			},
 		},
 	}
