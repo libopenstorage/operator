@@ -332,3 +332,115 @@ func TestGetTLSCipherSuites(t *testing.T) {
 		}
 	}
 }
+
+func TestAppendUserVolumeMounts(t *testing.T) {
+	podSpecReference := &v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Name: "px",
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "install-vol",
+						MountPath: "/opt/pwx",
+					},
+					{
+						Name:      "creds-vol",
+						MountPath: "/var/lib/serviceaccount",
+					},
+					{
+						Name:      "osd-vol",
+						MountPath: "/var/lib/osd",
+					},
+				},
+			},
+		},
+		Volumes: []v1.Volume{
+			{
+				Name: "install-vol",
+				VolumeSource: v1.VolumeSource{
+					HostPath: &v1.HostPathVolumeSource{
+						Path: "/opt/pwx",
+					},
+				},
+			},
+			{
+				Name: "creds-vol",
+				VolumeSource: v1.VolumeSource{
+					HostPath: &v1.HostPathVolumeSource{
+						Path: "/var/lib/kubelet/pod123/serviceaccount",
+					},
+				},
+			},
+			{
+				Name: "osd-vol",
+				VolumeSource: v1.VolumeSource{
+					HostPath: &v1.HostPathVolumeSource{
+						Path: "/var/lib/osd",
+					},
+				},
+			},
+		},
+	}
+
+	// no user volume mounts
+	podSpec := podSpecReference.DeepCopy()
+	AppendUserVolumeMounts(podSpec, []corev1.VolumeSpec{})
+	assert.Equal(t, podSpecReference, podSpec)
+
+	// non-overlapping volume mounts
+	userMounts := []corev1.VolumeSpec{
+		{
+			Name:      "my-vol1",
+			MountPath: "/mnt/user-vol1",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/mnt/user-vol1",
+				},
+			},
+		},
+		{
+			Name:      "my-vol2",
+			MountPath: "/mnt/my-vol2",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/mnt/my-vol2",
+				},
+			},
+		},
+	}
+	AppendUserVolumeMounts(podSpec, userMounts)
+	assert.Equal(t, podSpecReference.Containers, podSpec.Containers)
+	assert.Equal(t, len(podSpecReference.Volumes)+2, len(podSpec.Volumes))
+
+	// add destination-overlapping volume mounts
+	userMounts = []corev1.VolumeSpec{
+		{
+			Name:      "custom-install",
+			MountPath: "/opt/pwx",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/usr/local/portworx",
+				},
+			},
+		},
+		{
+			Name:      "custom-osd",
+			MountPath: "/var/lib/osd",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{
+					Path: "/var/lib/vcap/store/osd",
+				},
+			},
+		},
+	}
+	podSpec = podSpecReference.DeepCopy()
+	AppendUserVolumeMounts(podSpec, userMounts)
+	assert.NotEqual(t, podSpecReference.Containers, podSpec.Containers)
+	assert.Equal(t, len(podSpecReference.Volumes)+2, len(podSpec.Volumes))
+	assert.Equal(t, "user-custom-install", podSpec.Containers[0].VolumeMounts[0].Name)
+	assert.Equal(t, "creds-vol", podSpec.Containers[0].VolumeMounts[1].Name)
+	assert.Equal(t, "user-custom-osd", podSpec.Containers[0].VolumeMounts[2].Name)
+	assert.Equal(t, podSpecReference.Containers[0].VolumeMounts[0].MountPath, podSpec.Containers[0].VolumeMounts[0].MountPath)
+	assert.Equal(t, podSpecReference.Containers[0].VolumeMounts[1].MountPath, podSpec.Containers[0].VolumeMounts[1].MountPath)
+	assert.Equal(t, podSpecReference.Containers[0].VolumeMounts[2].MountPath, podSpec.Containers[0].VolumeMounts[2].MountPath)
+}
