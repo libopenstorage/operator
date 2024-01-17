@@ -311,7 +311,7 @@ var (
 	// MinimumPxVersionCO minimum PX version to use 'container orchestrator'
 	MinimumPxVersionCO, _ = version.NewVersion("3.2")
 	// MinimumCcmGoVersionCO minimum ccm-go version to use 'container orchestrator'
-	MinimumCcmGoVersionCO, _ = version.NewVersion("1.2.5")
+	MinimumCcmGoVersionCO, _ = version.NewVersion("1.2.3")
 	// MinimumPxVersionQuorumFlag is a minimal PX version that introduces the quorum member
 	// flag in the node object of the PX SDK response.
 	MinimumPxVersionQuorumFlag, _ = version.NewVersion("3.1.0")
