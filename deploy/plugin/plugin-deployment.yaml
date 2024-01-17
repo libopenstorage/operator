@@ -28,7 +28,7 @@ spec:
           ports:
             - containerPort: 9443
               protocol: TCP
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           securityContext: 
             allowPrivilegeEscalation: false
             capabilities:
