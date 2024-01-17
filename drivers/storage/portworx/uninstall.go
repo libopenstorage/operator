@@ -412,6 +412,7 @@ func (u *uninstallPortworx) RunNodeWiper(
 	if strings.Contains(wiperImage, "monitor") {
 		logrus.Warnf("Using oci-monitor %s as node-wiper image", wiperImage)
 		ds.Spec.Template.Spec.Containers[0].Command = []string{"/px-node-wiper"}
+		pxutil.AppendUserVolumeMounts(&ds.Spec.Template.Spec, u.cluster.Spec.Volumes)
 	}
 
 	if u.cluster.Spec.ImagePullSecret != nil && *u.cluster.Spec.ImagePullSecret != "" {

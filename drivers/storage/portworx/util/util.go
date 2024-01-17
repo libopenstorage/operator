@@ -1680,6 +1680,7 @@ func GetTLSCipherSuites(cluster *corev1.StorageCluster) (string, error) {
 	}
 	return strings.Join(outList, ","), nil
 }
+
 func GetKvdbMap(k8sClient client.Client,
 	cluster *corev1.StorageCluster,
 ) map[string]*kvdb_api.BootstrapEntry {
@@ -1710,6 +1711,7 @@ func GetKvdbMap(k8sClient client.Client,
 	}
 	return kvdbNodeMap
 }
+
 func blobToBootstrapEntries(
 	entriesBlob []byte,
 ) (map[string]*kvdb_api.BootstrapEntry, error) {
@@ -1725,4 +1727,46 @@ func blobToBootstrapEntries(
 		retMap[e.ID] = e
 	}
 	return retMap, nil
+}
+
+// AppendUserVolumeMounts appends "user" vol specs to the pod spec
+//   - note, the user volume specs will override container mounts, if the mount
+//     destination directory is the same
+//   - caveat: caller needs to ensure that the volume specs NAMES are unique
+func AppendUserVolumeMounts(
+	podSpec *v1.PodSpec,
+	userVolSpecList []corev1.VolumeSpec,
+) {
+	if podSpec == nil {
+		return
+	} else if len(userVolSpecList) == 0 {
+		return
+	}
+
+	// make map of user-volumes, also append vols to pod spec
+	usrSpecMap := make(map[string]corev1.VolumeSpec)
+	for _, v := range userVolSpecList {
+		usrSpecMap[v.MountPath] = v
+		podSpec.Volumes = append(podSpec.Volumes, v1.Volume{
+			Name:         UserVolumeName(v.Name),
+			VolumeSource: v.VolumeSource,
+		})
+	}
+
+	// update container volumes, when destination-dir matches
+	for idx1, cntr := range podSpec.Containers {
+		for idx2, cv := range cntr.VolumeMounts {
+			if uv, has := usrSpecMap[cv.MountPath]; has {
+				logrus.Debugf("Replacing container %s:%s mount '%s' with user-mount '%s'",
+					cntr.Name, cv.MountPath, cv.Name, uv.Name)
+
+				podSpec.Containers[idx1].VolumeMounts[idx2] = v1.VolumeMount{
+					Name:             UserVolumeName(uv.Name),
+					MountPath:        uv.MountPath,
+					ReadOnly:         uv.ReadOnly,
+					MountPropagation: uv.MountPropagation,
+				}
+			}
+		}
+	}
 }
