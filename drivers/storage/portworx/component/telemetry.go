@@ -114,13 +114,15 @@ const (
 	stagingArcusRestProxyURL        = "rest.staging-cloud-support.purestorage.com"
 	stagingArcusRegisterProxyURL    = "register.staging-cloud-support.purestorage.com"
 
-	// Ports for telemetry components
+	// Ports/offsets for telemetry components
 	defaultCCMListeningPort            = 9024
 	defaultCCMListeningPortForPXge2138 = 9029
+	ccmListeningPortOffset             = 20
 	defaultCollectorPort               = 10000
 	defaultRegisterPort                = 12001
 	defaultPhonehomePort               = 12002
 	pxDefaultCOListeningPort           = 9030
+	coListeningPortOffset              = 21
 
 	arcusPingInterval = 6 * time.Second
 	arcusPingRetry    = 5
@@ -1248,7 +1250,7 @@ func GetCCMListeningPort(cluster *corev1.StorageCluster) int {
 	if startPort == pxutil.DefaultStartPort {
 		return defCCMPort
 	}
-	return startPort + 20
+	return startPort + ccmListeningPortOffset
 }
 
 func GetPxCOListeningPort(cluster *corev1.StorageCluster) int {
@@ -1256,7 +1258,7 @@ func GetPxCOListeningPort(cluster *corev1.StorageCluster) int {
 	if startPort == pxutil.DefaultStartPort {
 		return pxDefaultCOListeningPort
 	}
-	return startPort + 21
+	return startPort + coListeningPortOffset
 }
 
 func getCCMCloudSupportPorts(cluster *corev1.StorageCluster, port int) (int, int, int) {
