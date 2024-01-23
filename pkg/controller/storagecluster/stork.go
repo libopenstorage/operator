@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -52,10 +51,6 @@ const (
 	// K8S scheduler policy decoder changed in this version.
 	// https://github.com/kubernetes/kubernetes/blob/release-1.21/pkg/scheduler/scheduler.go#L306
 	policyDecoderChangeVersion = "1.17.0"
-	// Stork scheduler cannot run with kube-scheduler image > v1.22
-	pinnedStorkSchedulerVersion                = "1.21.4"
-	minK8sVersionForPinnedStorkScheduler       = "1.22.0"
-	minK8sVersionForKubeSchedulerConfiguration = "1.23.0"
 )
 
 const (
@@ -296,14 +291,10 @@ func (c *Controller) createStorkConfigMap(
 	// Auto fill the default configuration params
 	schedconfigapi.SetDefaults_KubeSchedulerConfiguration(&kubeSchedulerConfiguration)
 
-	k8sMinVersionForKubeSchedulerConfiguration, err := version.NewVersion(minK8sVersionForKubeSchedulerConfiguration)
-	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForKubeSchedulerConfiguration)
-		return err
-	}
 	var policyConfig []byte
 	var dataKey string
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {
+	var err error
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerConfiguration) {
 		policyConfig, err = yaml.Marshal(kubeSchedulerConfiguration)
 		if err != nil {
 			logrus.WithError(err).Errorf("Could not encode policy object")
@@ -871,37 +862,14 @@ func (c *Controller) createStorkSchedDeployment(
 		return err
 	}
 
-	kubeSchedImage := "gcr.io/google_containers/kube-scheduler-amd64"
-	if k8sutil.IsNewKubernetesRegistry(c.kubernetesVersion) {
-		kubeSchedImage = k8sutil.DefaultK8SRegistryPath + "/kube-scheduler-amd64"
-	}
-
-	k8sMinVersionForPinnedStorkScheduler, err := version.NewVersion(minK8sVersionForPinnedStorkScheduler)
-	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForPinnedStorkScheduler)
-		return err
-	}
-
-	k8sMinVersionForKubeSchedulerConfiguration, err := version.NewVersion(minK8sVersionForKubeSchedulerConfiguration)
-	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForKubeSchedulerConfiguration)
-		return err
-	}
-
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForPinnedStorkScheduler) &&
-		c.kubernetesVersion.LessThan(k8sMinVersionForKubeSchedulerConfiguration) {
-		kubeSchedImage = kubeSchedImage + ":v" + pinnedStorkSchedulerVersion
-	} else {
-		kubeSchedImage = kubeSchedImage + ":v" + c.kubernetesVersion.String()
-	}
-	imageName := kubeSchedImage
+	imageName := k8sutil.GetDefaultKubeSchedulerImage(c.kubernetesVersion)
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.KubeScheduler != "" {
 		imageName = cluster.Status.DesiredImages.KubeScheduler
 	}
 	imageName = util.GetImageURN(cluster, imageName)
 
 	var command []string
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerConfiguration) {
 		command = []string{
 			"/usr/local/bin/kube-scheduler",
 			"--bind-address=0.0.0.0",
@@ -963,7 +931,7 @@ func (c *Controller) createStorkSchedDeployment(
 		command,
 		targetCPUQuantity,
 		updatedTopologySpreadConstraints,
-		c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration))
+		c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerConfiguration))
 
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
