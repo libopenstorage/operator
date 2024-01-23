@@ -44,6 +44,9 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			PxRepo:                    "portworx/px-repo:1.1.0",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
+			KubeScheduler:             "gcr.io/google_containers/kube-scheduler-amd64:v1.15.0",
+			KubeControllerManager:     "gcr.io/google_containers/kube-controller-manager-amd64:v1.15.0",
+			Pause:                     "registry.k8s.io/pause:3.1",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -86,6 +89,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			PxRepo:                    "portworx/px-repo:1.1.0",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
+			Pause:                     "registry.k8s.io/pause:3.1",
 		},
 	}
 
@@ -180,6 +184,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			PxRepo:                    "portworx/px-repo:1.1.0",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
+			Pause:                     "registry.k8s.io/pause:3.1",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -275,6 +280,9 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			PxRepo:                    "portworx/px-repo:1.1.0",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
+			KubeScheduler:             "gcr.io/google_containers/kube-scheduler-amd64:v1.15.0",
+			KubeControllerManager:     "gcr.io/google_containers/kube-controller-manager-amd64:v1.15.0",
+			Pause:                     "registry.k8s.io/pause:3.1",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -402,6 +410,7 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			PxRepo:                    "portworx/px-repo:1.1.0",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
+			Pause:                     "registry.k8s.io/pause:3.1",
 		},
 	}
 	cluster := &corev1.StorageCluster{
