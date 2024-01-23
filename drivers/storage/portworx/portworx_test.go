@@ -2681,8 +2681,16 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 }
 
 func TestStorageClusterDefaultsForStork(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.28.0",
+	}
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -2694,7 +2702,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	}
 
 	// Stork should be enabled by default
-	err := driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.True(t, cluster.Spec.Stork.Enabled)
 
@@ -2709,6 +2717,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.False(t, cluster.Spec.Stork.LockImage)
 	require.Empty(t, cluster.Status.DesiredImages.Stork)
+	require.Empty(t, cluster.Status.DesiredImages.KubeScheduler)
 
 	// Use image from release manifest if no image present
 	cluster.Spec.Stork = &corev1.StorkSpec{
@@ -2718,6 +2727,10 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
+	require.Equal(t, "registry.k8s.io/kube-scheduler-amd64:v1.28.0",
+		cluster.Status.DesiredImages.KubeScheduler)
+	require.Equal(t, "registry.k8s.io/kube-controller-manager-amd64:v1.28.0",
+		cluster.Status.DesiredImages.KubeControllerManager)
 
 	// Use given spec image if specified and reset desired image in status
 	cluster.Spec.Stork = &corev1.StorkSpec{
@@ -11599,6 +11612,8 @@ func (m *fakeManifest) GetVersions(
 			CsiLivenessProbe:           "docker.io/portworx/livenessprobe:v2.10.0-windows",
 			CsiWindowsDriver:           "docker.io/portworx/px-windows-csi-driver:23.8.0",
 			CsiWindowsNodeRegistrar:    "docker.io/portworx/csi-node-driver-registrar:v2.8.0-windows",
+			KubeScheduler:              k8sutil.GetDefaultKubeSchedulerImage(m.k8sVersion),
+			KubeControllerManager:      k8sutil.GetDefaultKubeControllerManagerImage(m.k8sVersion),
 		},
 	}
 	if m.k8sVersion != nil && m.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
