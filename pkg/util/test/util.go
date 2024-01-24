@@ -186,7 +186,7 @@ var (
 	opVer23_5_1, _                    = version.NewVersion("23.5.1-")
 	opVer23_7, _                      = version.NewVersion("23.7.0-")
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
-	pxOperatorMasterVersion, _        = version.NewVersion(PxOperatorMasterVersion)
+	OpVer23_10_3, _                   = version.NewVersion("23.10.3-")
 
 	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
 	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
@@ -2481,8 +2481,8 @@ func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCl
 	t := func() (interface{}, bool, error) {
 		logrus.Debug("CSI is enabled in StorageCluster")
 
-		// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
-		if opVersion, _ := GetPxOperatorVersion(); pxVersion.GreaterThanOrEqual(pxVer2_13) && opVersion.GreaterThanOrEqual(pxOperatorMasterVersion) {
+		// After operator version 23.10.3, CSI node registrar container is inside portworx-api pods
+		if opVersion, _ := GetPxOperatorVersion(); pxVersion.GreaterThanOrEqual(pxVer2_13) && opVersion.GreaterThanOrEqual(OpVer23_10_3) {
 			if err := validateCsiContainerInPxApiPods(cluster.Namespace, true, timeout, interval); err != nil {
 				return nil, true, err
 			}
@@ -2503,8 +2503,7 @@ func ValidateCsiEnabled(pxImageList map[string]string, cluster *corev1.StorageCl
 		var pods *v1.PodList
 		var err error
 
-		// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
-		if opVersion, _ := GetPxOperatorVersion(); pxVersion.GreaterThanOrEqual(pxVer2_13) && opVersion.GreaterThanOrEqual(pxOperatorMasterVersion) {
+		if opVersion, _ := GetPxOperatorVersion(); pxVersion.GreaterThanOrEqual(pxVer2_13) && opVersion.GreaterThanOrEqual(OpVer23_10_3) {
 			pods, err = coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx-api"})
 			if err != nil {
 				return nil, true, err
@@ -2559,8 +2558,7 @@ func ValidateCsiDisabled(cluster *corev1.StorageCluster, pxCsiDp *appsv1.Deploym
 
 	t := func() (interface{}, bool, error) {
 		logrus.Debug("CSI is disabled in StorageCluster")
-		// TODO: Need to change "pxOperatorMasterVersion" to the release version when released
-		if opVersion, _ := GetPxOperatorVersion(); pxVersion.GreaterThanOrEqual(pxVer2_13) && opVersion.GreaterThanOrEqual(pxOperatorMasterVersion) {
+		if opVersion, _ := GetPxOperatorVersion(); pxVersion.GreaterThanOrEqual(pxVer2_13) && opVersion.GreaterThanOrEqual(OpVer23_10_3) {
 			if err := validateCsiContainerInPxApiPods(cluster.Namespace, false, timeout, interval); err != nil {
 				return nil, true, err
 			}
