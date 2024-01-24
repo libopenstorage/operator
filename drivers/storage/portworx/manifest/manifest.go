@@ -191,10 +191,12 @@ func (m *manifest) GetVersions(
 	var provider versionProvider
 	ver := pxutil.GetImageTag(cluster.Spec.Image)
 	currPxVer, err := version.NewSemver(ver)
-	if err == nil {
-		if currPxVer.LessThan(pxVer2_5_7) {
-			provider = newDeprecatedManifest(ver)
-		}
+	if currPxVer == nil || err != nil {
+		// note, dev-bulids like `c2bb2a0_14e4543` won't parse correctly, so adding this as a failback
+		currPxVer = pxutil.GetPortworxVersion(cluster)
+	}
+	if currPxVer != nil && currPxVer.LessThan(pxVer2_5_7) {
+		provider = newDeprecatedManifest(ver)
 	}
 
 	if provider == nil {
@@ -233,9 +235,6 @@ func fillDefaults(
 	rel *Version,
 	k8sVersion *version.Version,
 ) {
-	if rel.Components.Stork == "" {
-		rel.Components.Stork = defaultStorkImage
-	}
 	if rel.Components.Autopilot == "" {
 		rel.Components.Autopilot = defaultAutopilotImage
 	}
@@ -256,10 +255,38 @@ func fillDefaults(
 	if rel.Components.DynamicPluginProxy == "" {
 		rel.Components.DynamicPluginProxy = DefaultDynamicPluginProxyImage
 	}
+	fillStorkDefaults(rel, k8sVersion)
 	fillCSIDefaults(rel, k8sVersion)
 	fillPrometheusDefaults(rel, k8sVersion)
 	fillGrafanaDefaults(rel, k8sVersion)
 	fillTelemetryDefaults(rel)
+	fillK8sDefaults(rel, k8sVersion)
+}
+
+func fillStorkDefaults(
+	rel *Version,
+	k8sVersion *version.Version,
+) {
+	if rel.Components.Stork == "" {
+		rel.Components.Stork = defaultStorkImage
+	}
+
+	if rel.Components.KubeScheduler == "" {
+		rel.Components.KubeScheduler = k8sutil.GetDefaultKubeSchedulerImage(k8sVersion)
+	}
+}
+
+func fillK8sDefaults(
+	rel *Version,
+	k8sVersion *version.Version,
+) {
+	if rel.Components.KubeControllerManager == "" {
+		rel.Components.KubeControllerManager = k8sutil.GetDefaultKubeControllerManagerImage(k8sVersion)
+	}
+
+	if rel.Components.Pause == "" {
+		rel.Components.Pause = pxutil.ImageNamePause
+	}
 }
 
 func fillCSIDefaults(

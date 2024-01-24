@@ -44,6 +44,9 @@ func TestManifestWithNewerPortworxVersion(t *testing.T) {
 			PxRepo:                    "portworx/px-repo:1.1.0",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
+			KubeScheduler:             "gcr.io/google_containers/kube-scheduler-amd64:v1.15.0",
+			KubeControllerManager:     "gcr.io/google_containers/kube-controller-manager-amd64:v1.15.0",
+			Pause:                     "registry.k8s.io/pause:3.1",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -86,6 +89,7 @@ func TestManifestWithNewerPortworxVersionAndConfigMapPresent(t *testing.T) {
 			PxRepo:                    "portworx/px-repo:1.1.0",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
+			Pause:                     "registry.k8s.io/pause:3.1",
 		},
 	}
 
@@ -180,6 +184,7 @@ func TestManifestWithOlderPortworxVersion(t *testing.T) {
 			PxRepo:                    "portworx/px-repo:1.1.0",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
+			Pause:                     "registry.k8s.io/pause:3.1",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -275,6 +280,9 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 			PxRepo:                    "portworx/px-repo:1.1.0",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
+			KubeScheduler:             "gcr.io/google_containers/kube-scheduler-amd64:v1.15.0",
+			KubeControllerManager:     "gcr.io/google_containers/kube-controller-manager-amd64:v1.15.0",
+			Pause:                     "registry.k8s.io/pause:3.1",
 		},
 	}
 	httpGet = func(url string) (*http.Response, error) {
@@ -303,6 +311,47 @@ func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
 	rel, err := m.GetVersions(cluster, true)
 	require.NoError(t, err)
 	require.Equal(t, expected, rel)
+}
+
+func TestManifestWithDevelopmentPortworxVersion(t *testing.T) {
+	k8sVersion, _ := version.NewSemver("1.28.4")
+	expected := &Version{
+		PortworxVersion: "c2bb2a0_14e4543",
+		Components: Release{
+			Stork:     "image/stork:22.33.44",
+			Autopilot: "image/autopi:55.666.777",
+		},
+	}
+	httpGet = func(url string) (*http.Response, error) {
+		body, _ := yaml.Marshal(expected)
+		return &http.Response{
+			Body: io.NopCloser(bytes.NewReader(body)),
+		}, nil
+	}
+
+	expected_ociMon := "px/image:" + expected.PortworxVersion
+	cluster := &corev1.StorageCluster{
+		Spec: corev1.StorageClusterSpec{
+			Image: expected_ociMon,
+			CommonConfig: corev1.CommonConfig{
+				Env: []v1.EnvVar{
+					{
+						Name:  envKeyReleaseManifestURL,
+						Value: "https://edge-install.portworx.com/3.1.0/version",
+					},
+				},
+			},
+		},
+	}
+
+	m := Instance()
+	m.Init(testutil.FakeK8sClient(), nil, k8sVersion)
+	rel, err := m.GetVersions(cluster, true)
+	require.NoError(t, err)
+	assert.Equal(t, rel.PortworxVersion, expected.PortworxVersion)
+	assert.Equal(t, rel.Components.Stork, expected.Components.Stork)
+	assert.Equal(t, rel.Components.Autopilot, expected.Components.Autopilot)
+	assert.Equal(t, rel.Components.NodeWiper, expected_ociMon)
 }
 
 func TestManifestWithUnknownNonSemvarPortworxVersion(t *testing.T) {
@@ -361,6 +410,7 @@ func TestManifestWithoutPortworxVersion(t *testing.T) {
 			PxRepo:                    "portworx/px-repo:1.1.0",
 			DynamicPlugin:             "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:        "nginxinc/nginx-unprivileged:1.25",
+			Pause:                     "registry.k8s.io/pause:3.1",
 		},
 	}
 	cluster := &corev1.StorageCluster{
