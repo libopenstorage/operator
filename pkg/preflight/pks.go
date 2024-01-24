@@ -1,7 +1,7 @@
 package preflight
 
 const (
-	pksDistribution = "gke"
+	pksDistribution = "pks"
 	// PksSystemNamespace PKS system namespace
 	PksSystemNamespace = "pks-system"
 )
