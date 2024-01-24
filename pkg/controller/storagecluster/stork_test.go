@@ -126,6 +126,8 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 		require.Equal(t, cluster.Namespace, storkConfigMap.Namespace)
 		require.Len(t, storkConfigMap.OwnerReferences, 1)
 		require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
+		k8sMinVersionForKubeSchedulerV1Configuration, err := version.NewVersion(minK8sVersionForKubeSchedulerV1Configuration)
+		require.NoError(t, err)
 
 		if k8sVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerV1Configuration) {
 			expectedKubeSchedulerConfiguration := schedconfig.KubeSchedulerConfiguration{
