@@ -23,7 +23,8 @@ import (
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/record"
 	schedcomp "k8s.io/component-base/config/v1alpha1"
-	schedconfig "k8s.io/kube-scheduler/config/v1beta3"
+	schedconfig "k8s.io/kube-scheduler/config/v1"
+	schedconfigbeta3 "k8s.io/kube-scheduler/config/v1beta3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -42,6 +43,7 @@ func TestStorkInstallation(t *testing.T) {
 	testStorkInstallation(t, "1.18.0")
 	testStorkInstallation(t, "1.23.0")
 	testStorkInstallation(t, "1.25.0")
+	testStorkInstallation(t, "1.29.0")
 }
 
 func testStorkInstallation(t *testing.T, k8sVersionStr string) {
@@ -108,42 +110,15 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 		// Stork ConfigMap
 		leaderElect := true
 		schedulerName := storkDeploymentName
-		expectedKubeSchedulerConfiguration := schedconfig.KubeSchedulerConfiguration{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "KubeSchedulerConfiguration",
-				APIVersion: "kubescheduler.config.k8s.io/v1beta3",
-			},
-			LeaderElection: schedcomp.LeaderElectionConfiguration{
-				LeaderElect:       &leaderElect,
-				ResourceNamespace: "kube-test",
-				ResourceName:      storkSchedDeploymentName,
-				LeaseDuration:     metav1.Duration{Duration: 15 * time.Second},
-				RenewDeadline:     metav1.Duration{Duration: 10 * time.Second},
-				RetryPeriod:       metav1.Duration{Duration: 2 * time.Second},
-				ResourceLock:      "leases",
-			},
-			Profiles: []schedconfig.KubeSchedulerProfile{
-				{
-					SchedulerName: &schedulerName,
-				},
-			},
-			Extenders: []schedconfig.Extender{
-				{
-					URLPrefix: fmt.Sprintf(
-						"http://%s.%s:%d",
-						storkServiceName, "kube-test", storkServicePort,
-					),
-					FilterVerb:       "filter",
-					PrioritizeVerb:   "prioritize",
-					Weight:           5,
-					EnableHTTPS:      false,
-					NodeCacheCapable: false,
-					HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
-				},
-			},
+		leaderElectionConfiguration := schedcomp.LeaderElectionConfiguration{
+			LeaderElect:       &leaderElect,
+			ResourceNamespace: "kube-test",
+			ResourceName:      storkSchedDeploymentName,
+			LeaseDuration:     metav1.Duration{Duration: 15 * time.Second},
+			RenewDeadline:     metav1.Duration{Duration: 10 * time.Second},
+			RetryPeriod:       metav1.Duration{Duration: 2 * time.Second},
+			ResourceLock:      "leases",
 		}
-
-		var actualKubeSchedulerConfiguration = schedconfig.KubeSchedulerConfiguration{}
 		storkConfigMap := &v1.ConfigMap{}
 		err = testutil.Get(k8sClient, storkConfigMap, storkConfigMapName, cluster.Namespace)
 		require.NoError(t, err)
@@ -151,14 +126,80 @@ func testStorkInstallation(t *testing.T, k8sVersionStr string) {
 		require.Equal(t, cluster.Namespace, storkConfigMap.Namespace)
 		require.Len(t, storkConfigMap.OwnerReferences, 1)
 		require.Equal(t, cluster.Name, storkConfigMap.OwnerReferences[0].Name)
-
-		err = yaml.Unmarshal([]byte(storkConfigMap.Data["stork-config.yaml"]), &actualKubeSchedulerConfiguration)
+		k8sMinVersionForKubeSchedulerV1Configuration, err := version.NewVersion(minK8sVersionForKubeSchedulerV1Configuration)
 		require.NoError(t, err)
 
-		require.True(t, reflect.DeepEqual(expectedKubeSchedulerConfiguration.TypeMeta, actualKubeSchedulerConfiguration.TypeMeta))
-		require.Equal(t, expectedKubeSchedulerConfiguration.Profiles[0].SchedulerName, actualKubeSchedulerConfiguration.Profiles[0].SchedulerName)
-		require.True(t, reflect.DeepEqual(expectedKubeSchedulerConfiguration.LeaderElection, actualKubeSchedulerConfiguration.LeaderElection))
-		require.True(t, reflect.DeepEqual(expectedKubeSchedulerConfiguration.Extenders[0], actualKubeSchedulerConfiguration.Extenders[0]))
+		if k8sVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerV1Configuration) {
+			expectedKubeSchedulerConfiguration := schedconfig.KubeSchedulerConfiguration{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "KubeSchedulerConfiguration",
+					APIVersion: "kubescheduler.config.k8s.io/v1",
+				},
+				LeaderElection: leaderElectionConfiguration,
+				Profiles: []schedconfig.KubeSchedulerProfile{
+					{
+						SchedulerName: &schedulerName,
+					},
+				},
+				Extenders: []schedconfig.Extender{
+					{
+						URLPrefix: fmt.Sprintf(
+							"http://%s.%s:%d",
+							storkServiceName, "kube-test", storkServicePort,
+						),
+						FilterVerb:       "filter",
+						PrioritizeVerb:   "prioritize",
+						Weight:           5,
+						EnableHTTPS:      false,
+						NodeCacheCapable: false,
+						HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
+					},
+				},
+			}
+			var actualKubeSchedulerConfiguration = schedconfig.KubeSchedulerConfiguration{}
+			err = yaml.Unmarshal([]byte(storkConfigMap.Data["stork-config.yaml"]), &actualKubeSchedulerConfiguration)
+			require.NoError(t, err)
+
+			require.True(t, reflect.DeepEqual(expectedKubeSchedulerConfiguration.TypeMeta, actualKubeSchedulerConfiguration.TypeMeta))
+			require.Equal(t, expectedKubeSchedulerConfiguration.Profiles[0].SchedulerName, actualKubeSchedulerConfiguration.Profiles[0].SchedulerName)
+			require.True(t, reflect.DeepEqual(expectedKubeSchedulerConfiguration.LeaderElection, actualKubeSchedulerConfiguration.LeaderElection))
+			require.True(t, reflect.DeepEqual(expectedKubeSchedulerConfiguration.Extenders[0], actualKubeSchedulerConfiguration.Extenders[0]))
+		} else {
+			expectedKubeSchedulerConfiguration := schedconfigbeta3.KubeSchedulerConfiguration{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "KubeSchedulerConfiguration",
+					APIVersion: "kubescheduler.config.k8s.io/v1beta3",
+				},
+				LeaderElection: leaderElectionConfiguration,
+				Profiles: []schedconfigbeta3.KubeSchedulerProfile{
+					{
+						SchedulerName: &schedulerName,
+					},
+				},
+				Extenders: []schedconfigbeta3.Extender{
+					{
+						URLPrefix: fmt.Sprintf(
+							"http://%s.%s:%d",
+							storkServiceName, "kube-test", storkServicePort,
+						),
+						FilterVerb:       "filter",
+						PrioritizeVerb:   "prioritize",
+						Weight:           5,
+						EnableHTTPS:      false,
+						NodeCacheCapable: false,
+						HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
+					},
+				},
+			}
+			var actualKubeSchedulerConfiguration = schedconfigbeta3.KubeSchedulerConfiguration{}
+			err = yaml.Unmarshal([]byte(storkConfigMap.Data["stork-config.yaml"]), &actualKubeSchedulerConfiguration)
+			require.NoError(t, err)
+
+			require.True(t, reflect.DeepEqual(expectedKubeSchedulerConfiguration.TypeMeta, actualKubeSchedulerConfiguration.TypeMeta))
+			require.Equal(t, expectedKubeSchedulerConfiguration.Profiles[0].SchedulerName, actualKubeSchedulerConfiguration.Profiles[0].SchedulerName)
+			require.True(t, reflect.DeepEqual(expectedKubeSchedulerConfiguration.LeaderElection, actualKubeSchedulerConfiguration.LeaderElection))
+			require.True(t, reflect.DeepEqual(expectedKubeSchedulerConfiguration.Extenders[0], actualKubeSchedulerConfiguration.Extenders[0]))
+		}
 	} else {
 		// Stork ConfigMap
 		expectedPolicy := SchedulerPolicy{
