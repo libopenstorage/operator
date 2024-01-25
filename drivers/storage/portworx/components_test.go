@@ -258,6 +258,26 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, cluster.Name, ds.OwnerReferences[0].Name)
 	require.Equal(t, expectedDaemonSet.Spec, ds.Spec)
 
+	// When Portworx version is greater than 2.13, daemonset contains csi driver registrar as well
+	cluster.Spec.Image = "portworx/oci-monitor:2.18.0"
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient = testutil.FakeK8sClient()
+	driver = portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	newExpectedDaemonSet := testutil.GetExpectedDaemonSet(t, "portworxAPIDaemonset_2_13.yaml")
+	newDs := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, newDs, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, newExpectedDaemonSet.Name, newDs.Name)
+	require.Equal(t, newExpectedDaemonSet.Namespace, newDs.Namespace)
+	require.Len(t, newDs.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, newDs.OwnerReferences[0].Name)
+	require.Equal(t, newExpectedDaemonSet.Spec, newDs.Spec)
+
 	// Portworx Proxy ServiceAccount
 	sa = &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, sa, component.PxProxyServiceAccountName, api.NamespaceSystem)
@@ -475,7 +495,7 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
 	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
@@ -483,8 +503,16 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
+		Status: corev1.StorageClusterStatus{
+			DesiredImages: &corev1.ComponentImages{},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.18.0",
+		},
 	}
-
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -517,6 +545,34 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "registry.k8s.io/pause:3.1", ds.Spec.Template.Spec.Containers[0].Image)
 
+	cluster.Status.DesiredImages.Pause = "private.repo.org/foo/bar:1.2.3"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "private.repo.org/foo/bar:1.2.3", ds.Spec.Template.Spec.Containers[0].Image)
+
+	// Case: Change image of csi-registrar-driver container in daemonset, daemonset should be recreated
+	// it is already deployed
+	ds.Spec.Template.Spec.Containers[1].Image = "new/csi-driver-image"
+	err = k8sClient.Update(context.TODO(), ds)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	ds = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3", ds.Spec.Template.Spec.Containers[1].Image)
+
+	cluster.Status.DesiredImages.CSINodeDriverRegistrar = "docker.io/repo/latest/image:1.2.3"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, "docker.io/repo/latest/image:1.2.3", ds.Spec.Template.Spec.Containers[1].Image)
+
 	// Case: If the daemon set was marked as deleted, the it should be recreated,
 	// even if it is already present
 	pxAPIComponent, _ := component.Get(component.PortworxAPIComponentName)
@@ -529,6 +585,8 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.NotEqual(t, "new/image", ds.Spec.Template.Spec.Containers[0].Image)
+	require.NotEqual(t, "new/csi-driver-image", ds.Spec.Template.Spec.Containers[1].Image)
+
 }
 
 func TestPortworxProxyIsNotDeployedWhenClusterInKubeSystem(t *testing.T) {
@@ -6379,7 +6437,24 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	}
 	require.True(t, validStatefulSetSocketPath)
 
+	// Case 1: When portworx version is less than 2.13
 	spec, err := driver.GetStoragePodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	logrus.Infof("Volumes %+v", spec.Volumes)
+
+	// CSI driver path
+	for _, v := range spec.Volumes {
+		if v.Name == "csi-driver-path" && v.HostPath.Path == customKubeletPath+"/csi-plugins/com.openstorage.pxd" {
+			validCSIDriverPath = true
+		}
+	}
+	require.True(t, validCSIDriverPath)
+
+	// Case 2: When px version is greater than or equal to 2.13, csi-node-driver-registrar becomes a part of the portworx-api daemonset instead of px storage pod
+	// Hence even the CSI volumes are defined in the portworx-api daemonset
+	cluster.Spec.Image = "portworx/image:2.15.2"
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	logrus.Infof("Volumes %+v", spec.Volumes)
 
@@ -14332,6 +14407,8 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 		GitVersion: "v1.17.0",
 	}
 	coreops.SetInstance(coreops.New(versionClient))
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient(fakeNode)
 	driver := portworx{}
@@ -14347,6 +14424,7 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.6.1",
 			CSI: &corev1.CSISpec{
 				Enabled: true,
 			},
@@ -14400,6 +14478,8 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 		GitVersion: "v1.17.0",
 	}
 	coreops.SetInstance(coreops.New(versionClient))
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -14415,6 +14495,7 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 			},
 		},
 		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.6.1",
 			CSI: &corev1.CSISpec{
 				Enabled: true,
 			},

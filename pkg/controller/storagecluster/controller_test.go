@@ -4215,6 +4215,15 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	err := k8sClient.Create(context.TODO(), k8sNode)
 	require.NoError(t, err)
 
+	// create portworx-api pod
+	pxApiPodName := "portworx-api"
+	m := map[string]string{
+		"name": pxApiPodName,
+	}
+	apipod := createPxApiPod(cluster, k8sNode.Name, m)
+	err = k8sClient.Create(context.TODO(), apipod)
+	require.NoError(t, err)
+
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name:      cluster.Name,
@@ -4244,7 +4253,8 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	// Also the pod should be changed with the updated spec
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	cluster.Spec.Image = "new/image"
+
+	cluster.Spec.Image = "new/image:2.17.3"
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 	oldPod, err := k8scontroller.GetPodFromTemplate(&podControl.Templates[0], cluster, clusterRef)
@@ -4267,14 +4277,12 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
-
 	// New revision should be created for the updated cluster spec
 	revisions = &appsv1.ControllerRevisionList{}
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
 	require.ElementsMatch(t, []int64{1, 2}, []int64{revisions.Items[0].Revision, revisions.Items[1].Revision})
-
 	// The old pod should be marked for deletion
 	require.Empty(t, podControl.Templates)
 	require.Empty(t, podControl.ControllerRefs)
@@ -4293,13 +4301,16 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result)
 
+	// Newer px pods are created
+	// Since version of portworx is greater than 2.13, portworx-api pods are deleted to re-register csi nodes driver
+	require.Len(t, podControl.DeletePodName, 1)
+	require.Equal(t, []string{pxApiPodName}, podControl.DeletePodName)
+
 	// New revision should not be created as the cluster spec is unchanged
 	revisions = &appsv1.ControllerRevisionList{}
 	err = testutil.List(k8sClient, revisions)
 	require.NoError(t, err)
 	require.Len(t, revisions.Items, 2)
-
-	require.Empty(t, podControl.DeletePodName)
 
 	require.Len(t, podControl.ControllerRefs, 1)
 	require.Equal(t, *clusterRef, podControl.ControllerRefs[0])
@@ -9984,4 +9995,30 @@ func TestGetDefaultMaxStorageNodesPerZone(t *testing.T) {
 	storageNodes, err = controller.getDefaultMaxStorageNodesPerZone(&nodeList, cluster, recorder)
 	require.Equal(t, uint32(0), storageNodes)
 	require.Equal(t, ErrNodeListEmpty, err)
+}
+
+func createPxApiPod(
+	cluster *corev1.StorageCluster,
+	nodeName string,
+	labels map[string]string,
+) *v1.Pod {
+
+	return &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "portworx-api",
+			Namespace: cluster.Namespace,
+			Labels:    labels,
+		},
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
+			Containers: []v1.Container{
+				{
+					Name: "portworx-api",
+				},
+				{
+					Name: "csi-node-driver-registrar",
+				},
+			},
+		},
+	}
 }
