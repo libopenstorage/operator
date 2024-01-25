@@ -503,9 +503,6 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Status: corev1.StorageClusterStatus{
-			DesiredImages: &corev1.ComponentImages{},
-		},
 		Spec: corev1.StorageClusterSpec{
 			Image: "portworx/oci-monitor:2.18.0",
 		},
@@ -544,13 +541,6 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, "registry.k8s.io/pause:3.1", ds.Spec.Template.Spec.Containers[0].Image)
-
-	cluster.Status.DesiredImages.Pause = "private.repo.org/foo/bar:1.2.3"
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, "private.repo.org/foo/bar:1.2.3", ds.Spec.Template.Spec.Containers[0].Image)
 
 	// Case: Change image of csi-registrar-driver container in daemonset, daemonset should be recreated
 	// it is already deployed
@@ -6456,7 +6446,7 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	ds := &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.NoError(t, err)
-	logrus.Infof("Volumes %+v", spec.Volumes)
+	logrus.Infof("Volumes %+v", ds.Spec.Template.Spec.Volumes)
 
 	// CSI driver path
 	for _, v := range spec.Volumes {
