@@ -33,7 +33,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	operatorutil "github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
-
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
@@ -85,7 +84,6 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 				"to or exceeds allowed maximum: %d", numUnavailable, maxUnavailable)
 			break
 		}
-
 		logrus.Infof("Marking pod %s/%s for deletion", cluster.Name, pod.Name)
 		oldPodsToDelete = append(oldPodsToDelete, pod.Name)
 		numUnavailable++

@@ -2,14 +2,12 @@ package component
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,10 +26,6 @@ const (
 	PxAPIServiceName = "portworx-api"
 	// PxAPIDaemonSetName name of the Portworx API daemon set
 	PxAPIDaemonSetName = "portworx-api"
-)
-
-var (
-	csiRegistrarAdditionPxVersion, _ = version.NewVersion("2.13")
 )
 
 type portworxAPI struct {
@@ -173,41 +167,27 @@ func (c *portworxAPI) createDaemonSet(
 		return getErr
 	}
 
-	var existingPauseImageName string
-	var csiNodeRegistrarImageName string
-	var existingCsiDriverRegistrarImageName string
+	var existingImageName string
 	if len(existingDaemonSet.Spec.Template.Spec.Containers) > 0 {
-		existingPauseImageName = existingDaemonSet.Spec.Template.Spec.Containers[0].Image
+		existingImageName = existingDaemonSet.Spec.Template.Spec.Containers[0].Image
 	}
 
-	pauseImageName := pxutil.ImageNamePause
-
+	imageName := pxutil.ImageNamePause
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.Pause != "" {
-		pauseImageName = cluster.Status.DesiredImages.Pause
+		imageName = cluster.Status.DesiredImages.Pause
 	}
-
-	//  If px version is greater than 2.13 then update daemonset when csi-node-driver-registrar image changes if CSI is enabled
-	pxVersion := pxutil.GetPortworxVersion(cluster)
-	checkCSIDriverRegistrarChange := false
-	if pxutil.IsCSIEnabled(cluster) && pxVersion.GreaterThanOrEqual(csiRegistrarAdditionPxVersion) && len(existingDaemonSet.Spec.Template.Spec.Containers) > 1 {
-		existingCsiDriverRegistrarImageName = existingDaemonSet.Spec.Template.Spec.Containers[1].Image
-		csiNodeRegistrarImageName = cluster.Status.DesiredImages.CSINodeDriverRegistrar
-		csiNodeRegistrarImageName = util.GetImageURN(cluster, csiNodeRegistrarImageName)
-		checkCSIDriverRegistrarChange = true
-	}
-
-	pauseImageName = util.GetImageURN(cluster, pauseImageName)
+	imageName = util.GetImageURN(cluster, imageName)
 	serviceAccount := pxutil.PortworxServiceAccountName(cluster)
 	existingServiceAccount := existingDaemonSet.Spec.Template.Spec.ServiceAccountName
 
-	modified := existingPauseImageName != pauseImageName ||
-		(checkCSIDriverRegistrarChange && (existingCsiDriverRegistrarImageName != csiNodeRegistrarImageName)) ||
+	modified := existingImageName != imageName ||
 		existingServiceAccount != serviceAccount ||
 		util.HasPullSecretChanged(cluster, existingDaemonSet.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDaemonSet.Spec.Template.Spec.Affinity) ||
 		util.HaveTolerationsChanged(cluster, existingDaemonSet.Spec.Template.Spec.Tolerations)
+
 	if !c.isCreated || errors.IsNotFound(getErr) || modified {
-		daemonSet := getPortworxAPIDaemonSetSpec(cluster, ownerRef, pauseImageName)
+		daemonSet := getPortworxAPIDaemonSetSpec(cluster, ownerRef, imageName)
 		if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, daemonSet, ownerRef); err != nil {
 			return err
 		}
@@ -270,19 +250,6 @@ func getPortworxAPIDaemonSetSpec(
 		},
 	}
 
-	// If CSI is enabled then run the csi-node-driver-registrar pods in the same daemonset
-	// Do this only if portworx version is greater than 2.13
-	pxVersion := pxutil.GetPortworxVersion(cluster)
-	if pxutil.IsCSIEnabled(cluster) && pxVersion.GreaterThanOrEqual(csiRegistrarAdditionPxVersion) {
-		csiRegistrar := csiRegistrarContainer(cluster)
-		if csiRegistrar != nil {
-			newDaemonSet.Spec.Template.Spec.Containers = append(newDaemonSet.Spec.Template.Spec.Containers, *csiRegistrar)
-			newDaemonSet.Spec.Template.Spec.Volumes = getCSIContainerVolume(cluster)
-		} else {
-			logrus.Warn("CSI enabled, but no CSI-Registrar container info")
-		}
-	}
-
 	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
 		newDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
 			[]v1.LocalObjectReference{},
@@ -329,129 +296,4 @@ func RegisterPortworxAPIComponent() {
 
 func init() {
 	RegisterPortworxAPIComponent()
-}
-
-// Function to return container specs for csi-node-driver-registrar
-func csiRegistrarContainer(cluster *corev1.StorageCluster) *v1.Container {
-	k8sVersion, _, _ := k8sutil.GetFullVersion()
-	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
-	disableCSIAlpha := pxutil.DisableCSIAlpha(cluster)
-	kubeletPath := pxutil.KubeletPath(cluster)
-	includeSnapshotController := pxutil.IncludeCSISnapshotController(cluster)
-	pxVersion := pxutil.GetPortworxVersion(cluster)
-	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
-	csiGenerator := pxutil.NewCSIGenerator(*k8sVersion, *pxVersion,
-		deprecatedCSIDriverName, disableCSIAlpha, kubeletPath, includeSnapshotController)
-
-	var csiConfig *pxutil.CSIConfiguration
-	if pxutil.IsCSIEnabled(cluster) {
-		csiConfig = csiGenerator.GetCSIConfiguration()
-	} else {
-		csiConfig = csiGenerator.GetBasicCSIConfiguration()
-	}
-
-	container := v1.Container{
-		ImagePullPolicy: imagePullPolicy,
-		Env: []v1.EnvVar{
-			{
-				Name:  "ADDRESS",
-				Value: "/csi/csi.sock",
-			},
-			{
-				Name: "KUBE_NODE_NAME",
-				ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{
-						FieldPath: "spec.nodeName",
-					},
-				},
-			},
-		},
-		VolumeMounts: []v1.VolumeMount{
-			{
-				Name:      "csi-driver-path",
-				MountPath: "/csi",
-			},
-			{
-				Name:      "registration-dir",
-				MountPath: "/registration",
-			},
-		},
-	}
-
-	if cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {
-		container.Name = pxutil.CSIRegistrarContainerName
-		container.Image = util.GetImageURN(
-			cluster,
-			cluster.Status.DesiredImages.CSINodeDriverRegistrar,
-		)
-		container.Args = []string{
-			"--v=5",
-			"--csi-address=$(ADDRESS)",
-			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", csiConfig.DriverBasePath()),
-		}
-	} else if cluster.Status.DesiredImages.CSIDriverRegistrar != "" {
-		container.Name = "csi-driver-registrar"
-		container.Image = util.GetImageURN(
-			cluster,
-			cluster.Status.DesiredImages.CSIDriverRegistrar,
-		)
-		container.Args = []string{
-			"--v=5",
-			"--csi-address=$(ADDRESS)",
-			"--mode=node-register",
-			fmt.Sprintf("--kubelet-registration-path=%s/csi.sock", csiConfig.DriverBasePath()),
-		}
-	}
-
-	if container.Name == "" {
-		return nil
-	}
-	return &container
-}
-
-// Returns the volume specs for the csi container
-func getCSIContainerVolume(cluster *corev1.StorageCluster) []v1.Volume {
-	k8sVersion, _, _ := k8sutil.GetFullVersion()
-	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
-	disableCSIAlpha := pxutil.DisableCSIAlpha(cluster)
-	kubeletPath := pxutil.KubeletPath(cluster)
-	includeSnapshotController := pxutil.IncludeCSISnapshotController(cluster)
-	pxVersion := pxutil.GetPortworxVersion(cluster)
-	csiGenerator := pxutil.NewCSIGenerator(*k8sVersion, *pxVersion,
-		deprecatedCSIDriverName, disableCSIAlpha, kubeletPath, includeSnapshotController)
-
-	if !pxutil.IsCSIEnabled(cluster) {
-		return []v1.Volume{}
-	}
-
-	csiConfig := csiGenerator.GetCSIConfiguration()
-	volumes := make([]v1.Volume, 0, 2)
-
-	volume1 := v1.Volume{
-		Name: "registration-dir",
-		VolumeSource: v1.VolumeSource{
-			HostPath: &v1.HostPathVolumeSource{
-				Path: kubeletPath + "/plugins_registry",
-				Type: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
-			},
-		},
-	}
-
-	if csiConfig.UseOlderPluginsDirAsRegistration {
-		volume1.HostPath.Path = kubeletPath + "/plugins"
-	}
-
-	volumes = append(volumes, volume1)
-
-	volume2 := v1.Volume{
-		Name: "csi-driver-path",
-		VolumeSource: v1.VolumeSource{
-			HostPath: &v1.HostPathVolumeSource{
-				Path: csiConfig.DriverBasePath(),
-				Type: hostPathTypePtr(v1.HostPathDirectoryOrCreate),
-			},
-		},
-	}
-	volumes = append(volumes, volume2)
-	return volumes
 }
