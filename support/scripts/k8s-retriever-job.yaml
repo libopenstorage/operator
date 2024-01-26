@@ -42,7 +42,7 @@ spec:
       serviceAccountName: portworx-operator
       containers:
         - name: k8s-retriever
-          image: calvarado2004/portworx-operator:23.12.0
+          image: calvarado2004/portworx-operator:24.02.0
           command:
             - /bin/sh
             - -c
