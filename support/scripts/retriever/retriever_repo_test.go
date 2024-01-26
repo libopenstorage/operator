@@ -8,6 +8,7 @@ import (
 	"k8s.io/client-go/rest"
 	"log"
 	"net/url"
+	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -29,6 +30,14 @@ type FileSystem interface {
 type errorInjectingFS struct {
 	afero.Fs
 	shouldError bool
+}
+
+func (efs *errorInjectingFS) MkdirAll(path string, perm os.FileMode) error {
+	if efs.shouldError {
+		// You can return any error here that you want your application to handle
+		return fmt.Errorf("injected error in MkdirAll")
+	}
+	return efs.Fs.MkdirAll(path, perm)
 }
 
 type mockContainerProcessor struct {

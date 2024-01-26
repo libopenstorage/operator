@@ -178,9 +178,6 @@ func (k8s *k8sRetriever) processPodAndEvents(pod *unstructured.Unstructured, sav
 func (k8s *k8sRetriever) getLogsForPod(namespace string, labelSelector string) error {
 	saveFilesPath := k8s.outputPath + "/px-pods"
 	err := k8s.fs.MkdirAll(saveFilesPath, 0766)
-	if err != nil && os.IsExist(err) {
-		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
-	}
 	if err != nil {
 		k8s.loggerToUse.Errorf("error creating directory: %s", err.Error())
 		panic(err.Error())

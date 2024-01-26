@@ -669,6 +669,7 @@ func TestGetLogsForPod(t *testing.T) {
 		client        client.Client
 		fs            FileSystem
 		outputPath    string
+		expectPanic   bool
 	}{
 		{
 			name:          "Successful retrieval and processing",
@@ -687,10 +688,32 @@ func TestGetLogsForPod(t *testing.T) {
 			fs:            &errorInjectingFS{Fs: afero.NewMemMapFs(), shouldError: false},
 			outputPath:    outputPath,
 		},
+		{
+			name:          "Error creating directory",
+			namespace:     "test-namespace",
+			labelSelector: "app=example",
+			client:        testutil.FakeK8sClient(),
+			fs:            &errorInjectingFS{Fs: afero.NewMemMapFs(), shouldError: true},
+			expectedError: true,
+			expectPanic:   true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Set up defer/recover to handle a panic
+			defer func() {
+				if r := recover(); r != nil {
+					// We are only expecting a panic if tt.expectedError is true
+					if !tt.expectedError {
+						t.Errorf("did not expect a panic but got one: %v", r)
+					}
+					// If we expected an error, and a panic occurred, we consider it a pass,
+					return
+				}
+			}()
+
+			// Now run the test as normal.
 			k8s := &k8sRetriever{
 				k8sClient:   tt.client,
 				context:     context.TODO(),
@@ -702,6 +725,10 @@ func TestGetLogsForPod(t *testing.T) {
 			err := k8s.getLogsForPod(tt.namespace, tt.labelSelector)
 			if (err != nil) != tt.expectedError {
 				t.Errorf("Expected error = %v, got %v", tt.expectedError, err)
+			}
+			// If a panic was expected but didn't occur, that's also an error.
+			if tt.expectedError && err == nil {
+				t.Errorf("Expected an error but none was returned")
 			}
 		})
 	}
