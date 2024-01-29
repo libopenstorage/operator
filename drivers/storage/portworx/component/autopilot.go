@@ -52,6 +52,8 @@ const (
 	AutoPilotSecretName = "autopilot-auth-token-secret"
 	// Autopilot Env variable name for token
 	AutopilotOCPTokenName = "OCP_TOKEN"
+	// Autopilot Env variable name for cacer
+	AutopilotOCPCACertName = "CA_CERT"
 )
 
 var (
@@ -262,7 +264,7 @@ func (c *autopilot) createConfigMap(
 
 func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.OwnerReference) error {
 
-	token, err := c.getPrometheusToken()
+	token, cert, err := c.getPrometheusTokenAndCert()
 	if err != nil {
 		return err
 	}
@@ -275,7 +277,8 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
 			Data: map[string][]byte{
-				"token": []byte(token),
+				"token":  []byte(token),
+				"cacert": []byte(cert),
 			},
 		},
 		ownerRef,
@@ -477,6 +480,18 @@ func (c *autopilot) createDeployment(
 					Name: AutoPilotSecretName,
 				},
 				Key: "token",
+			},
+		},
+	}
+
+	envMap[AutopilotOCPCACertName] = &v1.EnvVar{
+		Name: AutopilotOCPCACertName,
+		ValueFrom: &v1.EnvVarSource{
+			SecretKeyRef: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: AutoPilotSecretName,
+				},
+				Key: "cacert",
 			},
 		},
 	}
@@ -707,7 +722,7 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 	return volumes, volumeMounts
 }
 
-func (c *autopilot) getPrometheusToken() (string, error) {
+func (c *autopilot) getPrometheusTokenAndCert() (string, string, error) {
 	fmt.Println("getPrometheusToken")
 	secrets := &v1.SecretList{}
 	err := c.k8sClient.List(
@@ -719,35 +734,48 @@ func (c *autopilot) getPrometheusToken() (string, error) {
 	if err != nil {
 		// Handle the error
 		fmt.Println("Error fetching secrets: ", err)
-		return "", err
+		return "", "", err
 	}
 
 	// Iterate through the list and process secrets
-	var encodedToken string
+	var encodedToken, caCert string
+	var secretFound bool
 	for _, secret := range secrets.Items {
 		fmt.Println("Secret : ", secret.Name)
 
 		// Process each secret, for example, print its name
 		if strings.HasPrefix(secret.Name, "prometheus-user-workload-token") {
+			secretFound = true
 			fmt.Println("Found secret : ", secret.Name)
 			// Retrieve the token data from the secret as []byte
 			tokenBytes, ok := secret.Data["token"]
 			if !ok {
 				// Handle the case where the "token" key is not present in the secret's Data
 				fmt.Println("Token not found in secret")
-				return "", fmt.Errorf("Token not found in secret")
+				return encodedToken, caCert, fmt.Errorf("Token not found in secret")
 			}
 
 			// Convert the []byte token data to a b64 string
 			encodedToken = base64.StdEncoding.EncodeToString(tokenBytes)
+
 			fmt.Println(encodedToken)
+
+			cert, ok := secret.Data["ca.crt"]
+			if !ok {
+				// Handle the case where the "token" key is not present in the secret's Data
+				fmt.Println("Cert not found in secret")
+				return encodedToken, caCert, fmt.Errorf("Cert not found in secret")
+			}
+			caCert = string(cert)
 		}
 	}
-	fmt.Println(encodedToken)
-	if encodedToken == "" {
-		return "", fmt.Errorf("prometheus-user-workload-token not found. Please make sure that user workload is enabled in openshift.")
+	fmt.Println("encodedToken ", encodedToken)
+	fmt.Println("caCert ", caCert)
+
+	if !secretFound {
+		return "", "", fmt.Errorf("prometheus-user-workload-token not found. Please make sure that user workload is enabled in openshift.")
 	}
-	return encodedToken, nil
+	return encodedToken, caCert, nil
 }
 
 func GetHost(k8sClient client.Client) (string, error) {
