@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"reflect"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	routev1 "github.com/openshift/api/route/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -43,10 +45,12 @@ const (
 	AutopilotContainerName = "autopilot"
 	// AutopilotDefaultProviderEndpoint endpoint of default provider
 	AutopilotDefaultProviderEndpoint = "http://px-prometheus:9090"
-
-	defaultAutopilotCPU = "0.1"
-
+	// AutopilotDefaultReviewersKey is a key for default reviewers array in gitops config map
+	AutopilotDefaultReviewersKey = "defaultReviewers"
+	defaultAutopilotCPU          = "0.1"
 	defaultAutopilotCPULimit = "0.25"
+
+	AutoPilotSecretName = "autopilot-auth-token-secret"
 )
 
 var (
@@ -132,6 +136,9 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := c.createDeployment(cluster, ownerRef); err != nil {
 		return err
 	}
+	if err := c.createSecret(cluster.Namespace, ownerRef); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -150,6 +157,9 @@ func (c *autopilot) Delete(cluster *corev1.StorageCluster) error {
 		return err
 	}
 	if err := k8sutil.DeleteDeployment(c.k8sClient, AutopilotDeploymentName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteSecret(c.k8sClient, AutoPilotSecretName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	c.MarkDeleted()
@@ -205,6 +215,28 @@ func (c *autopilot) createConfigMap(
 		ownerRef,
 	)
 	return err
+}
+
+func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.OwnerReference) error {
+
+	token, err := c.getPrometheusToken()
+	if err != nil {
+		return err
+	}
+	return k8sutil.CreateOrUpdateSecret(
+		c.k8sClient,
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            AutoPilotSecretName,
+				Namespace:       clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Data: map[string][]byte{
+				"token": []byte(token),
+			},
+		},
+		ownerRef,
+	)
 }
 
 func (c *autopilot) createServiceAccount(
@@ -624,6 +656,71 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 	sort.Sort(k8sutil.VolumeByName(volumes))
 	sort.Sort(k8sutil.VolumeMountByName(volumeMounts))
 	return volumes, volumeMounts
+}
+
+func (c *autopilot) getPrometheusToken() (string, error) {
+	fmt.Println("getPrometheusToken")
+	secrets := &v1.SecretList{}
+	err := c.k8sClient.List(
+		context.TODO(),
+		secrets,
+		client.InNamespace("openshift-user-workload-monitoring"),
+	)
+
+	if err != nil {
+		// Handle the error
+		fmt.Println("Error fetching secrets: ", err)
+		return "", err
+	}
+
+	// Iterate through the list and process secrets
+	var encodedToken string
+	for _, secret := range secrets.Items {
+		fmt.Println("Secret : ", secret.Name)
+
+		// Process each secret, for example, print its name
+		if strings.HasPrefix(secret.Name, "prometheus-user-workload-token") {
+			fmt.Println("Found secret : ", secret.Name)
+			// Retrieve the token data from the secret as []byte
+			tokenBytes, ok := secret.Data["token"]
+			if !ok {
+				// Handle the case where the "token" key is not present in the secret's Data
+				fmt.Println("Token not found in secret")
+				return "", fmt.Errorf("Token not found in secret")
+			}
+
+			// Convert the []byte token data to a b64 string
+			encodedToken = base64.StdEncoding.EncodeToString(tokenBytes)
+			fmt.Println(encodedToken)
+		}
+	}
+	fmt.Println(encodedToken)
+
+	return encodedToken, nil
+}
+
+func GetHost(k8sClient client.Client) (string, error) {
+	route := &routev1.Route{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      "thanos-querier",
+			Namespace: "openshift-monitoring",
+		},
+		route,
+	)
+	if err != nil {
+		fmt.Println("Error fetching route ", err.Error())
+		return "", fmt.Errorf("Error fetching route ", err.Error())
+	}
+
+	if route.Spec.Host == "" {
+		return "", fmt.Errorf("Host is empty")
+	}
+
+	fmt.Println(" route.Spec.Host ", route.Spec.Host)
+	return route.Spec.Host, nil
+
 }
 
 // RegisterAutopilotComponent registers the Autopilot component
