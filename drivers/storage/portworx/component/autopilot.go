@@ -561,6 +561,19 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 								AllowPrivilegeEscalation: boolPtr(false),
 								Privileged:               boolPtr(false),
 							},
+							Env: []v1.EnvVar{
+								{
+									Name: "OCP_TOKEN",
+									ValueFrom: &v1.EnvVarSource{
+										SecretKeyRef: &v1.SecretKeySelector{
+											LocalObjectReference: v1.LocalObjectReference{
+												Name: AutoPilotSecretName,
+											},
+											Key: "token",
+										},
+									},
+								},
+							},
 						},
 					},
 					Volumes: volumes,
