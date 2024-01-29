@@ -188,31 +188,34 @@ func (c *portworxAPI) createDaemonSet(
 
 	//  If px version is greater than 2.13 then update daemonset when csi-node-driver-registrar image changes if CSI is enabled
 	pxVersion := pxutil.GetPortworxVersion(cluster)
-	removeCSIRegistrar := false
-	addCSIRegistrar := false
+	addOrRemoveCSIRegistrar := false
 	checkCSIDriverRegistrarChange := false
-	if pxutil.IsCSIEnabled(cluster) && pxVersion.GreaterThanOrEqual(csiRegistrarAdditionPxVersion) && len(existingDaemonSet.Spec.Template.Spec.Containers) > 1 {
+	isCsiEnabled := pxutil.IsCSIEnabled(cluster)
+	pxVersionGTE2_13 := pxVersion.GreaterThanOrEqual(csiRegistrarAdditionPxVersion)
+	hasMultipleCsiContainers := len(existingDaemonSet.Spec.Template.Spec.Containers) > 1
+	isSingleCsiContainer := len(existingDaemonSet.Spec.Template.Spec.Containers) == 1
+
+	if isCsiEnabled && pxVersionGTE2_13 && hasMultipleCsiContainers {
 		existingCsiDriverRegistrarImageName = existingDaemonSet.Spec.Template.Spec.Containers[1].Image
 		csiNodeRegistrarImageName = cluster.Status.DesiredImages.CSINodeDriverRegistrar
 		csiNodeRegistrarImageName = util.GetImageURN(cluster, csiNodeRegistrarImageName)
 		checkCSIDriverRegistrarChange = true
-	} else if !pxutil.IsCSIEnabled(cluster) && pxVersion.GreaterThanOrEqual(csiRegistrarAdditionPxVersion) && len(existingDaemonSet.Spec.Template.Spec.Containers) > 1 {
+	} else if !isCsiEnabled && pxVersionGTE2_13 && hasMultipleCsiContainers {
 		// When CSI is disabled, remove the csi-node-driver-registrar container from the daemonset
-		removeCSIRegistrar = true
-
-	} else if pxVersion.LessThan(csiRegistrarAdditionPxVersion) && len(existingDaemonSet.Spec.Template.Spec.Containers) > 1 {
+		addOrRemoveCSIRegistrar = true
+	} else if !pxVersionGTE2_13 && hasMultipleCsiContainers {
 		// When px version is less than 2.13, remove the csi-node-driver-registrar container from the daemonset
-		removeCSIRegistrar = true
-	} else if pxutil.IsCSIEnabled(cluster) && pxVersion.GreaterThanOrEqual(csiRegistrarAdditionPxVersion) && len(existingDaemonSet.Spec.Template.Spec.Containers) == 1 {
+		addOrRemoveCSIRegistrar = true
+	} else if isCsiEnabled && pxVersionGTE2_13 && isSingleCsiContainer {
 		// When px version is greater than 2.13 and CSI is enabled, add the csi-node-driver-registrar container to the daemonset
-		addCSIRegistrar = true
+		addOrRemoveCSIRegistrar = true
 	}
 
 	pauseImageName = util.GetImageURN(cluster, pauseImageName)
 	serviceAccount := pxutil.PortworxServiceAccountName(cluster)
 	existingServiceAccount := existingDaemonSet.Spec.Template.Spec.ServiceAccountName
 
-	modified := existingPauseImageName != pauseImageName || removeCSIRegistrar || addCSIRegistrar ||
+	modified := existingPauseImageName != pauseImageName || addOrRemoveCSIRegistrar ||
 		(checkCSIDriverRegistrarChange && (existingCsiDriverRegistrarImageName != csiNodeRegistrarImageName)) ||
 		existingServiceAccount != serviceAccount ||
 		util.HasPullSecretChanged(cluster, existingDaemonSet.Spec.Template.Spec.ImagePullSecrets) ||
