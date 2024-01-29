@@ -11,6 +11,7 @@ import (
 
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	consolev1 "github.com/openshift/api/console/v1"
+	routev1 "github.com/openshift/api/route/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -207,6 +208,10 @@ func run(c *cli.Context) {
 	}
 
 	if err := consolev1.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
+	}
+
+	if err := routev1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
 
