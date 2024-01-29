@@ -728,7 +728,9 @@ func (c *autopilot) getPrometheusToken() (string, error) {
 		}
 	}
 	fmt.Println(encodedToken)
-
+	if encodedToken == "" {
+		return "", fmt.Errorf("prometheus-user-workload-token not found. Please make sure that user workload is enabled in openshift.")
+	}
 	return encodedToken, nil
 }
 
@@ -744,7 +746,7 @@ func GetHost(k8sClient client.Client) (string, error) {
 	)
 	if err != nil {
 		fmt.Println("Error fetching route ", err.Error())
-		return "", fmt.Errorf("Error fetching route ", err.Error())
+		return "", fmt.Errorf("Error fetching route %s", err.Error())
 	}
 
 	if route.Spec.Host == "" {

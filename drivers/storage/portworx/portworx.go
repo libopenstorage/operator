@@ -1527,7 +1527,7 @@ func setAutopilotDefaults(
 
 	hostUrl, err := component.GetHost(k8sClient)
 	if err != nil {
-		logrus.Errorf("Error during fetching autopilot host url ", err.Error())
+		logrus.Errorf("Error during fetching autopilot host url %s", err.Error())
 		return
 	}
 
