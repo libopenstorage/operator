@@ -805,7 +805,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Status.DesiredImages.Grafana = ""
 	}
 
-	setAutopilotDefaults(toUpdate)
+	setAutopilotDefaults(toUpdate, p.k8sClient)
 	setTLSDefaults(toUpdate)
 
 	if pxutil.IsFreshInstall(toUpdate) {
@@ -1519,8 +1519,15 @@ func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
 
 func setAutopilotDefaults(
 	toUpdate *corev1.StorageCluster,
+	k8sClient client.Client,
 ) {
 	if toUpdate.Spec.Autopilot == nil || !toUpdate.Spec.Autopilot.Enabled {
+		return
+	}
+
+	hostUrl, err := component.GetHost(k8sClient)
+	if err != nil {
+		logrus.Errorf("Error during fetching autopilot host url ", err.Error())
 		return
 	}
 
@@ -1530,7 +1537,7 @@ func setAutopilotDefaults(
 				Name: "default",
 				Type: "prometheus",
 				Params: map[string]string{
-					"url": component.AutopilotDefaultProviderEndpoint,
+					"url": hostUrl,
 				},
 			},
 		}
