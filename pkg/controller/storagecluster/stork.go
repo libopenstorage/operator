@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hashicorp/go-version"
 	"reflect"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -26,8 +26,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	schedcomp "k8s.io/component-base/config/v1alpha1"
-	schedconfig "k8s.io/kube-scheduler/config/v1beta3"
-	schedconfigapi "k8s.io/kubernetes/pkg/scheduler/apis/config/v1beta3"
+	schedconfig "k8s.io/kube-scheduler/config/v1"
+	schedconfigbeta3 "k8s.io/kube-scheduler/config/v1beta3"
+	schedconfigapi "k8s.io/kubernetes/pkg/scheduler/apis/config/v1"
+	schedconfigapibeta3 "k8s.io/kubernetes/pkg/scheduler/apis/config/v1beta3"
 	"sigs.k8s.io/yaml"
 )
 
@@ -52,10 +54,9 @@ const (
 	// K8S scheduler policy decoder changed in this version.
 	// https://github.com/kubernetes/kubernetes/blob/release-1.21/pkg/scheduler/scheduler.go#L306
 	policyDecoderChangeVersion = "1.17.0"
-	// Stork scheduler cannot run with kube-scheduler image > v1.22
-	pinnedStorkSchedulerVersion                = "1.21.4"
-	minK8sVersionForPinnedStorkScheduler       = "1.22.0"
-	minK8sVersionForKubeSchedulerConfiguration = "1.23.0"
+	// kubescheduler.config.k8s.io/v1 is GA'ed only in k8s 1.25
+	// so for 1.23 <= ver < 1.25 we should continue using kubescheduler.config.k8s.io/v1beta3
+	minK8sVersionForKubeSchedulerV1Configuration = "1.25.0"
 )
 
 const (
@@ -237,80 +238,121 @@ func (c *Controller) createStorkConfigMap(
 	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	policy := SchedulerPolicy{
-		Kind:       "Policy",
-		APIVersion: "kubescheduler.config.k8s.io/v1",
-		Extenders: []SchedulerExtender{
-			{
-				URLPrefix: fmt.Sprintf(
-					"http://%s.%s:%d",
-					storkServiceName, clusterNamespace, storkServicePort,
-				),
-				FilterVerb:       "filter",
-				PrioritizeVerb:   "prioritize",
-				Weight:           5,
-				EnableHTTPS:      false,
-				NodeCacheCapable: false,
-				HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute}.Nanoseconds(),
-			},
-		},
+	// KubeSchedulerConfiguration is beta in 1.23 and GA in 1.25
+	k8sMinVersionForKubeSchedulerV1Configuration, err := version.NewVersion(minK8sVersionForKubeSchedulerV1Configuration)
+	if err != nil {
+		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForKubeSchedulerV1Configuration)
+		return err
 	}
 
 	leaderElect := true
 	schedulerName := storkDeploymentName
-	kubeSchedulerConfiguration := schedconfig.KubeSchedulerConfiguration{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "KubeSchedulerConfiguration",
-			APIVersion: "kubescheduler.config.k8s.io/v1beta3",
-		},
-		LeaderElection: schedcomp.LeaderElectionConfiguration{
-			LeaderElect:       &leaderElect,
-			ResourceNamespace: clusterNamespace,
-			ResourceName:      storkSchedDeploymentName,
-			LeaseDuration:     metav1.Duration{Duration: 15 * time.Second},
-			RenewDeadline:     metav1.Duration{Duration: 10 * time.Second},
-			RetryPeriod:       metav1.Duration{Duration: 2 * time.Second},
-			ResourceLock:      "leases",
-		},
-		Profiles: []schedconfig.KubeSchedulerProfile{
-			{
-				SchedulerName: &schedulerName,
-			},
-		},
-		Extenders: []schedconfig.Extender{
-			{
-				URLPrefix: fmt.Sprintf(
-					"http://%s.%s:%d",
-					storkServiceName, clusterNamespace, storkServicePort,
-				),
-				FilterVerb:       "filter",
-				PrioritizeVerb:   "prioritize",
-				Weight:           5,
-				EnableHTTPS:      false,
-				NodeCacheCapable: false,
-				HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
-			},
-		},
+	leaderElectionConfiguration := schedcomp.LeaderElectionConfiguration{
+		LeaderElect:       &leaderElect,
+		ResourceNamespace: clusterNamespace,
+		ResourceName:      storkSchedDeploymentName,
+		LeaseDuration:     metav1.Duration{Duration: 15 * time.Second},
+		RenewDeadline:     metav1.Duration{Duration: 10 * time.Second},
+		RetryPeriod:       metav1.Duration{Duration: 2 * time.Second},
+		ResourceLock:      "leases",
 	}
 
-	// Auto fill the default configuration params
-	schedconfigapi.SetDefaults_KubeSchedulerConfiguration(&kubeSchedulerConfiguration)
-
-	k8sMinVersionForKubeSchedulerConfiguration, err := version.NewVersion(minK8sVersionForKubeSchedulerConfiguration)
-	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForKubeSchedulerConfiguration)
-		return err
-	}
 	var policyConfig []byte
 	var dataKey string
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {
-		policyConfig, err = yaml.Marshal(kubeSchedulerConfiguration)
-		if err != nil {
-			logrus.WithError(err).Errorf("Could not encode policy object")
-			return err
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerConfiguration) {
+		if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerV1Configuration) {
+			// enter this branch when k8s ver >= 1.25
+			kubeSchedulerConfigurationV1 := schedconfig.KubeSchedulerConfiguration{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "KubeSchedulerConfiguration",
+					APIVersion: "kubescheduler.config.k8s.io/v1",
+				},
+				LeaderElection: leaderElectionConfiguration,
+				Profiles: []schedconfig.KubeSchedulerProfile{
+					{
+						SchedulerName: &schedulerName,
+					},
+				},
+				Extenders: []schedconfig.Extender{
+					{
+						URLPrefix: fmt.Sprintf(
+							"http://%s.%s:%d",
+							storkServiceName, clusterNamespace, storkServicePort,
+						),
+						FilterVerb:       "filter",
+						PrioritizeVerb:   "prioritize",
+						Weight:           5,
+						EnableHTTPS:      false,
+						NodeCacheCapable: false,
+						HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
+					},
+				},
+			}
+			// Auto fill the default configuration params
+			schedconfigapi.SetDefaults_KubeSchedulerConfiguration(&kubeSchedulerConfigurationV1)
+			policyConfig, err = yaml.Marshal(kubeSchedulerConfigurationV1)
+			if err != nil {
+				logrus.WithError(err).Errorf("Could not encode policy object")
+				return err
+			}
+		} else {
+			// enter this branch when 1.23 <= k8s ver < 1.25
+			kubeSchedulerConfigurationV1Beta := schedconfigbeta3.KubeSchedulerConfiguration{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "KubeSchedulerConfiguration",
+					APIVersion: "kubescheduler.config.k8s.io/v1beta3",
+				},
+				LeaderElection: leaderElectionConfiguration,
+				Profiles: []schedconfigbeta3.KubeSchedulerProfile{
+					{
+						SchedulerName: &schedulerName,
+					},
+				},
+				Extenders: []schedconfigbeta3.Extender{
+					{
+						URLPrefix: fmt.Sprintf(
+							"http://%s.%s:%d",
+							storkServiceName, clusterNamespace, storkServicePort,
+						),
+						FilterVerb:       "filter",
+						PrioritizeVerb:   "prioritize",
+						Weight:           5,
+						EnableHTTPS:      false,
+						NodeCacheCapable: false,
+						HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
+					},
+				},
+			}
+
+			// Auto fill the default configuration params
+			schedconfigapibeta3.SetDefaults_KubeSchedulerConfiguration(&kubeSchedulerConfigurationV1Beta)
+			policyConfig, err = yaml.Marshal(kubeSchedulerConfigurationV1Beta)
+			if err != nil {
+				logrus.WithError(err).Errorf("Could not encode policy object")
+				return err
+			}
 		}
 		dataKey = "stork-config.yaml"
 	} else {
+		// enter this branch when k8s ver < 1.23
+		policy := SchedulerPolicy{
+			Kind:       "Policy",
+			APIVersion: "kubescheduler.config.k8s.io/v1",
+			Extenders: []SchedulerExtender{
+				{
+					URLPrefix: fmt.Sprintf(
+						"http://%s.%s:%d",
+						storkServiceName, clusterNamespace, storkServicePort,
+					),
+					FilterVerb:       "filter",
+					PrioritizeVerb:   "prioritize",
+					Weight:           5,
+					EnableHTTPS:      false,
+					NodeCacheCapable: false,
+					HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute}.Nanoseconds(),
+				},
+			},
+		}
 		policyConfig, err = json.Marshal(policy)
 		if err != nil {
 			logrus.WithError(err).Errorf("Could not encode policy object")
@@ -871,37 +913,14 @@ func (c *Controller) createStorkSchedDeployment(
 		return err
 	}
 
-	kubeSchedImage := "gcr.io/google_containers/kube-scheduler-amd64"
-	if k8sutil.IsNewKubernetesRegistry(c.kubernetesVersion) {
-		kubeSchedImage = k8sutil.DefaultK8SRegistryPath + "/kube-scheduler-amd64"
-	}
-
-	k8sMinVersionForPinnedStorkScheduler, err := version.NewVersion(minK8sVersionForPinnedStorkScheduler)
-	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForPinnedStorkScheduler)
-		return err
-	}
-
-	k8sMinVersionForKubeSchedulerConfiguration, err := version.NewVersion(minK8sVersionForKubeSchedulerConfiguration)
-	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForKubeSchedulerConfiguration)
-		return err
-	}
-
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForPinnedStorkScheduler) &&
-		c.kubernetesVersion.LessThan(k8sMinVersionForKubeSchedulerConfiguration) {
-		kubeSchedImage = kubeSchedImage + ":v" + pinnedStorkSchedulerVersion
-	} else {
-		kubeSchedImage = kubeSchedImage + ":v" + c.kubernetesVersion.String()
-	}
-	imageName := kubeSchedImage
+	imageName := k8sutil.GetDefaultKubeSchedulerImage(c.kubernetesVersion)
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.KubeScheduler != "" {
 		imageName = cluster.Status.DesiredImages.KubeScheduler
 	}
 	imageName = util.GetImageURN(cluster, imageName)
 
 	var command []string
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerConfiguration) {
 		command = []string{
 			"/usr/local/bin/kube-scheduler",
 			"--bind-address=0.0.0.0",
@@ -963,7 +982,7 @@ func (c *Controller) createStorkSchedDeployment(
 		command,
 		targetCPUQuantity,
 		updatedTopologySpreadConstraints,
-		c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration))
+		c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerConfiguration))
 
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
