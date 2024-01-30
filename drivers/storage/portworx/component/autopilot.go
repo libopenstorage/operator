@@ -95,6 +95,9 @@ var (
 				},
 			},
 		},
+	}
+
+	openshiftDeploymentVolume = []corev1.VolumeSpec{
 		{
 			Name:      "token-volume",
 			MountPath: "/var/local/secrets",
@@ -695,6 +698,11 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 	cluster *corev1.StorageCluster,
 ) ([]v1.Volume, []v1.VolumeMount) {
 	volumeSpecs := make([]corev1.VolumeSpec, 0)
+
+	if IsOCPUserWorkloadSupported(c.k8sClient, c) {
+		autopilotDeploymentVolumes = append(autopilotDeploymentVolumes, openshiftDeploymentVolume...)
+	}
+	
 	for _, v := range autopilotDeploymentVolumes {
 		vCopy := v.DeepCopy()
 		volumeSpecs = append(volumeSpecs, *vCopy)
