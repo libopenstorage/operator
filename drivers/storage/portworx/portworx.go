@@ -1251,10 +1251,16 @@ func setDefaultAutopilotProviders(
 	if toUpdate.Spec.Autopilot != nil && toUpdate.Spec.Autopilot.Enabled &&
 		len(toUpdate.Spec.Autopilot.Providers) == 0 {
 
-	hostUrl, err := component.GetHost(k8sClient)
-	if err != nil {
-		logrus.Errorf("Error during fetching autopilot host url %s", err.Error())
-		return
+	var hostUrl string
+	var err error
+	if component.IsOCPUserWorkloadSupported(k8sClient, nil) {
+		hostUrl, err = component.GetHost(k8sClient)
+		if err != nil {
+			logrus.Errorf("Error during fetching autopilot host url %s", err.Error())
+			return
+		}
+	} else {
+		hostUrl = component.AutopilotDefaultProviderEndpoint
 	}
 
 		toUpdate.Spec.Autopilot.Providers = []corev1.DataProviderSpec{

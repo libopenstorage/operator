@@ -3,6 +3,10 @@ package component
 import (
 	"context"
 	"fmt"
+	ocpconfig "github.com/openshift/api/config/v1"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	"github.com/sirupsen/logrus"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"reflect"
 	"sort"
 	"strings"
@@ -55,8 +59,9 @@ const (
 	// OpenshiftMonitoringRouteName name of OCP user-workload route
 	OpenshiftMonitoringRouteName = "thanos-querier"
 	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
-	OpenshiftMonitoringNamespace = "openshift-monitoring"
-
+	OpenshiftMonitoringNamespace        = "openshift-monitoring"
+	defaultAutopilotCPU                 = "0.1"
+	OpenshiftPrometheusSupportedVersion = "4.14"
 )
 
 var (
@@ -126,9 +131,10 @@ var (
 )
 
 type autopilot struct {
-	isCreated  bool
-	k8sClient  client.Client
-	k8sVersion version.Version
+	isCreated               bool
+	k8sClient               client.Client
+	k8sVersion              version.Version
+	isUserWorkloadSupported *bool
 }
 
 func (c *autopilot) Name() string {
@@ -174,8 +180,11 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := c.createDeployment(cluster, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createSecret(cluster.Namespace, ownerRef); err != nil {
-		return err
+
+	if IsOCPUserWorkloadSupported(c.k8sClient, c) {
+		if err := c.createSecret(cluster.Namespace, ownerRef); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -197,15 +206,19 @@ func (c *autopilot) Delete(cluster *corev1.StorageCluster) error {
 	if err := k8sutil.DeleteDeployment(c.k8sClient, AutopilotDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteSecret(c.k8sClient, AutoPilotSecretName, cluster.Namespace, *ownerRef); err != nil {
-		return err
+	if IsOCPUserWorkloadSupported(c.k8sClient, c) {
+		if err := k8sutil.DeleteSecret(c.k8sClient, AutoPilotSecretName, cluster.Namespace, *ownerRef); err != nil {
+			return err
+		}
 	}
+
 	c.MarkDeleted()
 	return nil
 }
 
 func (c *autopilot) MarkDeleted() {
 	c.isCreated = false
+	c.isUserWorkloadSupported = boolPtr(false)
 }
 
 func (c *autopilot) createConfigMap(
@@ -739,7 +752,63 @@ func (c *autopilot) getPrometheusTokenAndCert() (encodedToken, caCert string, er
 	return encodedToken, caCert, nil
 }
 
+func IsOCPUserWorkloadSupported(k8sClient client.Client, c *autopilot) bool {
+
+	if c != nil && c.isUserWorkloadSupported != nil {
+		return *c.isUserWorkloadSupported
+	}
+
+	gvk := schema.GroupVersionKind{
+		Kind:    ClusterOperatorKind,
+		Version: ClusterOperatorVersion,
+	}
+
+	exists, err := coreops.Instance().ResourceExists(gvk)
+	if err != nil {
+		logrus.Error(err)
+		return false
+	}
+
+	if exists {
+		operator := &ocpconfig.ClusterOperator{}
+		err := k8sClient.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name: OpenshiftAPIServer,
+			},
+			operator,
+		)
+
+		if err != nil {
+			logrus.Error(err)
+			if errors.IsNotFound(err) {
+				if c != nil {
+					c.isUserWorkloadSupported = boolPtr(false)
+				}
+			}
+			return false
+		}
+
+		for _, v := range operator.Status.Versions {
+			if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version, OpenshiftPrometheusSupportedVersion) {
+				if c != nil {
+					c.isUserWorkloadSupported = boolPtr(true)
+				}
+				return true
+			}
+		}
+	} else {
+		if c != nil {
+			c.isUserWorkloadSupported = boolPtr(false)
+		}
+		return false
+	}
+
+	return false
+}
+
 func GetHost(k8sClient client.Client) (string, error) {
+
 	route := &routev1.Route{}
 	err := k8sClient.Get(
 		context.TODO(),
