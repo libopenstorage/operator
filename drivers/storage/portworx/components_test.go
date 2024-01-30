@@ -3044,6 +3044,123 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	require.Equal(t, "docker.io/test/stork-connector:t2", image)
 }
 
+// test if user-workload can be enabled on non-openshift servers for AutoPilot
+func TestIsUserWorkloadSupportedOnNonOCPCluster(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: "non-openshift-version",
+			APIResources: []metav1.APIResource{
+				{
+					Kind: "non-openshift-kind",
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+
+	k8sClient := testutil.FakeK8sClient()
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	enabled := component.IsOCPUserWorkloadSupported(k8sClient, nil)
+	require.Equal(t, false, enabled)
+}
+
+// test if user-workload can be enabled on 4.14 version of openshift for AutoPilot
+func TestIsUserWorkloadSupportedForSupportedVersionOpenshift(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.14",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	enabled := component.IsOCPUserWorkloadSupported(k8sClient, nil)
+	require.Equal(t, true, enabled)
+
+}
+
+// test if install can be enabled on 4.13 version of openshift for AutoPilot
+func TestIsUserWorkloadSupportedForUnsupportedVersionOpenshift(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.13",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	enabled := component.IsOCPUserWorkloadSupported(k8sClient, nil)
+	require.Equal(t, false, enabled)
+
+}
+
 func TestAutopilotInstall(t *testing.T) {
 	// Start test with newer version (1.25 beyond) of Kubernetes first, on which PodSecurityPolicy is no longer existing
 	versionClient := fakek8sclient.NewSimpleClientset()
