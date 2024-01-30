@@ -1525,10 +1525,16 @@ func setAutopilotDefaults(
 		return
 	}
 
-	hostUrl, err := component.GetHost(k8sClient)
-	if err != nil {
-		logrus.Errorf("Error during fetching autopilot host url %s", err.Error())
-		return
+	var hostUrl string
+	var err error
+	if component.IsOCPUserWorkloadSupported(k8sClient, nil) {
+		hostUrl, err = component.GetHost(k8sClient)
+		if err != nil {
+			logrus.Errorf("Error during fetching autopilot host url %s", err.Error())
+			return
+		}
+	} else {
+		hostUrl = component.AutopilotDefaultProviderEndpoint
 	}
 
 	if len(toUpdate.Spec.Autopilot.Providers) == 0 {

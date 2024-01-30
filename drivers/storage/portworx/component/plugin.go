@@ -113,7 +113,7 @@ func (p *plugin) IsEnabled(cluster *corev1.StorageCluster) bool {
 			}
 
 			for _, v := range operator.Status.Versions {
-				if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version) {
+				if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version, OpenshiftSupportedVersion) {
 					p.isPluginSupported = boolPtr(true)
 					return true
 				}
@@ -349,14 +349,14 @@ func updateDataIfNginxConfigMap(cm *v1.ConfigMap, storageNs string) {
 	}
 }
 
-func isVersionSupported(v string) bool {
-	targetVersion, err := version.NewVersion(OpenshiftSupportedVersion)
+func isVersionSupported(current, target string) bool {
+	targetVersion, err := version.NewVersion(target)
 	if err != nil {
 		logrus.Errorf("Error during parsing version : %s ", err)
 		return false
 	}
 
-	currentVersion, err := version.NewVersion(v)
+	currentVersion, err := version.NewVersion(current)
 	if err != nil {
 		logrus.Errorf("Error during parsing version : %s ", err)
 		return false
