@@ -138,6 +138,7 @@ type autopilot struct {
 	k8sClient               client.Client
 	k8sVersion              version.Version
 	isUserWorkloadSupported *bool
+	isVolumeMounted         bool
 }
 
 func (c *autopilot) Name() string {
@@ -699,10 +700,11 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 ) ([]v1.Volume, []v1.VolumeMount) {
 	volumeSpecs := make([]corev1.VolumeSpec, 0)
 
-	if IsOCPUserWorkloadSupported(c.k8sClient, c) {
+	if IsOCPUserWorkloadSupported(c.k8sClient, c) && !c.isVolumeMounted {
+		c.isVolumeMounted = true
 		autopilotDeploymentVolumes = append(autopilotDeploymentVolumes, openshiftDeploymentVolume...)
 	}
-	
+
 	for _, v := range autopilotDeploymentVolumes {
 		vCopy := v.DeepCopy()
 		volumeSpecs = append(volumeSpecs, *vCopy)
@@ -761,7 +763,6 @@ func (c *autopilot) getPrometheusTokenAndCert() (encodedToken, caCert string, er
 }
 
 func IsOCPUserWorkloadSupported(k8sClient client.Client, c *autopilot) bool {
-
 	if c != nil && c.isUserWorkloadSupported != nil {
 		return *c.isUserWorkloadSupported
 	}
