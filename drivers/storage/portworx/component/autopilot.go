@@ -701,6 +701,7 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 ) ([]v1.Volume, []v1.VolumeMount) {
 	volumeSpecs := make([]corev1.VolumeSpec, 0)
 
+	fmt.Println("c.isVolumeMounted :: ", c.isVolumeMounted)
 	if IsOCPUserWorkloadSupported(c.k8sClient, c) && !c.isVolumeMounted {
 		c.isVolumeMounted = true
 		autopilotDeploymentVolumes = append(autopilotDeploymentVolumes, openshiftDeploymentVolume...)
@@ -800,6 +801,7 @@ func IsOCPUserWorkloadSupported(k8sClient client.Client, c *autopilot) bool {
 		}
 
 		for _, v := range operator.Status.Versions {
+			fmt.Println(" v.Name  : ", v.Name, " v.Version ", v.Version)
 			if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version, OpenshiftPrometheusSupportedVersion) {
 				if c != nil {
 					c.isUserWorkloadSupported = boolPtr(true)
