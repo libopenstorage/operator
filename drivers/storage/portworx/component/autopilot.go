@@ -278,6 +278,7 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 	if err != nil {
 		return err
 	}
+
 	return k8sutil.CreateOrUpdateSecret(
 		c.k8sClient,
 		&v1.Secret{

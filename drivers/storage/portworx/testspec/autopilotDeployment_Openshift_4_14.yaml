@@ -1,0 +1,148 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    scheduler.alpha.kubernetes.io/critical-pod: ""
+  labels:
+    tier: control-plane
+  name: autopilot
+  namespace: kube-test
+  ownerReferences:
+    - apiVersion: core.libopenstorage.org/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: StorageCluster
+      name: px-cluster
+spec:
+  selector:
+    matchLabels:
+      name: autopilot
+      tier: control-plane
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ""
+      labels:
+        name: autopilot
+        tier: control-plane
+        operator.libopenstorage.org/managed-by: portworx
+    spec:
+      containers:
+        - command:
+            - /autopilot
+            - --config=/etc/config/config.yaml
+            - --log-level=info
+          imagePullPolicy: Always
+          image: docker.io/portworx/autopilot:1.1.1
+          resources:
+            requests:
+              cpu: 100m
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+          name: autopilot
+          volumeMounts:
+            - name: ca-cert-volume
+              mountPath: /etc/ssl/certs
+              readOnly: true
+            - name: config-volume
+              mountPath: /etc/config
+            - name: token-volume
+              mountPath: /var/local/secrets
+              readOnly: true
+            - name: varcores
+              mountPath: /var/cores
+          env:
+            - name: PX_NAMESPACE
+              value: kube-test
+            - name: PX_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: apps-secret
+                  name: px-system-secrets
+      hostPID: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - "false"
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - "linux"
+                  - key: node-role.kubernetes.io/master
+                    operator: DoesNotExist
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - "false"
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - "linux"
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
+                  - key: node-role.kubernetes.io/worker
+                    operator: Exists
+              - matchExpressions:
+                  - key: px/enabled
+                    operator: NotIn
+                    values:
+                      - "false"
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - "linux"
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+                  - key: node-role.kubernetes.io/worker
+                    operator: Exists
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "name"
+                    operator: In
+                    values:
+                      - autopilot
+              topologyKey: "kubernetes.io/hostname"
+      serviceAccountName: autopilot
+      volumes:
+        - name: ca-cert-volume
+          secret:
+            defaultMode: 420
+            items:
+              - key: cacert
+                path: ca-certificates.crt
+            secretName: autopilot-auth-token-secret
+        - name: config-volume
+          configMap:
+            name: autopilot-config
+            defaultMode: 420
+            items:
+              - key: config.yaml
+                path: config.yaml
+        - name: token-volume
+          secret:
+            defaultMode: 420
+            items:
+              - key: token
+                path: token
+            secretName: autopilot-auth-token-secret
+        - hostPath:
+            path: /var/cores
+            type: ""
+          name: varcores
