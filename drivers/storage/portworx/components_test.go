@@ -12017,8 +12017,6 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 		// Node that does not return a scheduler node name, does not get counted towards quorum calculation as we cannot
 		// determine if it is part of the current k8s cluster or not.
 		{NonQuorumMember: false, NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
-		// Node that is not part of the cluster, does not get counted towards quorum calculation.
-		{NonQuorumMember: false, SchedulerNodeName: "node6", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
 		// Ignore node that is in Decommission state.
 		{NonQuorumMember: false, Status: osdapi.Status_STATUS_DECOMMISSION},
 	}
@@ -12061,10 +12059,12 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	defer mockCtrl.Finish()
 
 	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	mockClusterDomainServer := mock.NewMockOpenStorageClusterDomainsServer(mockCtrl)
 	sdkServerIP := "127.0.0.1"
 	sdkServerPort := 21883
 	mockSdk := mock.NewSdkServer(mock.SdkServers{
-		Node: mockNodeServer,
+		Node:           mockNodeServer,
+		ClusterDomains: mockClusterDomainServer,
 	})
 	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
 	require.NoError(t, err)
@@ -12095,6 +12095,11 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 			},
 		},
 	}}
+
+	// Since it is a metro DR cluster, there will be more than 1 cluster domain
+	expectedClusterDomainsEnumerateResp := &osdapi.SdkClusterDomainsEnumerateResponse{
+		ClusterDomainNames: []string{"domain 1", "domain 2"},
+	}
 	// StorageNode with ID 1,2,3 will run on the cluster
 	// k8s node4 doesn't meet affinity and node5 is tainted
 	// StorageNode with ID 6 and 7 don't belong to this cluster
@@ -12114,6 +12119,11 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	mockClusterDomainServer.EXPECT().
+		Enumerate(gomock.Any(), gomock.Any()).
+		Return(expectedClusterDomainsEnumerateResp, nil).
 		AnyTimes()
 
 	cluster := &corev1.StorageCluster{
