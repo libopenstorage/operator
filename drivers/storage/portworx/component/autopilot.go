@@ -742,13 +742,13 @@ func (c *autopilot) getPrometheusTokenAndCert() (encodedToken, caCert string, er
 			// Retrieve the token data from the secret as []byte
 			tokenBytes, ok := secret.Data["token"]
 			if !ok {
-				return encodedToken, caCert, fmt.Errorf("Token not found in secret")
+				return encodedToken, caCert, fmt.Errorf("token not found in secret")
 			}
 
 			// Retrieve the ca.cert data from the secret as []byte
 			cert, ok := secret.Data["ca.crt"]
 			if !ok {
-				return encodedToken, caCert, fmt.Errorf("Cert not found in secret")
+				return encodedToken, caCert, fmt.Errorf("cert not found in secret")
 			}
 
 			encodedToken = string(tokenBytes)
@@ -757,7 +757,7 @@ func (c *autopilot) getPrometheusTokenAndCert() (encodedToken, caCert string, er
 	}
 
 	if !secretFound {
-		return "", "", fmt.Errorf("prometheus-user-workload-token not found. Please make sure that user workload is enabled in openshift.")
+		return "", "", fmt.Errorf("prometheus-user-workload-token not found. Please make sure that user workload is enabled in openshift")
 	}
 	return encodedToken, caCert, nil
 }
@@ -832,7 +832,7 @@ func GetHost(k8sClient client.Client) (string, error) {
 	}
 
 	if route.Spec.Host == "" {
-		return "", fmt.Errorf("Host is empty")
+		return "", fmt.Errorf("host is empty")
 	}
 
 	return "https://" + route.Spec.Host, nil
