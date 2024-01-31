@@ -3332,8 +3332,8 @@ func TestIsUserWorkloadSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 
 }
 
-// test install on ocp cluster 4.14
-func TestAutopilotInstallOnOpenshift414(t *testing.T) {
+// test Autopilot install and Uninstall on ocp cluster 4.14
+func TestAutopilotInstallAndUninstallOnOpenshift414(t *testing.T) {
 	// Start test with newer version (1.25 beyond) of Kubernetes first, on which PodSecurityPolicy is no longer existing
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
@@ -3502,6 +3502,12 @@ func TestAutopilotInstallOnOpenshift414(t *testing.T) {
 
 	require.Equal(t, expectedDeployment.Spec.Template.Spec.Volumes, autopilotDeployment.Spec.Template.Spec.Volumes)
 	require.Equal(t, expectedDeployment.Spec.Template.Spec.Containers[0].VolumeMounts, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	autopilotComponent, _ := component.Get(component.AutopilotComponentName)
+	err = autopilotComponent.Delete(cluster)
+	autopilotComponent.MarkDeleted()
+	require.NoError(t, err)
+
 }
 
 func TestAutopilotInstall(t *testing.T) {
