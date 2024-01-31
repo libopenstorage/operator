@@ -20,6 +20,7 @@ type SdkServers struct {
 	Role            *MockOpenStorageRoleServer
 	Volume          *MockOpenStorageVolumeServer
 	PortworxService *MockPortworxServiceServer
+	ClusterDomains  *MockOpenStorageClusterDomainsServer
 }
 
 // SdkServer can be used to create a sdk server which implements mock server
