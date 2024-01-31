@@ -32,7 +32,6 @@ var listOfPods = []PodSelector{
 	{Name: "px-telemetry-phonehome", Label: "name=px-telemetry-phonehome"},
 	{Name: "stork", Label: "name=stork"},
 	{Name: "stork-scheduler", Label: "name=stork-scheduler"},
-	{Name: "retrieve-multipath-conf", Label: "name=retrieve-multipath-conf"},
 }
 
 // setupLogging sets up logging to a file and returns a logrus logger
