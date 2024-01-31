@@ -11366,6 +11366,136 @@ func TestDisableCSI_1_0(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+// Test to check the movement of csi registrar container when px version is upgraded/downgraded from 2.13
+func TestCSIRegistrarContainerShift(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.12.0",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
+			},
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Initially since px version is lesser than 2.13, oci monitor pods will have csi-registrar container
+	newDs := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, newDs, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(newDs.Spec.Template.Spec.Containers))
+
+	podSpec, err := driver.GetStoragePodSpec(cluster, "")
+	require.NoError(t, err)
+	require.Equal(t, 2, len(podSpec.Containers))
+
+	// On upgrading px version to 2.13, csi registrar containers will be moved to px-api pods
+	cluster.Spec.Image = "portworx/image:2.13.0"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	newDs = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, newDs, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(newDs.Spec.Template.Spec.Containers))
+
+	podSpec, err = driver.GetStoragePodSpec(cluster, "")
+	require.NoError(t, err)
+	require.Equal(t, 1, len(podSpec.Containers))
+
+	// Now downgrade version back to 2.12.0, csi-registrar container should be moved back to oci monitor pods
+	cluster.Spec.Image = "portworx/image:2.12.0"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	newDs = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, newDs, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(newDs.Spec.Template.Spec.Containers))
+
+	podSpec, err = driver.GetStoragePodSpec(cluster, "")
+	require.NoError(t, err)
+	require.Equal(t, 2, len(podSpec.Containers))
+
+}
+
+// Test to verify if disabling CSI for PX version >= 2.13 will remove csi-registrar container from px-api pods
+func TestDisableCSI_GTPxVersion2_13(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.14.0",
+	}
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.13.0",
+			CSI: &corev1.CSISpec{
+				Enabled: true,
+			},
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// When CSI is enabled, px-api pods will have csi-node-registration container
+	newDs := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, newDs, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(newDs.Spec.Template.Spec.Containers))
+
+	podSpec, err := driver.GetStoragePodSpec(cluster, "")
+	require.NoError(t, err)
+	require.Equal(t, 1, len(podSpec.Containers))
+
+	// disable CSI
+	cluster.Spec.CSI.Enabled = false
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Now px-api daemonset should have only one container
+	newDs = &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, newDs, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(newDs.Spec.Template.Spec.Containers))
+
+	podSpec, err = driver.GetStoragePodSpec(cluster, "")
+	require.NoError(t, err)
+	require.Equal(t, 1, len(podSpec.Containers))
+
+}
+
 func TestMonitoringMetricsEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
@@ -13490,6 +13620,120 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
 	require.NotEmpty(t, cluster.Status.DesiredImages.TelemetryProxy)
 	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
+}
+
+func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:2.12.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
+	}
+
+	// Incompatible PX & Telemetry Images
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	supported := pxutil.IsCOSupported(cluster)
+	require.False(t, supported)
+	configMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, configMap.Data["config_properties_px.yaml"], "certStoreType: \"k8s\"")
+	// Validate deployments
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 1)
+
+	// Compatible PX & Incompatible Telemetry Images
+	cluster.Spec.Image = "portworx/image:3.2.0"
+	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.0.3"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	supported = pxutil.IsCOSupported(cluster)
+	require.False(t, supported)
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, configMap.Data["config_properties_px.yaml"], "certStoreType: \"k8s\"")
+	// Validate deployments
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 1)
+
+	// Incompatible PX & compatible Telemetry Images
+	cluster.Spec.Image = "portworx/image:3.0.0"
+	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.2.5"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	supported = pxutil.IsCOSupported(cluster)
+	require.False(t, supported)
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, configMap.Data["config_properties_px.yaml"], "certStoreType: \"k8s\"")
+	// Validate deployments
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 1)
+
+	// Compatible PX & Telemetry Images
+	cluster.Spec.Image = "portworx/image:3.2.0"
+	cluster.Spec.Monitoring.Telemetry.Image = "purestorage/ccm-go:1.2.5"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	supported = pxutil.IsCOSupported(cluster)
+	require.True(t, supported)
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, configMap.Data["config_properties_px.yaml"], "certStoreType: \"kvstore\"")
+	require.Contains(t, configMap.Data["config_properties_px.yaml"], "serverAddress: \"127.0.0.1:9030\"")
+	// Validate deployments
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[1].Name, "REFRESH_TOKEN")
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[1].Value, "")
+
+	// Port shift on OCP
+	cluster.Annotations[pxutil.AnnotationIsOpenshift] = "true"
+	cluster.Spec.StartPort = nil
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	supported = pxutil.IsCOSupported(cluster)
+	require.True(t, supported)
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryRegister, cluster.Namespace)
+	require.NoError(t, err)
+	require.Contains(t, configMap.Data["config_properties_px.yaml"], "serverAddress: \"127.0.0.1:17022\"")
 }
 
 func TestValidateTelemetryEnabled(t *testing.T) {

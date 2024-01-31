@@ -308,6 +308,10 @@ var (
 	MinimumPxVersionMetricsCollector, _ = version.NewVersion("2.9.1")
 	// MinimumPxVersionAutoTLS is a minimal PX version that supports "auto-TLS" setup
 	MinimumPxVersionAutoTLS, _ = version.NewVersion("4.0.0")
+	// MinimumPxVersionCO minimum PX version to use 'container orchestrator'
+	MinimumPxVersionCO, _ = version.NewVersion("3.2")
+	// MinimumCcmGoVersionCO minimum ccm-go version to use 'container orchestrator'
+	MinimumCcmGoVersionCO, _ = version.NewVersion("1.2.3")
 	// MinimumPxVersionQuorumFlag is a minimal PX version that introduces the quorum member
 	// flag in the node object of the PX SDK response.
 	MinimumPxVersionQuorumFlag, _ = version.NewVersion("3.1.0")
@@ -1214,6 +1218,45 @@ func IsCCMGoSupported(pxVersion *version.Version) bool {
 	return pxVersion.GreaterThanOrEqual(MinimumPxVersionCCMGO)
 }
 
+// IsCOSupported returns true if px version is >= than MinimumPxVersionCO & ccm-go >= MinimumCcmGoVersionCO
+func IsCOSupported(cluster *corev1.StorageCluster) bool {
+	pxVersion := GetPortworxVersion(cluster)
+
+	if !IsCCMGoSupported(pxVersion) {
+		return false
+	}
+
+	ccmGoImage := strings.TrimSpace(cluster.Spec.Monitoring.Telemetry.Image)
+	if cluster.Spec.Monitoring.Telemetry.Image == "" {
+		if cluster.Status.DesiredImages == nil {
+			return false
+		}
+		ccmGoImage = cluster.Status.DesiredImages.Telemetry
+	}
+	ccmGoImage = util.GetImageURN(cluster, ccmGoImage)
+
+	logrus.Infof("ccmGoImage: %s", ccmGoImage)
+
+	if !strings.Contains(ccmGoImage, "ccm-go") {
+		return false
+	}
+
+	parts := strings.Split(ccmGoImage, ":")
+	if len(parts) < 2 {
+		logrus.Warnf("Failed to parse ccm-go image name:  %s.  Unable to determine tag.", ccmGoImage)
+		return false
+	}
+
+	ccmGoVersionStr := parts[len(parts)-1]
+	ccmGoVersion, err := version.NewVersion(ccmGoVersionStr)
+	if err != nil {
+		logrus.Warnf("Failed to extract ccm-go version from image tag [%s]: %s", ccmGoVersionStr, ccmGoImage)
+		return false
+	}
+	logrus.Infof("Using ccm-go version: %s", ccmGoVersionStr)
+	return pxVersion.GreaterThanOrEqual(MinimumPxVersionCO) && ccmGoVersion.GreaterThanOrEqual(MinimumCcmGoVersionCO)
+}
+
 // IsPxRepoEnabled returns true is pxRepo is enabled
 func IsPxRepoEnabled(spec corev1.StorageClusterSpec) bool {
 	return spec.PxRepo != nil &&
@@ -1246,6 +1289,19 @@ func ApplyStorageClusterSettingsToPodSpec(cluster *corev1.StorageCluster, podSpe
 			container.Image = util.GetImageURN(cluster, container.Image)
 		}
 		container.ImagePullPolicy = ImagePullPolicy(cluster)
+
+		// Check PX version to update the env for registration pod to use the "container orchestrator"
+		if container.Name == "registration" && IsCOSupported(cluster) {
+			refreshTokenEnv := "REFRESH_TOKEN"
+			_, exists := GetClusterEnvValue(cluster, refreshTokenEnv)
+			if !exists {
+				container.Env = append(container.Env,
+					v1.EnvVar{
+						Name:  refreshTokenEnv,
+						Value: "",
+					})
+			}
+		}
 	}
 
 	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
