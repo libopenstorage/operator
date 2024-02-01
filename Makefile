@@ -85,7 +85,7 @@ CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen
 .DEFAULT_GOAL=all
 .PHONY: operator deploy clean vendor vendor-update test generate manifests tools-check
 
-all: operator pretest downloads
+all: retriever operator pretest downloads
 
 vendor-update:
 	go mod download
@@ -193,8 +193,12 @@ manifests:
 
 operator:
 	@echo "Building the cluster operator binary"
-	@cd cmd/operator && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
+	@go clean -modcache && go get -d -v ./... && go mod vendor && go mod tidy && cd cmd/operator && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
 	@cd cmd/dryrun && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/dryrun
+
+retriever:
+	@echo "Building portworx kubernetes objects/logs retriever binary"
+	@go clean -modcache && go get -d -v ./... && go mod vendor && go mod tidy && cd support/scripts/retriever && CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build $(BUILD_OPTIONS) -o ../bin/retriever
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
