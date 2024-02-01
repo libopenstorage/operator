@@ -1,11 +1,10 @@
-package main //nolint:typecheck
+package main
 
 import (
 	"context"
 	"fmt"
-	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/rifflock/lfshook"
+	"github.com/natefinch/lumberjack/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"io"
@@ -81,35 +80,18 @@ func setupLogging() *logrus.Logger {
 		}
 	}(logger.Out.(*os.File))
 
-	logWriter, err := rotatelogs.New(
-		logPath+".%Y%m%d%H%M",
-		rotatelogs.WithLinkName(logPath),          // generate softlink
-		rotatelogs.WithMaxAge(24*time.Hour*60),    // max age, 60 days
-		rotatelogs.WithRotationTime(time.Hour*24), // log cut, 24 hours
-		rotatelogs.WithRotationSize(20*1024*1024), // enforce rotation when the log size reaches 20MB
+	l, _ := lumberjack.NewRoller(
+		logPath,
+		20*1024*1024, // 20 megabytes
+		&lumberjack.Options{
+			MaxBackups: 3,
+			MaxAge:     30 * time.Hour * 24, // 30 days
+			Compress:   true,
+		},
 	)
-	if err != nil {
-		log.Fatalf("Failed to create rotatelogs: %v", err)
-	}
 
-	writeMap := lfshook.WriterMap{
-		logrus.InfoLevel:  logWriter,
-		logrus.FatalLevel: logWriter,
-		logrus.DebugLevel: logWriter,
-		logrus.WarnLevel:  logWriter,
-		logrus.ErrorLevel: logWriter,
-		logrus.PanicLevel: logWriter,
-	}
-
-	lfHook := lfshook.NewHook(writeMap, &logrus.TextFormatter{
-		TimestampFormat: "2006-01-02 15:04:05",
-	})
-
-	// add hook to logger, this writes to the log file located at logPath
-	logger.AddHook(lfHook)
-
-	// add hook to logger, this writes to stdout
-	logger.SetOutput(io.MultiWriter(os.Stdout))
+	// Setting the output for logrus to lumberjack logger, and optionally to stdout
+	logger.SetOutput(io.MultiWriter(os.Stdout, l))
 
 	return logger
 }

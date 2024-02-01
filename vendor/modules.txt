@@ -248,14 +248,6 @@ github.com/josharian/intern
 # github.com/json-iterator/go v1.1.12
 ## explicit; go 1.12
 github.com/json-iterator/go
-# github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
-## explicit
-github.com/lestrrat-go/file-rotatelogs
-github.com/lestrrat-go/file-rotatelogs/internal/option
-# github.com/lestrrat-go/strftime v1.0.6
-## explicit; go 1.13
-github.com/lestrrat-go/strftime
-github.com/lestrrat-go/strftime/internal/errors
 # github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1
 ## explicit; go 1.13
 github.com/libopenstorage/cloudops
@@ -315,6 +307,9 @@ github.com/mohae/deepcopy
 # github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 ## explicit
 github.com/munnerz/goautoneg
+# github.com/natefinch/lumberjack/v3 v3.0.0-alpha
+## explicit; go 1.13
+github.com/natefinch/lumberjack/v3
 # github.com/opencontainers/go-digest v1.0.0
 ## explicit; go 1.13
 github.com/opencontainers/go-digest
@@ -397,9 +392,6 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
-## explicit
-github.com/rifflock/lfshook
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit
 github.com/russross/blackfriday/v2
