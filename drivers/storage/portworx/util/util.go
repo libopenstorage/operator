@@ -265,7 +265,6 @@ const (
 	OpenshiftMonitoringRouteName = "thanos-querier"
 	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
 	OpenshiftMonitoringNamespace = "openshift-monitoring"
-
 )
 
 var (
