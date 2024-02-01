@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
-	"github.com/natefinch/lumberjack/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"io"
@@ -15,7 +14,6 @@ import (
 	"path"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"syscall"
-	"time"
 )
 
 var listOfPods = []PodSelector{
@@ -80,18 +78,8 @@ func setupLogging() *logrus.Logger {
 		}
 	}(logger.Out.(*os.File))
 
-	l, _ := lumberjack.NewRoller(
-		logPath,
-		20*1024*1024, // 20 megabytes
-		&lumberjack.Options{
-			MaxBackups: 3,
-			MaxAge:     30 * time.Hour * 24, // 30 days
-			Compress:   true,
-		},
-	)
-
-	// Setting the output for logrus to lumberjack logger, and optionally to stdout
-	logger.SetOutput(io.MultiWriter(os.Stdout, l))
+	// Setting the output for logrus, and optionally to stdout
+	logger.SetOutput(io.MultiWriter(os.Stdout))
 
 	return logger
 }

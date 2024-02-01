@@ -13,7 +13,6 @@ require (
 	github.com/hashicorp/go-version v1.6.0
 	github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1
 	github.com/libopenstorage/openstorage v9.4.47+incompatible
-	github.com/natefinch/lumberjack/v3 v3.0.0-alpha
 	github.com/openshift/api v0.0.0-20230503133300-8bbcb7ca7183
 	github.com/operator-framework/api v0.17.1
 	github.com/pborman/uuid v1.2.1

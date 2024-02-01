@@ -307,9 +307,6 @@ github.com/mohae/deepcopy
 # github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 ## explicit
 github.com/munnerz/goautoneg
-# github.com/natefinch/lumberjack/v3 v3.0.0-alpha
-## explicit; go 1.13
-github.com/natefinch/lumberjack/v3
 # github.com/opencontainers/go-digest v1.0.0
 ## explicit; go 1.13
 github.com/opencontainers/go-digest
