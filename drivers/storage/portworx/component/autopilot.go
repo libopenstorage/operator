@@ -52,9 +52,8 @@ const (
 	// OCPPrometheusUserWorkloadSecretPrefix name of OCP user-workload Prometheus secret
 	OCPPrometheusUserWorkloadSecretPrefix = "prometheus-user-workload-token"
 	// Autopilot Secret name for prometheus-user-workload-token
-	AutopilotSecretName                 = "autopilot-prometheus-auth"
-	defaultAutopilotCPU                 = "0.1"
-	OpenshiftPrometheusSupportedVersion = "4.14"
+	AutopilotSecretName = "autopilot-prometheus-auth"
+	defaultAutopilotCPU = "0.1"
 )
 
 var (
@@ -759,7 +758,7 @@ func (c *autopilot) getPrometheusTokenAndCert() (encodedToken, caCert string, er
 
 func (c *autopilot) isOCPUserWorkloadSupported() bool {
 	if c.isUserWorkloadSupported == nil {
-		isSupported, err := pxutil.IsSupportedOCPVersion(c.k8sClient, OpenshiftPrometheusSupportedVersion)
+		isSupported, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.OpenshiftPrometheusSupportedVersion)
 		if err != nil {
 			logrus.Errorf("Failed to check if OCP user workload monitoring is supported: %v", err)
 			return false
