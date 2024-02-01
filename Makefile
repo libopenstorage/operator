@@ -198,7 +198,7 @@ operator:
 
 retriever:
 	@echo "Building portworx kubernetes objects/logs retriever binary"
-	@cd support/scripts/retriever && CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go mod vendor && CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go mod tidy  && CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go get github.com/spf13/afero@v1.10.0 && CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build $(BUILD_OPTIONS) -o ../bin/retriever
+	@cd support/scripts/retriever && go clean -modcache && go mod vendor && go mod tidy  && CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go get github.com/spf13/afero@v1.10.0 && CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build $(BUILD_OPTIONS) -o ../bin/retriever
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
