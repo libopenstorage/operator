@@ -127,7 +127,7 @@ spec:
             items:
               - key: cacert
                 path: ca-certificates.crt
-            secretName: autopilot-auth-token-secret
+            secretName: autopilot-prometheus-auth
         - name: config-volume
           configMap:
             name: autopilot-config
@@ -141,7 +141,7 @@ spec:
             items:
               - key: token
                 path: token
-            secretName: autopilot-auth-token-secret
+            secretName: autopilot-prometheus-auth
         - hostPath:
             path: /var/cores
             type: ""
