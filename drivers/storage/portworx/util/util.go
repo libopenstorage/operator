@@ -257,9 +257,10 @@ const (
 	// Portworx version of that node.
 	NodeLabelPortworxVersion = "PX Version"
 
-	ClusterOperatorVersion = "config.openshift.io/v1"
-	ClusterOperatorKind    = "ClusterOperator"
-	OpenshiftAPIServer     = "openshift-apiserver"
+	ClusterOperatorVersion              = "config.openshift.io/v1"
+	ClusterOperatorKind                 = "ClusterOperator"
+	OpenshiftAPIServer                  = "openshift-apiserver"
+	OpenshiftPrometheusSupportedVersion = "4.14"
 	// OpenshiftMonitoringRouteName name of OCP user-workload route
 	OpenshiftMonitoringRouteName = "thanos-querier"
 	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
@@ -1804,7 +1805,7 @@ func IsSupportedOCPVersion(k8sClient client.Client, targetVersion string) (bool,
 
 		if err != nil {
 			if errors.IsNotFound(err) {
-				return false, err
+				return false, nil
 			}
 			return false, err
 		}
@@ -1831,7 +1832,7 @@ func GetOCPPrometheusHost(k8sClient client.Client) (string, error) {
 		route,
 	)
 	if err != nil {
-		return "", fmt.Errorf("Error fetching route %s", err.Error())
+		return "", fmt.Errorf("error fetching route %s", err.Error())
 	}
 
 	if route.Spec.Host == "" {

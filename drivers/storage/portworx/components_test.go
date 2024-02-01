@@ -4554,7 +4554,7 @@ func TestIsUserWorkloadSupportedOnNonOCPCluster(t *testing.T) {
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
-	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, "4.14")
+	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, pxutil.OpenshiftPrometheusSupportedVersion)
 	require.Equal(t, false, enabled)
 	require.NoError(t, err)
 }
@@ -4599,7 +4599,7 @@ func TestIsUserWorkloadSupportedForSupportedVersionOpenshift(t *testing.T) {
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
-	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, "4.14")
+	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, pxutil.OpenshiftPrometheusSupportedVersion)
 	require.Equal(t, true, enabled)
 	require.NoError(t, err)
 
@@ -4645,7 +4645,7 @@ func TestIsUserWorkloadSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
-	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, "4.14")
+	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, pxutil.OpenshiftPrometheusSupportedVersion)
 	require.Equal(t, false, enabled)
 	require.NoError(t, err)
 
