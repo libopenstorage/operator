@@ -21,7 +21,7 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.63.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
 	github.com/sirupsen/logrus v1.9.0
-	github.com/spf13/afero v1.11.0
+	github.com/spf13/afero v1.8.2
 	github.com/stretchr/testify v1.8.2
 	github.com/urfave/cli v1.22.2
 	golang.org/x/sys v0.15.0
