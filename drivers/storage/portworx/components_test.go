@@ -4098,19 +4098,6 @@ func TestAutopilotInstallAndUninstallOnOpenshift414(t *testing.T) {
 						},
 					},
 				},
-				GitOps: &corev1.GitOpsSpec{
-					Name: "test",
-					Type: "bitbucket-scm",
-					Params: map[string]interface{}{
-						"defaultReviewers": []interface{}{"user1", "user2"},
-						"user":             "oksana",
-						"repo":             "autopilot-bb",
-						"folder":           "workloads",
-						"baseUrl":          "http://10.13.108.10:7990",
-						"projectKey":       "PXAUT",
-						"branch":           "master",
-					},
-				},
 				Args: map[string]string{
 					"min_poll_interval": "4",
 					"log-level":         "info",
@@ -13077,7 +13064,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.Equal(t, expectedDeployment, deployment)
 
 	secret := v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, secret.OwnerReferences[0].Name, cluster.Name)
 
@@ -13119,7 +13106,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	// Cert is not deleted after telemetry is disabled. it would be reused when it's re-enabled.
-	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Now enabled again with custom telemetry image.
@@ -13479,7 +13466,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
 	secret := v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, secret.OwnerReferences[0].Name, cluster.Name)
 
@@ -13528,7 +13515,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	// Cert is not deleted after telemetry is disabled. it would be reused when it's re-enabled.
-	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Now enabled again with custom telemetry image.
@@ -14609,7 +14596,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	require.NoError(t, err)
 
 	secret := v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, secret.OwnerReferences)
 
@@ -14624,7 +14611,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	require.NoError(t, err)
 
 	secret = v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Contains(t, secret.OwnerReferences, *ownerRef)
 
@@ -14636,7 +14623,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	require.NoError(t, err)
 
 	secret = v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, secret.OwnerReferences)
 }
@@ -15793,7 +15780,7 @@ func createTelemetrySecret(t *testing.T, k8sClient client.Client, namespace stri
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      testutil.TelemetryCertName,
+				Name:      component.TelemetryCertName,
 				Namespace: namespace,
 			},
 		},
