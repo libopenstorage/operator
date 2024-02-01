@@ -573,7 +573,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		toUpdate.Status.DesiredImages.Grafana = ""
 	}
 
-	setDefaultAutopilotProviders(toUpdate)
+	setDefaultAutopilotProviders(toUpdate, p.k8sClient)
 
 	if pxutil.IsFreshInstall(toUpdate) {
 		// Check for FACD variable on a new install: if so, add an annotation saying
@@ -1246,15 +1246,34 @@ func setSecuritySpecDefaults(toUpdate *corev1.StorageCluster) {
 
 func setDefaultAutopilotProviders(
 	toUpdate *corev1.StorageCluster,
+	k8sClient client.Client,
 ) {
 	if toUpdate.Spec.Autopilot != nil && toUpdate.Spec.Autopilot.Enabled &&
 		len(toUpdate.Spec.Autopilot.Providers) == 0 {
+
+		var hostUrl string
+		var err error
+		isSupported, err := pxutil.IsSupportedOCPVersion(k8sClient, pxutil.OpenshiftPrometheusSupportedVersion)
+		if err != nil {
+			logrus.Errorf("Error checking for OpenShift version %s", err.Error())
+			return
+		}
+		if isSupported {
+			hostUrl, err = pxutil.GetOCPPrometheusHost(k8sClient)
+			if err != nil {
+				logrus.Errorf("Error during fetching autopilot host url %s", err.Error())
+				return
+			}
+		} else {
+			hostUrl = component.AutopilotDefaultProviderEndpoint
+		}
+
 		toUpdate.Spec.Autopilot.Providers = []corev1.DataProviderSpec{
 			{
 				Name: "default",
 				Type: "prometheus",
 				Params: map[string]string{
-					"url": component.AutopilotDefaultProviderEndpoint,
+					"url": hostUrl,
 				},
 			},
 		}

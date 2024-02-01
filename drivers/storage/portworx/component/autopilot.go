@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -43,10 +45,14 @@ const (
 	AutopilotContainerName = "autopilot"
 	// AutopilotDefaultProviderEndpoint endpoint of default provider
 	AutopilotDefaultProviderEndpoint = "http://px-prometheus:9090"
-
-	defaultAutopilotCPU = "0.1"
-
-	defaultAutopilotCPULimit = "0.25"
+	// AutopilotDefaultReviewersKey is a key for default reviewers array in gitops config map
+	AutopilotDefaultReviewersKey = "defaultReviewers"
+	defaultAutopilotCPU          = "0.1"
+	defaultAutopilotCPULimit     = "0.25"
+	// OCPPrometheusUserWorkloadSecretPrefix name of OCP user-workload Prometheus secret
+	OCPPrometheusUserWorkloadSecretPrefix = "prometheus-user-workload-token"
+	// Autopilot Secret name for prometheus-user-workload-token
+	AutopilotSecretName = "autopilot-prometheus-auth"
 )
 
 var (
@@ -81,12 +87,49 @@ var (
 			},
 		},
 	}
+
+	openshiftDeploymentVolume = []corev1.VolumeSpec{
+		{
+			Name:      "token-volume",
+			MountPath: "/var/local/secrets",
+			ReadOnly:  true,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: AutopilotSecretName,
+					Items: []v1.KeyToPath{
+						{
+							Key:  "token",
+							Path: "token",
+						},
+					},
+				},
+			},
+		},
+		{
+			Name:      "ca-cert-volume",
+			MountPath: "/etc/ssl/certs",
+			ReadOnly:  true,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: AutopilotSecretName,
+					Items: []v1.KeyToPath{
+						{
+							Key:  "cacert",
+							Path: "ca-certificates.crt",
+						},
+					},
+				},
+			},
+		},
+	}
 )
 
 type autopilot struct {
-	isCreated  bool
-	k8sClient  client.Client
-	k8sVersion version.Version
+	isCreated               bool
+	k8sClient               client.Client
+	k8sVersion              version.Version
+	isUserWorkloadSupported *bool
+	isVolumeMounted         bool
 }
 
 func (c *autopilot) Name() string {
@@ -129,6 +172,11 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := c.createClusterRoleBinding(cluster.Namespace); err != nil {
 		return err
 	}
+	if c.isOCPUserWorkloadSupported() {
+		if err := c.createSecret(cluster.Namespace, ownerRef); err != nil {
+			return err
+		}
+	}
 	if err := c.createDeployment(cluster, ownerRef); err != nil {
 		return err
 	}
@@ -152,12 +200,20 @@ func (c *autopilot) Delete(cluster *corev1.StorageCluster) error {
 	if err := k8sutil.DeleteDeployment(c.k8sClient, AutopilotDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
+	if c.isOCPUserWorkloadSupported() {
+		if err := k8sutil.DeleteSecret(c.k8sClient, AutopilotSecretName, cluster.Namespace, *ownerRef); err != nil {
+			return err
+		}
+	}
+
 	c.MarkDeleted()
 	return nil
 }
 
 func (c *autopilot) MarkDeleted() {
 	c.isCreated = false
+	c.isUserWorkloadSupported = nil
+	c.isVolumeMounted = false
 }
 
 func (c *autopilot) createConfigMap(
@@ -205,6 +261,30 @@ func (c *autopilot) createConfigMap(
 		ownerRef,
 	)
 	return err
+}
+
+func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.OwnerReference) error {
+
+	token, cert, err := c.getPrometheusTokenAndCert()
+	if err != nil {
+		return err
+	}
+
+	return k8sutil.CreateOrUpdateSecret(
+		c.k8sClient,
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            AutopilotSecretName,
+				Namespace:       clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Data: map[string][]byte{
+				"token":  []byte(token),
+				"cacert": []byte(cert),
+			},
+		},
+		ownerRef,
+	)
 }
 
 func (c *autopilot) createServiceAccount(
@@ -610,6 +690,12 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 	cluster *corev1.StorageCluster,
 ) ([]v1.Volume, []v1.VolumeMount) {
 	volumeSpecs := make([]corev1.VolumeSpec, 0)
+
+	if c.isOCPUserWorkloadSupported() && !c.isVolumeMounted {
+		c.isVolumeMounted = true
+		autopilotDeploymentVolumes = append(autopilotDeploymentVolumes, openshiftDeploymentVolume...)
+	}
+
 	for _, v := range autopilotDeploymentVolumes {
 		vCopy := v.DeepCopy()
 		volumeSpecs = append(volumeSpecs, *vCopy)
@@ -624,6 +710,60 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 	sort.Sort(k8sutil.VolumeByName(volumes))
 	sort.Sort(k8sutil.VolumeMountByName(volumeMounts))
 	return volumes, volumeMounts
+}
+
+func (c *autopilot) getPrometheusTokenAndCert() (encodedToken, caCert string, err error) {
+	secrets := &v1.SecretList{}
+	err = c.k8sClient.List(
+		context.TODO(),
+		secrets,
+		client.InNamespace("openshift-user-workload-monitoring"),
+	)
+
+	if err != nil {
+		return "", "", err
+	}
+
+	// Iterate through the secrets list to process prometheus-user-workload-token secret
+	var secretFound bool
+	for _, secret := range secrets.Items {
+
+		if strings.HasPrefix(secret.Name, OCPPrometheusUserWorkloadSecretPrefix) {
+			secretFound = true
+			// Retrieve the token data from the secret as []byte
+			tokenBytes, ok := secret.Data["token"]
+			if !ok {
+				return encodedToken, caCert, fmt.Errorf("token not found in secret")
+			}
+
+			// Retrieve the ca.cert data from the secret as []byte
+			cert, ok := secret.Data["ca.crt"]
+			if !ok {
+				return encodedToken, caCert, fmt.Errorf("cert not found in secret")
+			}
+
+			encodedToken = string(tokenBytes)
+			caCert = string(cert)
+			break
+		}
+	}
+
+	if !secretFound {
+		return "", "", fmt.Errorf("prometheus-user-workload-token not found. Please make sure that user workload monitoring is enabled in openshift")
+	}
+	return encodedToken, caCert, nil
+}
+
+func (c *autopilot) isOCPUserWorkloadSupported() bool {
+	if c.isUserWorkloadSupported == nil {
+		isSupported, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.OpenshiftPrometheusSupportedVersion)
+		if err != nil {
+			logrus.Errorf("Failed to check if OCP user workload monitoring is supported: %v", err)
+			return false
+		}
+		c.isUserWorkloadSupported = &isSupported
+	}
+	return *c.isUserWorkloadSupported
 }
 
 // RegisterAutopilotComponent registers the Autopilot component
