@@ -8,6 +8,7 @@ import (
 	cryptoTls "crypto/tls"
 	"encoding/base64"
 	"fmt"
+	routev1 "github.com/openshift/api/route/v1"
 	"io"
 	"net"
 	"net/http"
@@ -222,6 +223,9 @@ func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 		logrus.Error(err)
 	}
 	if err := consolev1.AddToScheme(s); err != nil {
+		logrus.Error(err)
+	}
+	if err := routev1.AddToScheme(s); err != nil {
 		logrus.Error(err)
 	}
 	return fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(initObjects...).Build()

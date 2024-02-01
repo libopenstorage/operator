@@ -289,6 +289,7 @@ github.com/opencontainers/go-digest
 ## explicit; go 1.20
 github.com/openshift/api/config/v1
 github.com/openshift/api/console/v1
+github.com/openshift/api/route/v1
 github.com/openshift/api/security/v1
 # github.com/operator-framework/api v0.17.1
 ## explicit; go 1.18
