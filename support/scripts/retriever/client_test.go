@@ -3,11 +3,14 @@ package main
 import (
 	"fmt"
 	"github.com/emicklei/go-restful/v3/log"
+	"github.com/natefinch/lumberjack/v3"
 	"github.com/spf13/afero"
+	"io"
 	"k8s.io/client-go/rest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/sirupsen/logrus"
@@ -17,6 +20,18 @@ import (
 
 func TestInitializeRetriever(t *testing.T) {
 	logger := logrus.New()
+
+	l, _ := lumberjack.NewRoller(
+		"/tmp/k8s-retriever.log",
+		20*1024*1024, // 20 megabytes
+		&lumberjack.Options{
+			MaxBackups: 3,
+			MaxAge:     30 * time.Hour * 24, // 30 days
+			Compress:   true,
+		},
+	)
+
+	logger.SetOutput(io.MultiWriter(os.Stdout, l))
 
 	// Initialize a fake filesystem
 	fs := afero.NewOsFs()
