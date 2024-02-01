@@ -85,7 +85,7 @@ CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen
 .DEFAULT_GOAL=all
 .PHONY: operator deploy clean vendor vendor-update test generate manifests tools-check
 
-all: operator pretest downloads retriever
+all: retriever operator pretest downloads
 
 vendor-update:
 	go mod download
@@ -198,7 +198,7 @@ operator:
 
 retriever:
 	@echo "Building portworx kubernetes objects/logs retriever binary"
-	@cd support/scripts/retriever && CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build $(BUILD_OPTIONS) -o ../bin/retriever
+	@cd support/scripts/retriever && CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go get github.com/spf13/afero@v1.8.2 && CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build $(BUILD_OPTIONS) -o ../bin/retriever
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
