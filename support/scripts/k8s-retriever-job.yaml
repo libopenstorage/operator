@@ -42,7 +42,7 @@ spec:
       serviceAccountName: portworx-operator
       containers:
         - name: k8s-retriever
-          image: portworx/px-operator:latest
+          image: portworx/px-operator:latest 
           command:
             - /bin/sh
             - -c
