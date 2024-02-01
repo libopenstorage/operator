@@ -34,6 +34,7 @@ import (
 	appops "github.com/portworx/sched-ops/k8s/apps"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	k8serrors "github.com/portworx/sched-ops/k8s/errors"
+	openshiftops "github.com/portworx/sched-ops/k8s/openshift"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	prometheusops "github.com/portworx/sched-ops/k8s/prometheus"
 	rbacops "github.com/portworx/sched-ops/k8s/rbac"
@@ -143,6 +144,9 @@ const (
 	stagingArcusRegisterProxyURL    = "register.staging-cloud-support.purestorage.com"
 	arcusPingInterval               = 6 * time.Second
 	arcusPingRetry                  = 5
+
+	defaultOcpClusterCheckTimeout  = 15 * time.Minute
+	defaultOcpClusterCheckInterval = 1 * time.Minute
 
 	// OCP Plugin
 	clusterOperatorKind    = "ClusterOperator"
@@ -812,6 +816,54 @@ func ValidateStorageCluster(
 		return err
 	}
 
+	// Validate cluster provider health
+	if err = ValidateClusterProviderHealth(liveCluster); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateClusterProviderHealth validates health of the cluster provider environment
+func ValidateClusterProviderHealth(cluster *corev1.StorageCluster) error {
+	// NOTE: For now only checking this for Openshift, will add for other providers in future when its needed
+	if isOpenshift(cluster) {
+		t := func() (interface{}, bool, error) {
+			logrus.Debug("This is Openshift cluster, checking ClusterVersion object status..")
+			clusterVersion, err := openshiftops.Instance().GetClusterVersion("version")
+			if err != nil {
+				return nil, false, fmt.Errorf("failed to get Openshift ClusterVersion object, Err: %v", err)
+			}
+
+			var listOfBadConditions []ocp_configv1.ClusterOperatorStatusCondition
+			for _, condition := range clusterVersion.Status.Conditions {
+				logrus.Debugf("ClusterVersions condition [%v=%v], message [%s]", condition.Type, condition.Status, condition.Message)
+				if condition.Type == "Available" && condition.Status == ocp_configv1.ConditionFalse {
+					listOfBadConditions = append(listOfBadConditions, condition)
+				} else if condition.Type == "Degraded" && condition.Status == ocp_configv1.ConditionTrue {
+					listOfBadConditions = append(listOfBadConditions, condition)
+				} else if condition.Type == "Progressing" && condition.Status == ocp_configv1.ConditionTrue {
+					listOfBadConditions = append(listOfBadConditions, condition)
+				}
+			}
+
+			if len(listOfBadConditions) > 0 {
+				logrus.Debugf("ClusterVersion object list of all bad conditions:\n%s", listOfBadConditions)
+			}
+
+			lastCondition := clusterVersion.Status.Conditions[len(clusterVersion.Status.Conditions)-1]
+			logrus.Debugf("ClusterVersion object last known condition [%v=%v], message [%s]", lastCondition.Type, lastCondition.Status, lastCondition.Message)
+			if strings.Contains(strings.ToLower(lastCondition.Message), "cluster version is") { // This type of message is most likely an indication that cluster is healthy
+				logrus.Debugf("ClusterVersion object indicates that cluster is healthy, see latest status message [%s]", lastCondition.Message)
+				return nil, false, nil
+			}
+			return nil, true, fmt.Errorf("clusterVersion object returned message that does not indicate it is healthy, see [%s]", lastCondition.Message)
+		}
+		if _, err := task.DoRetryWithTimeout(t, defaultOcpClusterCheckTimeout, defaultOcpClusterCheckInterval); err != nil {
+			logrus.Warnf("Cluster does not seem to be healthy, Err: %v", err)
+			return nil // Will not be returning any errors here, this is just for observation of condition statuses
+		}
+	}
 	return nil
 }
 
