@@ -3,13 +3,11 @@ package component
 import (
 	"context"
 	"fmt"
-	ocpconfig "github.com/openshift/api/config/v1"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	"github.com/sirupsen/logrus"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"reflect"
 	"sort"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -17,7 +15,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
-	routev1 "github.com/openshift/api/route/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -53,11 +50,7 @@ const (
 	// OCPPrometheusUserWorkloadSecretPrefix name of OCP user-workload Prometheus secret
 	OCPPrometheusUserWorkloadSecretPrefix = "prometheus-user-workload-token"
 	// Autopilot Secret name for prometheus-user-workload-token
-	AutoPilotSecretName = "autopilot-auth-token-secret"
-	// OpenshiftMonitoringRouteName name of OCP user-workload route
-	OpenshiftMonitoringRouteName = "thanos-querier"
-	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
-	OpenshiftMonitoringNamespace        = "openshift-monitoring"
+	AutopilotSecretName                 = "autopilot-prometheus-auth"
 	defaultAutopilotCPU                 = "0.1"
 	OpenshiftPrometheusSupportedVersion = "4.14"
 )
@@ -102,7 +95,7 @@ var (
 			ReadOnly:  true,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
-					SecretName: AutoPilotSecretName,
+					SecretName: AutopilotSecretName,
 					Items: []v1.KeyToPath{
 						{
 							Key:  "token",
@@ -118,7 +111,7 @@ var (
 			ReadOnly:  true,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
-					SecretName: AutoPilotSecretName,
+					SecretName: AutopilotSecretName,
 					Items: []v1.KeyToPath{
 						{
 							Key:  "cacert",
@@ -179,14 +172,13 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := c.createClusterRoleBinding(cluster.Namespace); err != nil {
 		return err
 	}
-	if err := c.createDeployment(cluster, ownerRef); err != nil {
-		return err
-	}
-
-	if IsOCPUserWorkloadSupported(c.k8sClient, c) {
+	if c.isOCPUserWorkloadSupported() {
 		if err := c.createSecret(cluster.Namespace, ownerRef); err != nil {
 			return err
 		}
+	}
+	if err := c.createDeployment(cluster, ownerRef); err != nil {
+		return err
 	}
 	return nil
 }
@@ -208,8 +200,8 @@ func (c *autopilot) Delete(cluster *corev1.StorageCluster) error {
 	if err := k8sutil.DeleteDeployment(c.k8sClient, AutopilotDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if IsOCPUserWorkloadSupported(c.k8sClient, c) {
-		if err := k8sutil.DeleteSecret(c.k8sClient, AutoPilotSecretName, cluster.Namespace, *ownerRef); err != nil {
+	if c.isOCPUserWorkloadSupported() {
+		if err := k8sutil.DeleteSecret(c.k8sClient, AutopilotSecretName, cluster.Namespace, *ownerRef); err != nil {
 			return err
 		}
 	}
@@ -220,7 +212,8 @@ func (c *autopilot) Delete(cluster *corev1.StorageCluster) error {
 
 func (c *autopilot) MarkDeleted() {
 	c.isCreated = false
-	c.isUserWorkloadSupported = boolPtr(false)
+	c.isUserWorkloadSupported = nil
+	c.isVolumeMounted = false
 }
 
 func (c *autopilot) createConfigMap(
@@ -323,7 +316,7 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 		c.k8sClient,
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            AutoPilotSecretName,
+				Name:            AutopilotSecretName,
 				Namespace:       clusterNamespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -732,8 +725,7 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 ) ([]v1.Volume, []v1.VolumeMount) {
 	volumeSpecs := make([]corev1.VolumeSpec, 0)
 
-	fmt.Println("c.isVolumeMounted :: ", c.isVolumeMounted)
-	if IsOCPUserWorkloadSupported(c.k8sClient, c) && !c.isVolumeMounted {
+	if c.isOCPUserWorkloadSupported() && !c.isVolumeMounted {
 		c.isVolumeMounted = true
 		autopilotDeploymentVolumes = append(autopilotDeploymentVolumes, openshiftDeploymentVolume...)
 	}
@@ -786,91 +778,26 @@ func (c *autopilot) getPrometheusTokenAndCert() (encodedToken, caCert string, er
 
 			encodedToken = string(tokenBytes)
 			caCert = string(cert)
+			break
 		}
 	}
 
 	if !secretFound {
-		return "", "", fmt.Errorf("prometheus-user-workload-token not found. Please make sure that user workload is enabled in openshift")
+		return "", "", fmt.Errorf("prometheus-user-workload-token not found. Please make sure that user workload monitoring is enabled in openshift")
 	}
 	return encodedToken, caCert, nil
 }
 
-func IsOCPUserWorkloadSupported(k8sClient client.Client, c *autopilot) bool {
-	if c != nil && c.isUserWorkloadSupported != nil {
-		return *c.isUserWorkloadSupported
-	}
-
-	gvk := schema.GroupVersionKind{
-		Kind:    ClusterOperatorKind,
-		Version: ClusterOperatorVersion,
-	}
-
-	exists, err := coreops.Instance().ResourceExists(gvk)
-	if err != nil {
-		logrus.Error(err)
-		return false
-	}
-
-	if exists {
-		operator := &ocpconfig.ClusterOperator{}
-		err := k8sClient.Get(
-			context.TODO(),
-			types.NamespacedName{
-				Name: OpenshiftAPIServer,
-			},
-			operator,
-		)
-
+func (c *autopilot) isOCPUserWorkloadSupported() bool {
+	if c.isUserWorkloadSupported == nil {
+		isSupported, err := pxutil.IsSupportedOCPVersion(c.k8sClient, OpenshiftPrometheusSupportedVersion)
 		if err != nil {
-			logrus.Error(err)
-			if errors.IsNotFound(err) {
-				if c != nil {
-					c.isUserWorkloadSupported = boolPtr(false)
-				}
-			}
+			logrus.Errorf("Failed to check if OCP user workload monitoring is supported: %v", err)
 			return false
 		}
-
-		for _, v := range operator.Status.Versions {
-			fmt.Println(" v.Name  : ", v.Name, " v.Version ", v.Version)
-			if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version, OpenshiftPrometheusSupportedVersion) {
-				if c != nil {
-					c.isUserWorkloadSupported = boolPtr(true)
-				}
-				return true
-			}
-		}
-	} else {
-		if c != nil {
-			c.isUserWorkloadSupported = boolPtr(false)
-		}
-		return false
+		c.isUserWorkloadSupported = &isSupported
 	}
-
-	return false
-}
-
-func GetHost(k8sClient client.Client) (string, error) {
-
-	route := &routev1.Route{}
-	err := k8sClient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      OpenshiftMonitoringRouteName,
-			Namespace: OpenshiftMonitoringNamespace,
-		},
-		route,
-	)
-	if err != nil {
-		return "", fmt.Errorf("Error fetching route %s", err.Error())
-	}
-
-	if route.Spec.Host == "" {
-		return "", fmt.Errorf("host is empty")
-	}
-
-	return "https://" + route.Spec.Host, nil
-
+	return *c.isUserWorkloadSupported
 }
 
 // RegisterAutopilotComponent registers the Autopilot component
