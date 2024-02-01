@@ -3930,8 +3930,9 @@ func TestIsUserWorkloadSupportedOnNonOCPCluster(t *testing.T) {
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
-	enabled := component.IsOCPUserWorkloadSupported(k8sClient, nil)
+	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, "4.14")
 	require.Equal(t, false, enabled)
+	require.NoError(t, err)
 }
 
 // test if user-workload can be enabled on 4.14 version of openshift for AutoPilot
@@ -3974,8 +3975,9 @@ func TestIsUserWorkloadSupportedForSupportedVersionOpenshift(t *testing.T) {
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
-	enabled := component.IsOCPUserWorkloadSupported(k8sClient, nil)
+	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, "4.14")
 	require.Equal(t, true, enabled)
+	require.NoError(t, err)
 
 }
 
@@ -4019,8 +4021,9 @@ func TestIsUserWorkloadSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
-	enabled := component.IsOCPUserWorkloadSupported(k8sClient, nil)
+	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, "4.14")
 	require.Equal(t, false, enabled)
+	require.NoError(t, err)
 
 }
 
@@ -4181,7 +4184,7 @@ func TestAutopilotInstallAndUninstallOnOpenshift414(t *testing.T) {
 	// Autopilot Secret
 	expectedSecret := testutil.GetExpectedSecret(t, "autopilot-auth-token-secret.yaml")
 	actualSecret := &v1.Secret{}
-	err = testutil.Get(k8sClient, actualSecret, component.AutoPilotSecretName, cluster.Namespace)
+	err = testutil.Get(k8sClient, actualSecret, component.AutopilotSecretName, cluster.Namespace)
 	require.NoError(t, err)
 
 	require.Equal(t, expectedSecret.Data, actualSecret.Data)
@@ -13074,7 +13077,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.Equal(t, expectedDeployment, deployment)
 
 	secret := v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, secret.OwnerReferences[0].Name, cluster.Name)
 
@@ -13116,7 +13119,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	// Cert is not deleted after telemetry is disabled. it would be reused when it's re-enabled.
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Now enabled again with custom telemetry image.
@@ -13476,7 +13479,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
 	secret := v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, secret.OwnerReferences[0].Name, cluster.Name)
 
@@ -13525,7 +13528,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	// Cert is not deleted after telemetry is disabled. it would be reused when it's re-enabled.
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Now enabled again with custom telemetry image.
@@ -14606,7 +14609,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	require.NoError(t, err)
 
 	secret := v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, secret.OwnerReferences)
 
@@ -14621,7 +14624,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	require.NoError(t, err)
 
 	secret = v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Contains(t, secret.OwnerReferences, *ownerRef)
 
@@ -14633,7 +14636,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	require.NoError(t, err)
 
 	secret = v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, secret.OwnerReferences)
 }
@@ -15790,7 +15793,7 @@ func createTelemetrySecret(t *testing.T, k8sClient client.Client, namespace stri
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.TelemetryCertName,
+				Name:      testutil.TelemetryCertName,
 				Namespace: namespace,
 			},
 		},

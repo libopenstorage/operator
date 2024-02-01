@@ -5170,7 +5170,7 @@ func TestTelemetryMigrationWithPX2_12(t *testing.T) {
 	}
 	telemetrySecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      component.TelemetryCertName,
+			Name:      testutil.TelemetryCertName,
 			Namespace: ds.Namespace,
 		},
 	}
@@ -5340,7 +5340,7 @@ func TestTelemetryMigrationWithPX2_12(t *testing.T) {
 	require.NoError(t, err)
 
 	// Validate telemetry v1 config map got deleted but secret got preserved
-	err = testutil.Get(k8sClient, telemetrySecret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, telemetrySecret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	err = testutil.Get(k8sClient, telemetryConfig, component.TelemetryConfigMapName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))

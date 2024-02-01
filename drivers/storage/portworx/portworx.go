@@ -1253,8 +1253,13 @@ func setDefaultAutopilotProviders(
 
 	var hostUrl string
 	var err error
-	if component.IsOCPUserWorkloadSupported(k8sClient, nil) {
-		hostUrl, err = component.GetHost(k8sClient)
+	isSupported, err := pxutil.IsSupportedOCPVersion(k8sClient, "4.14")
+	if err != nil {
+		logrus.Errorf("Error during fetching autopilot host url %s", err.Error())
+		return
+	}
+	if isSupported {
+		hostUrl, err = pxutil.GetOCPPrometheusHost(k8sClient)
 		if err != nil {
 			logrus.Errorf("Error during fetching autopilot host url %s", err.Error())
 			return

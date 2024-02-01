@@ -17,6 +17,8 @@ import (
 
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
+	ocpconfig "github.com/openshift/api/config/v1"
+	routev1 "github.com/openshift/api/route/v1"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -250,6 +252,19 @@ const (
 
 	// VsphereInstallModeLocal env value for Vsphere 'local' install
 	VsphereInstallModeLocal = "local"
+
+	// NdoeLabelPortworxVersion is the label key in the node labels that has the
+	// Portworx version of that node.
+	NodeLabelPortworxVersion = "PX Version"
+
+	ClusterOperatorVersion = "config.openshift.io/v1"
+	ClusterOperatorKind    = "ClusterOperator"
+	OpenshiftAPIServer     = "openshift-apiserver"
+	// OpenshiftMonitoringRouteName name of OCP user-workload route
+	OpenshiftMonitoringRouteName = "thanos-querier"
+	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
+	OpenshiftMonitoringNamespace = "openshift-monitoring"
+
 )
 
 var (
@@ -1303,4 +1318,81 @@ func AppendUserVolumeMounts(
 			}
 		}
 	}
+}
+
+func IsSupportedOCPVersion(k8sClient client.Client, targetVersion string) (bool, error) {
+	gvk := schema.GroupVersionKind{
+		Kind:    ClusterOperatorKind,
+		Version: ClusterOperatorVersion,
+	}
+
+	exists, err := coreops.Instance().ResourceExists(gvk)
+	if err != nil {
+		return false, err
+	}
+
+	if exists {
+		operator := &ocpconfig.ClusterOperator{}
+		err := k8sClient.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name: OpenshiftAPIServer,
+			},
+			operator,
+		)
+
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return false, err
+			}
+			return false, err
+		}
+
+		for _, v := range operator.Status.Versions {
+			if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version, targetVersion) {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
+}
+
+func GetOCPPrometheusHost(k8sClient client.Client) (string, error) {
+
+	route := &routev1.Route{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      OpenshiftMonitoringRouteName,
+			Namespace: OpenshiftMonitoringNamespace,
+		},
+		route,
+	)
+	if err != nil {
+		return "", fmt.Errorf("Error fetching route %s", err.Error())
+	}
+
+	if route.Spec.Host == "" {
+		return "", fmt.Errorf("host is empty")
+	}
+
+	return "https://" + route.Spec.Host, nil
+
+}
+
+func isVersionSupported(current, target string) bool {
+	targetVersion, err := version.NewVersion(target)
+	if err != nil {
+		logrus.Errorf("Error during parsing version : %s ", err)
+		return false
+	}
+
+	currentVersion, err := version.NewVersion(current)
+	if err != nil {
+		logrus.Errorf("Error during parsing version : %s ", err)
+		return false
+	}
+
+	return currentVersion.GreaterThanOrEqual(targetVersion)
 }
