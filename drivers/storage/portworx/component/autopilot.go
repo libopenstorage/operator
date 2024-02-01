@@ -757,7 +757,7 @@ func (c *autopilot) isAutopilotSecretCreated(namespace string) bool {
 		secret,
 	)
 
-	if err == nil && secret.Name == AutopilotSecretName {
+	if err == nil {
 		return true
 	}
 
