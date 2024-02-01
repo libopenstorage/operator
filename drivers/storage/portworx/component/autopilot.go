@@ -691,7 +691,7 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 ) ([]v1.Volume, []v1.VolumeMount) {
 	volumeSpecs := make([]corev1.VolumeSpec, 0)
 
-	if c.isOCPUserWorkloadSupported() && !c.isVolumeMounted {
+	if c.isOCPUserWorkloadSupported() && !c.isVolumeMounted && c.isAutopilotSecretCreated(cluster.Namespace) {
 		c.isVolumeMounted = true
 		autopilotDeploymentVolumes = append(autopilotDeploymentVolumes, openshiftDeploymentVolume...)
 	}
@@ -710,6 +710,30 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 	sort.Sort(k8sutil.VolumeByName(volumes))
 	sort.Sort(k8sutil.VolumeMountByName(volumeMounts))
 	return volumes, volumeMounts
+}
+
+func (c *autopilot) isAutopilotSecretCreated(namespace string) bool {
+	secret := &v1.Secret{}
+
+	err := c.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      AutopilotSecretName,
+			Namespace: namespace,
+		},
+		secret,
+	)
+
+	if err == nil {
+		return true
+	}
+
+	if err != nil && errors.IsNotFound(err) {
+		return false
+	}
+
+	logrus.Errorf("error while fetching secret %s ", err)
+	return false
 }
 
 func (c *autopilot) getPrometheusTokenAndCert() (encodedToken, caCert string, err error) {
