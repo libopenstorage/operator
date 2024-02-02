@@ -13,8 +13,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 
-	e "github.com/coreos/etcd/client"
-	"github.com/coreos/etcd/pkg/transport"
+	e "go.etcd.io/etcd/client"
+	"go.etcd.io/etcd/pkg/transport"
 	"github.com/portworx/kvdb"
 	"github.com/portworx/kvdb/common"
 	ec "github.com/portworx/kvdb/etcd/common"
