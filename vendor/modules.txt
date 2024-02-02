@@ -289,6 +289,7 @@ github.com/opencontainers/go-digest
 ## explicit; go 1.20
 github.com/openshift/api/config/v1
 github.com/openshift/api/console/v1
+github.com/openshift/api/route/v1
 github.com/openshift/api/security/v1
 # github.com/operator-framework/api v0.17.1
 ## explicit; go 1.18
@@ -948,6 +949,7 @@ k8s.io/kube-openapi/pkg/util/sets
 k8s.io/kube-openapi/pkg/validation/spec
 # k8s.io/kube-scheduler v0.0.0 => k8s.io/kube-scheduler v0.25.1
 ## explicit; go 1.19
+k8s.io/kube-scheduler/config/v1
 k8s.io/kube-scheduler/config/v1beta3
 # k8s.io/kubernetes v1.25.1 => k8s.io/kubernetes v1.25.1
 ## explicit; go 1.19
@@ -970,6 +972,7 @@ k8s.io/kubernetes/pkg/controller/daemon/util
 k8s.io/kubernetes/pkg/features
 k8s.io/kubernetes/pkg/fieldpath
 k8s.io/kubernetes/pkg/scheduler/apis/config
+k8s.io/kubernetes/pkg/scheduler/apis/config/v1
 k8s.io/kubernetes/pkg/scheduler/apis/config/v1beta3
 k8s.io/kubernetes/pkg/scheduler/framework/plugins/names
 k8s.io/kubernetes/pkg/util/hash
