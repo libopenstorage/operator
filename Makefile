@@ -90,6 +90,8 @@ all: retriever operator pretest downloads
 vendor-update:
 	@echo "Vendor update ..."
 	@go get -d -v ./...
+	@go mod tidy
+	@go mod vendor
 	@go mod download
 
 vendor:
