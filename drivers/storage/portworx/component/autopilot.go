@@ -129,7 +129,6 @@ type autopilot struct {
 	k8sClient               client.Client
 	k8sVersion              version.Version
 	isUserWorkloadSupported *bool
-	isSecretCreated         *bool
 }
 
 func (c *autopilot) Name() string {
@@ -215,7 +214,6 @@ func (c *autopilot) Delete(cluster *corev1.StorageCluster) error {
 func (c *autopilot) MarkDeleted() {
 	c.isCreated = false
 	c.isUserWorkloadSupported = nil
-	c.isSecretCreated = nil
 }
 
 func (c *autopilot) createConfigMap(
@@ -717,9 +715,6 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 }
 
 func (c *autopilot) isAutopilotSecretCreated(namespace string) bool {
-	if c.isSecretCreated != nil {
-		return *c.isSecretCreated
-	}
 
 	secret := &v1.Secret{}
 
@@ -733,13 +728,11 @@ func (c *autopilot) isAutopilotSecretCreated(namespace string) bool {
 	)
 
 	if err == nil {
-		c.isSecretCreated = boolPtr(true)
-		return *c.isSecretCreated
+		return true
 	}
 
 	if err != nil && errors.IsNotFound(err) {
-		c.isSecretCreated = boolPtr(false)
-		return *c.isSecretCreated
+		return false
 	}
 
 	logrus.Errorf("error while fetching secret %s ", err)
