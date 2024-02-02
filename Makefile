@@ -88,7 +88,9 @@ CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen
 all: retriever operator pretest downloads
 
 vendor-update:
-	go mod download
+	@echo "Vendor update ..."
+	@go get -d -v ./...
+	@go mod download
 
 vendor:
 	go mod vendor
@@ -152,9 +154,6 @@ tools-check: $(GOPATH)/bin/mockgen $(GOPATH)/bin/golangci-lint $(GOPATH)/bin/err
 
 pretest: tools-check check-fmt lint vet staticcheck
 
-dependencies:
-	@echo "Installing dependencies"
-	@go get -d -v ./...
 
 test:
 	echo "" > coverage.txt
@@ -213,7 +212,7 @@ DOCK_BUILD_CNT	:= golang:1.21
 docker-build:
 	@echo "Building using docker"
 	docker run --rm --privileged=true -v $(shell pwd):/go/src/github.com/libopenstorage/operator $(DOCK_BUILD_CNT) \
-		/bin/bash -c "cd /go/src/github.com/libopenstorage/operator; make dependencies vendor-update all test integration-test"
+		/bin/bash -c "cd /go/src/github.com/libopenstorage/operator; make vendor-update all test integration-test"
 
 deploy:
 	@echo "Pushing operator image $(OPERATOR_IMG)"
