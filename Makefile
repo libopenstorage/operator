@@ -89,7 +89,7 @@ all: retriever operator pretest downloads
 
 vendor-update:
 	echo "Vendor update ..."
-	@go get github.com/spf13/afero@v1.6.0 && go mod tidy
+	@go get github.com/spf13/afero@v1.6.0 && go mod tidy && go mod vendor
 	@go mod download
 
 vendor:
