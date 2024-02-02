@@ -1388,6 +1388,12 @@ func CountStorageNodes(
 		return -1, err
 	}
 
+	// To check if metro DR setup or not
+	isDRSetup := false
+	clusterDomainClient := api.NewOpenStorageClusterDomainsClient(sdkConn)
+	clusterDomains, err := clusterDomainClient.Enumerate(ctx, &api.SdkClusterDomainsEnumerateRequest{})
+	isDRSetup = err == nil && len(clusterDomains.ClusterDomainNames) > 1
+
 	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
 		ctx,
 		&api.SdkNodeEnumerateWithFiltersRequest{},
@@ -1458,12 +1464,20 @@ func CountStorageNodes(
 			isQuorumMember = len(node.Pools) > 0 && node.Pools[0] != nil
 		}
 
+		// In case of non metro-DR setup, all portworx nodes that contain backend storage in the enumerate response are storage nodes
+		// In the case of metro DR setup, temporarily using existing logic to determine storage nodes count
+		// TODO: Need to update this logic in metro DR setup to use portworx nodes in the current domain
 		if isQuorumMember {
-			if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
+			if !isDRSetup {
 				storageNodesCount++
 			} else {
-				logrus.Debugf("node %s should not run portworx", node.SchedulerNodeName)
+				if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
+					storageNodesCount++
+				} else {
+					logrus.Debugf("node %s should not run portworx", node.SchedulerNodeName)
+				}
 			}
+
 		} else {
 			logrus.Debugf("node %s is not a quorum member, node: %+v", node.Id, node)
 		}
