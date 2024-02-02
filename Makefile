@@ -88,10 +88,8 @@ CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen
 all: retriever operator pretest downloads
 
 vendor-update:
-	@echo "Vendor update ..."
-	@go get -d -v ./...
-	@go mod tidy
-	@go mod vendor
+	echo "Vendor update ..."
+	@cd support/scripts/retriever && go mod tidy && go mod vendor && cd ../../..
 	@go mod download
 
 vendor:
