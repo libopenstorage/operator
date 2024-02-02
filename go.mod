@@ -17,7 +17,7 @@ require (
 	github.com/operator-framework/api v0.17.1
 	github.com/pborman/uuid v1.2.1
 	github.com/portworx/kvdb v0.0.0-20230405233801-87666830d3fd
-	github.com/portworx/sched-ops v1.20.4-rc1.0.20230802175859-ff4459c520ae
+	github.com/portworx/sched-ops v1.20.4-rc1.0.20230426231724-8d9f2c104721
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.63.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
 	github.com/sirupsen/logrus v1.9.0
@@ -34,10 +34,10 @@ require (
 	k8s.io/apimachinery v0.27.1
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/code-generator v0.25.4
-	k8s.io/component-base v0.26.1
+	k8s.io/component-base v0.25.2
 	k8s.io/component-helpers v0.25.1
 	k8s.io/klog v1.0.0
-	k8s.io/kube-scheduler v0.0.0
+	k8s.io/kube-scheduler v0.25.1
 	k8s.io/kubernetes v1.25.1
 	k8s.io/utils v0.0.0-20230505201702-9f6742963106
 	sigs.k8s.io/cluster-api v0.2.11
@@ -139,8 +139,10 @@ require (
 
 replace (
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
+	github.com/libopenstorage/cloudops => github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1
 	github.com/libopenstorage/openstorage => github.com/libopenstorage/openstorage v1.0.1-0.20231025225342-bd3d3ceba556
 	github.com/portworx/sched-ops => github.com/portworx/sched-ops v1.20.4-rc1.0.20231018042450-4c290674cb5a
+	github.com/spf13/afero => github.com/spf13/afero v1.6.0
 	golang.org/x/tools => golang.org/x/tools v0.1.11
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 	google.golang.org/grpc/examples/helloworld/helloworld => google.golang.org/grpc/examples/helloworld/helloworld v1.29.1
