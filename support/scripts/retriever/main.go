@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/spf13/afero"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"log"
 	"os"
 	"runtime/debug"

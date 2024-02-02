@@ -128,7 +128,6 @@ type autopilot struct {
 	k8sClient               client.Client
 	k8sVersion              version.Version
 	isUserWorkloadSupported *bool
-	isVolumeMounted         bool
 }
 
 func (c *autopilot) Name() string {
@@ -173,7 +172,9 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 	}
 	if c.isOCPUserWorkloadSupported() {
 		if err := c.createSecret(cluster.Namespace, ownerRef); err != nil {
-			return err
+			// log the error and proceed for deployment creation
+			// if secret is created in next reconcilation loop successfully, deployment will be updated with volume mounts
+			logrus.Errorf("Error during creating secret %v ", err)
 		}
 	}
 	if err := c.createDeployment(cluster, ownerRef); err != nil {
@@ -212,7 +213,6 @@ func (c *autopilot) Delete(cluster *corev1.StorageCluster) error {
 func (c *autopilot) MarkDeleted() {
 	c.isCreated = false
 	c.isUserWorkloadSupported = nil
-	c.isVolumeMounted = false
 }
 
 func (c *autopilot) createConfigMap(
@@ -724,9 +724,11 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 ) ([]v1.Volume, []v1.VolumeMount) {
 	volumeSpecs := make([]corev1.VolumeSpec, 0)
 
-	if c.isOCPUserWorkloadSupported() && !c.isVolumeMounted {
-		c.isVolumeMounted = true
-		autopilotDeploymentVolumes = append(autopilotDeploymentVolumes, openshiftDeploymentVolume...)
+	if c.isOCPUserWorkloadSupported() && c.isAutopilotSecretCreated(cluster.Namespace) {
+		for _, v := range openshiftDeploymentVolume {
+			vCopy := v.DeepCopy()
+			volumeSpecs = append(volumeSpecs, *vCopy)
+		}
 	}
 
 	for _, v := range autopilotDeploymentVolumes {
@@ -743,6 +745,31 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 	sort.Sort(k8sutil.VolumeByName(volumes))
 	sort.Sort(k8sutil.VolumeMountByName(volumeMounts))
 	return volumes, volumeMounts
+}
+
+func (c *autopilot) isAutopilotSecretCreated(namespace string) bool {
+
+	secret := &v1.Secret{}
+
+	err := c.k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      AutopilotSecretName,
+			Namespace: namespace,
+		},
+		secret,
+	)
+
+	if err == nil {
+		return true
+	}
+
+	if err != nil && errors.IsNotFound(err) {
+		return false
+	}
+
+	logrus.Errorf("error while fetching secret %s ", err)
+	return false
 }
 
 func (c *autopilot) getPrometheusTokenAndCert() (encodedToken, caCert string, err error) {

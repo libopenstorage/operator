@@ -88,9 +88,7 @@ CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen
 all: retriever operator pretest downloads
 
 vendor-update:
-	echo "Vendor update ..."
-	@cd support/scripts/retriever && go mod tidy && go mod vendor && cd ../../..
-	@go mod download
+	go mod download
 
 vendor:
 	go mod vendor
@@ -154,7 +152,6 @@ tools-check: $(GOPATH)/bin/mockgen $(GOPATH)/bin/golangci-lint $(GOPATH)/bin/err
 
 pretest: tools-check check-fmt lint vet staticcheck
 
-
 test:
 	echo "" > coverage.txt
 	for pkg in $(PKGS);	do \
@@ -196,12 +193,12 @@ manifests:
 
 operator:
 	@echo "Building the cluster operator binary"
-	@go clean -modcache && go get -d -v ./... && go mod vendor && go mod tidy && cd cmd/operator && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
+	@cd cmd/operator && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
 	@cd cmd/dryrun && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/dryrun
 
 retriever:
 	@echo "Building portworx kubernetes objects/logs retriever binary"
-	@cd support/scripts/retriever && go get -d -v ./... && go mod tidy  && CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build $(BUILD_OPTIONS) -o ../bin/retriever
+	@cd support/scripts/retriever && CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build $(BUILD_OPTIONS) -o ../bin/retriever
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
@@ -308,7 +305,7 @@ get-release-manifest: clean-release-manifest
 
 mockgen: $(GOPATH)/bin/mockgen
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/portworxsdk.mock.go -package=mock github.com/libopenstorage/operator/api/px PortworxServiceServer
-	$(GOPATH)/bin/mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer,OpenStorageNodeClient,OpenStorageVolumeServer
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer,OpenStorageNodeClient,OpenStorageVolumeServer,OpenStorageClusterDomainsServer
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/storagedriver.mock.go -package=mock github.com/libopenstorage/operator/drivers/storage Driver
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controllermanager.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/manager Manager
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controller.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/controller Controller
