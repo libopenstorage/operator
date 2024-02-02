@@ -1397,7 +1397,7 @@ func CountStorageNodes(
 			isQuorumMember = len(node.Pools) > 0 && node.Pools[0] != nil
 		}
 
-		// In case of non metro-DR setup, all portworx nodes from enumerate nodes response are storage nodes
+		// In case of non metro-DR setup, all portworx nodes that contain backend storage in the enumerate response are storage nodes
 		// In the case of metro DR setup, temporarily using existing logic to determine storage nodes count
 		// TODO: Need to update this logic in metro DR setup to use portworx nodes in the current domain
 		if isQuorumMember {
