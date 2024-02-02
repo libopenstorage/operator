@@ -152,6 +152,10 @@ tools-check: $(GOPATH)/bin/mockgen $(GOPATH)/bin/golangci-lint $(GOPATH)/bin/err
 
 pretest: tools-check check-fmt lint vet staticcheck
 
+dependencies:
+	@echo "Installing dependencies"
+	@go get -d -v ./...
+
 test:
 	echo "" > coverage.txt
 	for pkg in $(PKGS);	do \
@@ -209,7 +213,7 @@ DOCK_BUILD_CNT	:= golang:1.21
 docker-build:
 	@echo "Building using docker"
 	docker run --rm --privileged=true -v $(shell pwd):/go/src/github.com/libopenstorage/operator $(DOCK_BUILD_CNT) \
-		/bin/bash -c "cd /go/src/github.com/libopenstorage/operator; make vendor-update all test integration-test"
+		/bin/bash -c "cd /go/src/github.com/libopenstorage/operator; make dependencies vendor-update all test integration-test"
 
 deploy:
 	@echo "Pushing operator image $(OPERATOR_IMG)"
