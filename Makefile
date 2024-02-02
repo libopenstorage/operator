@@ -276,7 +276,7 @@ getgrafanaconfigs:
 	cp deploy/grafana/* bin/configs/
 
 getconfigs: cleanconfigs getccmconfigs getpluginconfigs getgrafanaconfigs getwindowsconfig
-	wget -q '$(PX_DOC_HOST)/samples/k8s/pxc/portworx-prometheus-rule.yaml' -P bin/configs --no-check-certificate
+	wget -q '$(PX_DOC_HOST)/samples/portworx-enterprise/k8s/pxc/portworx-prometheus-rule.yaml' -P bin/configs --no-check-certificate
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagerconfigs.yaml' -O bin/configs/prometheus-crd-alertmanagerconfigs.yaml
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-alertmanagers.yaml' -O bin/configs/prometheus-crd-alertmanagers.yaml
 	wget -q '$(PROMETHEUS_OPERATOR_CRD_URL_PREFIX)/crd-podmonitors.yaml' -O bin/configs/prometheus-crd-podmonitors.yaml
@@ -301,7 +301,7 @@ get-release-manifest: clean-release-manifest
 
 mockgen: $(GOPATH)/bin/mockgen
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/portworxsdk.mock.go -package=mock github.com/libopenstorage/operator/api/px PortworxServiceServer
-	$(GOPATH)/bin/mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer,OpenStorageNodeClient,OpenStorageVolumeServer
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer,OpenStorageNodeClient,OpenStorageVolumeServer,OpenStorageClusterDomainsServer
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/storagedriver.mock.go -package=mock github.com/libopenstorage/operator/drivers/storage Driver
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controllermanager.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/manager Manager
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controller.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/controller Controller

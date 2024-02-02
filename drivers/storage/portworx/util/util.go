@@ -19,6 +19,8 @@ import (
 
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
+	ocpconfig "github.com/openshift/api/config/v1"
+	routev1 "github.com/openshift/api/route/v1"
 	kvdb_api "github.com/portworx/kvdb/api/bootstrap"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
@@ -254,6 +256,15 @@ const (
 	// NdoeLabelPortworxVersion is the label key in the node labels that has the
 	// Portworx version of that node.
 	NodeLabelPortworxVersion = "PX Version"
+
+	ClusterOperatorVersion              = "config.openshift.io/v1"
+	ClusterOperatorKind                 = "ClusterOperator"
+	OpenshiftAPIServer                  = "openshift-apiserver"
+	OpenshiftPrometheusSupportedVersion = "4.14"
+	// OpenshiftMonitoringRouteName name of OCP user-workload route
+	OpenshiftMonitoringRouteName = "thanos-querier"
+	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
+	OpenshiftMonitoringNamespace = "openshift-monitoring"
 )
 const (
 	// pxEntriesKey is key which holds all the bootstrap entries
@@ -1377,6 +1388,12 @@ func CountStorageNodes(
 		return -1, err
 	}
 
+	// To check if metro DR setup or not
+	isDRSetup := false
+	clusterDomainClient := api.NewOpenStorageClusterDomainsClient(sdkConn)
+	clusterDomains, err := clusterDomainClient.Enumerate(ctx, &api.SdkClusterDomainsEnumerateRequest{})
+	isDRSetup = err == nil && len(clusterDomains.ClusterDomainNames) > 1
+
 	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
 		ctx,
 		&api.SdkNodeEnumerateWithFiltersRequest{},
@@ -1447,12 +1464,20 @@ func CountStorageNodes(
 			isQuorumMember = len(node.Pools) > 0 && node.Pools[0] != nil
 		}
 
+		// In case of non metro-DR setup, all portworx nodes that contain backend storage in the enumerate response are storage nodes
+		// In the case of metro DR setup, temporarily using existing logic to determine storage nodes count
+		// TODO: Need to update this logic in metro DR setup to use portworx nodes in the current domain
 		if isQuorumMember {
-			if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
+			if !isDRSetup {
 				storageNodesCount++
 			} else {
-				logrus.Debugf("node %s should not run portworx", node.SchedulerNodeName)
+				if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
+					storageNodesCount++
+				} else {
+					logrus.Debugf("node %s should not run portworx", node.SchedulerNodeName)
+				}
 			}
+
 		} else {
 			logrus.Debugf("node %s is not a quorum member, node: %+v", node.Id, node)
 		}
@@ -1769,4 +1794,81 @@ func AppendUserVolumeMounts(
 			}
 		}
 	}
+}
+
+func IsSupportedOCPVersion(k8sClient client.Client, targetVersion string) (bool, error) {
+	gvk := schema.GroupVersionKind{
+		Kind:    ClusterOperatorKind,
+		Version: ClusterOperatorVersion,
+	}
+
+	exists, err := coreops.Instance().ResourceExists(gvk)
+	if err != nil {
+		return false, err
+	}
+
+	if exists {
+		operator := &ocpconfig.ClusterOperator{}
+		err := k8sClient.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name: OpenshiftAPIServer,
+			},
+			operator,
+		)
+
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+
+		for _, v := range operator.Status.Versions {
+			if v.Name == OpenshiftAPIServer && isVersionSupported(v.Version, targetVersion) {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
+}
+
+func GetOCPPrometheusHost(k8sClient client.Client) (string, error) {
+
+	route := &routev1.Route{}
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      OpenshiftMonitoringRouteName,
+			Namespace: OpenshiftMonitoringNamespace,
+		},
+		route,
+	)
+	if err != nil {
+		return "", fmt.Errorf("error fetching route %s", err.Error())
+	}
+
+	if route.Spec.Host == "" {
+		return "", fmt.Errorf("host is empty")
+	}
+
+	return "https://" + route.Spec.Host, nil
+
+}
+
+func isVersionSupported(current, target string) bool {
+	targetVersion, err := version.NewVersion(target)
+	if err != nil {
+		logrus.Errorf("Error during parsing version : %s ", err)
+		return false
+	}
+
+	currentVersion, err := version.NewVersion(current)
+	if err != nil {
+		logrus.Errorf("Error during parsing version : %s ", err)
+		return false
+	}
+
+	return currentVersion.GreaterThanOrEqual(targetVersion)
 }

@@ -3379,6 +3379,7 @@ func TestAutopilotInstall(t *testing.T) {
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Empty(t, actualCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
+
 }
 
 func TestAutopilotInstallIncorrectSpec(t *testing.T) {
@@ -4528,6 +4529,304 @@ func TestAutopilotVolumesChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Volumes[2:])
 	require.Empty(t, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[2:])
+}
+
+// test if user-workload can be enabled on non-openshift servers for AutoPilot
+func TestIsUserWorkloadSupportedOnNonOCPCluster(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: "non-openshift-version",
+			APIResources: []metav1.APIResource{
+				{
+					Kind: "non-openshift-kind",
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+
+	k8sClient := testutil.FakeK8sClient()
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, pxutil.OpenshiftPrometheusSupportedVersion)
+	require.Equal(t, false, enabled)
+	require.NoError(t, err)
+}
+
+// test if user-workload can be enabled on 4.14 version of openshift for AutoPilot
+func TestIsUserWorkloadSupportedForSupportedVersionOpenshift(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.14",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, pxutil.OpenshiftPrometheusSupportedVersion)
+	require.Equal(t, true, enabled)
+	require.NoError(t, err)
+
+}
+
+// test if install can be enabled on 4.13 version of openshift for AutoPilot
+func TestIsUserWorkloadSupportedForUnsupportedVersionOpenshift(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.13",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, pxutil.OpenshiftPrometheusSupportedVersion)
+	require.Equal(t, false, enabled)
+	require.NoError(t, err)
+
+}
+
+// test Autopilot install and Uninstall on ocp cluster 4.14
+func TestAutopilotInstallAndUninstallOnOpenshift414(t *testing.T) {
+	// Start test with newer version (1.25 beyond) of Kubernetes first, on which PodSecurityPolicy is no longer existing
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.14",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	stcSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:1.1.1",
+				Providers: []corev1.DataProviderSpec{
+					{
+						Name: "default",
+						Type: "prometheus",
+						Params: map[string]string{
+							"url": "http://prometheus:9090",
+						},
+					},
+					{
+						Name: "second",
+						Type: "datadog",
+						Params: map[string]string{
+							"url":  "http://datadog:9090",
+							"auth": "foobar",
+						},
+					},
+				},
+				GitOps: &corev1.GitOpsSpec{
+					Name: "test",
+					Type: "bitbucket-scm",
+					Params: map[string]interface{}{
+						"defaultReviewers": []interface{}{"user1", "user2"},
+						"user":             "oksana",
+						"repo":             "autopilot-bb",
+						"folder":           "workloads",
+						"baseUrl":          "http://10.13.108.10:7990",
+						"projectKey":       "PXAUT",
+						"branch":           "master",
+					},
+				},
+				Args: map[string]string{
+					"min_poll_interval": "4",
+					"log-level":         "info",
+				},
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+
+	cluster := stcSpec.DeepCopy()
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "prometheus-user-workload-token-abcd",
+			Namespace: "openshift-user-workload-monitoring",
+		},
+		Data: map[string][]byte{
+			"token":  []byte("dG9rZW4tdmFsdWU="),
+			"ca.crt": []byte("Y2VydGlmaWNhdGUtdmFsdWU="),
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), secret)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Autopilot ConfigMap
+	expectedConfigMap := testutil.GetExpectedConfigMap(t, "autopilotConfigMap.yaml")
+	autopilotConfigMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, autopilotConfigMap, component.AutopilotConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, autopilotConfigMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, autopilotConfigMap.Namespace)
+	require.Len(t, autopilotConfigMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, autopilotConfigMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, autopilotConfigMap.Data)
+
+	// Autopilot ServiceAccount
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.AutopilotServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, component.AutopilotServiceAccountName, sa.Name)
+	require.Equal(t, cluster.Namespace, sa.Namespace)
+	require.Len(t, sa.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+
+	// Autopilot ClusterRoleBinding
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "autopilotClusterRoleBinding.yaml")
+	actualCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualCRB, component.AutopilotClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCRB.Name, actualCRB.Name)
+	require.Empty(t, actualCRB.OwnerReferences)
+	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
+	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
+
+	// Autopilot Secret
+	expectedSecret := testutil.GetExpectedSecret(t, "autopilot-auth-token-secret.yaml")
+	actualSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, component.AutopilotSecretName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, expectedSecret.Data, actualSecret.Data)
+
+	// Autopilot Deployment
+	expectedDeployment := testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_14.yaml")
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Volumes, autopilotDeployment.Spec.Template.Spec.Volumes)
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Containers[0].VolumeMounts, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	autopilotComponent, _ := component.Get(component.AutopilotComponentName)
+	err = autopilotComponent.Delete(cluster)
+	autopilotComponent.MarkDeleted()
+	require.NoError(t, err)
+
 }
 
 func TestSecurityInstall(t *testing.T) {
@@ -11590,10 +11889,12 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	defer mockCtrl.Finish()
 
 	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	mockClusterDomainServer := mock.NewMockOpenStorageClusterDomainsServer(mockCtrl)
 	sdkServerIP := "127.0.0.1"
 	sdkServerPort := 21883
 	mockSdk := mock.NewSdkServer(mock.SdkServers{
-		Node: mockNodeServer,
+		Node:           mockNodeServer,
+		ClusterDomains: mockClusterDomainServer,
 	})
 	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
 	require.NoError(t, err)
@@ -11617,6 +11918,10 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+	mockClusterDomainServer.EXPECT().
+		Enumerate(gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("cluster domains not available error")).
 		AnyTimes()
 
 	cluster := &corev1.StorageCluster{
@@ -11777,7 +12082,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 		// Node that does not return a scheduler node name, does not get counted towards quorum calculation as we cannot
 		// determine if it is part of the current k8s cluster or not.
 		{NonQuorumMember: false, NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
-		// Node that is not part of the cluster, does not get counted towards quorum calculation.
+		// Node that is not part of the k8s cluster, still gets counted towards quorum calculation.
 		{NonQuorumMember: false, SchedulerNodeName: "node6", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
 		// Ignore node that is in Decommission state.
 		{NonQuorumMember: false, Status: osdapi.Status_STATUS_DECOMMISSION},
@@ -11790,7 +12095,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
+	require.Equal(t, 3, storagePDB.Spec.MinAvailable.IntValue())
 
 	// TestCase: Do not use NonQuorumMember flag if there is at least one old unsupported node
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
@@ -11821,10 +12126,12 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	defer mockCtrl.Finish()
 
 	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	mockClusterDomainServer := mock.NewMockOpenStorageClusterDomainsServer(mockCtrl)
 	sdkServerIP := "127.0.0.1"
 	sdkServerPort := 21883
 	mockSdk := mock.NewSdkServer(mock.SdkServers{
-		Node: mockNodeServer,
+		Node:           mockNodeServer,
+		ClusterDomains: mockClusterDomainServer,
 	})
 	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
 	require.NoError(t, err)
@@ -11858,6 +12165,11 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 			},
 		},
 	}}
+
+	// Since it is a metro DR cluster, there will be more than 1 cluster domain
+	expectedClusterDomainsEnumerateResp := &osdapi.SdkClusterDomainsEnumerateResponse{
+		ClusterDomainNames: []string{"domain 1", "domain 2"},
+	}
 	// StorageNode with ID 1,2,3 will run on the cluster
 	// k8s node4 doesn't meet affinity and node5 is tainted
 	// StorageNode with ID 6 and 7 don't belong to this cluster
@@ -11877,6 +12189,11 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	mockClusterDomainServer.EXPECT().
+		Enumerate(gomock.Any(), gomock.Any()).
+		Return(expectedClusterDomainsEnumerateResp, nil).
 		AnyTimes()
 
 	cluster := &corev1.StorageCluster{
@@ -12872,7 +13189,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.Equal(t, expectedDeployment, deployment)
 
 	secret := v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, secret.OwnerReferences[0].Name, cluster.Name)
 
@@ -12914,7 +13231,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	// Cert is not deleted after telemetry is disabled. it would be reused when it's re-enabled.
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Now enabled again with custom telemetry image.
@@ -13261,7 +13578,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.Equal(t, expectedDeployment.Spec, deployment.Spec)
 
 	secret := v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, secret.OwnerReferences[0].Name, cluster.Name)
 
@@ -13310,7 +13627,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 
 	// Cert is not deleted after telemetry is disabled. it would be reused when it's re-enabled.
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 
 	// Now enabled again with custom telemetry image.
@@ -14298,7 +14615,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	require.NoError(t, err)
 
 	secret := v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, secret.OwnerReferences)
 
@@ -14313,7 +14630,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	require.NoError(t, err)
 
 	secret = v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Contains(t, secret.OwnerReferences, *ownerRef)
 
@@ -14325,7 +14642,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	require.NoError(t, err)
 
 	secret = v1.Secret{}
-	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, secret.OwnerReferences)
 }
@@ -15392,7 +15709,7 @@ func createTelemetrySecret(t *testing.T, k8sClient client.Client, namespace stri
 		context.TODO(),
 		&v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.TelemetryCertName,
+				Name:      testutil.TelemetryCertName,
 				Namespace: namespace,
 			},
 		},
