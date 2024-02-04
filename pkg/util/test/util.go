@@ -8,7 +8,6 @@ import (
 	cryptoTls "crypto/tls"
 	"encoding/base64"
 	"fmt"
-	routev1 "github.com/openshift/api/route/v1"
 	"io"
 	"net"
 	"net/http"
@@ -31,6 +30,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	consolev1 "github.com/openshift/api/console/v1"
+	routev1 "github.com/openshift/api/route/v1"
 	ocp_secv1 "github.com/openshift/api/security/v1"
 	appops "github.com/portworx/sched-ops/k8s/apps"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -869,6 +869,38 @@ func ValidateClusterProviderHealth(cluster *corev1.StorageCluster) error {
 		}
 	}
 	return nil
+}
+
+// GetOpenshiftVersion gets Openshift version from ClusterVersion object and returns it as a string
+func GetOpenshiftVersion() (string, error) {
+	logrus.Debug("Getting Openshift version from ClusterVersion object..")
+	clusterVersion, err := openshiftops.Instance().GetClusterVersion("version")
+	if err != nil {
+		return "", fmt.Errorf("failed to get Openshift ClusterVersion object, Err: %v", err)
+	}
+
+	if clusterVersion.Status.Desired.Version == "" {
+		return "", fmt.Errorf("ClusterVersion object returned empty Openshift version string")
+	}
+	logrus.Debugf("Got Openshift version [%s]", clusterVersion.Status.Desired.Version)
+	return clusterVersion.Status.Desired.Version, nil
+}
+
+// IsOpenshiftCluster checks if its Openshift cluster by seeing if ClusterVersion resource exists
+func IsOpenshiftCluster() bool {
+	clusterVersionKind := "ClusterVersion"
+	clusterVersionApiVersion := "config.openshift.io/v1"
+
+	gvk := schema.GroupVersionKind{
+		Kind:    clusterVersionKind,
+		Version: clusterVersionApiVersion,
+	}
+	exists, err := coreops.Instance().ResourceExists(gvk)
+	if err != nil {
+		logrus.Error(err)
+		return false
+	}
+	return exists
 }
 
 // ValidatePxPodsAreReadyOnGivenNodes takes list of node and validates PX pods are present and ready on these nodes
