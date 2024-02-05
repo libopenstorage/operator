@@ -230,12 +230,6 @@ func (p *plugin) createDeployment(filename, deploymentName string, ownerRef *met
 	}
 	deployment.Namespace = cluster.Namespace
 	deployment.OwnerReferences = []metav1.OwnerReference{*ownerRef}
-	if deployment.Name == PluginDeploymentName {
-		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPluginImage(cluster)
-	}
-	if deployment.Name == NginxDeploymentName {
-		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPluginProxyImage(cluster)
-	}
 	deployment.Spec.Template.ObjectMeta = k8s.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	existingDeployment := &appsv1.Deployment{}
@@ -252,6 +246,14 @@ func (p *plugin) createDeployment(filename, deploymentName string, ownerRef *met
 	}
 
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
+
+	if deployment.Name == PluginDeploymentName {
+		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPluginImage(cluster)
+		deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy = v1.PullAlways
+	}
+	if deployment.Name == NginxDeploymentName {
+		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPluginProxyImage(cluster)
+	}
 
 	equal, _ := util.DeepEqualPodTemplate(&deployment.Spec.Template, &existingDeployment.Spec.Template)
 
