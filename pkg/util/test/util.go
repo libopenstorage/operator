@@ -1522,7 +1522,7 @@ func GetExpectedPxNodeList(cluster *corev1.StorageCluster) ([]v1.Node, error) {
 	}
 
 	for _, node := range nodeList.Items {
-		if coreops.Instance().IsNodeMaster(node) && !IsK3sCluster() {
+		if coreops.Instance().IsNodeMaster(node) && !IsK3sCluster() && !IsPxDeployedOnMaster(cluster) {
 			continue
 		}
 
@@ -1533,6 +1533,12 @@ func GetExpectedPxNodeList(cluster *corev1.StorageCluster) ([]v1.Node, error) {
 	}
 
 	return nodeListWithPxPods, nil
+}
+
+// IsPxDeployedOnMaster look for PX StorageCluster annotation that tells PX Operator wether to deploy PX on master or not and return true or false
+func IsPxDeployedOnMaster(cluster *corev1.StorageCluster) bool {
+	deployOnMaster, err := strconv.ParseBool(cluster.Annotations["portworx.io/run-on-master"])
+	return err == nil && deployOnMaster
 }
 
 // ConvertNodeListToNodeNameList takes list of nodes and return list of node names
