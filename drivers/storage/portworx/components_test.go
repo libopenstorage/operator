@@ -15958,6 +15958,10 @@ func TestPluginInstallAndUninstall(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
+		Spec: corev1.StorageClusterSpec{
+			Image:           "portworx/image:2.2",
+			ImagePullPolicy: v1.PullIfNotPresent,
+		},
 	}
 
 	err = driver.PreInstall(cluster)
@@ -16006,11 +16010,14 @@ func TestPluginInstallAndUninstall(t *testing.T) {
 	// test creation of plugin-deployment
 	expectedPluginDeployment := testutil.GetExpectedDeployment(t, "plugin-deployment.yaml")
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &expectedPluginDeployment.Spec.Template.Spec)
+	expectedPluginDeployment.Spec.Template.Spec.Containers[0].ImagePullPolicy = v1.PullAlways
+
 	actualPluginDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, actualPluginDeployment, component.PluginDeploymentName, "kube-test")
 	require.NoError(t, err)
 	require.Equal(t, expectedPluginDeployment.Name, actualPluginDeployment.Name)
 	require.Equal(t, expectedPluginDeployment.Spec, actualPluginDeployment.Spec)
+	require.Equal(t, expectedPluginDeployment.Spec.Template.Spec.Containers[0].ImagePullPolicy, actualPluginDeployment.Spec.Template.Spec.Containers[0].ImagePullPolicy)
 
 	pluginComponent, _ := component.Get(component.PluginComponentName)
 	err = pluginComponent.Delete(cluster)
