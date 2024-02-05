@@ -1,29 +1,35 @@
 package utils
 
 import (
+	"fmt"
 	"path"
 	"strings"
 	"testing"
 
-	"github.com/libopenstorage/cloudops"
-
-	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/require"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/cloudops"
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
+	schedopsCore "github.com/portworx/sched-ops/k8s/core"
 	"github.com/portworx/sched-ops/k8s/operator"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
 	// specDir is a directory with all the specs
 	specDir = "./operator-test"
+)
+
+var (
+	// Openshift version where we do not support PX Prometheus any more
+	ocpVer4_14, _ = version.NewVersion("4.14")
 )
 
 // CreateStorageClusterTestSpecFunc creates a function that returns test specs for a test case
@@ -70,6 +76,48 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 
 			if ocpEnvVarCreds != nil {
 				envVarList = append(envVarList, ocpEnvVarCreds...)
+			}
+		}
+
+		// Configure Openshift Prometheus if version is 4.14+
+		if testutil.IsOpenshiftCluster() {
+			ocpVer, err := testutil.GetOpenshiftVersion()
+			if err != nil {
+				return err
+			}
+			ocpVersion, _ := version.NewVersion(ocpVer)
+			if ocpVersion.GreaterThanOrEqual(ocpVer4_14) {
+				// Deploy Openshift Prometheus ConfigMap
+				ocpConfigmap := &v1.ConfigMap{
+					ObjectMeta: meta_v1.ObjectMeta{
+						Name:      "cluster-monitoring-config",
+						Namespace: "openshift-monitoring",
+					},
+					Data: map[string]string{
+						"config.yaml": "enableUserWorkload: true",
+					},
+				}
+				_, err = schedopsCore.Instance().GetConfigMap(ocpConfigmap.Name, ocpConfigmap.Namespace)
+				if err != nil {
+					if errors.IsNotFound(err) {
+						logrus.Debugf("Creating ConfigMap [%s] in namespace [%s]", ocpConfigmap.Name, ocpConfigmap.Namespace)
+						_, err = schedopsCore.Instance().CreateConfigMap(ocpConfigmap)
+						if err != nil {
+							return fmt.Errorf("failed to create ConfigMap [%s] in namesapce [%s], Err: %v", ocpConfigmap.Name, ocpConfigmap.Namespace, err)
+						}
+						logrus.Debugf("Successfully created ConfigMap [%s] in namespace [%s]", ocpConfigmap.Name, ocpConfigmap.Namespace)
+					} else {
+						return fmt.Errorf("failed to get ConfigMap [%s] in namespace [%s], Err: %v", ocpConfigmap.Name, ocpConfigmap.Namespace, err)
+					}
+				} else {
+					logrus.Debugf("ConfigMap [%s] already exists in [%s] namespace, will skip creating one", ocpConfigmap.Name, ocpConfigmap.Namespace)
+				}
+
+				// Do not enable Portworx Prometheus as it is not supported on Openshift 4.14+
+				if cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.Enabled {
+					logrus.Debugf("Disabling PX Prometheus as it is not supported on Openshift [%s] and above", ocpVer)
+					cluster.Spec.Monitoring.Prometheus.Enabled = false
+				}
 			}
 		}
 	}

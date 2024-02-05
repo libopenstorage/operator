@@ -35,6 +35,8 @@ const (
 var (
 	pxVer2_9, _  = version.NewVersion("2.9")
 	pxVer2_12, _ = version.NewVersion("2.12")
+
+	ocpVer4_14, _ = version.NewVersion("4.14")
 )
 
 var testStorageClusterBasicCases = []types.TestCase{
@@ -181,7 +183,21 @@ var testStorageClusterBasicCases = []types.TestCase{
 		ShouldSkip: func(tc *types.TestCase) bool {
 			skip := ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer23_8)
 			if skip {
-				logrus.Info("Skipping BasicGrafanaRegression since operator version is less than 23.8.x")
+				logrus.Info("Skipping BasicGrafanaRegression, because PX Operator version is less than 23.8")
+			}
+
+			if testutil.IsOpenshiftCluster() {
+				ocpVer, err := testutil.GetOpenshiftVersion()
+				if err != nil {
+					logrus.Warnf("Skipping BasicGrafanaRegression, because not able to determine Openshift version, Err: %v", err)
+					skip = true
+				}
+
+				ocpVersion, _ := version.NewVersion(ocpVer)
+				if ocpVersion.GreaterThanOrEqual(ocpVer4_14) {
+					logrus.Warnf("Skipping BasicGrafanaRegression, because Openshift version is [%s] which is higher than 4.14, PX Prometheus is not supported here and will skip this test", ocpVer)
+					skip = true
+				}
 			}
 			return skip
 		},
