@@ -4,8 +4,9 @@ go 1.21
 
 require (
 	github.com/aws/aws-sdk-go v1.44.45
+	github.com/emicklei/go-restful/v3 v3.9.0
 	github.com/go-logr/logr v1.2.4
-	github.com/golang-jwt/jwt/v4 v4.3.0
+	github.com/golang-jwt/jwt/v4 v4.4.3
 	github.com/golang/mock v1.6.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/uuid v1.3.0
@@ -15,11 +16,12 @@ require (
 	github.com/openshift/api v0.0.0-20230503133300-8bbcb7ca7183
 	github.com/operator-framework/api v0.17.1
 	github.com/pborman/uuid v1.2.1
-	github.com/portworx/kvdb v0.0.0-20230326003017-21a38cf82d4b
-	github.com/portworx/sched-ops v1.20.4-rc1.0.20230802175859-ff4459c520ae
+	github.com/portworx/kvdb v0.0.0-20230405233801-87666830d3fd
+	github.com/portworx/sched-ops v1.20.4-rc1.0.20230426231724-8d9f2c104721
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.63.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
 	github.com/sirupsen/logrus v1.9.0
+	github.com/spf13/afero v1.8.2
 	github.com/stretchr/testify v1.8.2
 	github.com/urfave/cli v1.22.2
 	golang.org/x/sys v0.6.0
@@ -32,10 +34,10 @@ require (
 	k8s.io/apimachinery v0.27.1
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/code-generator v0.25.4
-	k8s.io/component-base v0.26.1
+	k8s.io/component-base v0.25.2
 	k8s.io/component-helpers v0.25.1
 	k8s.io/klog v1.0.0
-	k8s.io/kube-scheduler v0.0.0
+	k8s.io/kube-scheduler v0.25.1
 	k8s.io/kubernetes v1.25.1
 	k8s.io/utils v0.0.0-20230505201702-9f6742963106
 	sigs.k8s.io/cluster-api v0.2.11
@@ -51,13 +53,13 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0 // indirect
 	github.com/codeskyblue/go-sh v0.0.0-20170112005953-b097669b1569 // indirect
-	github.com/coreos/etcd v3.3.13+incompatible // indirect
 	github.com/coreos/go-oidc v2.2.1+incompatible // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
+	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
+	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/distribution v2.8.2+incompatible // indirect
-	github.com/emicklei/go-restful/v3 v3.9.0 // indirect
 	github.com/evanphx/json-patch v5.6.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/fatih/color v1.13.0 // indirect
@@ -72,7 +74,7 @@ require (
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
+	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/hashicorp/consul/api v1.12.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
@@ -110,8 +112,11 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/spf13/cobra v1.6.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	go.etcd.io/etcd v0.5.0-alpha.5.0.20200910180754-dd1b699fc489 // indirect
+	go.uber.org/atomic v1.7.0 // indirect
+	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
-	golang.org/x/crypto v0.1.0 // indirect
+	golang.org/x/crypto v0.6.0 // indirect
 	golang.org/x/mod v0.9.0 // indirect
 	golang.org/x/net v0.8.0 // indirect
 	golang.org/x/oauth2 v0.5.0 // indirect
@@ -134,8 +139,10 @@ require (
 
 replace (
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
+	github.com/libopenstorage/cloudops => github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1
 	github.com/libopenstorage/openstorage => github.com/libopenstorage/openstorage v1.0.1-0.20231025225342-bd3d3ceba556
 	github.com/portworx/sched-ops => github.com/portworx/sched-ops v1.20.4-rc1.0.20231018042450-4c290674cb5a
+	github.com/spf13/afero => github.com/spf13/afero v1.6.0
 	golang.org/x/tools => golang.org/x/tools v0.1.11
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 	google.golang.org/grpc/examples/helloworld/helloworld => google.golang.org/grpc/examples/helloworld/helloworld v1.29.1
