@@ -194,7 +194,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 				}
 
 				ocpVersion, _ := version.NewVersion(ocpVer)
-				if ocpVersion.GreaterThanOrEqual(ocpVer4_14) {
+				if ocpVersion.GreaterThanOrEqual(ocpVer4_14) && ci_utils.PxOperatorVersion.GreaterThanOrEqual(ci_utils.PxOperatorVer23_10_3) {
 					logrus.Warnf("Skipping BasicGrafanaRegression, because Openshift version is [%s] which is higher than 4.14, PX Prometheus is not supported here and will skip this test", ocpVer)
 					skip = true
 				}
@@ -217,6 +217,23 @@ var testStorageClusterBasicCases = []types.TestCase{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-stc"},
 		}),
 		TestFunc: BasicAlertManagerRegression,
+		ShouldSkip: func(tc *types.TestCase) bool {
+			skip := false
+			if testutil.IsOpenshiftCluster() {
+				ocpVer, err := testutil.GetOpenshiftVersion()
+				if err != nil {
+					logrus.Warnf("Skipping BasicAlertManagerRegression, because not able to determine Openshift version, Err: %v", err)
+					skip = true
+				}
+
+				ocpVersion, _ := version.NewVersion(ocpVer)
+				if ocpVersion.GreaterThanOrEqual(ocpVer4_14) && ci_utils.PxOperatorVersion.GreaterThanOrEqual(ci_utils.PxOperatorVer23_10_3) {
+					logrus.Warnf("Skipping BasicAlertManagerRegression, because Openshift version is [%s] which is higher than 4.14, PX Prometheus is not supported here and will skip this test", ocpVer)
+					skip = true
+				}
+			}
+			return skip
+		},
 	},
 	{
 		TestName:        "BasicKvdbRegression",
