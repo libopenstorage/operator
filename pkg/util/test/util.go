@@ -1484,6 +1484,7 @@ func validatePortworxAPIService(cluster *corev1.StorageCluster, timeout, interva
 // node selectors and affinities.
 func GetExpectedPxNodeList(cluster *corev1.StorageCluster) ([]v1.Node, error) {
 	var nodeListWithPxPods []v1.Node
+	var runOnMaster bool
 
 	nodeList, err := coreops.Instance().GetNodes()
 	if err != nil {
@@ -1496,11 +1497,15 @@ func GetExpectedPxNodeList(cluster *corev1.StorageCluster) ([]v1.Node, error) {
 			NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
 		}
 	} else {
-		dummyPod.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: defaultPxNodeAffinityRules(IsK3sCluster()),
+		if IsK3sCluster() || IsPxDeployedOnMaster(cluster) {
+			runOnMaster = true
 		}
 
-		if IsK3sCluster() {
+		dummyPod.Spec.Affinity = &v1.Affinity{
+			NodeAffinity: defaultPxNodeAffinityRules(runOnMaster),
+		}
+
+		if runOnMaster {
 			masterTaintFound := false
 			for _, t := range dummyPod.Spec.Tolerations {
 				if t.Key == "node-role.kubernetes.io/master" &&
@@ -1522,7 +1527,7 @@ func GetExpectedPxNodeList(cluster *corev1.StorageCluster) ([]v1.Node, error) {
 	}
 
 	for _, node := range nodeList.Items {
-		if coreops.Instance().IsNodeMaster(node) && !IsK3sCluster() && !IsPxDeployedOnMaster(cluster) {
+		if coreops.Instance().IsNodeMaster(node) && !runOnMaster {
 			continue
 		}
 
