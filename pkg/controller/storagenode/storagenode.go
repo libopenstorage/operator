@@ -269,6 +269,10 @@ func (c *Controller) syncKVDB(
 	}
 
 	if isNodeRunningKVDB(storageNode) { // create kvdb pod if not present
+		if len(kvdbPods) > 0 {
+			c.updateKvdbNodeInfoMap(storageNode.Name)
+		}
+
 		node := &v1.Node{}
 		isBeingDeleted := false
 		isRecentlyCreatedAfterNodeCordoned := false
@@ -294,21 +298,10 @@ func (c *Controller) syncKVDB(
 				return err
 			}
 
-			c.log(storageNode).Infof("creating kvdb pod: %s/%s", pod.Namespace, pod.Name)
+			c.log(storageNode).Infof("creating portworx-kvdb pod")
 			_, err = coreops.Instance().CreatePod(pod)
 			if err != nil {
 				return err
-			}
-
-			nodeInfo, ok := c.nodeInfoMap.Load(storageNode.Name)
-			if ok {
-				nodeInfo.LastPodCreationTime = time.Now()
-			} else {
-				c.nodeInfoMap.Store(storageNode.Name, &k8s.NodeInfo{
-					NodeName:             storageNode.Name,
-					LastPodCreationTime:  time.Now(),
-					CordonedRestartDelay: constants.DefaultCordonedRestartDelay,
-				})
 			}
 		}
 	} else { // delete pods if present
@@ -322,6 +315,7 @@ func (c *Controller) syncKVDB(
 	}
 	return nil
 }
+
 func (c *Controller) syncStorage(
 	cluster *corev1.StorageCluster,
 	storageNode *corev1.StorageNode,
@@ -438,6 +432,19 @@ func (c *Controller) kvdbOldPodLabels(cluster *corev1.StorageCluster) map[string
 		constants.LabelKeyClusterName: cluster.Name,
 		constants.LabelKeyDriverName:  c.Driver.String(),
 		constants.LabelKeyKVDBPod:     constants.LabelValueTrue,
+	}
+}
+
+func (c *Controller) updateKvdbNodeInfoMap(nodeName string) {
+	nodeInfo, ok := c.nodeInfoMap.Load(nodeName)
+	if ok {
+		nodeInfo.LastPodSeenTime = time.Now()
+	} else {
+		c.nodeInfoMap.Store(nodeName, &k8s.NodeInfo{
+			NodeName:             nodeName,
+			LastPodSeenTime:      time.Now(),
+			CordonedRestartDelay: constants.DefaultCordonedRestartDelay,
+		})
 	}
 }
 
