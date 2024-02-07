@@ -8986,7 +8986,7 @@ func TestNodeShouldRunStoragePod(t *testing.T) {
 	}
 	controller.nodeInfoMap.Store(k8sNode.Name, &k8s.NodeInfo{
 		NodeName:             k8sNode.Name,
-		LastPodCreationTime:  time.Now().Add(-time.Hour),
+		LastPodSeenTime:      time.Now().Add(-time.Hour),
 		CordonedRestartDelay: constants.DefaultCordonedRestartDelay,
 	})
 

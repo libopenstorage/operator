@@ -115,29 +115,69 @@ func TestIsPodRecentlyCreatedAfterNodeCordoned(t *testing.T) {
 	cluster := &corev1.StorageCluster{}
 	nodeInfoMap := maps.MakeSyncMap[string, *NodeInfo]()
 
-	// TestCase: Pod never created
-	recentlyCreatedAfterCordon := IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
-	require.False(t, recentlyCreatedAfterCordon)
-
+	// Simulate pod is not present, by not adding the pod info in the map
 	// Test with fixed restart delay to 10 seconds
 	cluster.Annotations = map[string]string{
 		constants.AnnotationCordonedRestartDelay: "10",
 	}
 
+	// TestCase: Node not cordoned
+	recentlyCreatedAfterCordon := IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
+	require.False(t, recentlyCreatedAfterCordon)
+	nodeInfo, present := nodeInfoMap.Load(node.Name)
+	require.True(t, present)
+	require.Equal(t, constants.DefaultCordonedRestartDelay, nodeInfo.CordonedRestartDelay)
+	require.Empty(t, nodeInfo.LastPodSeenTime)
+
+	// TestCase: Cordon time is older than overwritten restart wait duration, pod not present
+	timeAdded := metav1.NewTime(
+		metav1.Now().
+			Add(-10 * time.Second).
+			Add(-time.Second),
+	)
+	node.Spec.Unschedulable = true
+	node.Spec.Taints = []v1.Taint{
+		{
+			Key:       v1.TaintNodeUnschedulable,
+			TimeAdded: &timeAdded,
+		},
+	}
+	nodeInfoMap.Delete(node.Name)
+	recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
+	require.False(t, recentlyCreatedAfterCordon)
+	nodeInfo, _ = nodeInfoMap.Load(node.Name)
+	require.Equal(t, timeAdded.Time, nodeInfo.LastPodSeenTime)
+
+	// TestCase: Cordon time is newer than overwritten restart wait duration, pod not present
+	timeAdded = metav1.NewTime(
+		metav1.Now().
+			Add(-10 * time.Second).
+			Add(time.Second),
+	)
+	nodeInfoMap.Delete(node.Name)
+	recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
+	require.True(t, recentlyCreatedAfterCordon)
+	nodeInfo, _ = nodeInfoMap.Load(node.Name)
+	require.Equal(t, timeAdded.Time, nodeInfo.LastPodSeenTime)
+
+	// TestCase: Node not cordoned and pod is present
 	// Simulate new pod was recently created.
 	nodeInfoMap.Store(node.Name, &NodeInfo{
 		NodeName:             node.Name,
-		LastPodCreationTime:  time.Now(),
+		LastPodSeenTime:      time.Now(),
 		CordonedRestartDelay: constants.DefaultCordonedRestartDelay,
 	})
+	node.Spec.Unschedulable = false
+	node.Spec.Taints = nil
 
-	// TestCase: Node not cordoned
 	recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
 	require.False(t, recentlyCreatedAfterCordon)
-	// TestCase: Node cordoned, but time of cordon is zero
+
+	// TestCase: Node cordoned, but time of cordon is not set
 	node.Spec.Unschedulable = true
 	recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
 	require.False(t, recentlyCreatedAfterCordon)
+
 	// TestCase: Node cordoned, but time of cordon is zero
 	node.Spec.Taints = []v1.Taint{
 		{
@@ -149,7 +189,7 @@ func TestIsPodRecentlyCreatedAfterNodeCordoned(t *testing.T) {
 	require.False(t, recentlyCreatedAfterCordon)
 
 	// TestCase: Cordon time is older than overwritten restart wait duration, pod was recently created
-	timeAdded := metav1.NewTime(
+	timeAdded = metav1.NewTime(
 		metav1.Now().
 			Add(-10 * time.Second).
 			Add(-time.Second),
@@ -157,6 +197,7 @@ func TestIsPodRecentlyCreatedAfterNodeCordoned(t *testing.T) {
 	node.Spec.Taints[0].TimeAdded = &timeAdded
 	recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
 	require.True(t, recentlyCreatedAfterCordon)
+
 	// TestCase: Cordon time is newer than overwritten restart wait duration, pod was recently created.
 	timeAdded = metav1.NewTime(
 		metav1.Now().
@@ -167,16 +208,18 @@ func TestIsPodRecentlyCreatedAfterNodeCordoned(t *testing.T) {
 	require.True(t, recentlyCreatedAfterCordon)
 
 	// Simulate pod was created before the restart delay.
-	nodeInfoMap.LoadUnchecked(node.Name).LastPodCreationTime = time.Now().Add(-time.Hour)
+	nodeInfoMap.LoadUnchecked(node.Name).LastPodSeenTime = time.Now().Add(-time.Hour)
 
 	// TestCase: Node not cordoned
 	node.Spec.Taints = nil
 	recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
 	require.False(t, recentlyCreatedAfterCordon)
-	// TestCase: Node cordoned, but time of cordon is zero
+
+	// TestCase: Node cordoned, but time of cordon is not set
 	node.Spec.Unschedulable = true
 	recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
 	require.False(t, recentlyCreatedAfterCordon)
+
 	// TestCase: Node cordoned, but time of cordon is zero
 	node.Spec.Taints = []v1.Taint{
 		{
@@ -196,6 +239,7 @@ func TestIsPodRecentlyCreatedAfterNodeCordoned(t *testing.T) {
 	node.Spec.Taints[0].TimeAdded = &timeAdded
 	recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
 	require.False(t, recentlyCreatedAfterCordon)
+
 	// TestCase: Cordon time is newer than default restart wait duration, pod was created before the wait duration.
 	timeAdded = metav1.NewTime(
 		metav1.Now().
@@ -216,14 +260,14 @@ func TestIsPodRecentlyCreatedAfterNodeCordoned(t *testing.T) {
 	// Simulate pod keeps restarting when node is cordoned
 	for delay := constants.DefaultCordonedRestartDelay; delay < constants.MaxCordonedRestartDelay; delay = delay * 2 {
 		// Pod was created after cordoned restart delay
-		nodeInfoMap.LoadUnchecked(node.Name).LastPodCreationTime = time.Now().Add(-delay).Add(time.Second)
+		nodeInfoMap.LoadUnchecked(node.Name).LastPodSeenTime = time.Now().Add(-delay).Add(time.Second)
 		recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
 		require.True(t, recentlyCreatedAfterCordon)
 		// Cordoned restart delay should remain unchanged if there's no pod restart
 		require.Equal(t, delay, nodeInfoMap.LoadUnchecked(node.Name).CordonedRestartDelay)
 
 		// Time elapse 2s, now pod creation time is before the cutoff time and should restart
-		nodeInfoMap.LoadUnchecked(node.Name).LastPodCreationTime = time.Now().Add(-delay).Add(-time.Second)
+		nodeInfoMap.LoadUnchecked(node.Name).LastPodSeenTime = time.Now().Add(-delay).Add(-time.Second)
 		recentlyCreatedAfterCordon = IsPodRecentlyCreatedAfterNodeCordoned(node, nodeInfoMap, cluster)
 		require.False(t, recentlyCreatedAfterCordon)
 		// Restart delay should increase

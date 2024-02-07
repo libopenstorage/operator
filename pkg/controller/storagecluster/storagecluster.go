@@ -1052,17 +1052,6 @@ func (c *Controller) syncNodes(
 					logrus.Warnf("Failed creation of storage pod on node %s: %v", nodeName, err)
 					errCh <- err
 				} else {
-					// Pod created, store nodeInfo into the map, reset creation time if exists
-					nodeInfo, ok := c.nodeInfoMap.Load(nodeName)
-					if ok {
-						nodeInfo.LastPodCreationTime = time.Now()
-					} else {
-						c.nodeInfoMap.Store(nodeName, &k8s.NodeInfo{
-							NodeName:             nodeName,
-							LastPodCreationTime:  time.Now(),
-							CordonedRestartDelay: constants.DefaultCordonedRestartDelay,
-						})
-					}
 					if errors.IsTimeout(err) {
 						// TODO
 						// Pod is created but its initialization has timed out. If the initialization
@@ -1239,6 +1228,11 @@ func (c *Controller) podsShouldBeOnNode(
 	nodeToStoragePods map[string][]*v1.Pod,
 	cluster *corev1.StorageCluster,
 ) (nodesNeedingStoragePods, podsToDelete []string, err error) {
+	storagePods, exists := nodeToStoragePods[node.Name]
+	if exists {
+		c.updateNodeInfoMap(node.Name)
+	}
+
 	shouldRun, shouldContinueRunning, err := c.nodeShouldRunStoragePod(node, cluster)
 	logrus.WithFields(logrus.Fields{
 		"node":                  node.Name,
@@ -1249,7 +1243,6 @@ func (c *Controller) podsShouldBeOnNode(
 		return
 	}
 
-	storagePods, exists := nodeToStoragePods[node.Name]
 	pxVersion := pxutil.GetPortworxVersion(cluster)
 	supportedPxVersion, _ := version.NewVersion("2.13")
 
@@ -1303,6 +1296,19 @@ func (c *Controller) podsShouldBeOnNode(
 	}
 
 	return nodesNeedingStoragePods, podsToDelete, nil
+}
+
+func (c *Controller) updateNodeInfoMap(nodeName string) {
+	nodeInfo, ok := c.nodeInfoMap.Load(nodeName)
+	if ok {
+		nodeInfo.LastPodSeenTime = time.Now()
+	} else {
+		c.nodeInfoMap.Store(nodeName, &k8s.NodeInfo{
+			NodeName:             nodeName,
+			LastPodSeenTime:      time.Now(),
+			CordonedRestartDelay: constants.DefaultCordonedRestartDelay,
+		})
+	}
 }
 
 // nodeShouldRunStoragePod checks a set of preconditions against a (node, storagecluster) and
