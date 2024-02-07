@@ -1317,6 +1317,7 @@ func (c *Controller) nodeShouldRunStoragePod(
 	node *v1.Node,
 	cluster *corev1.StorageCluster,
 ) (bool, bool, error) {
+	fmt.Println("-----------------------------------------------------------------------")
 	if !storagePodsEnabled(cluster) {
 		return false, false, nil
 	}
@@ -1327,15 +1328,24 @@ func (c *Controller) nodeShouldRunStoragePod(
 		c.log(cluster).Warnf("failed to check if node: %s is being deleted due to: %v", node.Name, err)
 	}
 
+	fmt.Println(" isBeingDeleted : ", isBeingDeleted)
+
 	if isBeingDeleted {
 		logrus.Infof("node: %s is in the process of being deleted. Will not create new pods here.", node.Name)
 		return false, true, nil
 	}
 
 	if k8s.IsPodRecentlyCreatedAfterNodeCordoned(node, c.nodeInfoMap, cluster) {
+		fmt.Println(" IsPodRecentlyCreatedAfterNodeCordoned : ", true)
+
 		// Storage pod is created recently, should let the pod continue running without creating a new pod.
 		return false, true, nil
+	} else {
+		fmt.Println(" IsPodRecentlyCreatedAfterNodeCordoned : ", false)
+
 	}
+
+	fmt.Println("-----------------------------------------------------------------------")
 
 	return k8s.CheckPredicatesForStoragePod(node, cluster, c.StorageClusterSelectorLabels(cluster))
 }

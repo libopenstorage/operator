@@ -187,16 +187,25 @@ func CheckPredicatesForStoragePod(
 		logrus.Infof("Failed to create a pod spec for node %v: %v", node.Name, err)
 		return false, false, err
 	}
+	fmt.Println(" pod : ", pod)
 
 	taints := node.Spec.Taints
+	fmt.Println(" taints : ", taints)
+
 	fitsNodeName := len(pod.Spec.NodeName) == 0 || pod.Spec.NodeName == node.Name
+	fmt.Println(" fitsNodeName : ", fitsNodeName)
+
 	fitsNodeAffinity, err := affinityhelper.GetRequiredNodeAffinity(pod).Match(node)
+	fmt.Println(" fitsNodeAffinity : ", fitsNodeAffinity)
+
 	if err != nil {
 		logrus.Warnf("Failed to match node affinity of the pod to node %s. %v", node.Name, err)
 		return false, false, err
 	}
 
 	_, taintsUntolerated := schedulehelper.FindMatchingUntoleratedTaint(taints, pod.Spec.Tolerations, func(t *v1.Taint) bool {
+		fmt.Println(t.Effect == v1.TaintEffectNoExecute)
+		fmt.Println(t.Effect == v1.TaintEffectNoSchedule)
 		return t.Effect == v1.TaintEffectNoExecute || t.Effect == v1.TaintEffectNoSchedule
 	})
 	if !fitsNodeName || !fitsNodeAffinity {
