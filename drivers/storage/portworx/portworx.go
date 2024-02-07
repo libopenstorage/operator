@@ -344,6 +344,8 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		}
 	}
 
+	p.disablePrometheusOnNewInstall(toUpdate)
+
 	shouldRun := p.preflightShouldRun(toUpdate)
 	if _, ok := toUpdate.Annotations[pxutil.AnnotationPreflightCheck]; !ok {
 		toUpdate.Annotations[pxutil.AnnotationPreflightCheck] = strings.ToLower(strconv.FormatBool(shouldRun))
@@ -1366,6 +1368,27 @@ func (p *portworx) setTelemetryDefaults(
 		toUpdate.Spec.Monitoring.Telemetry.Enabled = true
 	}
 	return nil
+}
+
+func (p *portworx) disablePrometheusOnNewInstall(toUpdate *corev1.StorageCluster) {
+	if toUpdate.Spec.Version == "" &&
+		toUpdate.Spec.Monitoring != nil &&
+		toUpdate.Spec.Monitoring.Prometheus != nil &&
+		toUpdate.Spec.Monitoring.Prometheus.Enabled {
+		isOCPPrometheusSupported, err := pxutil.IsSupportedOCPVersion(p.k8sClient, pxutil.OpenshiftPrometheusSupportedVersion)
+		if err != nil {
+			logrus.Errorf("Error checking for OpenShift version %s", err.Error())
+			return
+		}
+		if isOCPPrometheusSupported {
+			toUpdate.Spec.Monitoring.Prometheus.Enabled = false
+			p.warningEvent(toUpdate, util.FailedComponentReason,
+				fmt.Sprintf("Disabling Portworx managed Prometheus in lieu of OpenShift managed Prometheus starting OpenShift %s",
+					pxutil.OpenshiftPrometheusSupportedVersion,
+				),
+			)
+		}
+	}
 }
 
 func removeDeprecatedFields(

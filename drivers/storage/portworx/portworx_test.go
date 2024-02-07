@@ -11,6 +11,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 	version "github.com/hashicorp/go-version"
+	ocpconfig "github.com/openshift/api/config/v1"
+	routev1 "github.com/openshift/api/route/v1"
 	ocp_secv1 "github.com/openshift/api/security/v1"
 	"github.com/portworx/kvdb"
 	"github.com/portworx/kvdb/api/bootstrap/k8s"
@@ -1864,8 +1866,24 @@ func TestStorageClusterDefaultsForLighthouse(t *testing.T) {
 }
 
 func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(1))
+	require.NoError(t, err)
+
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -1877,7 +1895,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	}
 
 	// Don't enable autopilot if nothing specified in the autopilot spec
-	err := driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot)
 	require.Empty(t, cluster.Status.DesiredImages.Autopilot)
@@ -2018,13 +2036,73 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, cluster.Status.DesiredImages.Autopilot)
 
-	// Check default autopilot provider is set if not specified
+	// Check default autopilot provider is not set if Autopilot is disabled
+	cluster.Spec.Autopilot.Providers = nil
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Autopilot.Providers)
+
+	// Check default autopilot provider is set if not specified when Autopilot is enabled
+	cluster.Spec.Autopilot.Enabled = true
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	providers := cluster.Spec.Autopilot.Providers
 	require.Equal(t, 1, len(providers))
 	require.Equal(t, "prometheus", providers[0].Type)
 	require.Equal(t, component.AutopilotDefaultProviderEndpoint, providers[0].Params["url"])
+
+	// Do not set the default provider if OCP > 4.14 and we fail to get the Prometheus endpoint
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.14",
+				},
+			},
+		},
+	}
+	err = k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+	cluster.Spec.Autopilot.Providers = nil
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.Empty(t, cluster.Spec.Autopilot.Providers)
+
+	// Set the default provider for OCP prometheus for OCP > 4.14 if Prometheus endpoint is found
+	route := &routev1.Route{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.OpenshiftMonitoringRouteName,
+			Namespace: pxutil.OpenshiftMonitoringNamespace,
+		},
+		Spec: routev1.RouteSpec{
+			Host: "thanos-querier.openshift-monitoring.com",
+		},
+	}
+	err = k8sClient.Create(context.TODO(), route)
+	require.NoError(t, err)
+	cluster.Spec.Autopilot.Providers = nil
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	providers = cluster.Spec.Autopilot.Providers
+	require.Equal(t, 1, len(providers))
+	require.Equal(t, "prometheus", providers[0].Type)
+	require.Equal(t, "https://thanos-querier.openshift-monitoring.com", providers[0].Params["url"])
+
+	// Do not overwrite the provider if already set
+	route.Spec.Host = "new-thanos-querier.openshift-monitoring.com"
+	err = k8sClient.Update(context.TODO(), route)
+	require.NoError(t, err)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	providers = cluster.Spec.Autopilot.Providers
+	require.Equal(t, "https://thanos-querier.openshift-monitoring.com", providers[0].Params["url"])
 }
 
 func TestStorageClusterDefaultsForStork(t *testing.T) {
@@ -2355,8 +2433,25 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 }
 
 func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	k8sClient := testutil.FakeK8sClient()
+	recorder := record.NewFakeRecorder(1)
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -2368,7 +2463,7 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 	}
 
 	// Don't enable prometheus if monitoring spec is nil
-	err := driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Monitoring.Prometheus)
 	require.Empty(t, cluster.Status.DesiredImages.Prometheus)
@@ -2450,6 +2545,41 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.PrometheusOperator)
 	require.Empty(t, cluster.Status.DesiredImages.PrometheusConfigReloader)
 	require.Empty(t, cluster.Status.DesiredImages.PrometheusConfigMapReload)
+
+	// Disable prometheus on new install for OCP 4.14+, even if set by the user
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.14",
+				},
+			},
+		},
+	}
+	err = k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+	cluster.Spec.Version = ""
+	cluster.Spec.Monitoring.Prometheus.Enabled = true
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.False(t, cluster.Spec.Monitoring.Prometheus.Enabled)
+	require.NotEmpty(t, recorder.Events)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedComponentReason,
+			"Disabling Portworx managed Prometheus in lieu of OpenShift managed Prometheus starting OpenShift 4.14"))
+
+	// Do not disable prometheus on existing install if set by the user
+	cluster.Spec.Monitoring.Prometheus.Enabled = true
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.True(t, cluster.Spec.Monitoring.Prometheus.Enabled)
 }
 
 func TestStorageClusterDefaultsForAlertManager(t *testing.T) {
