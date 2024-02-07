@@ -953,7 +953,7 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 
 	// TestCase: Create kvdb pod if node was cordoned long time ago, and pod was created long time ago.
 	controller.nodeInfoMap.Range(func(key string, value *k8s.NodeInfo) bool {
-		value.LastPodCreationTime = value.LastPodCreationTime.Add(-time.Hour)
+		value.LastPodSeenTime = value.LastPodSeenTime.Add(-time.Hour)
 		return true
 	})
 	timeAdded = metav1.NewTime(
