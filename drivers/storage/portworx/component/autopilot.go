@@ -106,7 +106,7 @@ var (
 		},
 		{
 			Name:      "ca-cert-volume",
-			MountPath: "/etc/ssl/certs",
+			MountPath: "/etc/ssl/px-custom/1",
 			ReadOnly:  true,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
