@@ -865,7 +865,7 @@ func GetPortworxConn(sdkConn *grpc.ClientConn, k8sClient client.Client, namespac
 	}
 
 	// note, using symbolic name for the `endpoint`, as SSL certificates won't have K8s service IP
-	endpoint := PortworxServiceName + "." + namespace + ".svc.cluster.local"
+	endpoint := PortworxServiceName + "." + namespace
 	sdkPort := defaultSDKPort
 
 	// Get the ports from service
