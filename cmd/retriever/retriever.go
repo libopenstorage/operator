@@ -190,7 +190,7 @@ func (k8s *k8sRetriever) removeOpenShiftSCC(dc dynamic.Interface, namespace stri
 func (k8s *k8sRetriever) listDeployments(namespace string) error {
 
 	saveFilesPath := k8s.outputDir + "/px-deployments"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -222,7 +222,7 @@ func (k8s *k8sRetriever) listDeployments(namespace string) error {
 func (k8s *k8sRetriever) listPods(namespace string, labelSelector string) error {
 
 	saveFilesPath := k8s.outputDir + "/px-pods"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -317,7 +317,7 @@ func (k8s *k8sRetriever) listPods(namespace string, labelSelector string) error 
 func (k8s *k8sRetriever) listServices(namespace string) error {
 
 	saveFilesPath := k8s.outputDir + "/px-services"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -349,7 +349,7 @@ func (k8s *k8sRetriever) listServices(namespace string) error {
 func (k8s *k8sRetriever) listStorageClusters(namespace string) error {
 
 	saveFilesPath := k8s.outputDir + "/px-storageCluster"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -391,7 +391,7 @@ func (k8s *k8sRetriever) listStorageClusters(namespace string) error {
 func (k8s *k8sRetriever) listStorageNodes(namespace string) error {
 
 	saveFilesPath := k8s.outputDir + "/px-storageNodes"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -432,7 +432,7 @@ func (k8s *k8sRetriever) listStorageNodes(namespace string) error {
 func (k8s *k8sRetriever) listDaemonSets(namespace string) error {
 
 	saveFilesPath := k8s.outputDir + "/px-daemonsets"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -466,7 +466,7 @@ func (k8s *k8sRetriever) listDaemonSets(namespace string) error {
 func (k8s *k8sRetriever) listStatefulSets(namespace string) error {
 
 	saveFilesPath := k8s.outputDir + "/px-statefulsets"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -500,7 +500,7 @@ func (k8s *k8sRetriever) listStatefulSets(namespace string) error {
 func (k8s *k8sRetriever) listPVCs(namespace string) error {
 
 	saveFilesPath := k8s.outputDir + "/cluster-PVCs"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -573,7 +573,7 @@ func (k8s *k8sRetriever) listAllPVCs() error {
 func (k8s *k8sRetriever) listAllPVs() error {
 
 	saveFilesPath := k8s.outputDir + "/cluster-PVs"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -607,7 +607,7 @@ func (k8s *k8sRetriever) listAllPVs() error {
 func (k8s *k8sRetriever) listKubernetesWorkerNodes() error {
 
 	saveFilesPath := k8s.outputDir + "/cluster-workerNodes"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -664,7 +664,7 @@ func (k8s *k8sRetriever) listKubernetesWorkerNodes() error {
 func (k8s *k8sRetriever) listStorageClasses() error {
 
 	saveFilesPath := k8s.outputDir + "/cluster-storageClasses"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -698,7 +698,7 @@ func (k8s *k8sRetriever) listStorageClasses() error {
 func (k8s *k8sRetriever) listVolumePlacementStrategies() error {
 
 	saveFilesPath := k8s.outputDir + "/px-VPSs"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -737,7 +737,7 @@ func (k8s *k8sRetriever) listVolumePlacementStrategies() error {
 func (k8s *k8sRetriever) listStorageProfiles() error {
 
 	saveFilesPath := k8s.outputDir + "/cluster-storageProfiles"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -776,7 +776,7 @@ func (k8s *k8sRetriever) listStorageProfiles() error {
 func (k8s *k8sRetriever) listVolumeSnapshotClasses() error {
 
 	saveFilesPath := k8s.outputDir + "/px-VolumeSnapshotClasses"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -815,7 +815,7 @@ func (k8s *k8sRetriever) listVolumeSnapshotClasses() error {
 func (k8s *k8sRetriever) listClusterPairs() error {
 
 	saveFilesPath := k8s.outputDir + "/stork-clusterPairs"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -865,7 +865,7 @@ func (k8s *k8sRetriever) listClusterPairs() error {
 func (k8s *k8sRetriever) listBackupLocations() error {
 
 	saveFilesPath := k8s.outputDir + "/stork-backupLocations"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -915,7 +915,7 @@ func (k8s *k8sRetriever) listBackupLocations() error {
 func (k8s *k8sRetriever) listJobs(namespace string) error {
 
 	saveFilesPath := k8s.outputDir + "/px-jobs"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -960,7 +960,7 @@ func (k8s *k8sRetriever) namespaceExists(namespace string) bool {
 func (k8s *k8sRetriever) listConfigMaps(namespace string) error {
 
 	saveFilesPath := k8s.outputDir + "/px-configMaps"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
@@ -994,7 +994,7 @@ func (k8s *k8sRetriever) listConfigMaps(namespace string) error {
 func (k8s *k8sRetriever) getPXConfigMapsKubeSystem(partialName string) error {
 
 	saveFilesPath := k8s.outputDir + "/kube-system-px-configMaps"
-	err := os.MkdirAll(saveFilesPath, os.ModePerm)
+	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
