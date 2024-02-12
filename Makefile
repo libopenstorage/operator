@@ -79,7 +79,7 @@ CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen
 .DEFAULT_GOAL=all
 .PHONY: operator deploy clean vendor vendor-update test generate manifests tools-check
 
-all: operator pretest downloads
+all: operator pretest downloads retriever
 
 vendor-update:
 	go mod download
@@ -189,6 +189,10 @@ operator:
 	@echo "Building the cluster operator binary"
 	@cd cmd/operator && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
 	@cd cmd/dryrun && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/dryrun
+
+retriever:
+	@echo "Building the retriever binary"
+	@cd cmd/retriever && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/retriever
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
