@@ -993,7 +993,7 @@ func (k8s *k8sRetriever) listConfigMaps(namespace string) error {
 // getPXConfigMapsKubeSystem gets a configmap from a partial name from kube-system namespace
 func (k8s *k8sRetriever) getPXConfigMapsKubeSystem(partialName string) error {
 
-	saveFilesPath := k8s.outputDir + "/cluster-configMaps"
+	saveFilesPath := k8s.outputDir + "/kube-system-px-configMaps"
 	err := os.MkdirAll(saveFilesPath, os.ModePerm)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)

@@ -422,6 +422,7 @@ func main() {
 
 }
 
+// retrievePXCentralResources retrieves PX-Central/PX-Backup resources if they exist
 func (k8s *k8sRetriever) retrievePXCentralResources(pxcentralns string) error {
 
 	var existingNamespaces []string
@@ -438,7 +439,10 @@ func (k8s *k8sRetriever) retrievePXCentralResources(pxcentralns string) error {
 		}
 
 		if len(existingNamespaces) == 0 {
-			return fmt.Errorf("px-backup or px-central namespace does not exist")
+
+			k8s.loggerToUse.Infof("PX-Central/PX-Backup resources not found in any namespace")
+			return nil
+
 		}
 	}
 
