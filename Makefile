@@ -192,7 +192,7 @@ operator:
 
 retriever:
 	@echo "Building the retriever binary"
-	@cd cmd/retriever && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/retriever
+	@cd cmd/retriever && go mod tidy && go mod vendor && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/retriever
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
