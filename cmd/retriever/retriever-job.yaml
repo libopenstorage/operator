@@ -49,7 +49,7 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: spec.nodeName
-          command: ["/bin/sh", "-c", "/app/retriever --output_dir $OUTPUT_PATH --namespace $PX_NAMESPACE"]
+          command: ["/bin/sh", "-c", "/retriever --output_dir $OUTPUT_PATH --namespace $PX_NAMESPACE"]
           imagePullPolicy: Always
           securityContext:
             privileged: true
