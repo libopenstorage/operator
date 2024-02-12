@@ -1,0 +1,14 @@
+pipeline {
+	agent {
+		label "px-operator-builder"
+	}
+
+	stages {
+		stage("Build Operator") {
+			steps {
+				build(job: "${PX_OPERATOR_BUILD_JOB_NAME}", parameters: [string(name: "GIT_BRANCH", value: GIT_BRANCH)])
+			}
+		}
+	}
+}
+
