@@ -49,7 +49,7 @@ spec:
           name: autopilot
           volumeMounts:
             - name: ca-cert-volume
-              mountPath: /etc/ssl/certs
+              mountPath: /etc/ssl/px-custom/1
               readOnly: true
             - name: config-volume
               mountPath: /etc/config
