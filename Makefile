@@ -32,14 +32,8 @@ ifndef BASE_REGISTRY_IMG
     $(warning BASE_REGISTRY_IMG not defined, using '$(BASE_REGISTRY_IMG)' instead)
 endif
 
-HAS_GOMODULES := $(shell go help mod why 2> /dev/null)
-
-ifdef HAS_GOMODULES
 export GO111MODULE=on
 export GOFLAGS=-mod=vendor
-else
-$(error operator can only be built with go 1.11+ which supports go modules)
-endif
 
 ifndef PKGS
 PKGS := $(shell GOFLAGS=-mod=vendor go list ./... 2>&1 | grep -v 'pkg/client/informers/externalversions' | grep -v versioned | grep -v 'pkg/apis/core')
