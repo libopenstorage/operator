@@ -4238,6 +4238,7 @@ func ValidateTelemetryContainerOrchestrator(pxImageList map[string]string, clust
 
 	coStartTime, startErr := getCoStateTimeStamp(coStateDir + "/kvStart.ts")
 	if startErr != nil {
+		logrus.Errorf("error obtaining start time from costate file: %v\n", startErr)
 		return fmt.Errorf("container orchestrator validated failed, error obtaining start time from costate file")
 	}
 	logrus.Infof("container orchestrater server start time: %v", time.Unix(coStartTime, 0))
@@ -4258,8 +4259,8 @@ func ValidateTelemetryContainerOrchestrator(pxImageList map[string]string, clust
 
 	if setErr != nil && getErr != nil {
 		// No secret handler timestamp exists
-		logrus.Infof("error obtaining set time from costate file: %v\n", setErr)
-		logrus.Infof("error obtaining get time from costate file: %v\n", getErr)
+		logrus.Errorf("error obtaining set time from costate file: %v\n", setErr)
+		logrus.Errorf("error obtaining get time from costate file: %v\n", getErr)
 		return fmt.Errorf("container orchestrator validated failed, error obtaining costate file")
 	}
 
