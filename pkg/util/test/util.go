@@ -24,6 +24,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
+
+	//pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/pkg/apis"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/mock"
@@ -4160,6 +4162,118 @@ func ValidateAlertManagerDisabled(pxImageList map[string]string, cluster *corev1
 	return nil
 }
 
+// This validates the telemetry container orchestrator usage.  Container orchestrator manages the telemetry registration certificate secret.
+// The container orchestrator is a server running in PX which handles gprc requests to save/retrieve/delete the registration certificate secret.
+func ValidateTelemetryContainerOrchestrator(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	const (
+		OsdBaseLogDir = "/var/lib/osd/log"
+		coStateDir    = OsdBaseLogDir + "/coState"
+	)
+
+	logrus.Infof("Validating telemetry container orchestrator usage...")
+
+	configMap, err := coreops.Instance().GetConfigMap("px-telemetry-register", cluster.Namespace)
+	if err != nil {
+		return err
+	}
+
+	logrus.Infof("Obtained px-telemetry-register configmap...")
+
+	isCOenabled := strings.Contains(configMap.Data["config_properties_px.yaml"], "certStoreType: \"kvstore\"")
+	if !isCOenabled {
+		return fmt.Errorf("telemetry container orchestrator 'certStoreType: kvstore' is expected to be set in 'px-telemetry-register' configmap")
+	}
+
+	logrus.Infof("Validated 'certStoreType: kvstore' configmap setting")
+
+	// Test validation is done by checking timestamp entries of when the container orchestrator operations were called (server start, secret set/get).
+	// The timestamps for secret set/get must be after the timestamp for the start.
+	labelSelector := map[string]string{"role": "px-telemetry-registration"}
+	nodeList, err := coreops.Instance().GetNodes()
+	if err != nil {
+		return err
+	}
+
+	logrus.Infof("find telemetry registration pod node and px pod on that node...")
+
+	var pxPod v1.Pod
+	for _, node := range nodeList.Items {
+		// Get telemetry registration pod
+		podList, err := coreops.Instance().GetPodsByNodeAndLabels(node.Name, cluster.Namespace, labelSelector)
+		if err != nil {
+			return err
+		}
+
+		if len(podList.Items) == 0 {
+			continue
+		}
+		tregPod := podList.Items[0]
+		logrus.Infof("Found telemetry registration pod [%s] on node [%s]", tregPod.Name, node.Name)
+		labelSelector = map[string]string{"name": "portworx"}
+		podList, err = coreops.Instance().GetPodsByNodeAndLabels(node.Name, cluster.Namespace, labelSelector)
+		if err != nil {
+			return err
+		}
+
+		if len(podList.Items) == 0 {
+			return fmt.Errorf("failed to find Portworx pod on telemetry registration node [%s]", node.Name)
+		}
+		pxPod = podList.Items[0]
+		logrus.Infof("Found PX pod [%s] on telemetry registration node [%s]", pxPod.Name, node.Name)
+		break
+	}
+
+	getCoStateTimeStamp := func(tsFileName string) (int64, error) {
+		tmData, err := runCmdInsidePxPod(&pxPod, "cat "+tsFileName, cluster.Namespace, false)
+		if err != nil {
+			return 0, err
+		}
+
+		tm, terr := strconv.ParseInt(string(tmData), 10, 64)
+		if terr != nil {
+			return 0, terr
+		}
+		return tm, nil
+	}
+
+	coStartTime, startErr := getCoStateTimeStamp(coStateDir + "/kvStart.ts")
+	if startErr != nil {
+		return fmt.Errorf("container orchestrator validated failed, error obtaining start time from costate file")
+	}
+	logrus.Infof("container orchestrater server start time: %v", time.Unix(coStartTime, 0))
+
+	coSetTime, setErr := getCoStateTimeStamp(coStateDir + "/kvSet.ts")
+	coGetTime, getErr := getCoStateTimeStamp(coStateDir + "/kvGet.ts")
+
+	if setErr == nil {
+		// secret set time exists, check it
+		logrus.Infof("container orchestrater set time: %v\n", time.Unix(coSetTime, 0))
+		if coSetTime > coStartTime {
+			logrus.Infof("container orchestrator validated via set time")
+			return nil
+		}
+		setErr = fmt.Errorf("set time is less than start time, check for upgrade")
+		logrus.Infof("%s", setErr.Error())
+	}
+
+	if setErr != nil && getErr != nil {
+		// No secret handler timestamp exists
+		logrus.Infof("error obtaining set time from costate file: %v\n", setErr)
+		logrus.Infof("error obtaining get time from costate file: %v\n", getErr)
+		return fmt.Errorf("container orchestrator validated failed, error obtaining costate file")
+	}
+
+	// secret get time stamp exists, check it
+	logrus.Infof("container orchestrater get time: %v\n", time.Unix(coGetTime, 0))
+	if coGetTime < coStartTime {
+		return fmt.Errorf("container orchestrator validated failed, get time is less than start time")
+	}
+
+	logrus.Infof("container orchestrator validated via get time")
+
+	return nil
+}
+
 // ValidateTelemetryV2Enabled validates telemetry component is running as expected
 func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Telemetry components are enabled")
@@ -4248,6 +4362,27 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 	// Validate Telemetry is Healthy in pxctl status
 	if err := validateTelemetryStatusInPxctl(true, cluster); err != nil {
 		return fmt.Errorf("failed to validate that Telemetry is Healthy in pxctl status, Err: %v", err)
+	}
+
+	// Validate registration certificate management via Container Orchestrator
+	ccmGoImage, ok := pxImageList["telemetry"]
+	if !ok {
+		return fmt.Errorf("failed to find image for telemetry")
+	}
+
+	ccmGoVersionStr := strings.Split(ccmGoImage, ":")[len(strings.Split(ccmGoImage, ":"))-1]
+	ccmGoVersion, err := version.NewSemver(ccmGoVersionStr)
+	if err != nil {
+		return fmt.Errorf("failed to find telemetry image version")
+	}
+
+	minimumPxVersionCO, _ := version.NewVersion("3.2")
+	minimumCcmGoVersionCO, _ := version.NewVersion("1.2.3")
+	pxVersion := GetPortworxVersion(cluster)
+	if pxVersion.GreaterThanOrEqual(minimumPxVersionCO) && ccmGoVersion.GreaterThanOrEqual(minimumCcmGoVersionCO) { // Validate the versions
+		if err := ValidateTelemetryContainerOrchestrator(pxImageList, cluster, timeout, interval); err != nil {
+			return err
+		}
 	}
 
 	logrus.Infof("All Telemetry components were successfully enabled/installed")
