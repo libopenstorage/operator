@@ -107,17 +107,21 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 	}
 
 	var minAvailable int
-	if err != nil || userProvidedMinValue < 0 {
-		c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.k8sClient, cluster.Namespace)
-		if err != nil {
-			return err
-		}
+	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.k8sClient, cluster.Namespace)
+	if err != nil {
+		return err
+	}
 
-		storageNodesCount, err := pxutil.CountStorageNodes(cluster, c.sdkConn, c.k8sClient)
-		if err != nil {
-			c.closeSdkConn()
-			return err
-		}
+	storageNodesCount, err := pxutil.CountStorageNodes(cluster, c.sdkConn, c.k8sClient)
+	if err != nil {
+		c.closeSdkConn()
+		return err
+	}
+
+	// Set minAvailable value to storagenodes-1 if no value is provided,
+	// or if the user provided value is lesser than 0
+	// or greater than or equal to the number of storage nodes.
+	if userProvidedMinValue < 0 || userProvidedMinValue >= storageNodesCount {
 		minAvailable = storageNodesCount - 1
 	} else {
 		minAvailable = userProvidedMinValue
