@@ -12061,6 +12061,19 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
 
 	// TestCase: Update storage PDB if overwritten using annotation
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "3"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, 3, storagePDB.Spec.MinAvailable.IntValue())
+
+	// TestCase: Ignore annotation and go back to default PDB calculation
+	// if annotation value is greater than or equal to storagenodes
 	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "10"
 
 	err = driver.PreInstall(cluster)
@@ -12070,7 +12083,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
 
-	require.Equal(t, 10, storagePDB.Spec.MinAvailable.IntValue())
+	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
 
 	// TestCase: Use NonQuorumMember flag to determine storage node count
 	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = ""
