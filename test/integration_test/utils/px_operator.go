@@ -20,6 +20,8 @@ const (
 )
 
 var (
+	// PxOperator1_5_0 portworx-operator 1.5.0 minimum version
+	PxOperatorVer1_5_0, _ = version.NewVersion("1.5.0-")
 	// PxOperatorVer1_7 portworx-operator 1.7 minimum version
 	PxOperatorVer1_7, _ = version.NewVersion("1.7-")
 	// PxOperatorVer1_8 portworx-operator 1.8 minimum version
