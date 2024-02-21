@@ -4492,7 +4492,7 @@ func TestDisableEnableAutopilotOCP414(t *testing.T) {
 
 }
 
-// test Autopilot install and Uninstall on ocp cluster 4.14
+// test Autopilot default provider URL on OCP 4.14
 func TestAutopilotProviderURLOnOCP414(t *testing.T) {
 	// Start test with newer version (1.25 beyond) of Kubernetes first, on which PodSecurityPolicy is no longer existing
 	versionClient := fakek8sclient.NewSimpleClientset()
