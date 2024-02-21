@@ -122,6 +122,7 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 	// or if the user provided value is lesser than 0
 	// or greater than or equal to the number of storage nodes.
 	if userProvidedMinValue < 0 || userProvidedMinValue >= storageNodesCount {
+		logrus.Warnf("Value for px-storage pod disruption budget not provided or is invalid, using default calculated value %d: ", storageNodesCount-1)
 		minAvailable = storageNodesCount - 1
 	} else {
 		minAvailable = userProvidedMinValue
