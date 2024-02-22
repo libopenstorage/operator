@@ -4264,19 +4264,6 @@ func TestAutopilotWithOCPSecretNotFound(t *testing.T) {
 						},
 					},
 				},
-				GitOps: &corev1.GitOpsSpec{
-					Name: "test",
-					Type: "bitbucket-scm",
-					Params: map[string]interface{}{
-						"defaultReviewers": []interface{}{"user1", "user2"},
-						"user":             "oksana",
-						"repo":             "autopilot-bb",
-						"folder":           "workloads",
-						"baseUrl":          "http://10.13.108.10:7990",
-						"projectKey":       "PXAUT",
-						"branch":           "master",
-					},
-				},
 				Args: map[string]string{
 					"min_poll_interval": "4",
 					"log-level":         "info",
@@ -4389,19 +4376,6 @@ func TestDisableEnableAutopilotOCP414(t *testing.T) {
 							"url":  "http://datadog:9090",
 							"auth": "foobar",
 						},
-					},
-				},
-				GitOps: &corev1.GitOpsSpec{
-					Name: "test",
-					Type: "bitbucket-scm",
-					Params: map[string]interface{}{
-						"defaultReviewers": []interface{}{"user1", "user2"},
-						"user":             "oksana",
-						"repo":             "autopilot-bb",
-						"folder":           "workloads",
-						"baseUrl":          "http://10.13.108.10:7990",
-						"projectKey":       "PXAUT",
-						"branch":           "master",
 					},
 				},
 				Args: map[string]string{
@@ -4574,20 +4548,6 @@ func TestAutopilotProviderURLOnOCP414(t *testing.T) {
 			Autopilot: &corev1.AutopilotSpec{
 				Enabled: true,
 				Image:   "portworx/autopilot:1.1.1",
-
-				GitOps: &corev1.GitOpsSpec{
-					Name: "test",
-					Type: "bitbucket-scm",
-					Params: map[string]interface{}{
-						"defaultReviewers": []interface{}{"user1", "user2"},
-						"user":             "oksana",
-						"repo":             "autopilot-bb",
-						"folder":           "workloads",
-						"baseUrl":          "http://10.13.108.10:7990",
-						"projectKey":       "PXAUT",
-						"branch":           "master",
-					},
-				},
 				Args: map[string]string{
 					"min_poll_interval": "4",
 					"log-level":         "info",
