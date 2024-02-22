@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	routev1 "github.com/openshift/api/route/v1"
 	"math/rand"
 	"net"
 	"os"
@@ -4189,6 +4190,398 @@ func TestAutopilotInstallAndUninstallOnOpenshift414(t *testing.T) {
 	err = autopilotComponent.Delete(cluster)
 	autopilotComponent.MarkDeleted()
 	require.NoError(t, err)
+
+}
+
+// test Autopilot install when user workload monitoring is not enabled
+func TestAutopilotWithOCPSecretNotFound(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.14",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	stcSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:1.1.1",
+				Providers: []corev1.DataProviderSpec{
+					{
+						Name: "default",
+						Type: "prometheus",
+						Params: map[string]string{
+							"url": "http://prometheus:9090",
+						},
+					},
+					{
+						Name: "second",
+						Type: "datadog",
+						Params: map[string]string{
+							"url":  "http://datadog:9090",
+							"auth": "foobar",
+						},
+					},
+				},
+				Args: map[string]string{
+					"min_poll_interval": "4",
+					"log-level":         "info",
+				},
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+
+	cluster := stcSpec.DeepCopy()
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// when user-workload-monitoring is disabled,  prometheus-user-workload-token secret will not exist in OCP
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Autopilot Secret autopilot-prometheus-auth should not be created
+	actualSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, component.AutopilotSecretName, cluster.Namespace)
+	require.Error(t, err)
+	require.EqualError(t, err, "secrets \"autopilot-prometheus-auth\" not found")
+
+	// Autopilot Deployment should not have cert and token mounts
+	expectedDeployment := testutil.GetExpectedDeployment(t, "autopilotDeployment.yaml")
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Volumes, autopilotDeployment.Spec.Template.Spec.Volumes)
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Containers[0].VolumeMounts, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+}
+
+// test Autopilot deployment and Secret after disabling and enabling autopilot
+func TestDisableEnableAutopilotOCP414(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.14",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	stcSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:1.1.1",
+				Providers: []corev1.DataProviderSpec{
+					{
+						Name: "default",
+						Type: "prometheus",
+						Params: map[string]string{
+							"url": "http://prometheus:9090",
+						},
+					},
+					{
+						Name: "second",
+						Type: "datadog",
+						Params: map[string]string{
+							"url":  "http://datadog:9090",
+							"auth": "foobar",
+						},
+					},
+				},
+				Args: map[string]string{
+					"min_poll_interval": "4",
+					"log-level":         "info",
+				},
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+
+	cluster := stcSpec.DeepCopy()
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	ocpSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "prometheus-user-workload-token-abcd",
+			Namespace: "openshift-user-workload-monitoring",
+		},
+		Data: map[string][]byte{
+			"token":  []byte("dG9rZW4tdmFsdWU="),
+			"ca.crt": []byte("Y2VydGlmaWNhdGUtdmFsdWU="),
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), ocpSecret)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Autopilot Secret
+	expectedSecret := testutil.GetExpectedSecret(t, "autopilot-auth-token-secret.yaml")
+	actualSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, component.AutopilotSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSecret.Data, actualSecret.Data)
+
+	// Autopilot Deployment
+	expectedDeployment := testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_14.yaml")
+	actualDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, actualDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Volumes, actualDeployment.Spec.Template.Spec.Volumes)
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Containers[0].VolumeMounts, actualDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	// Disable Autopilot
+	cluster.Spec.Autopilot.Enabled = false
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	actualSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, component.AutopilotSecretName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	actualDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, actualDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Enable Autopilot and verify deployment and secret
+	cluster.Spec.Autopilot.Enabled = true
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Autopilot Secret
+	expectedSecret = testutil.GetExpectedSecret(t, "autopilot-auth-token-secret.yaml")
+	actualSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, component.AutopilotSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSecret.Data, actualSecret.Data)
+
+	// Autopilot Deployment
+	expectedDeployment = testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_14.yaml")
+	actualDeployment = &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, actualDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Volumes, actualDeployment.Spec.Template.Spec.Volumes)
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Containers[0].VolumeMounts, actualDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+}
+
+// test Autopilot default provider URL on OCP 4.14
+func TestAutopilotProviderURLOnOCP414(t *testing.T) {
+	// Start test with newer version (1.25 beyond) of Kubernetes first, on which PodSecurityPolicy is no longer existing
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.14",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "prometheus-user-workload-token-abcd",
+			Namespace: "openshift-user-workload-monitoring",
+		},
+		Data: map[string][]byte{
+			"token":  []byte("dG9rZW4tdmFsdWU="),
+			"ca.crt": []byte("Y2VydGlmaWNhdGUtdmFsdWU="),
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), secret)
+	require.NoError(t, err)
+
+	route := &routev1.Route{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.OpenshiftMonitoringRouteName,
+			Namespace: pxutil.OpenshiftMonitoringNamespace,
+		},
+		Spec: routev1.RouteSpec{
+			Host: "thanos-host",
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), route)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	stcSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:1.1.1",
+				Args: map[string]string{
+					"min_poll_interval": "4",
+					"log-level":         "info",
+				},
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+
+	cluster := stcSpec.DeepCopy()
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedProvider := corev1.DataProviderSpec{
+		Name: "default",
+		Type: "prometheus",
+		Params: map[string]string{
+			"url": "https://thanos-host",
+		},
+	}
+
+	require.Equal(t, expectedProvider, cluster.Spec.Autopilot.Providers[0])
 
 }
 
