@@ -25,7 +25,6 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
 
-	//pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"github.com/libopenstorage/operator/pkg/apis"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/mock"
@@ -194,6 +193,9 @@ var (
 	opVer23_7, _                      = version.NewVersion("23.7.0-")
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
 	OpVer23_10_3, _                   = version.NewVersion("23.10.3-")
+
+	minimumPxVersionCO, _    = version.NewVersion("3.2")
+	minimumCcmGoVersionCO, _ = version.NewVersion("1.2.3")
 
 	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
 	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
@@ -4238,8 +4240,7 @@ func ValidateTelemetryContainerOrchestrator(pxImageList map[string]string, clust
 
 	coStartTime, startErr := getCoStateTimeStamp(coStateDir + "/kvStart.ts")
 	if startErr != nil {
-		logrus.Errorf("error obtaining start time from costate file: %v\n", startErr)
-		return fmt.Errorf("container orchestrator validated failed, error obtaining start time from costate file")
+		return fmt.Errorf("container orchestrator validated failed, error obtaining start time from costate file: %v", startErr)
 	}
 	logrus.Infof("container orchestrater server start time: %v", time.Unix(coStartTime, 0))
 
@@ -4259,9 +4260,7 @@ func ValidateTelemetryContainerOrchestrator(pxImageList map[string]string, clust
 
 	if setErr != nil && getErr != nil {
 		// No secret handler timestamp exists
-		logrus.Errorf("error obtaining set time from costate file: %v\n", setErr)
-		logrus.Errorf("error obtaining get time from costate file: %v\n", getErr)
-		return fmt.Errorf("container orchestrator validated failed, error obtaining costate file")
+		return fmt.Errorf("container orchestrator validated failed, error obtaining costate file: %v and %v", setErr, getErr)
 	}
 
 	// secret get time stamp exists, check it
@@ -4377,10 +4376,9 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 		return fmt.Errorf("failed to find telemetry image version")
 	}
 
-	minimumPxVersionCO, _ := version.NewVersion("3.2")
-	minimumCcmGoVersionCO, _ := version.NewVersion("1.2.3")
+	opVersion, _ := GetPxOperatorVersion()
 	pxVersion := GetPortworxVersion(cluster)
-	if pxVersion.GreaterThanOrEqual(minimumPxVersionCO) && ccmGoVersion.GreaterThanOrEqual(minimumCcmGoVersionCO) { // Validate the versions
+	if opVersion.GreaterThanOrEqual(OpVer23_10_3) && pxVersion.GreaterThanOrEqual(minimumPxVersionCO) && ccmGoVersion.GreaterThanOrEqual(minimumCcmGoVersionCO) { // Validate the versions
 		if err := ValidateTelemetryContainerOrchestrator(pxImageList, cluster, timeout, interval); err != nil {
 			return err
 		}
