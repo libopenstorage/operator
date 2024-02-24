@@ -1,7 +1,7 @@
 apiVersion: operators.coreos.com/v1alpha1
 kind: ClusterServiceVersion
 metadata:
-  name: portworx-operator.v23.10.3.1
+  name: portworx-operator.v23.10.3-1
   namespace: placeholder
   annotations:
     capabilities: Auto Pilot
@@ -50,7 +50,7 @@ metadata:
       ]
 spec:
   displayName: Portworx Enterprise
-  version: 23.10.3.1
+  version: 23.10.3-1
   minKubeVersion: "1.21.0"
   maturity: stable
   replaces: portworx-operator.v23.10.3
