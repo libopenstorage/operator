@@ -1,7 +1,6 @@
 package component
 
 import (
-	"context"
 	cryptoTls "crypto/tls"
 	"fmt"
 	"io"
@@ -20,10 +19,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -140,7 +137,6 @@ type telemetry struct {
 	isDeploymentRegistrationServiceCreated bool
 	isDaemonSetTelemetryPhonehomeCreated   bool
 	usePxProxy                             bool
-	reconcileMetricsCollector              *bool
 }
 
 func (t *telemetry) Name() string {
@@ -182,9 +178,7 @@ func (t *telemetry) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := pxutil.SetTelemetryCertOwnerRef(cluster, ownerRef, t.k8sClient); err != nil {
 		return err
 	}
-	if err := t.shouldReconcileMetricsCollector(cluster); err != nil {
-		return err
-	}
+
 	t.isCCMGoSupported = pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster))
 	if t.isCCMGoSupported {
 		return t.reconcileCCMGo(cluster, ownerRef)
@@ -433,45 +427,10 @@ func (t *telemetry) deleteCCMGoPhonehomeCluster(
 	return nil
 }
 
-func (t *telemetry) shouldReconcileMetricsCollector(
-	cluster *corev1.StorageCluster,
-) error {
-	// reconcile metrics collector by default, keep the code in case we need to disable it again
-	if t.reconcileMetricsCollector == nil {
-		t.reconcileMetricsCollector = boolPtr(true)
-		return nil
-	} else if t.reconcileMetricsCollector != nil {
-		return nil
-	}
-	// Check if collector V1 or V2 deployment exists
-	existingDeployment := &appsv1.Deployment{}
-	for _, deploymentName := range []string{CollectorDeploymentName, DeploymentNameTelemetryCollectorV2} {
-		err := t.k8sClient.Get(
-			context.TODO(),
-			types.NamespacedName{
-				Name:      deploymentName,
-				Namespace: cluster.Namespace,
-			},
-			existingDeployment,
-		)
-		if err == nil {
-			t.reconcileMetricsCollector = boolPtr(true)
-			return nil
-		} else if !errors.IsNotFound(err) {
-			return err
-		}
-	}
-	t.reconcileMetricsCollector = boolPtr(false)
-	return nil
-}
-
 func (t *telemetry) reconcileCCMGoTelemetryCollectorV2(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	if t.reconcileMetricsCollector == nil || !*t.reconcileMetricsCollector {
-		return nil
-	}
 
 	// Delete metrics collector V1 if exists
 	if err := t.deleteMetricsCollectorV1(cluster.Namespace, ownerRef); err != nil {
