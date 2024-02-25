@@ -433,7 +433,6 @@ func (t *telemetry) deleteCCMGoPhonehomeCluster(
 	return nil
 }
 
-// PWX-27401 only reconcile metrics collector if it's already running
 func (t *telemetry) shouldReconcileMetricsCollector(
 	cluster *corev1.StorageCluster,
 ) error {
