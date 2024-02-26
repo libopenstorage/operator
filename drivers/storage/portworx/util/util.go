@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/shlex"
 	"github.com/hashicorp/go-version"
+	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	ocpconfig "github.com/openshift/api/config/v1"
 	routev1 "github.com/openshift/api/route/v1"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -38,7 +39,6 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
-	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 const (
