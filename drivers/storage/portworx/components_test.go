@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	routev1 "github.com/openshift/api/route/v1"
 	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	routev1 "github.com/openshift/api/route/v1"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/mock/gomock"
@@ -12508,6 +12509,19 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	// TestCase: Ignore annotation and go back to default PDB calculation
 	// if annotation value is greater than or equal to storagenodes
 	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "10"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
+
+	// TestCase: When annotation to override PDB value is lesser than num(storagenodes)/2 +1
+	// Ignore annotation and use default PDB calculation
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "2"
 
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
