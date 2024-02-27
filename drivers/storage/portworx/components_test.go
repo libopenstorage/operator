@@ -14221,8 +14221,7 @@ func TestTelemetryCCMGoHTTPProxy(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
-// PWX-27401
-func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
+func TestTelemetryMetricsCollectorEnabledByDefault(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -14261,36 +14260,44 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// TestCase: enabling telemetry doesn't create metrics collector
+	// TestCase: enabling telemetry should create metrics collector
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
 	serviceAccount := &v1.ServiceAccount{}
-	err = testutil.Get(k8sClient, serviceAccount, component.CollectorServiceAccountName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
 	clusterRole := &rbacv1.ClusterRole{}
-	err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
-	require.True(t, errors.IsNotFound(err))
 	clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
-	require.True(t, errors.IsNotFound(err))
 	role := &rbacv1.Role{}
-	err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
 	roleBinding := &rbacv1.RoleBinding{}
-	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
 	configMap := &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-	configMap = &v1.ConfigMap{}
-	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
 	deployment := &appsv1.Deployment{}
+
+	err = testutil.Get(k8sClient, serviceAccount, component.CollectorServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
 	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.NoError(t, err)
+
+	// new collector components created
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorV2, cluster.Namespace)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryCollectorV2, cluster.Namespace)
+	require.NoError(t, err)
 
 	// TestCase: deploy metrics collector V1 and restart operator, collector should be reconciled
 	err = k8sClient.Create(
