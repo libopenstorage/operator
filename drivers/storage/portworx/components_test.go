@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	routev1 "github.com/openshift/api/route/v1"
 	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	routev1 "github.com/openshift/api/route/v1"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/mock/gomock"
@@ -12518,6 +12519,19 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
 
+	// TestCase: When annotation to override PDB value is lesser than num(storagenodes)/2 +1
+	// Ignore annotation and use default PDB calculation
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "2"
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
+
 	// TestCase: Use NonQuorumMember flag to determine storage node count
 	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = ""
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
@@ -16288,6 +16302,83 @@ func TestIsVersionSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 	enabled := pluginComponent.IsEnabled(cluster)
 	require.Equal(t, false, enabled)
 
+}
+
+// test if PVC-Controler gets enabled on various configs
+func TestCheckPVCControllerEnablement(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{},
+	}
+	pvcContoller, has := component.Get(component.PVCControllerComponentName)
+	require.True(t, has)
+	require.NotNil(t, pvcContoller)
+
+	// check enablement by namespace
+	cluster.Namespace = "portworx"
+	assert.True(t, pvcContoller.IsEnabled(cluster))
+	cluster.Namespace = "kube-system"
+	assert.False(t, pvcContoller.IsEnabled(cluster))
+
+	// check enablement by `portworx.io/pvc-controller` annotation
+	testData1 := []struct {
+		annotation string
+		expect     bool
+	}{
+		{"false", false},
+		{"true", true},
+		{"", false},
+		{"~~unparseable~~", false},
+	}
+	for i, td := range testData1 {
+		cluster.Annotations = map[string]string{"portworx.io/pvc-controller": td.annotation}
+		res := pvcContoller.IsEnabled(cluster)
+		assert.Equal(t, td.expect, res,
+			"Failed expectation for test #%d / %v", i+1, td)
+	}
+
+	// check PVC-enablement for various clouds
+	testData2 := []struct {
+		annotationKey string
+		annotationVal string
+		expect        bool
+	}{
+		{"portworx.io/is-openshift", "true", false},
+		{"portworx.io/is-iks", "true", false},
+		{"portworx.io/is-pks", "true", true},
+		{"portworx.io/is-gke", "true", true},
+		{"portworx.io/is-oke", "true", true},
+		{"portworx.io/is-aks", "true", true},
+		{"portworx.io/is-eks", "true", true},
+		{"", "", false},
+	}
+	for i, td := range testData2 {
+		cluster.Annotations = make(map[string]string)
+		if td.annotationKey != "" {
+			cluster.Annotations[td.annotationKey] = td.annotationVal
+		}
+		res := pvcContoller.IsEnabled(cluster)
+		assert.Equal(t, td.expect, res,
+			"Failed expectation for test #%d / %v", i+1, td)
+	}
 }
 
 func TestPluginInstallAndUninstall(t *testing.T) {
