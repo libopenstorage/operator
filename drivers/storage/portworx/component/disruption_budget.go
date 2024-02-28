@@ -113,10 +113,18 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 		return err
 	}
 
-	storageNodesCount, err := pxutil.CountStorageNodes(cluster, c.sdkConn, c.k8sClient)
+	storageNodeCountPerClusterDomain, err := pxutil.CountStorageNodes(cluster, c.sdkConn, c.k8sClient)
 	if err != nil {
 		c.closeSdkConn()
 		return err
+	}
+
+	storageNodesCount := 0
+
+	if len(storageNodeCountPerClusterDomain) == 1 {
+		for _, v := range storageNodeCountPerClusterDomain {
+			storageNodesCount = v
+		}
 	}
 
 	// Set minAvailable value to storagenodes-1 if no value is provided,
