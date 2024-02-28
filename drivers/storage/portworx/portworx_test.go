@@ -2053,7 +2053,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	require.Equal(t, "prometheus", providers[0].Type)
 	require.Equal(t, component.AutopilotDefaultProviderEndpoint, providers[0].Params["url"])
 
-	// Do not set the default provider if OCP > 4.14 and we fail to get the Prometheus endpoint
+	// Do not set the default provider if OCP > 4.12 and we fail to get the Prometheus endpoint
 	operator := &ocpconfig.ClusterOperator{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: component.OpenshiftAPIServer,
@@ -2077,7 +2077,7 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Autopilot.Providers)
 
-	// Set the default provider for OCP prometheus for OCP > 4.14 if Prometheus endpoint is found
+	// Set the default provider for OCP prometheus for OCP > 4.12 if Prometheus endpoint is found
 	route := &routev1.Route{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.OpenshiftMonitoringRouteName,
@@ -2548,7 +2548,7 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.PrometheusConfigReloader)
 	require.Empty(t, cluster.Status.DesiredImages.PrometheusConfigMapReload)
 
-	// Disable prometheus on new install for OCP 4.14+, even if set by the user
+	// Disable prometheus on new install for OCP 4.12+, even if set by the user
 	operator := &ocpconfig.ClusterOperator{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: component.OpenshiftAPIServer,
