@@ -1381,13 +1381,11 @@ func CountStorageNodes(
 	cluster *corev1.StorageCluster,
 	sdkConn *grpc.ClientConn,
 	k8sClient client.Client,
-) (map[string]int, error) {
-
-	storageNodeCountPerClusterDomain := make(map[string]int)
+) (int, error) {
 	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
 	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
 	if err != nil {
-		return storageNodeCountPerClusterDomain, err
+		return -1, err
 	}
 
 	// To check if metro DR setup or not
@@ -1401,20 +1399,19 @@ func CountStorageNodes(
 		&api.SdkNodeEnumerateWithFiltersRequest{},
 	)
 	if err != nil {
-		return storageNodeCountPerClusterDomain, fmt.Errorf("failed to enumerate nodes: %v", err)
+		return -1, fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
 	k8sNodeList := &v1.NodeList{}
 	err = k8sClient.List(context.TODO(), k8sNodeList)
 	if err != nil {
-		return storageNodeCountPerClusterDomain, err
+		return -1, err
 	}
-
 	k8sNodesStoragePodCouldRun := make(map[string]bool)
 	for _, node := range k8sNodeList.Items {
 		shouldRun, shouldContinueRunning, err := k8sutil.CheckPredicatesForStoragePod(&node, cluster, nil)
 		if err != nil {
-			return storageNodeCountPerClusterDomain, err
+			return -1, err
 		}
 		if shouldRun || shouldContinueRunning {
 			k8sNodesStoragePodCouldRun[node.Name] = true
@@ -1443,6 +1440,15 @@ func CountStorageNodes(
 		}
 	}
 
+	// get cluster domain of current node to fetch storage nodes count for current k8s node
+	// for Metro DR cluster, we need to calculate PDB for current k8s cluster and not Portworx cluster
+	inspectCurrentResponse, err := nodeClient.InspectCurrent(ctx, &api.SdkNodeInspectCurrentRequest{})
+	if err != nil {
+		logrus.Errorf("error while inspecting current node.")
+	}
+	currentClusterDomain := inspectCurrentResponse.Node.ClusterDomain
+
+	storageNodesCount := 0
 	for _, node := range nodeEnumerateResponse.Nodes {
 		if node.SchedulerNodeName == "" {
 			k8sNode, err := coreops.Instance().SearchNodeByAddresses(
@@ -1471,10 +1477,12 @@ func CountStorageNodes(
 		// TODO: Need to update this logic in metro DR setup to use portworx nodes in the current domain
 		if isQuorumMember {
 			if !isDRSetup {
-				storageNodeCountPerClusterDomain[node.ClusterDomain] = storageNodeCountPerClusterDomain[node.ClusterDomain] + 1
+				storageNodesCount++
 			} else {
 				if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
-					storageNodeCountPerClusterDomain[node.ClusterDomain] = storageNodeCountPerClusterDomain[node.ClusterDomain] + 1
+					if node.ClusterDomain == currentClusterDomain {
+						storageNodesCount++
+					}
 				} else {
 					logrus.Debugf("node %s should not run portworx", node.SchedulerNodeName)
 				}
@@ -1485,11 +1493,8 @@ func CountStorageNodes(
 		}
 	}
 
-	for clusterDomain, storageNodesCount := range storageNodeCountPerClusterDomain {
-		logrus.Debugf("storageNodesCount: %d for cluster domain: %d, k8sNodesStoragePodCouldRun: %d", storageNodesCount, clusterDomain, len(k8sNodesStoragePodCouldRun))
-	}
-
-	return storageNodeCountPerClusterDomain, nil
+	logrus.Debugf("storageNodesCount: %d, k8sNodesStoragePodCouldRun: %d", storageNodesCount, len(k8sNodesStoragePodCouldRun))
+	return storageNodesCount, nil
 }
 
 func getStorageNodeMappingFromRPC(
