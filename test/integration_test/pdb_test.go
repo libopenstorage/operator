@@ -2,6 +2,7 @@ package integrationtest
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/hashicorp/go-version"
@@ -9,6 +10,8 @@ import (
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
 	"github.com/portworx/sched-ops/k8s/operator"
+
+	//operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -22,7 +25,7 @@ var (
 var testStorageClusterPDBCases = []types.TestCase{
 	{
 		TestName:        "PDBWithStoragelessNode",
-		TestrailCaseIDs: []string{"C58606"},
+		TestrailCaseIDs: []string{"C257095"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-stc"},
 		}),
@@ -43,7 +46,7 @@ var testStorageClusterPDBCases = []types.TestCase{
 	},
 	{
 		TestName:        "OverridePDBUsingAnnotation",
-		TestrailCaseIDs: []string{"C58607"},
+		TestrailCaseIDs: []string{"C257148", "C257146", "C257203"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-stc"},
 		}),
@@ -80,9 +83,13 @@ func OverridePDBUsingAnnotation(tc *types.TestCase) func(*testing.T) {
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
+
 		//Add annotations to override the default PDB
+
 		k8snodecount, err := ci_utils.GetK8sNodeCount()
 		require.NoError(t, err)
+		// Assuming 1 node is dedicated control plane node
+		k8snodecount = k8snodecount - 1
 
 		// Override PDB value with (number of k8s nodes -2) to check if allowed disruptions is 2
 		cluster.Annotations = make(map[string]string)
@@ -90,9 +97,10 @@ func OverridePDBUsingAnnotation(tc *types.TestCase) func(*testing.T) {
 		cluster.Annotations["portworx.io/storage-pdb-min-available"] = fmt.Sprintf("%d", k8snodecount-2)
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
-		// Override PDB with value 1 and ensure minAvailable value does not get changed
-		logrus.Infof("Validating PDB using minAvailable value: 1")
-		cluster.Annotations["portworx.io/storage-pdb-min-available"] = "1"
+		// Override PDB with value less than px quorum and ensure minAvailable value uses default calculation
+		quorumValue := math.Floor(float64(k8snodecount)/2) + 1
+		logrus.Infof("Validating PDB using minAvailable value: %d", int(quorumValue)-1)
+		cluster.Annotations["portworx.io/storage-pdb-min-available"] = fmt.Sprintf("%d", int(quorumValue)-1)
 		cluster, err = ci_utils.UpdateStorageCluster(cluster)
 		require.NoError(t, err)
 		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateUpgradeTimeout, ci_utils.DefaultValidateUpgradeRetryInterval, true, "")

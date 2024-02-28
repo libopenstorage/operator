@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -1639,7 +1640,7 @@ func validateComponents(pxImageList map[string]string, originalClusterSpec, clus
 	}
 
 	// Validate Poddisruptionbudget
-	if err := ValidatePodDisruptionBudegt(cluster, timeout, interval); err != nil {
+	if err := ValidatePodDisruptionBudget(cluster, timeout, interval); err != nil {
 		return err
 	}
 
@@ -4738,8 +4739,8 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 	return nil
 }
 
-// ValidatePodDisruptionBudegt validates the value of minavailable and number of disruptions for px-storage poddisruptionbudget
-func ValidatePodDisruptionBudegt(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+// ValidatePodDisruptionBudget validates the value of minavailable and number of disruptions for px-storage poddisruptionbudget
+func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate px-storage poddisruptionbudget minAvailable and allowed disruptions")
 
 	kbVer, err := GetK8SVersion()
@@ -4769,9 +4770,9 @@ func ValidatePodDisruptionBudegt(cluster *corev1.StorageCluster, timeout, interv
 				}
 			}
 
-			// Skip PDB validation for px-storage if number of storage nodes is lesser than or equal to 1
-			if nodeslen <= 1 {
-				logrus.Infof("Storage PDB does not exist for storage nodes lesser than or equal to length 1, skipping PDB validattion")
+			// Skip PDB validation for px-storage if number of storage nodes is lesser than or equal to 2
+			if nodeslen <= 2 {
+				logrus.Infof("Storage PDB does not exist for storage nodes lesser than or equal to 2, skipping PDB validattion")
 				return nil, false, nil
 			}
 
@@ -4779,39 +4780,39 @@ func ValidatePodDisruptionBudegt(cluster *corev1.StorageCluster, timeout, interv
 			if err != nil {
 				return nil, true, fmt.Errorf("failed to get px-storage poddisruptionbudget, Err: %v", err)
 			}
-			pdbValue := pdb.Spec.MinAvailable.IntValue()
-			allowedDisruptions := pdb.Status.DisruptionsAllowed
+			actualPdbValue := pdb.Spec.MinAvailable.IntValue()
+			actualAllowedDisruptions := pdb.Status.DisruptionsAllowed
 
-			// If annotations to override PDb are not set or if the value of minAvailable is lesser than or equal to 1
+			// If annotations to override PDB are not set or if the value of minAvailable is lesser than (n/1)+1 (px quorum)
 			// or if it is more than or equal to number of storage nodes then use default minAvailable calculation
 			// Else minAvailable will be annotation value
-			checkOverrideValue := false
-			var intPDBVal int
-			if val, ok := cluster.Annotations["portworx.io/pdb-min-available"]; ok {
-				intPDBVal, err = strconv.Atoi(val)
+			var annotatedPDBVal int
+			var expectedPdbValue int
+			var expectedAllowedDsiruptions int
+			// checkOverrideValue := false
+			pxQuorum := math.Floor(float64(nodeslen)/2) + 1
+			if val, ok := cluster.Annotations["portworx.io/storage-pdb-min-available"]; ok {
+				annotatedPDBVal, err = strconv.Atoi(val)
 				if err != nil {
 					return nil, true, fmt.Errorf("error in converting string to int: %v", err)
 				}
-				if intPDBVal < 1 || intPDBVal >= nodeslen {
-					checkOverrideValue = false
+				if annotatedPDBVal < int(pxQuorum) || annotatedPDBVal >= nodeslen {
+					expectedPdbValue = nodeslen - 1
+					expectedAllowedDsiruptions = 1
 				} else {
-					checkOverrideValue = true
-				}
-
-			}
-
-			if checkOverrideValue {
-				if pdbValue == intPDBVal && allowedDisruptions == int32(nodeslen-intPDBVal) {
-					return nil, false, nil
+					expectedPdbValue = annotatedPDBVal
+					expectedAllowedDsiruptions = nodeslen - annotatedPDBVal
 				}
 
 			} else {
-				if pdbValue == nodeslen-1 && allowedDisruptions == 1 {
-					return nil, false, nil
-				}
+				expectedPdbValue = nodeslen - 1
+				expectedAllowedDsiruptions = 1
+			}
+			if expectedPdbValue == actualPdbValue && expectedAllowedDsiruptions == int(actualAllowedDisruptions) {
+				return nil, false, nil
 			}
 
-			return nil, false, fmt.Errorf("incorrect PDB value. Expected %d, Actual %d", nodeslen-1, pdbValue)
+			return nil, false, fmt.Errorf("incorrect PDB value. Expected %d, Actual %d", expectedPdbValue, actualPdbValue)
 		}
 
 		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
