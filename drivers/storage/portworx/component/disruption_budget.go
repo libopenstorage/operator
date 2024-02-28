@@ -1,7 +1,6 @@
 package component
 
 import (
-	"math"
 	"strconv"
 
 	"github.com/hashicorp/go-version"
@@ -120,10 +119,9 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 	}
 
 	// Set minAvailable value to storagenodes-1 if no value is provided,
-	// or if the user provided value is lesser storageNodes/2 +1 (px quorum)
+	// or if the user provided value is lesser than 0
 	// or greater than or equal to the number of storage nodes.
-	quorumValue := math.Floor(float64(storageNodesCount)/2) + 1
-	if userProvidedMinValue < int(quorumValue) || userProvidedMinValue >= storageNodesCount {
+	if userProvidedMinValue < 0 || userProvidedMinValue >= storageNodesCount {
 		logrus.Warnf("Value for px-storage pod disruption budget not provided or is invalid, using default calculated value %d: ", storageNodesCount-1)
 		minAvailable = storageNodesCount - 1
 	} else {

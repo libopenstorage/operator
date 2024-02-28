@@ -1155,6 +1155,14 @@ func CountStorageNodes(
 		}
 	}
 
+	// get cluster domain of current node to fetch storage nodes count for current k8s node
+	// for Metro DR cluster, we need to calculate PDB for current k8s cluster and not Portworx cluster
+	inspectCurrentResponse, err := nodeClient.InspectCurrent(ctx, &api.SdkNodeInspectCurrentRequest{})
+	if err != nil {
+		logrus.Errorf("error while inspecting current node.")
+	}
+	currentClusterDomain := inspectCurrentResponse.Node.ClusterDomain
+
 	storageNodesCount := 0
 	for _, node := range nodeEnumerateResponse.Nodes {
 		if node.SchedulerNodeName == "" {
@@ -1186,7 +1194,9 @@ func CountStorageNodes(
 				storageNodesCount++
 			} else {
 				if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
-					storageNodesCount++
+					if node.ClusterDomain == currentClusterDomain {
+						storageNodesCount++
+					}
 				} else {
 					logrus.Debugf("node %s should not run portworx", node.SchedulerNodeName)
 				}
@@ -1197,6 +1207,7 @@ func CountStorageNodes(
 		}
 	}
 
+	logrus.Debugf("storageNodesCount: %d, k8sNodesStoragePodCouldRun: %d", storageNodesCount, len(k8sNodesStoragePodCouldRun))
 	return storageNodesCount, nil
 }
 
