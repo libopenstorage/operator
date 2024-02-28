@@ -4607,7 +4607,7 @@ func TestIsUserWorkloadSupportedForSupportedVersionOpenshift(t *testing.T) {
 
 }
 
-// test if install can be enabled on 4.13 version of openshift for AutoPilot
+// test if install can be enabled on 4.11 version of openshift for AutoPilot
 func TestIsUserWorkloadSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
@@ -4634,7 +4634,7 @@ func TestIsUserWorkloadSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 			Versions: []ocpconfig.OperandVersion{
 				{
 					Name:    component.OpenshiftAPIServer,
-					Version: "4.13",
+					Version: "4.11",
 				},
 			},
 		},
@@ -4647,6 +4647,7 @@ func TestIsUserWorkloadSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
+	// from operator 23.10.4, openshift prometheus will be supported on OCP versions GTE 4.12
 	enabled, err := pxutil.IsSupportedOCPVersion(k8sClient, pxutil.OpenshiftPrometheusSupportedVersion)
 	require.Equal(t, false, enabled)
 	require.NoError(t, err)
