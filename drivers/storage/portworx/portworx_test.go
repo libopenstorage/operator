@@ -2575,7 +2575,7 @@ func TestStorageClusterDefaultsForPrometheus(t *testing.T) {
 	require.NotEmpty(t, recorder.Events)
 	require.Contains(t, <-recorder.Events,
 		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedComponentReason,
-			"Disabling Portworx managed Prometheus in lieu of OpenShift managed Prometheus starting OpenShift 4.14"))
+			"Disabling Portworx managed Prometheus in lieu of OpenShift managed Prometheus starting OpenShift 4.12"))
 
 	// Do not disable prometheus on existing install if set by the user
 	cluster.Spec.Monitoring.Prometheus.Enabled = true
