@@ -13,8 +13,6 @@ import (
 	"testing"
 	"time"
 
-	routev1 "github.com/openshift/api/route/v1"
-
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/mock/gomock"
 	ocpconfig "github.com/openshift/api/config/v1"
