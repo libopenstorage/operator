@@ -3,7 +3,7 @@ module github.com/libopenstorage/operator
 go 1.21
 
 require (
-	github.com/aws/aws-sdk-go v1.40.39
+	github.com/aws/aws-sdk-go v1.44.45
 	github.com/go-logr/logr v1.2.3
 	github.com/golang-jwt/jwt/v4 v4.3.0
 	github.com/golang/mock v1.6.0
@@ -11,32 +11,34 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/go-version v1.6.0
 	github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1
-	github.com/libopenstorage/openstorage v9.4.46+incompatible
+	github.com/libopenstorage/openstorage v9.4.47+incompatible
 	github.com/openshift/api v0.0.0-20230426193520-54a14470e5dc
 	github.com/pborman/uuid v1.2.1
 	github.com/portworx/kvdb v0.0.0-20230326003017-21a38cf82d4b
 	github.com/portworx/sched-ops v1.20.4-rc1.0.20230302072046-553cc8ef572b
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.46.0
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.63.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.2
 	github.com/urfave/cli v1.22.2
 	golang.org/x/sys v0.7.0
+	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
 	google.golang.org/grpc v1.54.0
+	google.golang.org/protobuf v1.30.0
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.26.1
+	k8s.io/api v0.26.3
 	k8s.io/apiextensions-apiserver v0.26.1
-	k8s.io/apimachinery v0.26.1
+	k8s.io/apimachinery v0.26.3
 	k8s.io/client-go v12.0.0+incompatible
-	k8s.io/code-generator v0.25.1
-	k8s.io/component-base v0.26.0
+	k8s.io/code-generator v0.25.4
+	k8s.io/component-base v0.26.1
 	k8s.io/component-helpers v0.25.1
 	k8s.io/klog v1.0.0
 	k8s.io/kube-scheduler v0.0.0
 	k8s.io/kubernetes v1.25.1
-	k8s.io/utils v0.0.0-20221107191617-1a15be271d1d
+	k8s.io/utils v0.0.0-20230313181309-38a27ef9d749
 	sigs.k8s.io/cluster-api v0.2.11
-	sigs.k8s.io/controller-runtime v0.13.0
+	sigs.k8s.io/controller-runtime v0.14.5
 	sigs.k8s.io/yaml v1.3.0
 )
 
@@ -72,7 +74,6 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-hclog v1.2.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/serf v0.9.7 // indirect
@@ -80,8 +81,7 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/kr/pretty v0.3.0 // indirect
-	github.com/libopenstorage/secrets v0.0.0-20210908194121-a1d19aa9713a // indirect
+	github.com/libopenstorage/secrets v0.0.0-20220413195519-57d1c446c5e9 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect
@@ -101,29 +101,25 @@ require (
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
-	github.com/rogpeppe/go-internal v1.9.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
-	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.8.0 // indirect
 	golang.org/x/mod v0.8.0 // indirect
 	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/oauth2 v0.7.0 // indirect
 	golang.org/x/term v0.7.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
-	golang.org/x/time v0.1.0 // indirect
+	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.6.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
-	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiserver v0.25.1 // indirect
-	k8s.io/gengo v0.0.0-20211129171323-c02415ce4185 // indirect
-	k8s.io/klog/v2 v2.80.1 // indirect
+	k8s.io/apiserver v0.25.4 // indirect
+	k8s.io/gengo v0.0.0-20220913193501-391367153a38 // indirect
+	k8s.io/klog/v2 v2.90.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20221207184640-f3cff1453715 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
@@ -132,7 +128,9 @@ require (
 replace (
 	github.com/coreos/prometheus-operator => github.com/prometheus-operator/prometheus-operator v0.46.0
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
-	github.com/libopenstorage/openstorage => github.com/libopenstorage/openstorage v1.0.1-0.20230511212757-41751b27d69f
+	github.com/libopenstorage/openstorage => github.com/libopenstorage/openstorage v1.0.1-0.20240227215941-8712fa83eaae
+	github.com/portworx/sched-ops => github.com/portworx/sched-ops v1.20.4-rc1.0.20230608173331-0ad828044e13
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring => github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.46.0
 	golang.org/x/tools => golang.org/x/tools v0.1.11
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 	google.golang.org/grpc/examples/helloworld/helloworld => google.golang.org/grpc/examples/helloworld/helloworld v1.29.1
@@ -166,4 +164,5 @@ replace (
 	k8s.io/mount-utils => k8s.io/mount-utils v0.25.1
 	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.25.1
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.25.1
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.13.0
 )
