@@ -643,7 +643,7 @@ func (p *portworx) createOrUpdateStorageNode(
 		storageNode.Labels[util.DefaultStorageClusterUniqueLabelKey] = originalHash
 	}
 
-	if version, ok := node.NodeLabels[labelPortworxVersion]; ok {
+	if version, ok := node.NodeLabels[pxutil.NodeLabelPortworxVersion]; ok {
 		storageNode.Spec.Version = version
 	} else {
 		partitions := strings.Split(cluster.Spec.Image, ":")
