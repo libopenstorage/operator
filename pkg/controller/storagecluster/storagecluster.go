@@ -537,6 +537,18 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		// preflight passed or not required
 		logrus.Infof("preflight check not required")
 		return nil
+	} else if check == "true" {
+		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
+		if condition != nil {
+			if condition.Status == corev1.ClusterConditionStatusCompleted {
+				cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
+				if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
+					return fmt.Errorf("UpdateStorageCluster failure when pre-flight is done, %v", err)
+				}
+				logrus.Infof("preflight status completed, stopping...")
+				return nil
+			}
+		}
 	}
 
 	// Only do the preflight check on demand once a time
@@ -594,9 +606,6 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 	// Update the cluster only if anything has changed
 	if !reflect.DeepEqual(cluster, toUpdate) {
 		toUpdate.DeepCopyInto(cluster)
-		if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
-			return err
-		}
 
 		cluster.Status = *toUpdate.Status.DeepCopy()
 		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
@@ -606,6 +615,10 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 					"preflight check failed to update storage cluster status. Need to rerun preflight or skip it")
 				return fmt.Errorf("update storage cluster status failure, %v", err)
 			}
+		}
+
+		if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
+			return fmt.Errorf("UpdateStorageCluster failure, %v", err)
 		}
 	}
 	return err
