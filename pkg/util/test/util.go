@@ -4376,9 +4376,12 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 		return fmt.Errorf("failed to find telemetry image version")
 	}
 
+	masterOpVersion, _ := version.NewVersion(PxOperatorMasterVersion)
 	opVersion, _ := GetPxOperatorVersion()
 	pxVersion := GetPortworxVersion(cluster)
-	if opVersion.GreaterThanOrEqual(OpVer23_10_3) && pxVersion.GreaterThanOrEqual(minimumPxVersionCO) && ccmGoVersion.GreaterThanOrEqual(minimumCcmGoVersionCO) { // Validate the versions
+
+	// NOTE: These versions will need to be updated when we move the CO code to a release. Currently its bound to master branches
+	if opVersion.GreaterThanOrEqual(masterOpVersion) && pxVersion.GreaterThanOrEqual(minimumPxVersionCO) && ccmGoVersion.GreaterThanOrEqual(minimumCcmGoVersionCO) { // Validate the versions
 		if err := ValidateTelemetryContainerOrchestrator(pxImageList, cluster, timeout, interval); err != nil {
 			return err
 		}
