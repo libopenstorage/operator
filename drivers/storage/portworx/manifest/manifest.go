@@ -239,10 +239,12 @@ func defaultRelease(
 			DynamicPluginProxy: DefaultDynamicPluginProxyImage,
 		},
 	}
+	fillStorkDefaults(rel, k8sVersion)
 	fillCSIDefaults(rel, k8sVersion)
 	fillPrometheusDefaults(rel, k8sVersion)
 	fillGrafanaDefaults(rel, k8sVersion)
 	fillTelemetryDefaults(rel)
+	fillK8sDefaults(rel, k8sVersion)
 	return rel
 }
 
@@ -250,9 +252,6 @@ func fillDefaults(
 	rel *Version,
 	k8sVersion *version.Version,
 ) {
-	if rel.Components.Stork == "" {
-		rel.Components.Stork = defaultStorkImage
-	}
 	if rel.Components.Autopilot == "" {
 		rel.Components.Autopilot = defaultAutopilotImage
 	}
@@ -269,11 +268,38 @@ func fillDefaults(
 	if rel.Components.DynamicPluginProxy == "" {
 		rel.Components.DynamicPluginProxy = DefaultDynamicPluginProxyImage
 	}
-
+	fillStorkDefaults(rel, k8sVersion)
 	fillCSIDefaults(rel, k8sVersion)
 	fillPrometheusDefaults(rel, k8sVersion)
 	fillGrafanaDefaults(rel, k8sVersion)
 	fillTelemetryDefaults(rel)
+	fillK8sDefaults(rel, k8sVersion)
+}
+
+func fillStorkDefaults(
+	rel *Version,
+	k8sVersion *version.Version,
+) {
+	if rel.Components.Stork == "" {
+		rel.Components.Stork = defaultStorkImage
+	}
+
+	if rel.Components.KubeScheduler == "" {
+		rel.Components.KubeScheduler = k8sutil.GetDefaultKubeSchedulerImage(k8sVersion)
+	}
+}
+
+func fillK8sDefaults(
+	rel *Version,
+	k8sVersion *version.Version,
+) {
+	if rel.Components.KubeControllerManager == "" {
+		rel.Components.KubeControllerManager = k8sutil.GetDefaultKubeControllerManagerImage(k8sVersion)
+	}
+
+	if rel.Components.Pause == "" {
+		rel.Components.Pause = pxutil.ImageNamePause
+	}
 }
 
 func fillCSIDefaults(

@@ -312,11 +312,7 @@ func (c *pvcController) createDeployment(
 		return err
 	}
 
-	imageName := "gcr.io/google_containers/kube-controller-manager-amd64"
-	if k8sutil.IsNewKubernetesRegistry(&c.k8sVersion) {
-		imageName = k8sutil.DefaultK8SRegistryPath + "/kube-controller-manager-amd64"
-	}
-	imageName = imageName + ":v" + c.k8sVersion.String()
+	imageName := k8sutil.GetDefaultKubeControllerManagerImage(&c.k8sVersion)
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.KubeControllerManager != "" {
 		imageName = cluster.Status.DesiredImages.KubeControllerManager
 	}
