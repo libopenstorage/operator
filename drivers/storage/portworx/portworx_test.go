@@ -2108,8 +2108,16 @@ func TestStorageClusterDefaultsForAutopilot(t *testing.T) {
 }
 
 func TestStorageClusterDefaultsForStork(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.28.0",
+	}
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -2121,7 +2129,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	}
 
 	// Stork should be enabled by default
-	err := driver.SetDefaultsOnStorageCluster(cluster)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	require.True(t, cluster.Spec.Stork.Enabled)
 
@@ -2136,6 +2144,7 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.False(t, cluster.Spec.Stork.LockImage)
 	require.Empty(t, cluster.Status.DesiredImages.Stork)
+	require.Empty(t, cluster.Status.DesiredImages.KubeScheduler)
 
 	// Use image from release manifest if no image present
 	cluster.Spec.Stork = &corev1.StorkSpec{
@@ -2145,6 +2154,10 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, cluster.Spec.Stork.Image)
 	require.Equal(t, "openstorage/stork:"+compVersion(), cluster.Status.DesiredImages.Stork)
+	require.Equal(t, "registry.k8s.io/kube-scheduler-amd64:v1.28.0",
+		cluster.Status.DesiredImages.KubeScheduler)
+	require.Equal(t, "registry.k8s.io/kube-controller-manager-amd64:v1.28.0",
+		cluster.Status.DesiredImages.KubeControllerManager)
 
 	// Use given spec image if specified and reset desired image in status
 	cluster.Spec.Stork = &corev1.StorkSpec{
@@ -10229,6 +10242,8 @@ func (m *fakeManifest) GetVersions(
 			TelemetryProxy:             "purestorage/envoy:1.2.3",
 			DynamicPlugin:              "portworx/portworx-dynamic-plugin:1.1.0",
 			DynamicPluginProxy:         "nginxinc/nginx-unprivileged:1.23",
+			KubeScheduler:              k8sutil.GetDefaultKubeSchedulerImage(m.k8sVersion),
+			KubeControllerManager:      k8sutil.GetDefaultKubeControllerManagerImage(m.k8sVersion),
 		},
 	}
 	if m.k8sVersion != nil && m.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {

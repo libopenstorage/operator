@@ -2,15 +2,17 @@ package k8s
 
 import (
 	"context"
-	"github.com/libopenstorage/operator/pkg/constants"
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/go-version"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -2819,4 +2821,47 @@ func TestCreateCRD(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expectedCRD, actualCRD)
 	require.NotEqual(t, updatedCRD, actualCRD)
+}
+
+func TestGetDefaultKubeControllerManagerImage(t *testing.T) {
+	data := []struct {
+		kbver    string
+		expected string
+	}{
+		{"1.0.0", "gcr.io/google_containers/kube-controller-manager-amd64:v1.0.0"},
+		{"1.16.13", "gcr.io/google_containers/kube-controller-manager-amd64:v1.16.13"},
+		{"1.16.14", "registry.k8s.io/kube-controller-manager-amd64:v1.16.14"},
+		{"1.28.99", "registry.k8s.io/kube-controller-manager-amd64:v1.28.99"},
+	}
+
+	for i, td := range data {
+		ver, err := version.NewVersion(td.kbver)
+		require.NoError(t, err)
+		actual := GetDefaultKubeControllerManagerImage(ver)
+		assert.Equal(t, td.expected, actual,
+			"failed expectation for #%d / %v", i+1, td)
+	}
+}
+
+func TestGetDefaultKubeSchedulerImage(t *testing.T) {
+	data := []struct {
+		kbver    string
+		expected string
+	}{
+		{"1.0.0", "gcr.io/google_containers/kube-scheduler-amd64:v1.0.0"},
+		{"1.16.13", "gcr.io/google_containers/kube-scheduler-amd64:v1.16.13"},
+		{"1.16.14", "registry.k8s.io/kube-scheduler-amd64:v1.16.14"},
+		{"1.28.99", "registry.k8s.io/kube-scheduler-amd64:v1.28.99"},
+		// stork pinned...
+		{"1.22.0", "registry.k8s.io/kube-scheduler-amd64:v1.21.4"},
+		{"1.22.99", "registry.k8s.io/kube-scheduler-amd64:v1.21.4"},
+	}
+
+	for i, td := range data {
+		ver, err := version.NewVersion(td.kbver)
+		require.NoError(t, err)
+		actual := GetDefaultKubeSchedulerImage(ver)
+		assert.Equal(t, td.expected, actual,
+			"failed expectation for #%d / %v", i+1, td)
+	}
 }
