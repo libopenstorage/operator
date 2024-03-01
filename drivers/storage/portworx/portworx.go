@@ -385,6 +385,9 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				pxVersionChanged ||
 				autoUpdateComponents(toUpdate)) {
 			toUpdate.Status.DesiredImages.Stork = release.Components.Stork
+			if toUpdate.Status.DesiredImages.KubeScheduler == "" {
+				toUpdate.Status.DesiredImages.KubeScheduler = release.Components.KubeScheduler
+			}
 		}
 
 		if autoUpdateAutopilot(toUpdate) &&
@@ -494,7 +497,6 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			releaseImage string
 		}{
 			{&toUpdate.Status.DesiredImages.KubeControllerManager, release.Components.KubeControllerManager},
-			{&toUpdate.Status.DesiredImages.KubeScheduler, release.Components.KubeScheduler},
 			{&toUpdate.Status.DesiredImages.Pause, release.Components.Pause},
 		}
 		for _, v := range imagesData {
@@ -513,6 +515,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 
 	if !autoUpdateStork(toUpdate) {
 		toUpdate.Status.DesiredImages.Stork = ""
+		toUpdate.Status.DesiredImages.KubeScheduler = ""
 	}
 
 	if !autoUpdateAutopilot(toUpdate) {

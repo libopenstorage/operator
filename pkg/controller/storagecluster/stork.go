@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -54,13 +53,6 @@ const (
 	// K8S scheduler policy decoder changed in this version.
 	// https://github.com/kubernetes/kubernetes/blob/release-1.21/pkg/scheduler/scheduler.go#L306
 	policyDecoderChangeVersion = "1.17.0"
-	// Stork scheduler cannot run with kube-scheduler image > v1.22
-	pinnedStorkSchedulerVersion          = "1.21.4"
-	minK8sVersionForPinnedStorkScheduler = "1.22.0"
-	// kubescheduler.config.k8s.io/v1 is GA'ed in k8s 1.25, so for 1.23 <= ver < 1.25
-	// we should continue using kubescheduler.config.k8s.io/v1beta3
-	minK8sVersionForKubeSchedulerV1BetaConfiguration = "1.23.0"
-	minK8sVersionForKubeSchedulerV1Configuration     = "1.25.0"
 )
 
 const (
@@ -257,21 +249,11 @@ func (c *Controller) createStorkConfigMap(
 		ResourceLock:      "leases",
 	}
 
-	k8sMinVersionForKubeSchedulerV1BetaConfiguration, err := version.NewVersion(minK8sVersionForKubeSchedulerV1BetaConfiguration)
-	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForKubeSchedulerV1BetaConfiguration)
-		return err
-	}
-	k8sMinVersionForKubeSchedulerV1Configuration, err := version.NewVersion(minK8sVersionForKubeSchedulerV1Configuration)
-	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForKubeSchedulerV1Configuration)
-		return err
-	}
-
 	var policyConfig []byte
 	var dataKey string
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerV1BetaConfiguration) {
-		if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerV1Configuration) {
+	var err error
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerV1BetaConfiguration) {
+		if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerV1Configuration) {
 			// enter this branch when k8s ver >= 1.25
 			kubeSchedulerConfigurationV1 := schedconfig.KubeSchedulerConfiguration{
 				TypeMeta: metav1.TypeMeta{
@@ -923,37 +905,14 @@ func (c *Controller) createStorkSchedDeployment(
 		return err
 	}
 
-	kubeSchedImage := "gcr.io/google_containers/kube-scheduler-amd64"
-	if k8sutil.IsNewKubernetesRegistry(c.kubernetesVersion) {
-		kubeSchedImage = k8sutil.DefaultK8SRegistryPath + "/kube-scheduler-amd64"
-	}
-
-	k8sMinVersionForPinnedStorkScheduler, err := version.NewVersion(minK8sVersionForPinnedStorkScheduler)
-	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForPinnedStorkScheduler)
-		return err
-	}
-
-	k8sMinVersionForKubeSchedulerConfiguration, err := version.NewVersion(minK8sVersionForKubeSchedulerV1BetaConfiguration)
-	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", minK8sVersionForKubeSchedulerV1BetaConfiguration)
-		return err
-	}
-
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForPinnedStorkScheduler) &&
-		c.kubernetesVersion.LessThan(k8sMinVersionForKubeSchedulerConfiguration) {
-		kubeSchedImage = kubeSchedImage + ":v" + pinnedStorkSchedulerVersion
-	} else {
-		kubeSchedImage = kubeSchedImage + ":v" + c.kubernetesVersion.String()
-	}
-	imageName := kubeSchedImage
+	imageName := k8sutil.GetDefaultKubeSchedulerImage(c.kubernetesVersion)
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.KubeScheduler != "" {
 		imageName = cluster.Status.DesiredImages.KubeScheduler
 	}
 	imageName = util.GetImageURN(cluster, imageName)
 
 	var command []string
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration) {
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerV1BetaConfiguration) {
 		command = []string{
 			"/usr/local/bin/kube-scheduler",
 			"--bind-address=0.0.0.0",
@@ -1015,7 +974,7 @@ func (c *Controller) createStorkSchedDeployment(
 		command,
 		targetCPUQuantity,
 		updatedTopologySpreadConstraints,
-		c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerConfiguration))
+		c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerV1BetaConfiguration))
 
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||

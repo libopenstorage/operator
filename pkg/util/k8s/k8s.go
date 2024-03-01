@@ -67,6 +67,13 @@ var (
 	K8sVer1_24, _ = version.NewVersion("1.24")
 	// K8sVer1_25 k8s 1.25
 	K8sVer1_25, _ = version.NewVersion("1.25")
+	// K8sVer1_26 k8s 1.26
+	K8sVer1_26, _ = version.NewVersion("1.26")
+
+	// kubescheduler.config.k8s.io/v1 is GA'ed in k8s 1.25, so for 1.23 <= ver < 1.25
+	// we should continue using kubescheduler.config.k8s.io/v1beta3
+	MinVersionForKubeSchedulerV1BetaConfiguration, _ = version.NewVersion("1.23.0")
+	MinVersionForKubeSchedulerV1Configuration, _     = version.NewVersion("1.25.0")
 
 	// ErrDoSkipUpdate used by update callback functions, to skip the StorageCluster updates
 	ErrDoSkipUpdate = fmt.Errorf("update skipped")
@@ -2320,4 +2327,34 @@ func AddManagedByOperatorLabel(om metav1.ObjectMeta) metav1.ObjectMeta {
 	}
 	om.Labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
 	return om
+}
+
+func GetDefaultKubeControllerManagerImage(k8sVersion *version.Version) string {
+	if k8sVersion == nil {
+		return ""
+	}
+	prefix := "gcr.io/google_containers"
+	if IsNewKubernetesRegistry(k8sVersion) {
+		prefix = DefaultK8SRegistryPath
+	}
+	return prefix + "/kube-controller-manager-amd64:v" + k8sVersion.String()
+}
+
+func GetDefaultKubeSchedulerImage(k8sVersion *version.Version) string {
+	if k8sVersion == nil {
+		return ""
+	}
+	minVersionForPinnedStorkScheduler, _ := version.NewVersion("1.22.0")
+	prefix := "gcr.io/google_containers"
+	if IsNewKubernetesRegistry(k8sVersion) {
+		prefix = DefaultK8SRegistryPath
+	}
+	prefix += "/kube-scheduler-amd64:v"
+
+	if k8sVersion.GreaterThanOrEqual(minVersionForPinnedStorkScheduler) &&
+		k8sVersion.LessThan(MinVersionForKubeSchedulerV1BetaConfiguration) {
+		// Stork scheduler cannot run with kube-scheduler image > v1.22
+		return prefix + "1.21.4"
+	}
+	return prefix + k8sVersion.String()
 }
