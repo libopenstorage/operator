@@ -1165,16 +1165,6 @@ func CountStorageNodes(
 
 	storageNodesCount := 0
 	for _, node := range nodeEnumerateResponse.Nodes {
-		if node.SchedulerNodeName == "" {
-			k8sNode, err := coreops.Instance().SearchNodeByAddresses(
-				[]string{node.DataIp, node.MgmtIp, node.Hostname},
-			)
-			if err != nil {
-				logrus.Warnf("Unable to find kubernetes node name for nodeID %v: %v", node.Id, err)
-				continue
-			}
-			node.SchedulerNodeName = k8sNode.Name
-		}
 
 		var isQuorumMember bool
 		if useQuorumFlag {
@@ -1193,15 +1183,12 @@ func CountStorageNodes(
 			if !isDRSetup {
 				storageNodesCount++
 			} else {
-				if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
-					if node.ClusterDomain == currentClusterDomain {
-						storageNodesCount++
-					}
+				if node.ClusterDomain == currentClusterDomain {
+					storageNodesCount++
 				} else {
-					logrus.Debugf("node %s should not run portworx", node.SchedulerNodeName)
+					logrus.Debugf("node %s is not part of cluster domain %s ", node.SchedulerNodeName, currentClusterDomain)
 				}
 			}
-
 		} else {
 			logrus.Debugf("node %s is not a quorum member, node: %+v", node.Id, node)
 		}
