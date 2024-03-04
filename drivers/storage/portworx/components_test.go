@@ -12395,7 +12395,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 				},
 			},
 		},
-	}, fakeK8sNodes)
+	})
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	component.DeregisterAllComponents()
@@ -12723,7 +12723,7 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 				},
 			},
 		},
-	}, fakeK8sNodes)
+	})
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
 	component.DeregisterAllComponents()
@@ -12949,7 +12949,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 				},
 			},
 		},
-	}, fakeK8sNodes)
+	})
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	component.DeregisterAllComponents()
@@ -13175,7 +13175,7 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 				},
 			},
 		},
-	}, fakeK8sNodes)
+	})
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	component.DeregisterAllComponents()

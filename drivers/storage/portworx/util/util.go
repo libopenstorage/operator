@@ -1402,22 +1402,6 @@ func CountStorageNodes(
 		return -1, fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
-	k8sNodeList := &v1.NodeList{}
-	err = k8sClient.List(context.TODO(), k8sNodeList)
-	if err != nil {
-		return -1, err
-	}
-	k8sNodesStoragePodCouldRun := make(map[string]bool)
-	for _, node := range k8sNodeList.Items {
-		shouldRun, shouldContinueRunning, err := k8sutil.CheckPredicatesForStoragePod(&node, cluster, nil)
-		if err != nil {
-			return -1, err
-		}
-		if shouldRun || shouldContinueRunning {
-			k8sNodesStoragePodCouldRun[node.Name] = true
-		}
-	}
-
 	// Use the quorum member flag from the node enumerate response if all the nodes are upgraded to the
 	// newer version. The Enumerate response could be coming from any node and we want to make sure that
 	// we are not talking to an old node when enumerating.
@@ -1481,7 +1465,7 @@ func CountStorageNodes(
 		}
 	}
 
-	logrus.Debugf("storageNodesCount: %d, k8sNodesStoragePodCouldRun: %d", storageNodesCount, len(k8sNodesStoragePodCouldRun))
+	logrus.Debugf("storageNodesCount: %d", storageNodesCount)
 	return storageNodesCount, nil
 }
 
