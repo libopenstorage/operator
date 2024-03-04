@@ -12888,7 +12888,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 
 	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
 	defer testutil.RestoreEtcHosts(t)
-	
+
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
 			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
