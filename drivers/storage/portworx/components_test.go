@@ -12647,15 +12647,21 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	// StorageNode with ID 6 and 7 don't belong to this cluster
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
-			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
-			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
-			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "", Hostname: "node3"},
+			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", ClusterDomain: "domain 1"},
+			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", ClusterDomain: "domain 1"},
+			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "", Hostname: "node3", ClusterDomain: "domain 1"},
 			{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4"},
 			{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5"},
-			{Pools: []*osdapi.StoragePool{{ID: 6}}, SchedulerNodeName: "metro-dr-node1"},
-			{Pools: []*osdapi.StoragePool{{ID: 7}}, SchedulerNodeName: "metro-dr-node2"},
+			{Pools: []*osdapi.StoragePool{{ID: 6}}, SchedulerNodeName: "metro-dr-node1", ClusterDomain: "domain 2"},
+			{Pools: []*osdapi.StoragePool{{ID: 7}}, SchedulerNodeName: "metro-dr-node2", ClusterDomain: "domain 2"},
 			{Pools: []*osdapi.StoragePool{}},
 			{},
+		},
+	}
+	// Cluster domain of the k8s cluster on which upgrade is running
+	expectedInspectCurrentResponse := &osdapi.SdkNodeInspectCurrentResponse{
+		Node: &osdapi.StorageNode{
+			ClusterDomain: "domain 1",
 		},
 	}
 	mockNodeServer.EXPECT().
@@ -12666,6 +12672,11 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	mockClusterDomainServer.EXPECT().
 		Enumerate(gomock.Any(), gomock.Any()).
 		Return(expectedClusterDomainsEnumerateResp, nil).
+		AnyTimes()
+
+	mockNodeServer.EXPECT().
+		InspectCurrent(gomock.Any(), gomock.Any()).
+		Return(expectedInspectCurrentResponse, nil).
 		AnyTimes()
 
 	cluster := &corev1.StorageCluster{
@@ -12750,6 +12761,16 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	expectedInspectCurrentResponse := &osdapi.SdkNodeInspectCurrentResponse{
+		Node: &osdapi.StorageNode{
+			ClusterDomain: "current-cluster-domain",
+		},
+	}
+	mockNodeServer.EXPECT().
+		InspectCurrent(gomock.Any(), gomock.Any()).
+		Return(expectedInspectCurrentResponse, nil).
 		AnyTimes()
 
 	cluster := &corev1.StorageCluster{
@@ -12889,6 +12910,16 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	expectedInspectCurrentResponse := &osdapi.SdkNodeInspectCurrentResponse{
+		Node: &osdapi.StorageNode{
+			ClusterDomain: "current-cluster-domain",
+		},
+	}
+	mockNodeServer.EXPECT().
+		InspectCurrent(gomock.Any(), gomock.Any()).
+		Return(expectedInspectCurrentResponse, nil).
 		AnyTimes()
 
 	cluster := &corev1.StorageCluster{
@@ -13104,6 +13135,16 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	expectedInspectCurrentResponse := &osdapi.SdkNodeInspectCurrentResponse{
+		Node: &osdapi.StorageNode{
+			ClusterDomain: "current-cluster-domain",
+		},
+	}
+	mockNodeServer.EXPECT().
+		InspectCurrent(gomock.Any(), gomock.Any()).
+		Return(expectedInspectCurrentResponse, nil).
 		AnyTimes()
 
 	cluster := &corev1.StorageCluster{
