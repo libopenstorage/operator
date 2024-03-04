@@ -1423,9 +1423,7 @@ func CountStorageNodes(
 	// we are not talking to an old node when enumerating.
 	useQuorumFlag := true
 	for _, node := range nodeEnumerateResponse.Nodes {
-		if node.Status == api.Status_STATUS_DECOMMISSION {
-			continue
-		}
+
 		v := node.NodeLabels[NodeLabelPortworxVersion]
 		nodeVersion, err := version.NewVersion(v)
 		if err != nil {
@@ -1450,6 +1448,10 @@ func CountStorageNodes(
 
 	storageNodesCount := 0
 	for _, node := range nodeEnumerateResponse.Nodes {
+		// skip decomissioned node to be calculated as part of storage node
+		if node.Status == api.Status_STATUS_DECOMMISSION {
+			continue
+		}
 
 		var isQuorumMember bool
 		if useQuorumFlag {

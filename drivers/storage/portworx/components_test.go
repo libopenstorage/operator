@@ -12349,6 +12349,13 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 			{SchedulerNodeName: "node1"},
 		},
 	}
+
+	expectedInspectCurrentResponse := &osdapi.SdkNodeInspectCurrentResponse{
+		Node: &osdapi.StorageNode{
+			ClusterDomain: "current-cluster-domain",
+		},
+	}
+
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
@@ -12356,6 +12363,11 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	mockClusterDomainServer.EXPECT().
 		Enumerate(gomock.Any(), gomock.Any()).
 		Return(nil, fmt.Errorf("cluster domains not available error")).
+		AnyTimes()
+
+	mockNodeServer.EXPECT().
+		InspectCurrent(gomock.Any(), gomock.Any()).
+		Return(expectedInspectCurrentResponse, nil).
 		AnyTimes()
 
 	cluster := &corev1.StorageCluster{
@@ -12555,7 +12567,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
 
-	require.Equal(t, 3, storagePDB.Spec.MinAvailable.IntValue())
+	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
 
 	// TestCase: Do not use NonQuorumMember flag if there is at least one old unsupported node
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
