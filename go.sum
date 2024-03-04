@@ -1728,6 +1728,8 @@ github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+
 github.com/libopenstorage/gossip v0.0.0-20190507031959-c26073a01952/go.mod h1:TjXt2Iz2bTkpfc4Q6xN0ttiNipTVwEEYoZSMZHlfPek=
 github.com/libopenstorage/gossip v0.0.0-20200808224301-d5287c7c8b24/go.mod h1:TjXt2Iz2bTkpfc4Q6xN0ttiNipTVwEEYoZSMZHlfPek=
 github.com/libopenstorage/gossip v0.0.0-20220309192431-44c895e0923e/go.mod h1:TjXt2Iz2bTkpfc4Q6xN0ttiNipTVwEEYoZSMZHlfPek=
+github.com/libopenstorage/openstorage v1.0.1-0.20240221210452-7757fdc2b8ff h1:9uognDSvafpcrNICT8I5OJRt9TlLeV61cF6nIl9KwBQ=
+github.com/libopenstorage/openstorage v1.0.1-0.20240221210452-7757fdc2b8ff/go.mod h1:8E8ueY3NJV+tcOr1BQBvyNU9FRtDfcRGB7+trr07+rA=
 github.com/libopenstorage/openstorage v1.0.1-0.20240227215941-8712fa83eaae h1:XvTU8+lQNBzgQxsI6efAoZlkp1eSp9M2A2dpOFSc1M4=
 github.com/libopenstorage/openstorage v1.0.1-0.20240227215941-8712fa83eaae/go.mod h1:8E8ueY3NJV+tcOr1BQBvyNU9FRtDfcRGB7+trr07+rA=
 github.com/libopenstorage/openstorage-sdk-clients v0.109.0/go.mod h1:vo0c/nLG2HIyQva4Avwx61U1kWcw4HGQh3sjzV2DEEs=
