@@ -12173,13 +12173,6 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
-		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node4"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node5"}},
-	}}
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
 			{SchedulerNodeName: "node1"},
@@ -12230,7 +12223,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 				},
 			},
 		},
-	}, fakeK8sNodes)
+	})
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	component.DeregisterAllComponents()
@@ -12554,7 +12547,7 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 				},
 			},
 		},
-	}, fakeK8sNodes)
+	})
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
 	component.DeregisterAllComponents()
@@ -12721,11 +12714,6 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
-		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
-	}}
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
 			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
@@ -12774,7 +12762,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 				},
 			},
 		},
-	}, fakeK8sNodes)
+	})
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	component.DeregisterAllComponents()
@@ -12940,11 +12928,6 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
-		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
-	}}
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
 			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
@@ -12994,7 +12977,7 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 				},
 			},
 		},
-	}, fakeK8sNodes)
+	})
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	component.DeregisterAllComponents()
