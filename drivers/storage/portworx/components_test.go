@@ -12338,13 +12338,6 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
 	defer testutil.RestoreEtcHosts(t)
 
-	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
-		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node4"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node5"}},
-	}}
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
 			{SchedulerNodeName: "node1"},
@@ -12895,12 +12888,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 
 	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
 	defer testutil.RestoreEtcHosts(t)
-
-	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
-		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
-	}}
+	
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
 			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
@@ -13121,11 +13109,6 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
 	defer testutil.RestoreEtcHosts(t)
 
-	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
-		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
-	}}
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
 			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
