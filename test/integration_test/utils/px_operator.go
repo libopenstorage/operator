@@ -36,8 +36,12 @@ var (
 	PxOperatorVer23_5_1, _ = version.NewVersion("23.5.1")
 	// PxOperatorVer23_8 portworx-operator 23.8 minimum version
 	PxOperatorVer23_8, _ = version.NewVersion("23.8-")
+	// PxOperatorVer23_10_2 portworx-operator version 23.1.02 is when we allow overriding PDB minAvailable value
+	PxOperatorVer23_10_2, _ = version.NewVersion("23.10.2-")
 	// PxOperatorVer23_10_3 portworx-operator 23.10.3 version is when we not allowing to deploy our own PX Prometheus
 	PxOperatorVer23_10_3, _ = version.NewVersion("23.10.3-")
+	// PxOperatorVer24_1_0 portworx-operator 24.1.0 version to correct invalid PDB minAvailable
+	PxOperatorVer24_1_0, _ = version.NewVersion("24.1.0-")
 )
 
 // TODO: Install portworx-operator in test automation
