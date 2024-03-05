@@ -4764,8 +4764,9 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 			}
 
 			nodeslen := 0
+			//availablenodes:=0
 			for _, node := range nodes.Items {
-				if *node.Status.NodeAttributes.Storage {
+				if *node.Status.NodeAttributes.Storage && node.Status.Phase == "Online" {
 					nodeslen++
 				}
 			}
@@ -4812,7 +4813,7 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 				return nil, false, nil
 			}
 
-			return nil, false, fmt.Errorf("incorrect PDB value. Expected %d, Actual %d", expectedPdbValue, actualPdbValue)
+			return nil, false, fmt.Errorf("incorrect PDB value. Expected PDB %d, Actual PDB %d, allowed dis %d, actual dis %d", expectedPdbValue, actualPdbValue, expectedAllowedDsiruptions, actualAllowedDisruptions)
 		}
 
 		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
