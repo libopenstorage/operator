@@ -4764,13 +4764,16 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 			}
 
 			nodeslen := 0
-			//availablenodes:=0
+			availablenodes := 0
 			for _, node := range nodes.Items {
-				if *node.Status.NodeAttributes.Storage && node.Status.Phase == "Online" {
+				if *node.Status.NodeAttributes.Storage {
 					nodeslen++
+					if node.Status.Phase == "Online" {
+						availablenodes++
+					}
 				}
 			}
-
+			nodesUnavailable := nodeslen - availablenodes
 			// Skip PDB validation for px-storage if number of storage nodes is lesser than or equal to 2
 			if nodeslen <= 2 {
 				logrus.Infof("Storage PDB does not exist for storage nodes lesser than or equal to 2, skipping PDB validattion")
@@ -4800,6 +4803,9 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 				if annotatedPDBVal < int(pxQuorum) || annotatedPDBVal >= nodeslen {
 					expectedPdbValue = nodeslen - 1
 					expectedAllowedDsiruptions = 1
+					if nodesUnavailable > 0 {
+						expectedAllowedDsiruptions = 0
+					}
 				} else {
 					expectedPdbValue = annotatedPDBVal
 					expectedAllowedDsiruptions = nodeslen - annotatedPDBVal
@@ -4808,12 +4814,15 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 			} else {
 				expectedPdbValue = nodeslen - 1
 				expectedAllowedDsiruptions = 1
+				if nodesUnavailable > 0 {
+					expectedAllowedDsiruptions = 0
+				}
 			}
 			if expectedPdbValue == actualPdbValue && expectedAllowedDsiruptions == int(actualAllowedDisruptions) {
 				return nil, false, nil
 			}
 
-			return nil, false, fmt.Errorf("incorrect PDB value. Expected PDB %d, Actual PDB %d, allowed dis %d, actual dis %d", expectedPdbValue, actualPdbValue, expectedAllowedDsiruptions, actualAllowedDisruptions)
+			return nil, true, fmt.Errorf("incorrect PDB value. Expected PDB %d, Actual PDB %d, allowed dis %d, actual dis %d", expectedPdbValue, actualPdbValue, expectedAllowedDsiruptions, actualAllowedDisruptions)
 		}
 
 		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
