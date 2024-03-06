@@ -24,7 +24,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
-
 	"github.com/libopenstorage/operator/pkg/apis"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/mock"
@@ -174,6 +173,9 @@ const (
 
 	defaultRunCmdInPxPodTimeout  = 25 * time.Second
 	defaultRunCmdInPxPodInterval = 5 * time.Second
+
+	defaultCheckFreshInstallTimeout  = 120 * time.Second
+	defaultCheckFreshInstallInterval = 5 * time.Second
 
 	etcHostsFile       = "/etc/hosts"
 	tempEtcHostsMarker = "### px-operator unit-test"
@@ -762,9 +764,17 @@ func ValidateStorageCluster(
 		os.Setenv("KUBECONFIG", kubeconfig[0])
 	}
 
+	freshInstall, err := IsThisFreshInstall(clusterSpec, defaultCheckFreshInstallTimeout, defaultCheckFreshInstallInterval)
+	if err != nil {
+		return err
+	}
+
+	if freshInstall {
+		logrus.Debug("This is fresh PX installation!")
+	}
+
 	// Validate StorageCluster
 	var liveCluster *corev1.StorageCluster
-	var err error
 	if shouldStartSuccessfully {
 		liveCluster, err = ValidateStorageClusterIsOnline(clusterSpec, timeout, interval)
 		if err != nil {
@@ -830,6 +840,41 @@ func ValidateStorageCluster(
 	}
 
 	return nil
+}
+
+// IsThisFreshInstall checks if its fresh install or not and returns true or false
+func IsThisFreshInstall(clusterSpec *corev1.StorageCluster, timeout, interval time.Duration) (bool, error) {
+	var isFreshInstall bool
+	t := func() (interface{}, bool, error) {
+		cluster, err := operatorops.Instance().GetStorageCluster(clusterSpec.Name, clusterSpec.Namespace)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get StorageCluster [%s] in [%s], Err: %v", clusterSpec.Name, cluster.Namespace, err)
+		}
+		return cluster, false, nil
+	}
+
+	out, err := task.DoRetryWithTimeout(t, timeout, interval)
+	if err != nil {
+		return isFreshInstall, fmt.Errorf("failed to determine if this is fresh install or not, Err: %v", err)
+	}
+	cluster := out.(*corev1.StorageCluster)
+
+	// Check if PX install if fresh
+	isFreshInstall = isThisFreshInstall(cluster)
+	if !isFreshInstall {
+		logrus.Debug("This is not a fresh PX installation!")
+	}
+	return isFreshInstall, nil
+}
+
+// IsThisFreshInstall checks whether it's a fresh Portworx install, copied this function her due to import cycle not allowed
+func isThisFreshInstall(cluster *corev1.StorageCluster) bool {
+	// To handle failures during fresh install e.g. validation failures,
+	// extra check for px runtime states is added here to avoid unexpected behaviors
+	return cluster.Status.Phase == "" ||
+		cluster.Status.Phase == string(corev1.ClusterStateInit) ||
+		(cluster.Status.Phase == string(corev1.ClusterStateDegraded) &&
+			util.GetStorageClusterCondition(cluster, "Portworx", corev1.ClusterConditionTypeRuntimeState) == nil)
 }
 
 // ValidateClusterProviderHealth validates health of the cluster provider environment
