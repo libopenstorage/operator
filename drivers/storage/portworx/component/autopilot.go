@@ -47,8 +47,10 @@ const (
 	AutopilotDefaultProviderEndpoint = "http://px-prometheus:9090"
 	// AutopilotDefaultReviewersKey is a key for default reviewers array in gitops config map
 	AutopilotDefaultReviewersKey = "defaultReviewers"
-	// OCPPrometheusUserWorkloadSecretPrefix name of OCP user-workload Prometheus secret
+	// OCPPrometheusUserWorkloadSecretPrefix name of OCP user-workload Prometheus secret for OCP < 4.15
 	OCPPrometheusUserWorkloadSecretPrefix = "prometheus-user-workload-token"
+	// OCPThanosRulerSecretPrefix name of OCP thanos-ruler secret for OCP 4.15+
+	OCPThanosRulerSecretPrefix = "thanos-ruler-token"
 	// Autopilot Secret name for prometheus-user-workload-token
 	AutopilotSecretName = "autopilot-prometheus-auth"
 	defaultAutopilotCPU = "0.1"
@@ -106,7 +108,7 @@ var (
 		},
 		{
 			Name:      "ca-cert-volume",
-			MountPath: "/etc/ssl/certs",
+			MountPath: "/etc/ssl/px-custom/1",
 			ReadOnly:  true,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
@@ -773,6 +775,18 @@ func (c *autopilot) isAutopilotSecretCreated(namespace string) bool {
 }
 
 func (c *autopilot) getPrometheusTokenAndCert() (encodedToken, caCert string, err error) {
+
+	var secretName string
+	ocp_415, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_15_Version)
+	if err != nil {
+		return "", "", err
+	}
+	if ocp_415 {
+		secretName = OCPThanosRulerSecretPrefix
+	} else {
+		secretName = OCPPrometheusUserWorkloadSecretPrefix
+	}
+
 	secrets := &v1.SecretList{}
 	err = c.k8sClient.List(
 		context.TODO(),
@@ -788,7 +802,7 @@ func (c *autopilot) getPrometheusTokenAndCert() (encodedToken, caCert string, er
 	var secretFound bool
 	for _, secret := range secrets.Items {
 
-		if strings.HasPrefix(secret.Name, OCPPrometheusUserWorkloadSecretPrefix) {
+		if strings.HasPrefix(secret.Name, secretName) {
 			secretFound = true
 			// Retrieve the token data from the secret as []byte
 			tokenBytes, ok := secret.Data["token"]

@@ -1,6 +1,7 @@
 package component
 
 import (
+	"math"
 	"strconv"
 
 	"github.com/hashicorp/go-version"
@@ -107,17 +108,23 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 	}
 
 	var minAvailable int
-	if err != nil || userProvidedMinValue < 0 {
-		c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.k8sClient, cluster.Namespace)
-		if err != nil {
-			return err
-		}
+	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.k8sClient, cluster.Namespace)
+	if err != nil {
+		return err
+	}
 
-		storageNodesCount, err := pxutil.CountStorageNodes(cluster, c.sdkConn, c.k8sClient)
-		if err != nil {
-			c.closeSdkConn()
-			return err
-		}
+	storageNodesCount, err := pxutil.CountStorageNodes(cluster, c.sdkConn, c.k8sClient)
+	if err != nil {
+		c.closeSdkConn()
+		return err
+	}
+
+	// Set minAvailable value to storagenodes-1 if no value is provided,
+	// or if the user provided value is lesser storageNodes/2 +1 (px quorum)
+	// or greater than or equal to the number of storage nodes.
+	quorumValue := math.Floor(float64(storageNodesCount)/2) + 1
+	if userProvidedMinValue < int(quorumValue) || userProvidedMinValue >= storageNodesCount {
+		logrus.Warnf("Value for px-storage pod disruption budget not provided or is invalid, using default calculated value %d: ", storageNodesCount-1)
 		minAvailable = storageNodesCount - 1
 	} else {
 		minAvailable = userProvidedMinValue
@@ -144,9 +151,13 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 				},
 			},
 		}
-		return k8sutil.CreateOrUpdatePodDisruptionBudget(c.k8sClient, pdb, ownerRef)
+
+		err = k8sutil.CreateOrUpdatePodDisruptionBudget(c.k8sClient, pdb, ownerRef)
+		if err == nil {
+			logrus.Infof("Value for px-storage pod disruption budget is set to %d ", pdb.Spec.MinAvailable.IntValue())
+		}
 	}
-	return nil
+	return err
 }
 
 func (c *disruptionBudget) createKVDBPodDisruptionBudget(

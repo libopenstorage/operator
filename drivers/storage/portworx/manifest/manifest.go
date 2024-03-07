@@ -48,7 +48,7 @@ const (
 	defaultCollectorProxyImage = "envoyproxy/envoy:v1.21.4"
 
 	defaultCCMGoImage       = "purestorage/ccm-go:1.0.3"
-	defaultCollectorImage   = "purestorage/realtime-metrics:1.0.15"
+	defaultCollectorImage   = "purestorage/realtime-metrics:1.0.23"
 	defaultCCMGoProxyImage  = "purestorage/telemetry-envoy:1.1.6"
 	defaultLogUploaderImage = "purestorage/log-upload:px-1.0.12"
 
