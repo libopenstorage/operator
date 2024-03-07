@@ -4,11 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
-
 	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,7 +11,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"os"
+	"path/filepath"
 	"sigs.k8s.io/yaml"
+	"strconv"
+	"strings"
 )
 
 // convertToYaml converts a k8s object to YAML string
@@ -195,12 +194,12 @@ func (k8s *k8sRetriever) listDeployments(namespace string) error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	deployments, err := k8s.k8sClient.AppsV1().Deployments(namespace).List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, deployment := range deployments.Items {
@@ -227,7 +226,7 @@ func (k8s *k8sRetriever) listPods(namespace string, labelSelector string) error 
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	options := meta.ListOptions{
@@ -240,7 +239,7 @@ func (k8s *k8sRetriever) listPods(namespace string, labelSelector string) error 
 
 	pods, err := k8s.k8sClient.CoreV1().Pods(namespace).List(k8s.context, options)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, pod := range pods.Items {
@@ -322,12 +321,12 @@ func (k8s *k8sRetriever) listServices(namespace string) error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	services, err := k8s.k8sClient.CoreV1().Services(namespace).List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, service := range services.Items {
@@ -345,6 +344,41 @@ func (k8s *k8sRetriever) listServices(namespace string) error {
 	return nil
 }
 
+// listSharedv4Services lists all sharedv4 services in a namespace and writes them to a file in the output directory
+func (k8s *k8sRetriever) listSharedv4Services(namespace string) error {
+	saveFilesPath := k8s.outputDir + "/px-sharedv4-services"
+	err := os.MkdirAll(saveFilesPath, 0750)
+	if err != nil && os.IsExist(err) {
+		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
+	}
+	if err != nil {
+		return err
+	}
+
+	labelSelector := "portworx.io/volid"
+
+	services, err := k8s.k8sClient.CoreV1().Services(namespace).List(k8s.context, meta.ListOptions{
+		LabelSelector: labelSelector,
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, service := range services.Items {
+		serviceYaml, err := k8s.convertToYaml(service)
+		if err != nil {
+			k8s.loggerToUse.Errorf("Error converting service to YAML: %s", err.Error())
+			continue
+		}
+		k8s.loggerToUse.Infof("Sharedv4 Service: %s", service.Name)
+		if err := k8s.writeToFile(service.Name, "service", serviceYaml, saveFilesPath); err != nil {
+			k8s.loggerToUse.Errorf("Error writing service YAML to file: %s", err.Error())
+		}
+	}
+
+	return nil
+}
+
 // listStorageClusters lists all storage clusters in a namespace and writes them to a file in the output directory
 func (k8s *k8sRetriever) listStorageClusters(namespace string) error {
 
@@ -354,12 +388,12 @@ func (k8s *k8sRetriever) listStorageClusters(namespace string) error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	dynamicClient, err := dynamic.NewForConfig(k8s.restConfig)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	gvr := schema.GroupVersionResource{Group: "core.libopenstorage.org", Version: "v1", Resource: "storageclusters"}
@@ -368,7 +402,7 @@ func (k8s *k8sRetriever) listStorageClusters(namespace string) error {
 
 	storageClusters, err := dynamicClient.Resource(gvr).Namespace(namespace).List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, storageCluster := range storageClusters.Items {
@@ -396,12 +430,12 @@ func (k8s *k8sRetriever) listStorageNodes(namespace string) error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	dynamicClient, err := dynamic.NewForConfig(k8s.restConfig)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	gvr := schema.GroupVersionResource{Group: "core.libopenstorage.org", Version: "v1", Resource: "storagenodes"}
@@ -410,7 +444,7 @@ func (k8s *k8sRetriever) listStorageNodes(namespace string) error {
 
 	storageNodes, err := dynamicClient.Resource(gvr).Namespace(namespace).List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, storageNode := range storageNodes.Items {
@@ -437,12 +471,12 @@ func (k8s *k8sRetriever) listDaemonSets(namespace string) error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	daemonSets, err := k8s.k8sClient.AppsV1().DaemonSets(namespace).List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, ds := range daemonSets.Items {
@@ -471,12 +505,12 @@ func (k8s *k8sRetriever) listStatefulSets(namespace string) error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	statefulSets, err := k8s.k8sClient.AppsV1().StatefulSets(namespace).List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, sts := range statefulSets.Items {
@@ -505,12 +539,12 @@ func (k8s *k8sRetriever) listPVCs(namespace string) error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	pvcs, err := k8s.k8sClient.CoreV1().PersistentVolumeClaims(namespace).List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	pvcprefix := "pvc-" + namespace
@@ -554,7 +588,7 @@ func (k8s *k8sRetriever) listAllPVCs() error {
 
 	namespaces, err := k8s.k8sClient.CoreV1().Namespaces().List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, ns := range namespaces.Items {
@@ -578,12 +612,12 @@ func (k8s *k8sRetriever) listAllPVs() error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	pvs, err := k8s.k8sClient.CoreV1().PersistentVolumes().List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, pv := range pvs.Items {
@@ -612,12 +646,12 @@ func (k8s *k8sRetriever) listKubernetesWorkerNodes() error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	nodes, err := k8s.k8sClient.CoreV1().Nodes().List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, node := range nodes.Items {
@@ -669,12 +703,12 @@ func (k8s *k8sRetriever) listStorageClasses() error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	storageClasses, err := k8s.k8sClient.StorageV1().StorageClasses().List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, storageClass := range storageClasses.Items {
@@ -703,19 +737,19 @@ func (k8s *k8sRetriever) listVolumePlacementStrategies() error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	dynamicClient, err := dynamic.NewForConfig(k8s.restConfig)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	gvr := schema.GroupVersionResource{Group: "portworx.io", Version: "v1beta2", Resource: "volumeplacementstrategies"}
 
 	volumePlacementStrategies, err := dynamicClient.Resource(gvr).List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, volumePlacementStrategy := range volumePlacementStrategies.Items {
@@ -742,19 +776,19 @@ func (k8s *k8sRetriever) listStorageProfiles() error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	dynamicClient, err := dynamic.NewForConfig(k8s.restConfig)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	gvr := schema.GroupVersionResource{Group: "cdi.kubevirt.io", Version: "v1beta1", Resource: "storageprofiles"}
 
 	storageProfiles, err := dynamicClient.Resource(gvr).List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, storageProfile := range storageProfiles.Items {
@@ -781,19 +815,19 @@ func (k8s *k8sRetriever) listVolumeSnapshotClasses() error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	dynamicClient, err := dynamic.NewForConfig(k8s.restConfig)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	gvr := schema.GroupVersionResource{Group: "snapshot.storage.k8s.io", Version: "v1", Resource: "volumesnapshotclasses"}
 
 	volumeSnapshotClasses, err := dynamicClient.Resource(gvr).List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, volumeSnapshotClass := range volumeSnapshotClasses.Items {
@@ -820,26 +854,26 @@ func (k8s *k8sRetriever) listClusterPairs() error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	dynamicClient, err := dynamic.NewForConfig(k8s.restConfig)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	gvr := schema.GroupVersionResource{Group: "stork.libopenstorage.org", Version: "v1alpha1", Resource: "clusterpairs"}
 
 	namespaces, err := k8s.k8sClient.CoreV1().Namespaces().List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, namespace := range namespaces.Items {
 
 		clusterPairs, err := dynamicClient.Resource(gvr).Namespace(namespace.GetName()).List(k8s.context, meta.ListOptions{})
 		if err != nil {
-			panic(err.Error())
+			return err
 		}
 
 		for _, clusterPair := range clusterPairs.Items {
@@ -870,26 +904,26 @@ func (k8s *k8sRetriever) listBackupLocations() error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	dynamicClient, err := dynamic.NewForConfig(k8s.restConfig)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	gvr := schema.GroupVersionResource{Group: "stork.libopenstorage.org", Version: "v1alpha1", Resource: "backuplocations"}
 
 	namespaces, err := k8s.k8sClient.CoreV1().Namespaces().List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, namespace := range namespaces.Items {
 
 		backupLocations, err := dynamicClient.Resource(gvr).Namespace(namespace.GetName()).List(k8s.context, meta.ListOptions{})
 		if err != nil {
-			panic(err.Error())
+			return err
 		}
 
 		for _, backupLocation := range backupLocations.Items {
@@ -920,12 +954,12 @@ func (k8s *k8sRetriever) listJobs(namespace string) error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	jobs, err := k8s.k8sClient.BatchV1().Jobs(namespace).List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, job := range jobs.Items {
@@ -965,14 +999,14 @@ func (k8s *k8sRetriever) listConfigMaps(namespace string) error {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	k8s.loggerToUse.Infof("Fetching ConfigMaps in namespace: %s", namespace)
 
 	configMaps, err := k8s.k8sClient.CoreV1().ConfigMaps(namespace).List(k8s.context, meta.ListOptions{})
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	for _, configMap := range configMaps.Items {
@@ -993,13 +1027,13 @@ func (k8s *k8sRetriever) listConfigMaps(namespace string) error {
 // getPXConfigMapsKubeSystem gets a configmap from a partial name from kube-system namespace
 func (k8s *k8sRetriever) getPXConfigMapsKubeSystem(partialName string) error {
 
-	saveFilesPath := k8s.outputDir + "/kube-system-px-configMaps"
+	saveFilesPath := k8s.outputDir + "/cluster-configMaps"
 	err := os.MkdirAll(saveFilesPath, 0750)
 	if err != nil && os.IsExist(err) {
 		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
 	}
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	configMaps, err := k8s.k8sClient.CoreV1().ConfigMaps("kube-system").List(k8s.context, meta.ListOptions{})

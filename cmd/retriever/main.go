@@ -8,6 +8,7 @@ import (
 	"github.com/rifflock/lfshook"
 	"github.com/sirupsen/logrus"
 	"io"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"log"
@@ -400,6 +401,21 @@ func main() {
 		return
 	}
 
+	// iterate through all namespaces and retrieve sharedv4 services with listSharedv4Services function
+	namespaces, err := k8sretriever.k8sClient.CoreV1().Namespaces().List(k8sretriever.context, meta.ListOptions{})
+	if err != nil {
+		k8sretriever.loggerToUse.Errorf("Error listing namespaces: %v", err)
+		return
+	}
+
+	for _, ns := range namespaces.Items {
+		err = k8sretriever.listSharedv4Services(ns.Name)
+		if err != nil {
+			k8sretriever.loggerToUse.Errorf("Error listing sharedv4 services: %v", err)
+			return
+		}
+	}
+
 	err = k8sretriever.retrievePXCentralResources("")
 	if err != nil {
 		k8sretriever.loggerToUse.Errorf("Error retrieving PX-Central/PX-Backup resources: %v", err)
@@ -441,8 +457,8 @@ func (k8s *k8sRetriever) retrievePXCentralResources(pxcentralns string) error {
 		if len(existingNamespaces) == 0 {
 
 			k8s.loggerToUse.Infof("PX-Central/PX-Backup resources not found in any namespace")
-			return nil
 
+			return nil
 		}
 	}
 
