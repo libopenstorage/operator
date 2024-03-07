@@ -2809,6 +2809,83 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	require.Equal(t, "registry.k8s.io/kube-controller-manager-amd64:v1.28.0",
 		cluster.Status.DesiredImages.KubeControllerManager)
 
+	// check if K8s-dependent images updated when PX version changes
+	cluster.Status.DesiredImages.KubeScheduler = "px/foo:v1.28.0"
+	cluster.Status.DesiredImages.KubeControllerManager = "px/bar:v1.28.0"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	assert.Equal(t, "px/foo:v1.28.0", cluster.Status.DesiredImages.KubeScheduler)
+	assert.Equal(t, "px/bar:v1.28.0", cluster.Status.DesiredImages.KubeControllerManager)
+
+	cluster.Spec.Image = "px/image:4.5.6"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	assert.Equal(t, "registry.k8s.io/kube-scheduler-amd64:v1.28.0",
+		cluster.Status.DesiredImages.KubeScheduler)
+	assert.Equal(t, "registry.k8s.io/kube-controller-manager-amd64:v1.28.0",
+		cluster.Status.DesiredImages.KubeControllerManager)
+
+	// check if K8s-dependent images updated (or not) when autoUpdateComponents used
+	testData := []struct {
+		kind                    corev1.AutoUpdateComponentStrategyType
+		expectUpdated           bool
+		expectAutoUpdateCleared bool
+	}{
+		{corev1.OnceAutoUpdate, true, true},
+		{corev1.AlwaysAutoUpdate, true, false},
+		{corev1.NeverAutoUpdate, false, false},
+	}
+
+	for i, td := range testData {
+		cluster.Spec.AutoUpdateComponents = nil
+		cluster.Status.DesiredImages.KubeScheduler = "px/foo:v1.28.0"
+		cluster.Status.DesiredImages.KubeControllerManager = "px/bar:v1.28.0"
+		err = driver.SetDefaultsOnStorageCluster(cluster)
+		require.NoError(t, err)
+		assert.Equal(t, "px/foo:v1.28.0", cluster.Status.DesiredImages.KubeScheduler,
+			"failed expectations for test %d / %v", i+1, td)
+		assert.Equal(t, "px/bar:v1.28.0", cluster.Status.DesiredImages.KubeControllerManager,
+			"failed expectations for test %d / %v", i+1, td)
+
+		cluster.Spec.AutoUpdateComponents = &td.kind
+		err = driver.SetDefaultsOnStorageCluster(cluster)
+		require.NoError(t, err)
+		if td.expectUpdated {
+			assert.Equal(t, "registry.k8s.io/kube-scheduler-amd64:v1.28.0",
+				cluster.Status.DesiredImages.KubeScheduler,
+				"failed expectations for test %d / %v", i+1, td)
+			assert.Equal(t, "registry.k8s.io/kube-controller-manager-amd64:v1.28.0",
+				cluster.Status.DesiredImages.KubeControllerManager,
+				"failed expectations for test %d / %v", i+1, td)
+		} else {
+			assert.Equal(t, "px/foo:v1.28.0", cluster.Status.DesiredImages.KubeScheduler,
+				"failed expectations for test %d / %v", i+1, td)
+			assert.Equal(t, "px/bar:v1.28.0", cluster.Status.DesiredImages.KubeControllerManager,
+				"failed expectations for test %d / %v", i+1, td)
+		}
+		if td.expectAutoUpdateCleared {
+			assert.Empty(t, cluster.Spec.AutoUpdateComponents,
+				"failed expectations for test %d / %v", i+1, td)
+		} else {
+			assert.NotEmpty(t, cluster.Spec.AutoUpdateComponents,
+				"failed expectations for test %d / %v", i+1, td)
+		}
+	}
+	cluster.Spec.AutoUpdateComponents = nil
+
+	// let's change the K8 version, and check if this caused the K8s-dependent images to be updated
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
+		GitVersion: "v1.29.9",
+	}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	assert.Equal(t, "registry.k8s.io/kube-scheduler-amd64:v1.29.9",
+		cluster.Status.DesiredImages.KubeScheduler)
+	assert.Equal(t, "registry.k8s.io/kube-controller-manager-amd64:v1.29.9",
+		cluster.Status.DesiredImages.KubeControllerManager)
+
 	// Use given spec image if specified and reset desired image in status
 	cluster.Spec.Stork = &corev1.StorkSpec{
 		Enabled: true,
