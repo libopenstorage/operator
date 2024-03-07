@@ -1853,5 +1853,5 @@ func isVersionSupported(current, target string) bool {
 		return false
 	}
 
-	return currentVersion.GreaterThanOrEqual(targetVersion)
+	return currentVersion.Core().GreaterThanOrEqual(targetVersion)
 }
