@@ -385,9 +385,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 				pxVersionChanged ||
 				autoUpdateComponents(toUpdate)) {
 			toUpdate.Status.DesiredImages.Stork = release.Components.Stork
-			if toUpdate.Status.DesiredImages.KubeScheduler == "" {
-				toUpdate.Status.DesiredImages.KubeScheduler = release.Components.KubeScheduler
-			}
+			toUpdate.Status.DesiredImages.KubeScheduler = release.Components.KubeScheduler
 		}
 
 		if autoUpdateAutopilot(toUpdate) &&
@@ -491,18 +489,17 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			toUpdate.Status.DesiredImages.DynamicPluginProxy = release.Components.DynamicPluginProxy
 		}
 
-		// set misc image defaults
-		imagesData := []struct {
-			desiredImage *string
-			releaseImage string
-		}{
-			{&toUpdate.Status.DesiredImages.KubeControllerManager, release.Components.KubeControllerManager},
-			{&toUpdate.Status.DesiredImages.Pause, release.Components.Pause},
+		needK8sDepComponentUpdate := pxVersionChanged || p.hasKubernetesVersionChanged(toUpdate) || autoUpdateComponents(toUpdate)
+		if toUpdate.Status.DesiredImages.KubeControllerManager == "" || needK8sDepComponentUpdate {
+			toUpdate.Status.DesiredImages.KubeControllerManager = release.Components.KubeControllerManager
 		}
-		for _, v := range imagesData {
-			if *v.desiredImage == "" {
-				*v.desiredImage = v.releaseImage
-			}
+
+		if toUpdate.Status.DesiredImages.KubeScheduler == "" || needK8sDepComponentUpdate {
+			toUpdate.Status.DesiredImages.KubeScheduler = release.Components.KubeScheduler
+		}
+
+		if toUpdate.Status.DesiredImages.Pause == "" || needK8sDepComponentUpdate {
+			toUpdate.Status.DesiredImages.Pause = release.Components.Pause
 		}
 
 		// Reset the component update strategy if it is 'Once', so that we don't
