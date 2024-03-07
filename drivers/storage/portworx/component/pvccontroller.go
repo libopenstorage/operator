@@ -12,6 +12,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -92,21 +93,29 @@ func (c *pvcController) IsPausedForMigration(cluster *corev1.StorageCluster) boo
 func (c *pvcController) IsEnabled(cluster *corev1.StorageCluster) bool {
 	enabled, err := strconv.ParseBool(cluster.Annotations[pxutil.AnnotationPVCController])
 	if err == nil {
+		logrus.WithField("enabled", enabled).Debugf("pvccontroller - explicitly set via annotation")
 		return enabled
 	}
 
 	// If portworx is disabled, then do not run pvc controller unless explicitly told to.
 	if !pxutil.IsPortworxEnabled(cluster) {
+		logrus.Debugf("pvccontroller - disabling since PX is not enabled")
 		return false
 	}
 
-	// Enable PVC controller for managed kubernetes services. Also enable it
-	// if Portworx is not deployed in kube-system namespace.
-	if pxutil.IsPKS(cluster) || pxutil.IsEKS(cluster) ||
+	if pxutil.IsOpenshift(cluster) {
+		logrus.Debugf("pvccontroller - disabling for OpenShift distribution")
+		return false
+	} else if pxutil.IsPKS(cluster) || pxutil.IsEKS(cluster) ||
 		pxutil.IsGKE(cluster) || pxutil.IsAKS(cluster) ||
-		pxutil.IsOKE(cluster) || cluster.Namespace != "kube-system" {
+		pxutil.IsOKE(cluster) {
+		logrus.Debugf("pvccontroller - enabling for managed kubernetes services")
+		return true
+	} else if cluster.Namespace != "kube-system" {
+		logrus.Debugf("pvccontroller - enabling for non- kube-system namespace %s", cluster.Namespace)
 		return true
 	}
+	logrus.Debugf("pvccontroller - disabled by default")
 	return false
 }
 

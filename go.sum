@@ -3313,6 +3313,8 @@ github.com/libopenstorage/gossip v0.0.0-20200808224301-d5287c7c8b24/go.mod h1:Tj
 github.com/libopenstorage/gossip v0.0.0-20220309192431-44c895e0923e/go.mod h1:TjXt2Iz2bTkpfc4Q6xN0ttiNipTVwEEYoZSMZHlfPek=
 github.com/libopenstorage/openstorage v1.0.1-0.20231025225342-bd3d3ceba556 h1:XRiZt9m2SedwQvZ3Tk4Dk+0MeDB8e/m1lHpLkI3ApM8=
 github.com/libopenstorage/openstorage v1.0.1-0.20231025225342-bd3d3ceba556/go.mod h1:qABmkza/x/PDptDLbrfC9XSFTeIL6OzA3Ndx2xRcVAk=
+github.com/libopenstorage/openstorage v1.0.1-0.20240221210452-7757fdc2b8ff h1:9uognDSvafpcrNICT8I5OJRt9TlLeV61cF6nIl9KwBQ=
+github.com/libopenstorage/openstorage v1.0.1-0.20240221210452-7757fdc2b8ff/go.mod h1:8E8ueY3NJV+tcOr1BQBvyNU9FRtDfcRGB7+trr07+rA=
 github.com/libopenstorage/openstorage-sdk-clients v0.109.0/go.mod h1:vo0c/nLG2HIyQva4Avwx61U1kWcw4HGQh3sjzV2DEEs=
 github.com/libopenstorage/operator v0.0.0-20230202214252-140e2e1fd86a/go.mod h1:Q66wsNUAekPawgGg9yh0Bs7eXWPa4/+c2JTefdiDciM=
 github.com/libopenstorage/operator v0.0.0-20230323034810-8853b151f594/go.mod h1:0S4k1ouTScuVS3rxPukfEFvc5bMasmI1wpAAM0NejWQ=
