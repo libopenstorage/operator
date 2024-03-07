@@ -444,3 +444,23 @@ func TestAppendUserVolumeMounts(t *testing.T) {
 	assert.Equal(t, podSpecReference.Containers[0].VolumeMounts[1].MountPath, podSpec.Containers[0].VolumeMounts[1].MountPath)
 	assert.Equal(t, podSpecReference.Containers[0].VolumeMounts[2].MountPath, podSpec.Containers[0].VolumeMounts[2].MountPath)
 }
+
+func TestIsVersionSupported(t *testing.T) {
+	supported := isVersionSupported("4.12.0", "4.15.0")
+	require.False(t, supported)
+
+	supported = isVersionSupported("4.14.1-beta.1", "4.15.0")
+	require.False(t, supported)
+
+	supported = isVersionSupported("4.15.0", "4.15.0")
+	require.True(t, supported)
+
+	supported = isVersionSupported("4.15.0-rc.5", "4.15.0")
+	require.True(t, supported)
+
+	supported = isVersionSupported("4.16.0-alpha.5", "4.15.0")
+	require.True(t, supported)
+
+	supported = isVersionSupported("4.16.0", "4.15.0")
+	require.True(t, supported)
+}
