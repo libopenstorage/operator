@@ -2825,6 +2825,24 @@ func TestStorageClusterDefaultsForStork(t *testing.T) {
 	assert.Equal(t, "registry.k8s.io/kube-controller-manager-amd64:v1.28.0",
 		cluster.Status.DesiredImages.KubeControllerManager)
 
+	// check if K8s-dependent images updated when autoUpdateComponents used
+	cluster.Status.DesiredImages.KubeScheduler = "px/foo:v1.28.0"
+	cluster.Status.DesiredImages.KubeControllerManager = "px/bar:v1.28.0"
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	assert.Equal(t, "px/foo:v1.28.0", cluster.Status.DesiredImages.KubeScheduler)
+	assert.Equal(t, "px/bar:v1.28.0", cluster.Status.DesiredImages.KubeControllerManager)
+
+	_once := corev1.OnceAutoUpdate
+	cluster.Spec.AutoUpdateComponents = &_once
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	assert.Equal(t, "registry.k8s.io/kube-scheduler-amd64:v1.28.0",
+		cluster.Status.DesiredImages.KubeScheduler)
+	assert.Equal(t, "registry.k8s.io/kube-controller-manager-amd64:v1.28.0",
+		cluster.Status.DesiredImages.KubeControllerManager)
+	assert.Empty(t, cluster.Spec.AutoUpdateComponents)
+
 	// let's change the K8 version, and check if this caused the K8s-dependent images to be updated
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
 		GitVersion: "v1.29.9",
