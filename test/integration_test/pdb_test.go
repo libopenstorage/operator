@@ -133,6 +133,7 @@ func OverridePDBUsingInvalidAnnotation(tc *types.TestCase) func(*testing.T) {
 		k8snodecount = k8snodecount - 1
 
 		// Override PDB with value less than px quorum and ensure minAvailable value uses default calculation
+		cluster.Annotations = make(map[string]string)
 		quorumValue := math.Floor(float64(k8snodecount)/2) + 1
 		logrus.Infof("Validating PDB using minAvailable value: %d", int(quorumValue)-1)
 		cluster.Annotations["portworx.io/storage-pdb-min-available"] = fmt.Sprintf("%d", int(quorumValue)-1)
