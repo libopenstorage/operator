@@ -261,6 +261,7 @@ const (
 	ClusterOperatorKind                 = "ClusterOperator"
 	OpenshiftAPIServer                  = "openshift-apiserver"
 	OpenshiftPrometheusSupportedVersion = "4.12"
+	Openshift_4_15_Version              = "4.15"
 	// OpenshiftMonitoringRouteName name of OCP user-workload route
 	OpenshiftMonitoringRouteName = "thanos-querier"
 	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
@@ -1852,5 +1853,5 @@ func isVersionSupported(current, target string) bool {
 		return false
 	}
 
-	return currentVersion.GreaterThanOrEqual(targetVersion)
+	return currentVersion.Core().GreaterThanOrEqual(targetVersion)
 }
