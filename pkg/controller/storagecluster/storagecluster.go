@@ -607,18 +607,16 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 	if !reflect.DeepEqual(cluster, toUpdate) {
 		toUpdate.DeepCopyInto(cluster)
 
-		cluster.Status = *toUpdate.Status.DeepCopy()
-		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
-			logrus.Errorf("preflight updateStorageClusterStatus failed trying again...")
-			if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
-				k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
-					"preflight check failed to update storage cluster status. Need to rerun preflight or skip it")
-				return fmt.Errorf("update storage cluster status failure, %v", err)
-			}
+		updatedCluster, uerr := operatorops.Instance().UpdateStorageCluster(toUpdate)
+		if uerr != nil {
+			return fmt.Errorf("UpdateStorageCluster failure, %v", uerr)
 		}
 
-		if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
-			return fmt.Errorf("UpdateStorageCluster failure, %v", err)
+		updatedCluster.Status = *toUpdate.Status.DeepCopy()
+		if _, err := operatorops.Instance().UpdateStorageClusterStatus(updatedCluster); err != nil {
+			k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
+				"preflight check failed to update storage cluster status. Need to rerun preflight or skip it")
+			return fmt.Errorf("update storage cluster status failure, %v", err)
 		}
 	}
 	return err
