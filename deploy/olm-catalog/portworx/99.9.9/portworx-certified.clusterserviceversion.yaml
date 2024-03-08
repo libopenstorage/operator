@@ -13,6 +13,13 @@ metadata:
     support: Portworx, Inc
     certified: "true"
     console.openshift.io/plugins: '["portworx"]'
+    features.operators.openshift.io/disconnected: "false"
+    features.operators.openshift.io/fips-compliant: "false"
+    features.operators.openshift.io/proxy-aware: "false"
+    features.operators.openshift.io/tls-profiles: "false"
+    features.operators.openshift.io/token-auth-aws: "false"
+    features.operators.openshift.io/token-auth-azure: "false"
+    features.operators.openshift.io/token-auth-gcp: "false"
     operatorframework.io/initialization-resource: |-
       {
         "apiVersion": "core.libopenstorage.org/v1",
