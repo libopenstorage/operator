@@ -128,12 +128,12 @@ var bgTestCases = []types.TestCase{
 				require.NoError(t, err)
 				require.Equal(t, numLicensedNodes, len(pl.Items))
 
-				logrus.Infof("Attempt license extend on Trial via node %s", pl.Items[0].Spec.NodeName)
+				logrus.Infof("Attempt license expand on Trial via node %s", pl.Items[0].Spec.NodeName)
 				var stdout, stderr bytes.Buffer
 				err = runInPortworxPod(&pl.Items[0],
 					nil, &stdout, &stderr,
-					"/bin/sh", "-c", "/opt/pwx/bin/pxctl license trial; exec /opt/pwx/bin/pxctl license extend --start")
-				require.Contains(t, stdout.String(), "license extension not supported for Trial licenses")
+					"/bin/sh", "-c", "/opt/pwx/bin/pxctl license trial; exec /opt/pwx/bin/pxctl license expand --start")
+				require.Contains(t, stdout.String(), " not supported for Trial licenses")
 
 				logrus.Infof("Installing license via node %s", pl.Items[0].Spec.NodeName)
 				err = runInPortworxPod(&pl.Items[0],
@@ -262,7 +262,7 @@ var bgTestCases = []types.TestCase{
 				logrus.Infof("Extending license via node %s", pl.Items[0].Spec.NodeName)
 				var stdout, stderr bytes.Buffer
 				err = runInPortworxPod(&pl.Items[0], nil, &stdout, &stderr,
-					"/opt/pwx/bin/pxctl", "license", "extend", "--start")
+					"/opt/pwx/bin/pxctl", "license", "expand", "--start")
 				require.NoError(t, err)
 				require.Contains(t, stdout.String(), "Successfully initiated license extension")
 
@@ -446,7 +446,7 @@ var bgTestCases = []types.TestCase{
 				logrus.Infof("End license extension while cluster over-allocated")
 				var stdout, stderr bytes.Buffer
 				err = runInPortworxPod(&pl.Items[0], nil, &stdout, &stderr,
-					"/opt/pwx/bin/pxctl", "license", "extend", "--end")
+					"/opt/pwx/bin/pxctl", "license", "expand", "--end")
 				assert.Equal(t, "", stderr.String())
 				assert.Contains(t, stdout.String(), "Successfully turned off license extension")
 				require.NoError(t, err)
