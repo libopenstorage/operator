@@ -596,16 +596,24 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 
 	// Update the cluster only if anything has changed
 	if !reflect.DeepEqual(cluster, toUpdate) {
-		toUpdate.DeepCopyInto(cluster)
+		// Get the latest cluster object to preserve the 'ResourceVersion'
+		latestCluster, gerr := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		if gerr != nil {
+			return fmt.Errorf("GetStorageCluster failure, %v", gerr)
+		}
 
-		updatedCluster, uerr := operatorops.Instance().UpdateStorageCluster(toUpdate)
+		latestResourceVersion := latestCluster.ResourceVersion
+		toUpdate.DeepCopyInto(latestCluster)                  // Apply pre-flight changes
+		latestCluster.ResourceVersion = latestResourceVersion // Preserve resource version
+
+		updatedCluster, uerr := operatorops.Instance().UpdateStorageCluster(latestCluster)
 		if uerr != nil {
 			return fmt.Errorf("UpdateStorageCluster failure, %v", uerr)
 		}
 
 		updatedCluster.Status = *toUpdate.Status.DeepCopy()
 		if _, err := operatorops.Instance().UpdateStorageClusterStatus(updatedCluster); err != nil {
-			k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
+			k8s.WarningEvent(c.recorder, latestCluster, util.FailedPreFlight,
 				"preflight check failed to update storage cluster status. Need to rerun preflight or skip it")
 			return fmt.Errorf("update storage cluster status failure, %v", err)
 		}
