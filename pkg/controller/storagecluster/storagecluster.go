@@ -533,9 +533,12 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		if condition != nil && (condition.Status == corev1.ClusterConditionStatusFailed || condition.Status == corev1.ClusterConditionStatusTimeout) {
 			return fmt.Errorf("FATAL: preflight checks have failed on your cluster.  " +
 				"Check events, logs and contact support to help make sure your cluster meets all prerequisites")
+		} else if condition != nil && condition.Status == corev1.ClusterConditionStatusInProgress {
+			logrus.Infof("preflight is check is not required, however preflight status is in progress, check for errors above...")
+		} else {
+			// preflight passed or not required
+			logrus.Infof("preflight check not required")
 		}
-		// preflight passed or not required
-		logrus.Infof("preflight check not required")
 		return nil
 	}
 
