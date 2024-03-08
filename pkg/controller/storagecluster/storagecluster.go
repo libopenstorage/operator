@@ -537,18 +537,6 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		// preflight passed or not required
 		logrus.Infof("preflight check not required")
 		return nil
-	} else if check == "true" {
-		condition := util.GetStorageClusterCondition(cluster, pxutil.PortworxComponentName, corev1.ClusterConditionTypePreflight)
-		if condition != nil {
-			if condition.Status == corev1.ClusterConditionStatusCompleted {
-				cluster.Annotations[pxutil.AnnotationPreflightCheck] = "false"
-				if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
-					return fmt.Errorf("UpdateStorageCluster failure when pre-flight is done, %v", err)
-				}
-				logrus.Infof("preflight status completed, stopping...")
-				return nil
-			}
-		}
 	}
 
 	// Only do the preflight check on demand once a time
