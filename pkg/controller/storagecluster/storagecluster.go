@@ -533,12 +533,9 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		if condition != nil && (condition.Status == corev1.ClusterConditionStatusFailed || condition.Status == corev1.ClusterConditionStatusTimeout) {
 			return fmt.Errorf("FATAL: preflight checks have failed on your cluster.  " +
 				"Check events, logs and contact support to help make sure your cluster meets all prerequisites")
-		} else if condition != nil && condition.Status == corev1.ClusterConditionStatusInProgress {
-			logrus.Infof("preflight is check is not required, however preflight status is in progress, check for errors above...")
-		} else {
-			// preflight passed or not required
-			logrus.Infof("preflight check not required")
 		}
+		// preflight passed or not required
+		logrus.Infof("preflight check not required")
 		return nil
 	}
 
@@ -599,23 +596,28 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 		// Get the latest cluster object to preserve the 'ResourceVersion'
 		latestCluster, gerr := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
 		if gerr != nil {
-			return fmt.Errorf("GetStorageCluster failure, %v", gerr)
+			return fmt.Errorf("UpdateStorageClusterStatus GetStorageCluster failure, %v", gerr)
 		}
+		toUpdate.ResourceVersion = latestCluster.ResourceVersion // Preserve resource version
 
-		latestResourceVersion := latestCluster.ResourceVersion
-		toUpdate.DeepCopyInto(latestCluster)                  // Apply pre-flight changes
-		latestCluster.ResourceVersion = latestResourceVersion // Preserve resource version
+		toUpdate.DeepCopyInto(cluster)
 
-		updatedCluster, uerr := operatorops.Instance().UpdateStorageCluster(latestCluster)
-		if uerr != nil {
-			return fmt.Errorf("UpdateStorageCluster failure, %v", uerr)
-		}
-
-		updatedCluster.Status = *toUpdate.Status.DeepCopy()
-		if _, err := operatorops.Instance().UpdateStorageClusterStatus(updatedCluster); err != nil {
-			k8s.WarningEvent(c.recorder, latestCluster, util.FailedPreFlight,
+		if _, err := operatorops.Instance().UpdateStorageClusterStatus(cluster); err != nil {
+			k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
 				"preflight check failed to update storage cluster status. Need to rerun preflight or skip it")
 			return fmt.Errorf("update storage cluster status failure, %v", err)
+		}
+
+		latestCluster, gerr = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		if gerr != nil {
+			return fmt.Errorf("UpdateStorageCluster GetStorageCluster failure, %v", gerr)
+		}
+		cluster.ResourceVersion = latestCluster.ResourceVersion // Preserve resource version
+
+		if _, err := operatorops.Instance().UpdateStorageCluster(cluster); err != nil {
+			k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
+				"preflight check failed to update storage cluster. Need to rerun preflight or skip it")
+			return fmt.Errorf("UpdateStorageCluster failure, %v", err)
 		}
 	}
 	return err
