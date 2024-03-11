@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	/* crippldTestLicense is a crippled test license  (lot worse than free PX-Developer or PX-Essentials)
+	/*
+	 * crippldTestLicense is a crippled test license  (lot worse than free PX-Developer or PX-Essentials)
 	   - license generated via:
 	   ../bin/tools/capresponseutil -id IdentityBackOffice.bin -lifetime 157680000 -host ANY -idtype Any -server ANY -serverIdType Any /dev/stdin lic-ANY.bin << _EOF
 	   INCREMENT  Nodes                portworx  1.0  07-feb-2028  3  HOSTID=ANY VENDOR_STRING=type="Torpedo_TEST_license"  START=07-feb-2023
