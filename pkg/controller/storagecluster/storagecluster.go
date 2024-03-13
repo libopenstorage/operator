@@ -1684,6 +1684,11 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 		logrus.Debugf("Failed to update driver: %v", err)
 	}
 
+	if err := c.Driver.SetDefaultsOnStorageCluster(toUpdate); err != nil {
+		// TODO: investigate update failure
+		return err
+	}
+
 	// if no value is set for any of max_storage_nodes*, try to see if can set a default value
 	if toUpdate.Spec.CloudStorage != nil &&
 		toUpdate.Spec.CloudStorage.MaxStorageNodesPerZonePerNodeGroup == nil &&
@@ -1711,11 +1716,6 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 			toUpdate.Spec.CloudStorage.MaxStorageNodesPerZone = &maxStorageNodesPerZone
 			logrus.Infof("setting spec.cloudStorage.maxStorageNodesPerZone %v", maxStorageNodesPerZone)
 		}
-	}
-
-	if err := c.Driver.SetDefaultsOnStorageCluster(toUpdate); err != nil {
-		// TODO: investigate update failure
-		return err
 	}
 
 	// Update the cluster only if anything has changed
