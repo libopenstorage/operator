@@ -2351,7 +2351,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(nil, nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).Return(nil).AnyTimes()
 	gomock.InOrder(
-	driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-1").
+		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-1").
 			DoAndReturn(func(c *corev1.StorageCluster, _ string) (v1.PodSpec, error) {
 				require.Equal(t, cluster.Spec.Nodes[0].Storage, c.Spec.Storage)
 				require.Equal(t, cluster.Spec.Nodes[0].CloudStorage.CloudStorageCommon,
@@ -2390,14 +2390,13 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 			DoAndReturn(func(c *corev1.StorageCluster, _ string) (v1.PodSpec, error) {
 				require.Equal(t, cluster.Spec.CommonConfig, c.Spec.CommonConfig)
 				hash := computeHash(&c.Spec, nil)
-			expectedPodTemplates[0].Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
-			expectedPodTemplates[1].Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
-			expectedPodTemplates[2].Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
+				expectedPodTemplates[0].Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
+				expectedPodTemplates[1].Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
+				expectedPodTemplates[2].Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
 				return expectedPodSpec, nil
 			}).
 			Times(1),
 	)
-
 
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
