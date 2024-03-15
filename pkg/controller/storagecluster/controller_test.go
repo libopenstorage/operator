@@ -2349,13 +2349,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil)
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(nil, nil).AnyTimes()
-	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).
-		Do(func(c *corev1.StorageCluster) {
-			hash := computeHash(&c.Spec, nil)
-			expectedPodTemplates[0].Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
-			expectedPodTemplates[1].Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
-			expectedPodTemplates[2].Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
-		})
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).Return(nil).AnyTimes()
 	gomock.InOrder(
 		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-1").
 			DoAndReturn(func(c *corev1.StorageCluster, _ string) (v1.PodSpec, error) {
@@ -2395,6 +2389,10 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		driver.EXPECT().GetStoragePodSpec(gomock.Any(), "k8s-node-3").
 			DoAndReturn(func(c *corev1.StorageCluster, _ string) (v1.PodSpec, error) {
 				require.Equal(t, cluster.Spec.CommonConfig, c.Spec.CommonConfig)
+				hash := computeHash(&c.Spec, nil)
+				expectedPodTemplates[0].Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
+				expectedPodTemplates[1].Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
+				expectedPodTemplates[2].Labels[util.DefaultStorageClusterUniqueLabelKey] = hash
 				return expectedPodSpec, nil
 			}).
 			Times(1),
@@ -2409,7 +2407,6 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	result, err := controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
-
 	// Verify there is no event raised
 	require.Empty(t, recorder.Events)
 
