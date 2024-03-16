@@ -599,22 +599,18 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 			return fmt.Errorf("UpdateStorageClusterStatus GetStorageCluster failure, %v", gerr)
 		}
 		toUpdate.ResourceVersion = latestCluster.ResourceVersion // Preserve resource version
-
 		toUpdate.DeepCopyInto(cluster)
 
-		if _, err := operatorops.Instance().UpdateStorageClusterStatus(cluster); err != nil {
+		if err := c.client.Status().Update(context.TODO(), cluster); err != nil {
 			k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
 				"preflight check failed to update storage cluster status. Need to rerun preflight or skip it")
 			return fmt.Errorf("update storage cluster status failure, %v", err)
 		}
 
-		latestCluster, gerr = operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
-		if gerr != nil {
-			return fmt.Errorf("UpdateStorageCluster GetStorageCluster failure, %v", gerr)
-		}
-		cluster.ResourceVersion = latestCluster.ResourceVersion // Preserve resource version
+		toUpdate.ResourceVersion = cluster.ResourceVersion // Preserve resource version
+		toUpdate.DeepCopyInto(cluster)
 
-		if _, err := operatorops.Instance().UpdateStorageCluster(cluster); err != nil {
+		if err := c.client.Update(context.TODO(), cluster); err != nil {
 			k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
 				"preflight check failed to update storage cluster. Need to rerun preflight or skip it")
 			return fmt.Errorf("UpdateStorageCluster failure, %v", err)
