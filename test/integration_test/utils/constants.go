@@ -69,6 +69,9 @@ var (
 
 	// IsOke is an indication that this is OKE cluster or not
 	IsOke bool
+
+	// PxNamespace is a default namespace for StorageCluster
+	PxNamespace string
 )
 
 const (
@@ -112,8 +115,6 @@ const (
 	// NodeReplacePrefix is used for replacing node name during the test
 	NodeReplacePrefix = "replaceWithNodeNumber"
 
-	// PxNamespace is a default namespace for StorageCluster
-	PxNamespace = "kube-system"
 	// PortworxOperatorDeploymentName name of portworx operator deployment
 	PortworxOperatorDeploymentName = "portworx-operator"
 	// PortworxOperatorContainerName name of portworx operator container
