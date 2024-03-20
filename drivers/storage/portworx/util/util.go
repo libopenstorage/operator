@@ -328,8 +328,8 @@ var (
 	// flag in the node object of the PX SDK response.
 	MinimumPxVersionQuorumFlag, _ = version.NewVersion("3.1.0")
 
-	//MinimumPxVersionCurrentDomain is a minimal PX version that exposes cluster domain field in enumerate nodes response
-	MinimumPxVersionCurrentDomain, _ = version.NewVersion("3.1.1")
+	//MinimumPxVersionClusterDomain is a minimal PX version that exposes cluster domain field in enumerate nodes response
+	MinimumPxVersionClusterDomain, _ = version.NewVersion("3.1.1")
 
 	// ConfigMapNameRegex regex of configMap.
 	ConfigMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -1386,7 +1386,6 @@ func CountStorageNodes(
 	sdkConn *grpc.ClientConn,
 	k8sClient client.Client,
 ) (int, error) {
-	pxVersion := GetPortworxVersion(cluster)
 	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
 	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
 	if err != nil {
@@ -1407,9 +1406,38 @@ func CountStorageNodes(
 		return -1, fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
+	// Use the quorum member flag from the node enumerate response if all the nodes are upgraded to the
+	// newer version. The Enumerate response could be coming from any node and we want to make sure that
+	// we are not talking to an old node when enumerating.
+	useQuorumFlag := true
+	useClusterDomain := true
+	for _, node := range nodeEnumerateResponse.Nodes {
+		if node.Status == api.Status_STATUS_DECOMMISSION {
+			continue
+		}
+		v := node.NodeLabels[NodeLabelPortworxVersion]
+		nodeVersion, err := version.NewVersion(v)
+		if err != nil {
+			logrus.Warnf("Failed to parse node version %s for node %s: %v", v, node.Id, err)
+			useQuorumFlag = false
+			useClusterDomain = false
+			break
+		}
+		if nodeVersion.LessThan(MinimumPxVersionQuorumFlag) {
+			logrus.Tracef("Node %s is older than %s. Not using quorum member flag", node.Id, MinimumPxVersionQuorumFlag.String())
+			useQuorumFlag = false
+			useClusterDomain = false
+			break
+		}
+		if nodeVersion.LessThan(MinimumPxVersionClusterDomain) {
+			logrus.Tracef("Node %s is older than %s. Cannot using cluster domain field", node.Id, MinimumPxVersionClusterDomain.String())
+			useClusterDomain = false
+		}
+	}
+
 	// We need to find kubernetes nodes that can run storage pods only for DR clusters that use px versions lesser than 3.1.1
 	k8sNodesStoragePodCouldRun := make(map[string]bool)
-	if pxVersion.LessThan(MinimumPxVersionCurrentDomain) && isDRSetup {
+	if isDRSetup && !useClusterDomain {
 		k8sNodeList := &v1.NodeList{}
 		err = k8sClient.List(context.TODO(), k8sNodeList)
 		if err != nil {
@@ -1426,41 +1454,16 @@ func CountStorageNodes(
 		}
 	}
 
-	// Use the quorum member flag from the node enumerate response if all the nodes are upgraded to the
-	// newer version. The Enumerate response could be coming from any node and we want to make sure that
-	// we are not talking to an old node when enumerating.
-	useQuorumFlag := true
-	useClusterDomain := true
-	for _, node := range nodeEnumerateResponse.Nodes {
-		if node.Status == api.Status_STATUS_DECOMMISSION {
-			continue
-		}
-		v := node.NodeLabels[NodeLabelPortworxVersion]
-		nodeVersion, err := version.NewVersion(v)
-		if err != nil {
-			logrus.Warnf("Failed to parse node version %s for node %s: %v", v, node.Id, err)
-			useQuorumFlag = false
-			break
-		}
-		if nodeVersion.LessThan(MinimumPxVersionQuorumFlag) {
-			logrus.Tracef("Node %s is older than %s. Not using quorum member flag", node.Id, MinimumPxVersionQuorumFlag.String())
-			useQuorumFlag = false
-			useClusterDomain = false
-			break
-		}
-		if nodeVersion.LessThan(MinimumPxVersionCurrentDomain) {
-			logrus.Tracef("Node %s is older than %s. Cannot using cluster domain field", node.Id, MinimumPxVersionCurrentDomain.String())
-			useClusterDomain = false
-		}
-	}
-
 	// get cluster domain of current node to fetch storage nodes count for current k8s node
 	// for Metro DR cluster, we need to calculate PDB for current k8s cluster and not Portworx cluster
-	inspectCurrentResponse, err := nodeClient.InspectCurrent(ctx, &api.SdkNodeInspectCurrentRequest{})
-	if err != nil {
-		logrus.Errorf("error while inspecting current node.")
+	var currentClusterDomain string
+	if isDRSetup && useClusterDomain {
+		inspectCurrentResponse, err := nodeClient.InspectCurrent(ctx, &api.SdkNodeInspectCurrentRequest{})
+		if err != nil {
+			return -1, fmt.Errorf("error while inspecting current node: %v", err)
+		}
+		currentClusterDomain = inspectCurrentResponse.Node.ClusterDomain
 	}
-	currentClusterDomain := inspectCurrentResponse.Node.ClusterDomain
 
 	storageNodesCount := 0
 	for _, node := range nodeEnumerateResponse.Nodes {
@@ -1491,17 +1494,16 @@ func CountStorageNodes(
 		}
 
 		// In case of non metro-DR setup, all portworx nodes that contain backend storage in the enumerate response are storage nodes
-		// In the case of metro DR setup, for PX versions 3.1.1 onwards, px nodes of that cluster are counted as storage nodes
+		// In the case of metro DR setup, for PX versions 3.1.1 onwards, px nodes of that cluster domain are counted as storage nodes
 		// When the DR cluster uses px version lesser than 3.1.1, only the nodes that are part of the current k8s cluster are counted as storage nodes
 		if isQuorumMember {
 			if !isDRSetup {
 				storageNodesCount++
 			} else if useClusterDomain {
-
 				if node.ClusterDomain == currentClusterDomain {
 					storageNodesCount++
 				} else {
-					logrus.Debugf("node %s is not part of cluster domain %s ", node.Id, currentClusterDomain)
+					logrus.Debugf("node %s (%s) is not part of cluster domain %s ", node.Id, node.SchedulerNodeName, currentClusterDomain)
 				}
 			} else if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
 				storageNodesCount++
