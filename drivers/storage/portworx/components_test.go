@@ -12987,7 +12987,7 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 	sdkServerIP := "127.0.0.1"
 	sdkServerPort := 21883
 	mockSdk := mock.NewSdkServer(mock.SdkServers{
-		Node: mockNodeServer,
+		Node:           mockNodeServer,
 		ClusterDomains: mockClusterDomainServer,
 	})
 	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
