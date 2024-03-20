@@ -13170,13 +13170,11 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
-	mockClusterDomainServer := mock.NewMockOpenStorageClusterDomainsServer(mockCtrl)
 	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
 	sdkServerIP := "127.0.0.1"
 	sdkServerPort := 21883
 	mockSdk := mock.NewSdkServer(mock.SdkServers{
 		Node:           mockNodeServer,
-		ClusterDomains: mockClusterDomainServer,
 	})
 	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
 	require.NoError(t, err)
