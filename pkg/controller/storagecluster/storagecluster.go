@@ -57,6 +57,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/libopenstorage/operator/drivers/storage"
+	component "github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
@@ -1448,6 +1449,10 @@ func (c *Controller) CreatePodTemplate(
 				newTemplate.Annotations[pxutil.AnnotationAppArmorPrefix+c.Name] = "unconfined"
 			}
 		}
+	}
+
+	if pxutil.IsOpenshift(cluster) {
+		newTemplate.Annotations[component.OpenshiftRequiredSCCAnnotation] = component.PxSCCName
 	}
 
 	if len(node.Labels) > 0 {
