@@ -116,6 +116,10 @@ func setup() error {
 		"log-level",
 		"",
 		"Log level")
+	flag.StringVar(&ci_utils.PxNamespace,
+		"px-namespace",
+		"kube-system",
+		"Namespace where the operator will be deployed")
 	flag.Parse()
 
 	// Set log level
@@ -150,7 +154,7 @@ func setup() error {
 	pxOperatorDep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "portworx-operator",
-			Namespace: "kube-system",
+			Namespace: ci_utils.PxNamespace,
 		},
 	}
 
