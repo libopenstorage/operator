@@ -12640,6 +12640,8 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "", Hostname: "node3", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 			{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4", ClusterDomain: "domain 2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 			{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5", ClusterDomain: "domain 2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+			// Ignore node that is in Decommission state. Should still use cluster domain field
+			{Pools: []*osdapi.StoragePool{{ID: 6}}, Status: osdapi.Status_STATUS_DECOMMISSION, NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
 		},
 	}
 	// Cluster domain of the k8s cluster on which upgrade is running
@@ -12723,7 +12725,7 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
 
-	// When portworx version is lesser than 3.1.1 , cluster domain field will not be available, schedulerNodeName will be used to decide the nodes in current domain
+	// Case 2: When portworx version is lesser than 3.1.1 , cluster domain field will not be available, schedulerNodeName will be used to decide the nodes in current domain
 	// Scheduler node name will be used even if 1 node (node4) has portworx version lesser than 3.1.1
 
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
@@ -12732,6 +12734,23 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "", Hostname: "node3", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 		{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.1"}},
 		{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5", ClusterDomain: "domain 2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
+
+	// Case 3: When node version is invalid and cannot be parsed, use schedulerNodeName to count storagenodes
+	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "", Hostname: "node3", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node4", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5", ClusterDomain: "domain 2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "invalid-version"}},
 	}
 
 	err = driver.PreInstall(cluster)
