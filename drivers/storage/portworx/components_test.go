@@ -12346,9 +12346,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	}
 
 	expectedInspectCurrentResponse := &osdapi.SdkNodeInspectCurrentResponse{
-		Node: &osdapi.StorageNode{
-			ClusterDomain: "current-cluster-domain",
-		},
+		Node: &osdapi.StorageNode{},
 	}
 
 	mockNodeServer.EXPECT().
@@ -12633,20 +12631,17 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	expectedClusterDomainsEnumerateResp := &osdapi.SdkClusterDomainsEnumerateResponse{
 		ClusterDomainNames: []string{"domain 1", "domain 2"},
 	}
-	// StorageNode with ID 1,2,3 will run on the cluster
-	// k8s node4 doesn't meet affinity and node5 is tainted
-	// StorageNode with ID 6 and 7 don't belong to this cluster
+
+	// Case 1: When all nodes in the cluster use portworx version 3.1.1
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
-			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", ClusterDomain: "domain 1"},
-			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", ClusterDomain: "domain 1"},
-			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "", Hostname: "node3", ClusterDomain: "domain 1"},
-			{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4"},
-			{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5"},
-			{Pools: []*osdapi.StoragePool{{ID: 6}}, SchedulerNodeName: "metro-dr-node1", ClusterDomain: "domain 2"},
-			{Pools: []*osdapi.StoragePool{{ID: 7}}, SchedulerNodeName: "metro-dr-node2", ClusterDomain: "domain 2"},
-			{Pools: []*osdapi.StoragePool{}},
-			{},
+			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "", Hostname: "node3", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+			{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4", ClusterDomain: "domain 2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+			{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5", ClusterDomain: "domain 2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+			// Ignore node that is in Decommission state. Should still use cluster domain field
+			{Pools: []*osdapi.StoragePool{{ID: 6}}, Status: osdapi.Status_STATUS_DECOMMISSION, NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
 		},
 	}
 	// Cluster domain of the k8s cluster on which upgrade is running
@@ -12713,7 +12708,7 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, fakeK8sNodes)
 
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset(fakeK8sNodes)))
 	component.DeregisterAllComponents()
@@ -12729,6 +12724,43 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
+
+	// Case 2: When portworx version is lesser than 3.1.1 , cluster domain field will not be available, schedulerNodeName will be used to decide the nodes in current domain
+	// Scheduler node name will be used even if 1 node (node4) has portworx version lesser than 3.1.1
+
+	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "", Hostname: "node3", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5", ClusterDomain: "domain 2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
+
+	// Case 3: When node version is invalid and cannot be parsed, use schedulerNodeName to count storagenodes
+	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "", Hostname: "node3", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node4", ClusterDomain: "domain 1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5", ClusterDomain: "domain 2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "invalid-version"}},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
+
 }
 
 func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
@@ -12752,9 +12784,7 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 		AnyTimes()
 
 	expectedInspectCurrentResponse := &osdapi.SdkNodeInspectCurrentResponse{
-		Node: &osdapi.StorageNode{
-			ClusterDomain: "current-cluster-domain",
-		},
+		Node: &osdapi.StorageNode{},
 	}
 	mockNodeServer.EXPECT().
 		InspectCurrent(gomock.Any(), gomock.Any()).
@@ -12893,9 +12923,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 		AnyTimes()
 
 	expectedInspectCurrentResponse := &osdapi.SdkNodeInspectCurrentResponse{
-		Node: &osdapi.StorageNode{
-			ClusterDomain: "current-cluster-domain",
-		},
+		Node: &osdapi.StorageNode{},
 	}
 	mockNodeServer.EXPECT().
 		InspectCurrent(gomock.Any(), gomock.Any()).
@@ -12973,7 +13001,6 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
-
 	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
 	sdkServerIP := "127.0.0.1"
 	sdkServerPort := 21883
@@ -13107,9 +13134,7 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 		AnyTimes()
 
 	expectedInspectCurrentResponse := &osdapi.SdkNodeInspectCurrentResponse{
-		Node: &osdapi.StorageNode{
-			ClusterDomain: "current-cluster-domain",
-		},
+		Node: &osdapi.StorageNode{},
 	}
 	mockNodeServer.EXPECT().
 		InspectCurrent(gomock.Any(), gomock.Any()).
