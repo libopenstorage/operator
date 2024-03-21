@@ -1675,7 +1675,7 @@ func CreateOrUpdatePodDisruptionBudget(
 		if pdb.Spec.MinAvailable == nil {
 			logrus.Infof("Updating PodDisruptionBudget %s/%s", pdb.Namespace, pdb.Name)
 		} else {
-			logrus.Infof("Updating value for PodDisruptionBudget of %s/%s to %d ", pdb.Namespace, pdb.Name, pdb.Spec.MinAvailable.IntValue())
+			logrus.Infof("Updating minAvailable for PodDisruptionBudget %s/%s to %d ", pdb.Namespace, pdb.Name, pdb.Spec.MinAvailable.IntValue())
 		}
 		return k8sClient.Update(context.TODO(), pdb)
 	}
