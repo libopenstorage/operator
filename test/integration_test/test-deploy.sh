@@ -26,6 +26,7 @@ portworx_kvdb_spec=""
 portworx_env_vars=""
 portworx_custom_annotations=""
 log_level="debug"
+px_namespace="kube-system"
 for i in "$@"
 do
 case $i in
@@ -167,11 +168,24 @@ case $i in
         shift
         shift
         ;;
+   --px-namespace)
+       echo "Portworx namespace: $2"
+       px_namespace=$2
+       shift
+       shift
+       ;;
 esac
 done
 
 # Copy test pod template to a new file
 cp $test_pod_template $test_pod_spec
+
+# Set namespace
+if [ "$px_namespace" != "" ]; then
+    echo "Updating Namespace: ${px_namespace}"
+    sed -i 's|'kube-system'|'"$px_namespace"'|g' $test_pod_spec
+    sed -i 's|'PX_NAMESPACE'|'"$px_namespace"'|g' $test_pod_spec
+fi
 
 # Set log level
 sed -i 's|'LOG_LEVEL'|'"$log_level"'|g' $test_pod_spec
@@ -322,11 +336,11 @@ kubectl delete -f $test_pod_template
 kubectl create -f $test_pod_spec
 
 for i in $(seq 1 100) ; do
-    test_status=$(kubectl -n kube-system get pod operator-test -o json | jq ".status.phase" -r)
+    test_status=$(kubectl -n "$px_namespace" get pod operator-test -o json | jq ".status.phase" -r)
     if [ "$test_status" == "Running" ] || [ "$test_status" == "Succeeded" ]; then
         break
     elif [ "$test_status" == "Failed" ]; then
-        kubectl -n kube-system logs operator-test
+        kubectl -n "$px_namespace" logs operator-test
 
         echo ""
         echo "Tests failed"
@@ -337,19 +351,19 @@ for i in $(seq 1 100) ; do
     fi
 done
 
-kubectl -n kube-system logs -f operator-test
+kubectl -n "$px_namespace" logs -f operator-test
 for i in $(seq 1 100) ; do
     sleep 5  # Give the test pod a chance to finish first after the logs stop
-    test_status=$(kubectl -n kube-system get pod operator-test -o json | jq ".status.phase" -r)
+    test_status=$(kubectl -n "$px_namespace" get pod operator-test -o json | jq ".status.phase" -r)
     if [ "$test_status" == "Running" ]; then
         echo "Test is still running, status: $test_status"
-        kubectl -n kube-system logs -f operator-test
+        kubectl -n "$px_namespace" logs -f operator-test
     else
         break
     fi
 done
 
-test_status=$(kubectl -n kube-system get pod operator-test -o json | jq ".status.phase" -r)
+test_status=$(kubectl -n "$px_namespace" get pod operator-test -o json | jq ".status.phase" -r)
 if [ "$test_status" == "Succeeded" ]; then
     echo "Tests passed"
     exit 0

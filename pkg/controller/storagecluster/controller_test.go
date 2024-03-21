@@ -9390,11 +9390,17 @@ func TestEKSPreflightCheck(t *testing.T) {
 
 	k8sClient := testutil.FakeK8sClient(cluster)
 	driver := testutil.MockDriver(mockCtrl)
+	recorder := record.NewFakeRecorder(10)
+
+	fakeClient := fake.NewSimpleClientset(cluster)
+	operatorops.SetInstance(operatorops.New(fakeClient))
+
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:   k8sClient,
+		recorder: recorder,
+		Driver:   driver,
 	}
 
 	// TestCase: eks cloud permission check failed
@@ -9431,6 +9437,8 @@ func TestEKSPreflightCheck(t *testing.T) {
 	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
 
 	// TestCase: fix the permission then rerun preflight
+	fakeClient = fake.NewSimpleClientset(cluster)
+	operatorops.SetInstance(operatorops.New(fakeClient))
 	cluster.Annotations[pxutil.AnnotationPreflightCheck] = "true"
 	// Cloud drive permission check will only be checked once when the status condition is not set.
 	cluster.Status.Conditions = []corev1.ClusterCondition{}

@@ -588,7 +588,10 @@ func validateTelemetrySecret(cluster *corev1.StorageCluster, timeout, interval t
 			}
 			// Validate secret owner should not have owner reference
 			// Do not validate reference for PX Operators below 1.10, as this was introduced in 1.10+, see PWX-26326 for more info
-			opVersion, _ := GetPxOperatorVersion()
+			opVersion, err := GetPxOperatorVersion()
+			if err != nil {
+				return nil, false, fmt.Errorf("failed to get operator version, Err: %v", err)
+			}
 			if opVersion.GreaterThanOrEqual(opVer1_10) {
 				for _, reference := range secret.OwnerReferences {
 					if reference.UID == ownerRef.UID {
@@ -1860,7 +1863,10 @@ func ValidateInternalKvdbEnabled(pxImageList map[string]string, cluster *corev1.
 
 		// Figure out what default registry to use for kvdb image, based on PX Operator version
 		kvdbImageName := "k8s.gcr.io/pause"
-		opVersion, _ := GetPxOperatorVersion()
+		opVersion, err := GetPxOperatorVersion()
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get operator version, Err: %v", err)
+		}
 		if opVersion.GreaterThanOrEqual(opVer23_3) {
 			kvdbImageName = "registry.k8s.io/pause"
 		}
@@ -2174,7 +2180,10 @@ func ValidateStorkScheduler(pxImageList map[string]string, cluster *corev1.Stora
 
 	// Figure out what default registry to use for stork-scheduler image, based on PX Operator version
 	storkSchedulerImageName := "k8s.gcr.io/kube-scheduler-amd64"
-	opVersion, _ := GetPxOperatorVersion()
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get operator version, Err: %v", err)
+	}
 	if opVersion.GreaterThanOrEqual(opVer23_3) {
 		storkSchedulerImageName = "registry.k8s.io/kube-scheduler-amd64"
 	}
@@ -3135,7 +3144,10 @@ func validateContainerImageInsidePods(cluster *corev1.StorageCluster, expectedIm
 	logrus.Infof("Validating image for [%s] container inside pod(s)", containerName)
 
 	// Get PX Operator version
-	opVersion, _ := GetPxOperatorVersion()
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get operator version, Err: %v", err)
+	}
 	if opVersion.GreaterThanOrEqual(opVer1_9_1) {
 		expectedImage = util.GetImageURN(cluster, expectedImage)
 	}
@@ -3492,7 +3504,7 @@ func ValidatePrometheus(pxImageList map[string]string, cluster *corev1.StorageCl
 func ValidateGrafana(pxImageList map[string]string, cluster *corev1.StorageCluster) error {
 	opVersion, err := GetPxOperatorVersion()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get operator version, Err: %v", err)
 	}
 	if opVersion.LessThan(opVer23_8) {
 		logrus.Infof("Skipping grafana validation for operation version: [%s]", opVersion.String())
@@ -3655,7 +3667,7 @@ func ValidateTelemetry(pxImageList map[string]string, originalClusterSpec, clust
 	logrus.Infof("PX Version: [%s]", pxVersion.String())
 	opVersion, err := GetPxOperatorVersion()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get operator version, Err: %v", err)
 	}
 	logrus.Infof("PX Operator version: [%s]", opVersion.String())
 
@@ -3711,7 +3723,11 @@ func shouldTelemetryBeEnabled(originalClusterSpec, cluster *corev1.StorageCluste
 	logrus.Info("Check PX and PX Operator versions to determine which Telemetry version to validate against..")
 	pxVersion := GetPortworxVersion(cluster)
 	logrus.Infof("PX Version: [%s]", pxVersion.String())
-	opVersion, _ := GetPxOperatorVersion()
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		logrus.Errorf("failed to get operator version, Err: %v", err)
+		return false
+	}
 	logrus.Infof("PX Operator version: [%s]", opVersion.String())
 
 	// Check if Telemetry is enabled or disabled in the original spec
@@ -4422,7 +4438,10 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 	}
 
 	masterOpVersion, _ := version.NewVersion(PxOperatorMasterVersion)
-	opVersion, _ := GetPxOperatorVersion()
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get operator version, Err: %v", err)
+	}
 	pxVersion := GetPortworxVersion(cluster)
 
 	// NOTE: These versions will need to be updated when we move the CO code to a release. Currently its bound to master branches
@@ -4806,7 +4825,10 @@ func ValidateTelemetryV2Disabled(cluster *corev1.StorageCluster, timeout, interv
 // ValidateTelemetryV1Enabled validates telemetry component is running as expected
 func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Info("Validate Telemetry components are enabled")
-	opVersion, _ := GetPxOperatorVersion()
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get operator version, Err: %v", err)
+	}
 	validateMetricsCollector := opVersion.LessThan(opVer1_10)
 
 	t := func() (interface{}, bool, error) {
@@ -5142,7 +5164,10 @@ func validateAllStorageNodesInState(namespace string, status corev1.NodeConditio
 func ValidateStorageClusterIsOnline(cluster *corev1.StorageCluster, timeout, interval time.Duration) (*corev1.StorageCluster, error) {
 	state := string(corev1.ClusterConditionStatusOnline)
 	var conditions []corev1.ClusterCondition
-	opVersion, _ := GetPxOperatorVersion()
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get operator version, Err: %v", err)
+	}
 	if opVersion.GreaterThanOrEqual(opVer23_5) {
 		state = string(corev1.ClusterStateRunning)
 		conditions = append(conditions, corev1.ClusterCondition{
