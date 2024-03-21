@@ -36,8 +36,6 @@ type diagTestSpec struct {
 }
 
 const (
-	DiagTestNamespace = "kube-system"
-
 	diagVolumeLabelKey = "diag-label"
 	diagVolumeLabelVal = "true"
 
@@ -46,6 +44,8 @@ const (
 )
 
 var (
+	DiagTestNamespace = ci_utils.PxNamespace
+
 	workerNodeCount = -1
 
 	testStorageClasses = []*storagev1.StorageClass{
