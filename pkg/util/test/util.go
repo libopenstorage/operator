@@ -832,6 +832,11 @@ func ValidateStorageCluster(
 		return err
 	}
 
+	// Validate PX pods annotation
+	if err = validatePxPodsAnnotations(liveCluster, timeout, interval); err != nil {
+		return err
+	}
+
 	// Validate components
 	if err = validateComponents(pxImageList, clusterSpec, liveCluster, timeout, interval); err != nil {
 		return err
@@ -842,6 +847,51 @@ func ValidateStorageCluster(
 		return err
 	}
 
+	return nil
+}
+
+func validatePxPodsAnnotations(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Debug("Validate PX pods..")
+	t := func() (interface{}, bool, error) {
+		// Get list of PX pods
+		pods, err := coreops.Instance().GetPodsByOwner(cluster.UID, cluster.Namespace)
+		if err != nil || pods == nil {
+			return "", true, fmt.Errorf("failed to get pods for StorageCluster [%s/%s]. Err: %v",
+				cluster.Namespace, cluster.Name, err)
+		}
+
+		for _, pod := range pods {
+			storageNode, err := operatorops.Instance().GetStorageNode(pod.Spec.NodeName, pod.Namespace)
+			if err != nil {
+				return nil, true, fmt.Errorf("failed to get StorageNode [%s] for PX pod [%s], Err: %v", pod.Spec.NodeName, pod.Name, err)
+			}
+
+			safeToEvictAnnotationName := "cluster-autoscaler.kubernetes.io/safe-to-evict"
+			safeToEvictValue, exists := pod.Annotations[safeToEvictAnnotationName]
+			if !exists {
+				return nil, true, fmt.Errorf("px pod [%s] is missing expected annnotation [%s]", pod.Name, safeToEvictAnnotationName)
+			}
+			safeToEvict, err := strconv.ParseBool(safeToEvictValue)
+			if err != nil {
+				return nil, true, fmt.Errorf("failed to convert [%v] to bool, Err: %v", safeToEvictValue, err)
+			}
+
+			// This should validate the annotation cluster-autoscaler.kubernetes.io/safe-to-evict value,
+			// when node is Storage, annotation value should be set to false,
+			// when node is Storageless, annotation value should be set to true
+			if storageNode.Status.NodeAttributes.Storage != nil && *storageNode.Status.NodeAttributes.Storage != !safeToEvict {
+				return nil, true, fmt.Errorf("failed to validate PX pod [%s] annotation [%s] value [%v], storageNode storage value [%v]", pod.Name, safeToEvictAnnotationName, safeToEvict, *storageNode.Status.NodeAttributes.Storage)
+			}
+			logrus.Debugf("PX pod [%s] belongs to node [%s], storage [%v] and has annotation [%s: %s]", pod.Name, storageNode.Name, *storageNode.Status.NodeAttributes.Storage, safeToEvictAnnotationName, safeToEvictValue)
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	logrus.Debug("Successfully validated PX pods")
 	return nil
 }
 
