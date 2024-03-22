@@ -27,13 +27,6 @@ import (
 	"strconv"
 	"strings"
 
-	storageapi "github.com/libopenstorage/openstorage/api"
-	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
-	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/constants"
-	operatorutil "github.com/libopenstorage/operator/pkg/util"
-	"github.com/libopenstorage/operator/pkg/util/k8s"
-
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
@@ -47,6 +40,13 @@ import (
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 	"k8s.io/kubernetes/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	storageapi "github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	"github.com/libopenstorage/operator/pkg/constants"
+	operatorutil "github.com/libopenstorage/operator/pkg/util"
+	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
 // rollingUpdate deletes old storage cluster pods making sure that no more than
