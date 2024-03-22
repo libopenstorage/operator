@@ -42,6 +42,8 @@ const (
 	OperatorLabelManagedByKey = OperatorPrefix + "/managed-by"
 	// OperatorLabelManagedByValue indicates that the object is managed by portworx.
 	OperatorLabelManagedByValue = "portworx"
+	// Annotation restricted SCC for openshift
+	AnnotationRequiredScc = "openshift.io/required-scc"
 )
 
 const (
@@ -50,6 +52,7 @@ const (
 	// RestrictedPSPName is a pod security policy used by portworx deployments which require no special privileges and
 	// capabilities.
 	RestrictedPSPName = "px-restricted"
+	//
 )
 
 var (
@@ -57,5 +60,6 @@ var (
 	KnownStoragePodAnnotations = []string{
 		AnnotationNodeLabels,
 		AnnotationPodSafeToEvict,
+		AnnotationRequiredScc,
 	}
 )

@@ -169,18 +169,28 @@ func (c *Controller) annotateStoragePod(
 	annotations := make(map[string]string)
 	// Keep only known storage pod annotations
 	if podAnnotations := pod.GetAnnotations(); podAnnotations != nil {
+		fmt.Println("podAnnotations :: ", podAnnotations)
 		for _, knownKeys := range constants.KnownStoragePodAnnotations {
+			fmt.Println("knownKeys : ", knownKeys)
+
 			if v, ok := podAnnotations[knownKeys]; ok {
+				fmt.Println(" ok : ", ok)
+				fmt.Println("v : ", v)
 				annotations[knownKeys] = v
 			}
 		}
 	}
+
 	// Add custom annotations if exist
 	if customAnnotations := operatorutil.GetCustomAnnotations(cluster, k8s.Pod, ComponentName); customAnnotations != nil {
+		fmt.Println("customAnnotations ----", customAnnotations)
+
 		for k, v := range customAnnotations {
 			annotations[k] = v
 		}
 	}
+
+	fmt.Println(annotations)
 
 	pod.SetAnnotations(annotations)
 }
