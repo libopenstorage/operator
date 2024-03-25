@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"github.com/libopenstorage/operator/pkg/controller/csr"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
@@ -62,6 +61,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/controller/csr"
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
@@ -1460,7 +1460,7 @@ func (c *Controller) CreatePodTemplate(
 	}
 
 	if pxutil.IsOpenshift(cluster) {
-		newTemplate.Annotations[component.OpenshiftRequiredSCCAnnotation] = component.PxSCCName
+		newTemplate.Annotations[constants.AnnotationOpenshiftRequiredSCC] = component.PxSCCName
 	}
 
 	if len(node.Labels) > 0 {
