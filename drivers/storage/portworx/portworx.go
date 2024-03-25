@@ -706,11 +706,11 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			}
 		}
 
-		if toUpdate.Status.DesiredImages.DynamicPlugin == "" || pxVersionChanged {
+		if toUpdate.Status.DesiredImages.DynamicPlugin == "" || pxVersionChanged || autoUpdateComponents(toUpdate) {
 			toUpdate.Status.DesiredImages.DynamicPlugin = release.Components.DynamicPlugin
 		}
 
-		if toUpdate.Status.DesiredImages.DynamicPluginProxy == "" || pxVersionChanged {
+		if toUpdate.Status.DesiredImages.DynamicPluginProxy == "" || pxVersionChanged || autoUpdateComponents(toUpdate) {
 			toUpdate.Status.DesiredImages.DynamicPluginProxy = release.Components.DynamicPluginProxy
 		}
 
