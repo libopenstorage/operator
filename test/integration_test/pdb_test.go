@@ -109,7 +109,7 @@ func OverridePDBUsingValidAnnotation(tc *types.TestCase) func(*testing.T) {
 		logrus.Infof("Validating PDB using minAvailable value: %d", k8snodecount-2)
 		cluster.Annotations["portworx.io/storage-pdb-min-available"] = fmt.Sprintf("%d", k8snodecount-2)
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
-		
+
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 	}
 }
