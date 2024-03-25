@@ -838,7 +838,8 @@ func ValidateStorageCluster(
 	}
 
 	// Validate PX pods annotation
-	if err = validatePxPodsAnnotations(liveCluster, timeout, interval); err != nil {
+	checkPxPodAnnotationsTimeout := 1 * time.Hour // NOTE: Temporary large timeout until PWX-36555 is resolved
+	if err = validatePxPodsAnnotations(liveCluster, checkPxPodAnnotationsTimeout, interval); err != nil {
 		return err
 	}
 
