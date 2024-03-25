@@ -1,6 +1,6 @@
 # set defaults
 ifndef DOCKER_HUB_REPO
-    DOCKER_HUB_REPO := portworx
+    DOCKER_HUB_REPO := docker.io/portworx
     $(warning DOCKER_HUB_REPO not defined, using '$(DOCKER_HUB_REPO)' instead)
 endif
 ifndef DOCKER_HUB_OPERATOR_IMG
@@ -198,7 +198,7 @@ DOCK_BUILD_CNT	:= golang:1.21
 
 docker-build:
 	@echo "Building using docker"
-	docker run --rm --privileged=true -v $(shell pwd):/go/src/github.com/libopenstorage/operator $(DOCK_BUILD_CNT) \
+	docker run --rm --privileged=true -e RELEASE_VER=$(RELEASE_VER) -v $(shell pwd):/go/src/github.com/libopenstorage/operator $(DOCK_BUILD_CNT) \
 		/bin/bash -c "cd /go/src/github.com/libopenstorage/operator; make vendor-update all test integration-test"
 
 deploy:
@@ -242,7 +242,7 @@ catalog: build-catalog deploy-catalog
 build-catalog:
 	@echo "Building operator registry image $(REGISTRY_IMG)"
 	opm index add -u docker -p docker \
-		--bundles docker.io/$(BUNDLE_IMG) \
+		--bundles $(BUNDLE_IMG) \
 		--from-index $(BASE_REGISTRY_IMG) \
 		--tag $(REGISTRY_IMG)
 

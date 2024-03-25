@@ -32,6 +32,8 @@ const (
 	PxRestrictedSCCName = "portworx-restricted"
 	// PxNodeWiperServiceAccountName name of portworx node wiper service account
 	PxNodeWiperServiceAccountName = "px-node-wiper"
+	// OpenshiftSCCAnnotation name of annotation for SCC in Openshift
+	OpenshiftRequiredSCCAnnotation = "openshift.io/required-scc"
 )
 
 type scc struct {
