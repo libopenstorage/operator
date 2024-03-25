@@ -515,5 +515,4 @@ func GetK8sNodeCount() (int, error) {
 		return -1, err
 	}
 	return len(nodes.Items), nil
-
 }

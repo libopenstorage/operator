@@ -7,14 +7,11 @@ import (
 
 	"github.com/hashicorp/go-version"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
+	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
 	"github.com/portworx/sched-ops/k8s/operator"
-
-	//operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
-
-	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -36,7 +33,7 @@ var testStorageClusterPDBCases = []types.TestCase{
 			}
 			kbVer, err := testutil.GetK8SVersion()
 			if err != nil {
-				logrus.Info("Skipping PDB test due to :", err)
+				logrus.Info("Skipping PDB test due to Err: ", err)
 				return true
 			}
 			k8sVersion, _ := version.NewVersion(kbVer)
@@ -53,7 +50,7 @@ var testStorageClusterPDBCases = []types.TestCase{
 		ShouldSkip: func(tc *types.TestCase) bool {
 			kbVer, err := testutil.GetK8SVersion()
 			if err != nil {
-				logrus.Info("Skipping PDB test due to :", err)
+				logrus.Info("Skipping PDB test due to Err: ", err)
 				return true
 			}
 			k8sVersion, _ := version.NewVersion(kbVer)
@@ -71,7 +68,7 @@ var testStorageClusterPDBCases = []types.TestCase{
 		ShouldSkip: func(tc *types.TestCase) bool {
 			kbVer, err := testutil.GetK8SVersion()
 			if err != nil {
-				logrus.Info("Skipping PDB test due to :", err)
+				logrus.Info("Skipping PDB test due to Err: ", err)
 				return true
 			}
 			k8sVersion, _ := version.NewVersion(kbVer)
@@ -102,8 +99,6 @@ func OverridePDBUsingValidAnnotation(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		//Add annotations to override the default PDB
-
 		k8snodecount, err := ci_utils.GetK8sNodeCount()
 		require.NoError(t, err)
 		// Assuming 1 node is dedicated control plane node
@@ -114,7 +109,7 @@ func OverridePDBUsingValidAnnotation(tc *types.TestCase) func(*testing.T) {
 		logrus.Infof("Validating PDB using minAvailable value: %d", k8snodecount-2)
 		cluster.Annotations["portworx.io/storage-pdb-min-available"] = fmt.Sprintf("%d", k8snodecount-2)
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
-
+		
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 	}
 }
@@ -124,8 +119,6 @@ func OverridePDBUsingInvalidAnnotation(tc *types.TestCase) func(*testing.T) {
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
-
-		//Add annotations to override the default PDB
 
 		k8snodecount, err := ci_utils.GetK8sNodeCount()
 		require.NoError(t, err)

@@ -4942,7 +4942,7 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 
 			nodes, err := operatorops.Instance().ListStorageNodes(cluster.Namespace)
 			if err != nil {
-				return nil, true, fmt.Errorf("failed to get storage nodes: %v", err)
+				return nil, true, fmt.Errorf("failed to get storage nodes, Err: %v", err)
 			}
 
 			nodeslen := 0
@@ -4975,12 +4975,11 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 			var annotatedPDBVal int
 			var expectedPdbValue int
 			var expectedAllowedDsiruptions int
-			// checkOverrideValue := false
 			pxQuorum := math.Floor(float64(nodeslen)/2) + 1
 			if val, ok := cluster.Annotations["portworx.io/storage-pdb-min-available"]; ok {
 				annotatedPDBVal, err = strconv.Atoi(val)
 				if err != nil {
-					return nil, true, fmt.Errorf("error in converting string to int: %v", err)
+					return nil, true, fmt.Errorf("error in converting string to int, Err: %v", err)
 				}
 				if annotatedPDBVal < int(pxQuorum) || annotatedPDBVal >= nodeslen {
 					expectedPdbValue = nodeslen - 1
@@ -5004,7 +5003,7 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 				return nil, false, nil
 			}
 
-			return nil, true, fmt.Errorf("incorrect PDB value. Expected PDB %d, Actual PDB %d, allowed dis %d, actual dis %d", expectedPdbValue, actualPdbValue, expectedAllowedDsiruptions, actualAllowedDisruptions)
+			return nil, true, fmt.Errorf("incorrect PDB value. Expected PDB [%d], Actual PDB [%d], allowed dis [%d], actual dis [%d]", expectedPdbValue, actualPdbValue, expectedAllowedDsiruptions, actualAllowedDisruptions)
 		}
 
 		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
@@ -5013,7 +5012,7 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 		return nil
 	}
 
-	logrus.Debugf("skipping poddisruptionbudget validation, not supported for kubernetes version %s and operator version %s", k8sVersion, opVersion)
+	logrus.Debugf("Skipping poddisruptionbudget validation, not supported for kubernetes version [%s] and operator version [%s]", k8sVersion, opVersion)
 	return nil
 
 }
