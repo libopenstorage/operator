@@ -121,6 +121,17 @@ func ConstructStorageCluster(cluster *corev1.StorageCluster, specGenURL string, 
 			}
 		}
 	}
+	// If not Ocp but cloud provider is Vsphere, add secret and other env vars
+	if !IsOcp && CloudProvider == cloudops.Vsphere {
+		EnvVarCreds, err := testutil.CreateVsphereCredentialEnvVarsFromSecret(cluster.Namespace)
+		if err != nil {
+			return err
+		}
+
+		if EnvVarCreds != nil {
+			envVarList = append(envVarList, EnvVarCreds...)
+		}
+	}
 
 	// Add EKS annotation
 	if IsEks {
@@ -496,4 +507,12 @@ func ValidateStorageClusterComponents(cluster *corev1.StorageCluster) error {
 	// TODO: Validate expected components are deployed and running
 	// TODO: Validate the components are running with expected configuration
 	return nil
+}
+
+func GetK8sNodeCount() (int, error) {
+	nodes, err := schedopsCore.Instance().GetNodes()
+	if err != nil {
+		return -1, err
+	}
+	return len(nodes.Items), nil
 }

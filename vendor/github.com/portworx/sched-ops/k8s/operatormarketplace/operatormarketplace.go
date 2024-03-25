@@ -1,6 +1,7 @@
 package operatormarketplace
 
 import (
+	"fmt"
 	"sync"
 
 	ofv1 "github.com/operator-framework/api/pkg/operators/v1"
@@ -8,6 +9,7 @@ import (
 	"github.com/portworx/sched-ops/k8s/common"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
@@ -49,6 +51,17 @@ func New(crClient client.Client) *Client {
 	return &Client{
 		crClient: crClient,
 	}
+}
+
+// NewInstanceFromConfigFile returns new instance of client by using given
+// config file
+func NewInstanceFromConfigFile(config string) (Ops, error) {
+	newInstance := &Client{}
+	err := newInstance.loadClientFromKubeconfig(config)
+	if err != nil {
+		return nil, err
+	}
+	return newInstance, nil
 }
 
 // Client is a wrapper for the operator client.
@@ -95,5 +108,27 @@ func (c *Client) setClient() error {
 		return err
 	}
 
+	return nil
+}
+
+func (c *Client) loadClientFromKubeconfig(kubeconfig string) error {
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		return err
+	}
+
+	c.config = config
+	return c.loadClient()
+}
+
+func (c *Client) loadClient() error {
+	if c.config == nil {
+		return fmt.Errorf("rest config is not provided")
+	}
+
+	err := common.SetRateLimiter(c.config)
+	if err != nil {
+		return err
+	}
 	return nil
 }
