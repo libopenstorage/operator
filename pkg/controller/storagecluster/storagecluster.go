@@ -1409,7 +1409,7 @@ func (c *Controller) CreatePodTemplate(
 	}
 
 	if pxutil.IsOpenshift(cluster) {
-		newTemplate.Annotations[component.OpenshiftRequiredSCCAnnotation] = component.PxSCCName
+		newTemplate.Annotations[constants.AnnotationOpenshiftRequiredSCC] = component.PxSCCName
 	}
 
 	if len(node.Labels) > 0 {
@@ -1432,6 +1432,7 @@ func (c *Controller) CreatePodTemplate(
 	}
 	return newTemplate, nil
 }
+
 func (c *Controller) getCurrentMaxStorageNodesPerZone(
 	cluster *corev1.StorageCluster,
 	nodeList *v1.NodeList,
