@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -37,6 +38,7 @@ import (
 	k8serrors "github.com/portworx/sched-ops/k8s/errors"
 	openshiftops "github.com/portworx/sched-ops/k8s/openshift"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
+	policyops "github.com/portworx/sched-ops/k8s/policy"
 	prometheusops "github.com/portworx/sched-ops/k8s/prometheus"
 	rbacops "github.com/portworx/sched-ops/k8s/rbac"
 	"github.com/portworx/sched-ops/task"
@@ -186,6 +188,7 @@ const (
 var TestSpecPath = "testspec"
 
 var (
+	opVer1_5_0, _                     = version.NewVersion("1.5.0-")
 	opVer1_9_1, _                     = version.NewVersion("1.9.1-")
 	opVer1_10, _                      = version.NewVersion("1.10.0-")
 	opVer23_3, _                      = version.NewVersion("23.3.0-")
@@ -201,6 +204,8 @@ var (
 
 	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
 	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
+	// PodDisruptionBudget is only supported in starting with k8s v1.21.0+
+	minSupportedK8sVersionForPdb, _ = version.NewVersion("1.21.0")
 
 	pxVer3_0, _  = version.NewVersion("3.0")
 	pxVer2_13, _ = version.NewVersion("2.13")
@@ -832,6 +837,12 @@ func ValidateStorageCluster(
 		return err
 	}
 
+	// Validate PX pods annotation
+	checkPxPodAnnotationsTimeout := 1 * time.Hour // NOTE: Temporary large timeout until PWX-36555 is resolved
+	if err = validatePxPodsAnnotations(liveCluster, checkPxPodAnnotationsTimeout, interval); err != nil {
+		return err
+	}
+
 	// Validate components
 	if err = validateComponents(pxImageList, clusterSpec, liveCluster, timeout, interval); err != nil {
 		return err
@@ -842,6 +853,51 @@ func ValidateStorageCluster(
 		return err
 	}
 
+	return nil
+}
+
+func validatePxPodsAnnotations(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Debug("Validate PX pods..")
+	t := func() (interface{}, bool, error) {
+		// Get list of PX pods
+		pods, err := coreops.Instance().GetPodsByOwner(cluster.UID, cluster.Namespace)
+		if err != nil || pods == nil {
+			return "", true, fmt.Errorf("failed to get pods for StorageCluster [%s/%s]. Err: %v",
+				cluster.Namespace, cluster.Name, err)
+		}
+
+		for _, pod := range pods {
+			storageNode, err := operatorops.Instance().GetStorageNode(pod.Spec.NodeName, pod.Namespace)
+			if err != nil {
+				return nil, true, fmt.Errorf("failed to get StorageNode [%s] for PX pod [%s], Err: %v", pod.Spec.NodeName, pod.Name, err)
+			}
+
+			safeToEvictAnnotationName := "cluster-autoscaler.kubernetes.io/safe-to-evict"
+			safeToEvictValue, exists := pod.Annotations[safeToEvictAnnotationName]
+			if !exists {
+				return nil, true, fmt.Errorf("px pod [%s] is missing expected annnotation [%s]", pod.Name, safeToEvictAnnotationName)
+			}
+			safeToEvict, err := strconv.ParseBool(safeToEvictValue)
+			if err != nil {
+				return nil, true, fmt.Errorf("failed to convert [%v] to bool, Err: %v", safeToEvictValue, err)
+			}
+
+			// This should validate the annotation cluster-autoscaler.kubernetes.io/safe-to-evict value,
+			// when node is Storage, annotation value should be set to false,
+			// when node is Storageless, annotation value should be set to true
+			if storageNode.Status.NodeAttributes.Storage != nil && *storageNode.Status.NodeAttributes.Storage != !safeToEvict {
+				return nil, true, fmt.Errorf("failed to validate PX pod [%s] annotation [%s] value [%v], storageNode storage value [%v]", pod.Name, safeToEvictAnnotationName, safeToEvict, *storageNode.Status.NodeAttributes.Storage)
+			}
+			logrus.Debugf("PX pod [%s] belongs to node [%s], storage [%v] and has annotation [%s: %s]", pod.Name, storageNode.Name, *storageNode.Status.NodeAttributes.Storage, safeToEvictAnnotationName, safeToEvictValue)
+		}
+		return nil, false, nil
+	}
+
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+
+	logrus.Debug("Successfully validated PX pods")
 	return nil
 }
 
@@ -1683,6 +1739,11 @@ func validateComponents(pxImageList map[string]string, originalClusterSpec, clus
 
 	// Validate KVDB
 	if err := ValidateKvdb(pxImageList, cluster, timeout, interval); err != nil {
+		return err
+	}
+
+	// Validate Poddisruptionbudget
+	if err := ValidatePodDisruptionBudget(cluster, timeout, interval); err != nil {
 		return err
 	}
 
@@ -4931,6 +4992,102 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 
 	logrus.Infof("Telemetry is enabled")
 	return nil
+}
+
+// ValidatePodDisruptionBudget validates the value of minavailable and number of disruptions for px-storage poddisruptionbudget
+func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	logrus.Info("Validate px-storage poddisruptionbudget minAvailable and allowed disruptions")
+
+	kbVer, err := GetK8SVersion()
+	if err != nil {
+		return err
+	}
+	k8sVersion, _ := version.NewVersion(kbVer)
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return err
+	}
+
+	// PodDisruptionBudget is supported for k8s version greater than or equal to 1.21 and operator version greater than or equal to 1.5.0
+	if k8sVersion.GreaterThanOrEqual(minSupportedK8sVersionForPdb) && opVersion.GreaterThanOrEqual(opVer1_5_0) {
+		// This is only for non async DR setup
+		t := func() (interface{}, bool, error) {
+
+			nodes, err := operatorops.Instance().ListStorageNodes(cluster.Namespace)
+			if err != nil {
+				return nil, true, fmt.Errorf("failed to get storage nodes, Err: %v", err)
+			}
+
+			nodeslen := 0
+			availablenodes := 0
+			for _, node := range nodes.Items {
+				if *node.Status.NodeAttributes.Storage {
+					nodeslen++
+					if node.Status.Phase == "Online" {
+						availablenodes++
+					}
+				}
+			}
+			nodesUnavailable := nodeslen - availablenodes
+			// Skip PDB validation for px-storage if number of storage nodes is lesser than or equal to 2
+			if nodeslen <= 2 {
+				logrus.Infof("Storage PDB does not exist for storage nodes lesser than or equal to 2, skipping PDB validattion")
+				return nil, false, nil
+			}
+
+			pdb, err := policyops.Instance().GetPodDisruptionBudget("px-storage", cluster.Namespace)
+			if err != nil {
+				return nil, true, fmt.Errorf("failed to get px-storage poddisruptionbudget, Err: %v", err)
+			}
+			actualPdbValue := pdb.Spec.MinAvailable.IntValue()
+			actualAllowedDisruptions := pdb.Status.DisruptionsAllowed
+
+			// If annotations to override PDB are not set or if the value of minAvailable is lesser than (n/1)+1 (px quorum)
+			// or if it is more than or equal to number of storage nodes then use default minAvailable calculation
+			// Else minAvailable will be annotation value
+			var annotatedPDBVal int
+			var expectedPdbValue int
+			var expectedAllowedDsiruptions int
+			pxQuorum := math.Floor(float64(nodeslen)/2) + 1
+			if val, ok := cluster.Annotations["portworx.io/storage-pdb-min-available"]; ok {
+				annotatedPDBVal, err = strconv.Atoi(val)
+				if err != nil {
+					return nil, true, fmt.Errorf("error in converting string to int, Err: %v", err)
+				}
+				if annotatedPDBVal < int(pxQuorum) || annotatedPDBVal >= nodeslen {
+					expectedPdbValue = nodeslen - 1
+					expectedAllowedDsiruptions = 1
+					if nodesUnavailable > 0 {
+						expectedAllowedDsiruptions = 0
+					}
+				} else {
+					expectedPdbValue = annotatedPDBVal
+					expectedAllowedDsiruptions = nodeslen - annotatedPDBVal
+				}
+
+			} else {
+				expectedPdbValue = nodeslen - 1
+				expectedAllowedDsiruptions = 1
+				if nodesUnavailable > 0 {
+					expectedAllowedDsiruptions = 0
+				}
+			}
+			if expectedPdbValue == actualPdbValue && expectedAllowedDsiruptions == int(actualAllowedDisruptions) {
+				return nil, false, nil
+			}
+
+			return nil, true, fmt.Errorf("incorrect PDB value. Expected PDB [%d], Actual PDB [%d], allowed dis [%d], actual dis [%d]", expectedPdbValue, actualPdbValue, expectedAllowedDsiruptions, actualAllowedDisruptions)
+		}
+
+		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	logrus.Debugf("Skipping poddisruptionbudget validation, not supported for kubernetes version [%s] and operator version [%s]", k8sVersion, opVersion)
+	return nil
+
 }
 
 // validatePodTopologySpreadConstraints validates pod topology spread constraints
