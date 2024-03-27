@@ -52,6 +52,9 @@ const (
 	OperatorLabelManagedByKey = OperatorPrefix + "/managed-by"
 	// OperatorLabelManagedByValue indicates that the object is managed by portworx.
 	OperatorLabelManagedByValue = "portworx"
+	// K8sNodeRunningPxPod hold the value of the kubernetes node on whcih the portworx pod is running
+    // Used for creating a Node PDB
+    K8sNodeRunningPxPod = "k8s-node-running-px-pod"
 )
 
 const (
