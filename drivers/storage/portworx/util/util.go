@@ -261,6 +261,7 @@ const (
 	ClusterOperatorKind                 = "ClusterOperator"
 	OpenshiftAPIServer                  = "openshift-apiserver"
 	OpenshiftPrometheusSupportedVersion = "4.12"
+	OpenshiftPxSupportedVersion         = "4.13"
 	// OpenshiftMonitoringRouteName name of OCP user-workload route
 	OpenshiftMonitoringRouteName = "thanos-querier"
 	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
