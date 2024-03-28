@@ -280,6 +280,30 @@ func DeployAndValidateStorageCluster(cluster *corev1.StorageCluster, pxSpecImage
 	return liveCluster
 }
 
+// DeployAndValidateStorageClusterAetosDemo creates and validates StorageCluster for Aetos Wrapper Demo
+func DeployAndValidateStorageClusterAetosDemo(cluster *corev1.StorageCluster, pxSpecImages map[string]string) (*corev1.StorageCluster, error) {
+	// Create StorageCluster
+	cluster, err := DeployStorageCluster(cluster, pxSpecImages)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate StorageCluster deployment
+	logrus.Infof("Validate StorageCluster %s", cluster.Name)
+	err = testutil.ValidateStorageCluster(pxSpecImages, cluster, DefaultValidateDeployTimeout, DefaultValidateDeployRetryInterval, true, "")
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the latest version of StorageCluster
+	liveCluster, err := operator.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	return liveCluster, nil
+
+}
+
 // UpdateStorageCluster updates the given StorageCluster and return latest live version of it
 func UpdateStorageCluster(cluster *corev1.StorageCluster) (*corev1.StorageCluster, error) {
 	logrus.Infof("Update StorageCluster %s in %s", cluster.Name, cluster.Namespace)
@@ -500,6 +524,25 @@ func UninstallAndValidateStorageCluster(cluster *corev1.StorageCluster, t *testi
 	logrus.Infof("Validate StorageCluster [%s] deletion", cluster.Name)
 	err = testutil.ValidateUninstallStorageCluster(cluster, DefaultValidateUninstallTimeout, DefaultValidateUninstallRetryInterval)
 	require.NoError(t, err)
+
+}
+
+// UninstallAndValidateStorageClusterAetosDemo uninstall and validate the cluster deletion for Aetos wrapper demo
+func UninstallAndValidateStorageClusterAetosDemo(cluster *corev1.StorageCluster) error {
+	// Delete cluster
+	logrus.Infof("Delete StorageCluster [%s]", cluster.Name)
+	err := testutil.UninstallStorageCluster(cluster)
+	if err != nil {
+		return err
+	}
+	// Validate cluster deletion
+	logrus.Infof("Validate StorageCluster [%s] deletion", cluster.Name)
+	err = testutil.ValidateUninstallStorageCluster(cluster, DefaultValidateUninstallTimeout, DefaultValidateUninstallRetryInterval)
+	if err != nil {
+		return err
+	}
+
+	return err
 }
 
 // ValidateStorageClusterComponents validates storage cluster components
