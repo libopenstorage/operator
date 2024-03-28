@@ -153,9 +153,6 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 		}
 
 		err = k8sutil.CreateOrUpdatePodDisruptionBudget(c.k8sClient, pdb, ownerRef)
-		if err == nil {
-			logrus.Infof("Value for px-storage pod disruption budget is set to %d ", pdb.Spec.MinAvailable.IntValue())
-		}
 	}
 	return err
 }

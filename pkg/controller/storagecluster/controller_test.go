@@ -14,6 +14,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/go-version"
 	ocp_configv1 "github.com/openshift/api/config/v1"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -44,6 +47,7 @@ import (
 	"github.com/libopenstorage/cloudops"
 	storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage"
+	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
@@ -55,9 +59,6 @@ import (
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/libopenstorage/operator/pkg/util/maps"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
-	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	operatorops "github.com/portworx/sched-ops/k8s/operator"
 )
 
 func TestInit(t *testing.T) {
@@ -8203,7 +8204,6 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 
 func TestUpdateStorageCustomAnnotations(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
@@ -8255,9 +8255,9 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 	// Pods that are already running on the k8s nodes with same hash
 	storageLabels[util.DefaultStorageClusterUniqueLabelKey] = rev1Hash
 	oldPod := createStoragePod(cluster, "old-pod", k8sNode.Name, storageLabels)
-	knownAnnotationKey := constants.AnnotationPodSafeToEvict
 	oldPod.Annotations = map[string]string{
-		knownAnnotationKey: "false",
+		constants.AnnotationPodSafeToEvict:       "false",
+		constants.AnnotationOpenshiftRequiredSCC: "portworx",
 	}
 	err = k8sClient.Create(context.TODO(), oldPod)
 	require.NoError(t, err)
@@ -8295,8 +8295,12 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 	val, ok := oldPod.Annotations[customAnnotationKey]
 	require.True(t, ok)
 	require.Equal(t, customAnnotationVal1, val)
-	_, ok = oldPod.Annotations[knownAnnotationKey]
+	val, ok = oldPod.Annotations[constants.AnnotationPodSafeToEvict]
 	require.True(t, ok)
+	require.Equal(t, "false", val)
+	val, ok = oldPod.Annotations[constants.AnnotationOpenshiftRequiredSCC]
+	require.True(t, ok)
+	require.Equal(t, "portworx", val)
 
 	// TestCase: Update existing custom annotations
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
@@ -8325,8 +8329,12 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 	val, ok = oldPod.Annotations[customAnnotationKey]
 	require.True(t, ok)
 	require.Equal(t, customAnnotationVal2, val)
-	_, ok = oldPod.Annotations[knownAnnotationKey]
+	val, ok = oldPod.Annotations[constants.AnnotationPodSafeToEvict]
 	require.True(t, ok)
+	require.Equal(t, "false", val)
+	val, ok = oldPod.Annotations[constants.AnnotationOpenshiftRequiredSCC]
+	require.True(t, ok)
+	require.Equal(t, "portworx", val)
 
 	// TestCase: Add malformed custom annotation key
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
@@ -8352,8 +8360,12 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 	err = testutil.Get(k8sClient, oldPod, oldPod.Name, oldPod.Namespace)
 	require.NoError(t, err)
 	require.NotEmpty(t, oldPod.Annotations)
-	_, ok = oldPod.Annotations[knownAnnotationKey]
+	val, ok = oldPod.Annotations[constants.AnnotationPodSafeToEvict]
 	require.True(t, ok)
+	require.Equal(t, "false", val)
+	val, ok = oldPod.Annotations[constants.AnnotationOpenshiftRequiredSCC]
+	require.True(t, ok)
+	require.Equal(t, "portworx", val)
 
 	updatedCluster := &corev1.StorageCluster{}
 	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
@@ -8385,8 +8397,12 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 	require.NotEmpty(t, oldPod.Annotations)
 	_, ok = oldPod.Annotations[customAnnotationKey]
 	require.False(t, ok)
-	_, ok = oldPod.Annotations[knownAnnotationKey]
+	val, ok = oldPod.Annotations[constants.AnnotationPodSafeToEvict]
 	require.True(t, ok)
+	require.Equal(t, "false", val)
+	val, ok = oldPod.Annotations[constants.AnnotationOpenshiftRequiredSCC]
+	require.True(t, ok)
+	require.Equal(t, "portworx", val)
 
 	// TestCase: Newly created pod will pick up custom annotations
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
@@ -8406,8 +8422,12 @@ func TestUpdateStorageCustomAnnotations(t *testing.T) {
 	val, ok = newPod.Annotations[customAnnotationKey]
 	require.True(t, ok)
 	require.Equal(t, customAnnotationVal1, val)
-	_, ok = oldPod.Annotations[knownAnnotationKey]
+	val, ok = oldPod.Annotations[constants.AnnotationPodSafeToEvict]
 	require.True(t, ok)
+	require.Equal(t, "false", val)
+	val, ok = oldPod.Annotations[constants.AnnotationOpenshiftRequiredSCC]
+	require.True(t, ok)
+	require.Equal(t, "portworx", val)
 }
 
 func TestUpdateClusterShouldDedupOlderRevisionsInHistory(t *testing.T) {
@@ -9390,11 +9410,17 @@ func TestEKSPreflightCheck(t *testing.T) {
 
 	k8sClient := testutil.FakeK8sClient(cluster)
 	driver := testutil.MockDriver(mockCtrl)
+	recorder := record.NewFakeRecorder(10)
+
+	fakeClient := fake.NewSimpleClientset(cluster)
+	operatorops.SetInstance(operatorops.New(fakeClient))
+
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 
 	controller := Controller{
-		client: k8sClient,
-		Driver: driver,
+		client:   k8sClient,
+		recorder: recorder,
+		Driver:   driver,
 	}
 
 	// TestCase: eks cloud permission check failed
@@ -9431,6 +9457,8 @@ func TestEKSPreflightCheck(t *testing.T) {
 	require.Equal(t, corev1.ClusterConditionStatusFailed, condition.Status)
 
 	// TestCase: fix the permission then rerun preflight
+	fakeClient = fake.NewSimpleClientset(cluster)
+	operatorops.SetInstance(operatorops.New(fakeClient))
 	cluster.Annotations[pxutil.AnnotationPreflightCheck] = "true"
 	// Cloud drive permission check will only be checked once when the status condition is not set.
 	cluster.Status.Conditions = []corev1.ClusterCondition{}
@@ -9986,6 +10014,68 @@ func TestStorageSpecValidation(t *testing.T) {
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
+}
+
+func TestRequiredSCCAnnotationOnPortworxPods(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+
+	cluster := createStorageCluster()
+	cluster.Annotations = map[string]string{
+		"portworx.io/is-openshift": "true",
+	}
+	k8sNode := createK8sNode("k8s-node", 10)
+
+	driverName := "mock-driver"
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster, k8sNode)
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
+	}
+
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	// TestCase: Pod template should have the required SCC annotation when running on OpenShift
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Len(t, podControl.Templates, 1)
+	require.Equal(t, component.PxSCCName, podControl.Templates[0].Annotations[constants.AnnotationOpenshiftRequiredSCC])
+
+	// TestCase: Pod template should not have the required SCC annotation when not running on OpenShift
+	podControl.Templates = nil
+	cluster.Annotations = nil
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+	require.Len(t, podControl.Templates, 1)
+	require.Empty(t, podControl.Templates[0].Annotations)
 }
 
 func replaceOldPod(

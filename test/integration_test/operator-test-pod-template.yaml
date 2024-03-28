@@ -72,6 +72,7 @@ spec:
     - -operator-upgrade-hops-image-list=OPERATOR_UPGRADE_HOPS_IMAGE_LIST
     - -log-level=LOG_LEVEL
     - -test.run=FOCUS_TESTS
+    - -px-namespace=PX_NAMESPACE
     imagePullPolicy: Always
     image: openstorage/px-operator-test:latest
     securityContext:

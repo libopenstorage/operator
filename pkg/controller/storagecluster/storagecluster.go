@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"github.com/libopenstorage/operator/pkg/controller/csr"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
@@ -57,10 +56,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/libopenstorage/operator/drivers/storage"
+	component "github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/controller/csr"
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
@@ -632,19 +633,27 @@ func (c *Controller) runPreflightCheck(cluster *corev1.StorageCluster) error {
 
 	// Update the cluster only if anything has changed
 	if !reflect.DeepEqual(cluster, toUpdate) {
+		// Get the latest cluster object to preserve the 'ResourceVersion'
+		latestCluster, gerr := operatorops.Instance().GetStorageCluster(cluster.Name, cluster.Namespace)
+		if gerr != nil {
+			return fmt.Errorf("UpdateStorageClusterStatus GetStorageCluster failure, %v", gerr)
+		}
+		toUpdate.ResourceVersion = latestCluster.ResourceVersion // Preserve resource version
 		toUpdate.DeepCopyInto(cluster)
-		if err := k8s.UpdateStorageCluster(c.client, cluster); err != nil {
-			return fmt.Errorf("UpdateStorageCluster failure, %v", err)
+
+		if err := c.client.Status().Update(context.TODO(), cluster); err != nil {
+			k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
+				"preflight check failed to update storage cluster status. Need to rerun preflight or skip it")
+			return fmt.Errorf("update storage cluster status failure, %v", err)
 		}
 
-		cluster.Status = *toUpdate.Status.DeepCopy()
-		if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
-			logrus.Errorf("preflight updateStorageClusterStatus failed trying again...")
-			if err := k8s.UpdateStorageClusterStatus(c.client, cluster); err != nil {
-				k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
-					"preflight check failed to update storage cluster status. Need to rerun preflight or skip it")
-				return fmt.Errorf("UpdateStorageClusterStatus failure, %v", err)
-			}
+		toUpdate.ResourceVersion = cluster.ResourceVersion // Preserve resource version
+		toUpdate.DeepCopyInto(cluster)
+
+		if err := c.client.Update(context.TODO(), cluster); err != nil {
+			k8s.WarningEvent(c.recorder, cluster, util.FailedPreFlight,
+				"preflight check failed to update storage cluster. Need to rerun preflight or skip it")
+			return fmt.Errorf("UpdateStorageCluster failure, %v", err)
 		}
 	}
 	return err
@@ -1448,6 +1457,10 @@ func (c *Controller) CreatePodTemplate(
 				newTemplate.Annotations[pxutil.AnnotationAppArmorPrefix+c.Name] = "unconfined"
 			}
 		}
+	}
+
+	if pxutil.IsOpenshift(cluster) {
+		newTemplate.Annotations[constants.AnnotationOpenshiftRequiredSCC] = component.PxSCCName
 	}
 
 	if len(node.Labels) > 0 {
