@@ -3210,6 +3210,54 @@ func TestStorageClusterDefaultsForPlugin(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, cluster.Status.DesiredImages.DynamicPlugin, "portworx/portworx-dynamic-plugin:1.1.0")
 	require.Equal(t, cluster.Status.DesiredImages.DynamicPluginProxy, "nginxinc/nginx-unprivileged:1.23")
+
+	// When plugin images are updated and autoupdateComponents is used
+	testData := []struct {
+		kind                    corev1.AutoUpdateComponentStrategyType
+		expectUpdated           bool
+		expectAutoUpdateCleared bool
+	}{
+		{corev1.OnceAutoUpdate, true, true},
+		{corev1.AlwaysAutoUpdate, true, false},
+		{corev1.NeverAutoUpdate, false, false},
+	}
+
+	for i, td := range testData {
+		cluster.Spec.AutoUpdateComponents = nil
+		cluster.Status.DesiredImages.DynamicPlugin = "portworx/foo:1.0.0"
+		cluster.Status.DesiredImages.DynamicPluginProxy = "nginxinc/bar:1.21"
+		err = driver.SetDefaultsOnStorageCluster(cluster)
+		require.NoError(t, err)
+		assert.Equal(t, "portworx/foo:1.0.0", cluster.Status.DesiredImages.DynamicPlugin,
+			"failed expectations for test %d / %v", i+1, td)
+		assert.Equal(t, "nginxinc/bar:1.21", cluster.Status.DesiredImages.DynamicPluginProxy,
+			"failed expectations for test %d / %v", i+1, td)
+
+		cluster.Spec.AutoUpdateComponents = &td.kind
+		err = driver.SetDefaultsOnStorageCluster(cluster)
+		require.NoError(t, err)
+		if td.expectUpdated {
+			assert.Equal(t, "portworx/portworx-dynamic-plugin:1.1.0",
+				cluster.Status.DesiredImages.DynamicPlugin,
+				"failed expectations for test %d / %v", i+1, td)
+			assert.Equal(t, "nginxinc/nginx-unprivileged:1.23",
+				cluster.Status.DesiredImages.DynamicPluginProxy,
+				"failed expectations for test %d / %v", i+1, td)
+		} else {
+			assert.Equal(t, "portworx/foo:1.0.0", cluster.Status.DesiredImages.DynamicPlugin,
+				"failed expectations for test %d / %v", i+1, td)
+			assert.Equal(t, "nginxinc/bar:1.21", cluster.Status.DesiredImages.DynamicPluginProxy,
+				"failed expectations for test %d / %v", i+1, td)
+		}
+		if td.expectAutoUpdateCleared {
+			assert.Empty(t, cluster.Spec.AutoUpdateComponents,
+				"failed expectations for test %d / %v", i+1, td)
+		} else {
+			assert.NotEmpty(t, cluster.Spec.AutoUpdateComponents,
+				"failed expectations for test %d / %v", i+1, td)
+		}
+	}
+
 }
 
 func assertDefaultSecuritySpec(t *testing.T, cluster *corev1.StorageCluster) {
