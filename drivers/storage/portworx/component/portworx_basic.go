@@ -412,6 +412,11 @@ func (c *portworxBasic) createClusterRole() error {
 					Resources: []string{"virtualmachineinstancemigrations"},
 					Verbs:     []string{"get", "list", "create", "watch", "delete", "update"},
 				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"namespaces"},
+					Verbs:     []string{"get", "list"},
+				},
 			},
 		},
 	)
