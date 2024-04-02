@@ -1441,6 +1441,7 @@ func (c *Controller) CreatePodTemplate(
 	podSpec.NodeName = node.Name
 	labels := c.StorageClusterSelectorLabels(cluster)
 	labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
+	labels[constants.OperatorLabelNodeNameKey] = node.Name
 	newTemplate := v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:   cluster.Namespace,
