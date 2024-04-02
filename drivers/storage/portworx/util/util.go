@@ -1528,3 +1528,66 @@ func ShouldUseClusterDomain(node *api.StorageNode) (bool, error) {
 	}
 	return true, nil
 }
+
+// Get list of storagenodes that are a part of the current cluster that need a node PDB
+func NodesNeedingPDB(cluster *corev1.StorageCluster, sdkConn *grpc.ClientConn, k8sClient client.Client) ([]string, error) {
+	// Get the list of storage nodes
+	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
+	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
+	if err != nil {
+		return nil, err
+	}
+
+	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
+		ctx,
+		&api.SdkNodeEnumerateWithFiltersRequest{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to enumerate nodes: %v", err)
+	}
+
+	// Get the list of k8s nodes that are part of the current cluster
+	k8sNodesStoragePodCouldRun := make(map[string]bool)
+	k8sNodeList := &v1.NodeList{}
+	err = k8sClient.List(context.TODO(), k8sNodeList)
+	if err != nil {
+		return nil, err
+	}
+	for _, node := range k8sNodeList.Items {
+		shouldRun, shouldContinueRunning, err := k8sutil.CheckPredicatesForStoragePod(&node, cluster, nil)
+		if err != nil {
+			return nil, err
+		}
+		if shouldRun || shouldContinueRunning {
+			k8sNodesStoragePodCouldRun[node.Name] = true
+		}
+	}
+
+	// Create a list of nodes that are part of quorum to create node PDB for them
+	nodesNeedingPDB := make([]string, 0)
+	for _, node := range nodeEnumerateResponse.Nodes {
+		// Do not add node if its not part of quorum or is decomissioned
+		if node.Status == api.Status_STATUS_DECOMMISSION || node.NonQuorumMember {
+			logrus.Debugf("Node %s is not a quorum member or is decomissioned, skipping", node.Id)
+			continue
+		}
+
+		if node.SchedulerNodeName == "" {
+			k8sNode, err := coreops.Instance().SearchNodeByAddresses(
+				[]string{node.DataIp, node.MgmtIp, node.Hostname},
+			)
+			if err != nil {
+				// In Metro-DR setup, this could be expected.
+				logrus.Infof("Unable to find kubernetes node name for nodeID %v: %v", node.Id, err)
+				continue
+			}
+			node.SchedulerNodeName = k8sNode.Name
+		}
+
+		if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
+			nodesNeedingPDB = append(nodesNeedingPDB, node.SchedulerNodeName)
+		}
+	}
+
+	return nodesNeedingPDB, nil
+}
