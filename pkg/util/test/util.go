@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	cryptoTls "crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -139,14 +140,15 @@ const (
 	AnnotationIsPKS = pxAnnotationPrefix + "/is-pks"
 
 	// Telemetry default params
-	productionArcusLocation         = "external"
-	productionArcusRestProxyURL     = "rest.cloud-support.purestorage.com"
-	productionArcusRegisterProxyURL = "register.cloud-support.purestorage.com"
-	stagingArcusLocation            = "internal"
-	stagingArcusRestProxyURL        = "rest.staging-cloud-support.purestorage.com"
-	stagingArcusRegisterProxyURL    = "register.staging-cloud-support.purestorage.com"
-	arcusPingInterval               = 6 * time.Second
-	arcusPingRetry                  = 5
+	productionArcusLocation           = "external"
+	productionArcusRestProxyURL       = "rest.cloud-support.purestorage.com"
+	productionArcusRegisterProxyURL   = "register.cloud-support.purestorage.com"
+	stagingArcusLocation              = "internal"
+	stagingArcusRestProxyURL          = "rest.staging-cloud-support.purestorage.com"
+	stagingArcusRegisterProxyURL      = "register.staging-cloud-support.purestorage.com"
+	arcusPingInterval                 = 6 * time.Second
+	arcusPingRetry                    = 5
+	pxTelemetryPhonehomeConfigmapName = "px-telemetry-phonehome"
 
 	defaultOcpClusterCheckTimeout  = 15 * time.Minute
 	defaultOcpClusterCheckInterval = 1 * time.Minute
@@ -160,6 +162,9 @@ const (
 
 	defaultTelemetryInPxctlValidationTimeout  = 20 * time.Minute
 	defaultTelemetryInPxctlValidationInterval = 30 * time.Second
+
+	defaultTelemetryPortValidationTimeout  = 2 * time.Minute
+	defaultTelemetryPortValidationInterval = 10 * time.Second
 
 	defaultStorageNodesValidationTimeout  = 30 * time.Minute
 	defaultStorageNodesValidationInterval = 30 * time.Second
@@ -4483,7 +4488,17 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 
 	// Validate Telemetry is Healthy in pxctl status
 	if err := validateTelemetryStatusInPxctl(true, cluster); err != nil {
+		// Check if the issue is with Telemetry ports
+		portErr := validateTelemetryPorts(cluster)
+		if portErr != nil {
+			err = fmt.Errorf("%v, might be due to Err: %v", err, portErr)
+		}
 		return fmt.Errorf("failed to validate that Telemetry is Healthy in pxctl status, Err: %v", err)
+	}
+
+	// Validate Telemetry ports
+	if err := validateTelemetryPorts(cluster); err != nil {
+		return err
 	}
 
 	// Validate registration certificate management via Container Orchestrator
@@ -4580,6 +4595,123 @@ func validatePxAuthOnPxNodes(pxAuthShouldBeEnabled bool, cluster *corev1.Storage
 
 }
 
+// validateTelemetryPorts validates Telemetry ports
+func validateTelemetryPorts(cluster *corev1.StorageCluster) error {
+	logrus.Info("Validate Telemetry ports...")
+	telemetryPort, err := getTelemetryLogUploaderPortFromConfigMap(cluster.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get Telemetry port, Err: %v", err)
+	}
+
+	if err := validateTelemetryLogUploaderPortOnPxNodes(cluster, telemetryPort); err != nil {
+		return fmt.Errorf("failed to validate Telemetry ports, Err: %v", err)
+	}
+
+	logrus.Info("Successfully validate PX Telemetry ports")
+	return nil
+}
+
+// getTelemetryLogUploaderPortFromConfigMap gets PX Telemetry Phonehome Configmap object, parses port from ccm.properties data and returns it
+func getTelemetryLogUploaderPortFromConfigMap(namespace string) (string, error) {
+	logrus.Infof("Get PX Telemetry LogUploader port from [%s] ConfigMap in [%s] namespace...", pxTelemetryPhonehomeConfigmapName, namespace)
+
+	// Get configmap
+	TelemetryPhonehomeConfigmap, err := coreops.Instance().GetConfigMap(pxTelemetryPhonehomeConfigmapName, namespace)
+	if err != nil {
+		return "", fmt.Errorf("failed to get Telemetry ConfigMap [%s] in [%s] namespace, Err: %v", TelemetryPhonehomeConfigmap, namespace, err)
+	}
+
+	// Check if ccm.properties data exists
+	ccmPropertiesJSON, exists := TelemetryPhonehomeConfigmap.Data["ccm.properties"]
+	if !exists {
+		return "", fmt.Errorf("failed to find 'ccm.properties' in ConfigMap [%s] object Data", TelemetryPhonehomeConfigmap.Name)
+	}
+
+	// Unmarshal ccm.properties json
+	var ccmProperties map[string]interface{}
+	err = json.Unmarshal([]byte(ccmPropertiesJSON), &ccmProperties)
+	if err != nil {
+		return "", fmt.Errorf("failed to unmarshal ccm.properties data json object, Err: %v", err)
+	}
+
+	// Check if port exists
+	logUploaderPort, exists := ccmProperties["port"].(string)
+	if !exists {
+		return "", fmt.Errorf("failed to find 'port' in the ccm.properties")
+	}
+
+	if len(logUploaderPort) == 0 {
+		return "", fmt.Errorf("got empty port value from ccm.properties")
+	}
+
+	logrus.Infof("Got PX Telemetry LogUploader port [%s] from Configmap [%s] in [%s] namespace", logUploaderPort, TelemetryPhonehomeConfigmap.Name, namespace)
+	return logUploaderPort, nil
+}
+
+// validateTelemetryLogUploaderPortOnPxNodes validates port on each PX node from the pxctl status output to be same as expected port
+func validateTelemetryLogUploaderPortOnPxNodes(cluster *corev1.StorageCluster, expectedPort string) error {
+	listOptions := map[string]string{"name": "portworx"}
+	cmd := "PX_LOGLEVEL=debug pxctl status |& grep Setting"
+
+	logrus.Infof("Validate Telemetry LogUploader port on all PX nodes...")
+	t := func() (interface{}, bool, error) {
+		if cluster.Spec.Security != nil && cluster.Spec.Security.Enabled {
+			token, err := getSecurityAdminToken(cluster.Namespace)
+			if err != nil {
+				return nil, true, err
+			}
+			cmd = fmt.Sprintf("PXCTL_AUTH_TOKEN=%s; %s", token, cmd)
+		}
+
+		// Get Portworx pods
+		pxPods, err := coreops.Instance().GetPods(cluster.Namespace, listOptions)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get PX pods, Err: %v", err)
+		}
+
+		for _, pxPod := range pxPods.Items {
+			// Validate PX pod is ready to run command on
+			if !coreops.Instance().IsPodReady(pxPod) {
+				return nil, true, fmt.Errorf("[%s (%s)] PX pod is not in Ready state", pxPod.Spec.NodeName, pxPod.Name)
+			}
+
+			output, err := runCmdInsidePxPod(&pxPod, cmd, cluster.Namespace, false)
+			if err != nil {
+				return nil, true, fmt.Errorf("got error while trying to get Telemetry status from pxctl, Err: %v", err)
+			}
+
+			if len(output) == 0 {
+				return nil, true, fmt.Errorf("got empty output from pxctl status command")
+			}
+			statusLines := strings.Split(output, "\n")
+
+			// Parse port from the output
+			var logUploaderPort string
+			telemetryStatusString := regexp.MustCompile(`Setting loguploader server:\s\S+:(\d+)`)
+			for _, line := range statusLines {
+				if matches := telemetryStatusString.FindStringSubmatch(line); matches != nil {
+					logUploaderPort = strings.TrimSpace(matches[1])
+					continue
+				}
+			}
+
+			// Check that ports match
+			if expectedPort != logUploaderPort {
+				return nil, true, fmt.Errorf("failed to validate PX Telemetry LogUploader port on PX node [%s (%s)], expected [%s], got [%s]", pxPod.Spec.NodeName, pxPod.Name, expectedPort, logUploaderPort)
+			}
+			logrus.Infof("Expected PX Telemetry LogUploader port [%s] in the ConfigMap and actual port [%s] on the PX node [%s (%s)]", expectedPort, logUploaderPort, pxPod.Spec.NodeName, pxPod.Name)
+		}
+		return nil, false, nil
+	}
+
+	_, err := task.DoRetryWithTimeout(t, defaultTelemetryPortValidationTimeout, defaultTelemetryPortValidationInterval)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateTelemetryStatusInPxctl validates Telemetry status on each PX node from the pxctl status output
 func validateTelemetryStatusInPxctl(telemetryShouldBeEnabled bool, cluster *corev1.StorageCluster) error {
 	listOptions := map[string]string{"name": "portworx"}
 	cmd := "pxctl status | grep Telemetry:"
@@ -4591,7 +4723,7 @@ func validateTelemetryStatusInPxctl(telemetryShouldBeEnabled bool, cluster *core
 			if err != nil {
 				return nil, true, err
 			}
-			cmd = fmt.Sprintf("PXCTL_AUTH_TOKEN=%s %s", token, cmd)
+			cmd = fmt.Sprintf("PXCTL_AUTH_TOKEN=%s; %s", token, cmd)
 		}
 
 		// Get Portworx pods
