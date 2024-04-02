@@ -13494,7 +13494,7 @@ func TestNodePodDisruptionBudget(t *testing.T) {
 
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName+"-node3", cluster.Namespace)
 	fmt.Println(err)
-	require.Error(t, err, fmt.Errorf("poddisruptionbudgets.policy %s-node3 not found",component.StoragePodDisruptionBudgetName))
+	require.Error(t, err, fmt.Errorf("poddisruptionbudgets.policy %s-node3 not found", component.StoragePodDisruptionBudgetName))
 
 }
 
