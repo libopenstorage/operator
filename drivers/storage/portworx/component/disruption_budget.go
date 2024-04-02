@@ -32,6 +32,11 @@ const (
 	DefaultKVDBClusterSize = 3
 )
 
+var (
+	// ParallelUpgradePDBVersion is the portworx version from which parallel upgrades is supported
+	ParallelUpgradePDBVersion, _ = version.NewVersion("3.1.2")
+)
+
 type disruptionBudget struct {
 	k8sClient client.Client
 	sdkConn   *grpc.ClientConn
@@ -71,9 +76,18 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := c.createKVDBPodDisruptionBudget(cluster, ownerRef); err != nil {
 		return err
 	}
-	if err := c.createPortworxPodDisruptionBudget(cluster, ownerRef); err != nil {
-		return err
+	// Create node PDB only if parallel upgrade is supported
+	clusterPXver := pxutil.GetPortworxVersion(cluster)
+	if clusterPXver.GreaterThanOrEqual(ParallelUpgradePDBVersion) {
+		if err := c.createPortworxNodePodDisruptionBudget(cluster, ownerRef); err != nil {
+			return err
+		}
+	} else {
+		if err := c.createPortworxPodDisruptionBudget(cluster, ownerRef); err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
@@ -155,6 +169,45 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 		err = k8sutil.CreateOrUpdatePodDisruptionBudget(c.k8sClient, pdb, ownerRef)
 	}
 	return err
+}
+
+func (c *disruptionBudget) createPortworxNodePodDisruptionBudget(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+) error {
+
+	var err error
+	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.k8sClient, cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	nodesNeedingPDB, err := pxutil.NodesNeedingPDB(cluster, c.sdkConn, c.k8sClient)
+	if err != nil {
+		return err
+	}
+	for _, node := range nodesNeedingPDB {
+		minAvailable := intstr.FromInt(1)
+		PDBName := "px-storage-" + node
+		pdb := &policyv1.PodDisruptionBudget{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            PDBName,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Spec: policyv1.PodDisruptionBudgetSpec{
+				MinAvailable: &minAvailable,
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						constants.LabelKeyClusterName:      cluster.Name,
+						constants.OperatorLabelNodeNameKey: node,
+					},
+				},
+			},
+		}
+		err = k8sutil.CreateOrUpdatePodDisruptionBudget(c.k8sClient, pdb, ownerRef)
+	}
+	return err
+
 }
 
 func (c *disruptionBudget) createKVDBPodDisruptionBudget(

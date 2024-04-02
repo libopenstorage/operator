@@ -13454,6 +13454,95 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestNodePodDisruptionBudget(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{SchedulerNodeName: "node1"},
+			{SchedulerNodeName: "node2"},
+			{NonQuorumMember: true, SchedulerNodeName: "node3"},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:3.1.2",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateRunning),
+		},
+	}
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+	},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	}, fakeK8sNodes)
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB := &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName+"-node1", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 1, storagePDB.Spec.MinAvailable.IntValue())
+	require.Equal(t, "node1", storagePDB.Spec.Selector.MatchLabels[constants.OperatorLabelNodeNameKey])
+
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName+"-node2", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 1, storagePDB.Spec.MinAvailable.IntValue())
+	require.Equal(t, "node2", storagePDB.Spec.Selector.MatchLabels[constants.OperatorLabelNodeNameKey])
+
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName+"-node3", cluster.Namespace)
+	fmt.Println(err)
+	require.Error(t, err, fmt.Errorf("poddisruptionbudgets.policy %s-node3 not found",component.StoragePodDisruptionBudgetName))
+
+}
+
 func TestSCC(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
