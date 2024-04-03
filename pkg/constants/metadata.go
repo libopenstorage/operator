@@ -44,6 +44,9 @@ const (
 	OperatorLabelManagedByKey = OperatorPrefix + "/managed-by"
 	// OperatorLabelManagedByValue indicates that the object is managed by portworx.
 	OperatorLabelManagedByValue = "portworx"
+	// OperatorLabelNodeNameKey holds the value of the kubernetes node on whcih the portworx pod is running
+	// Used for creating a Node PDB
+	OperatorLabelNodeNameKey = OperatorPrefix + "/node-name"
 )
 
 const (
