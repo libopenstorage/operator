@@ -2198,7 +2198,7 @@ func verifyPVCControllerInstall(
 	err := testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
 	fmt.Println(serviceAccountList.Items[0].Name)
-	// fmt.Println(serviceAccountList.Items[1].Name)
+	fmt.Println(serviceAccountList.Items[1].Name)
 
 	require.Len(t, serviceAccountList.Items, 2)
 
