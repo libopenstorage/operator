@@ -12508,7 +12508,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
-			{SchedulerNodeName: "node1"},
+			{SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 		},
 	}
 
@@ -12597,8 +12597,8 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 
 	// TestCase: Do not create storage PDB if total nodes with storage is less than 3
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
-		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
-		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 		{Pools: []*osdapi.StoragePool{}},
 		{},
 	}
@@ -12630,11 +12630,11 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	// Also, ignore the annotation if the value is an invalid integer
 	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "invalid"
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
-		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
-		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 		{Pools: []*osdapi.StoragePool{}},
 		{},
-		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3"},
+		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 	}
 
 	err = driver.PreInstall(cluster)
@@ -12657,11 +12657,11 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	// Also, ignore the annotation if the value is an invalid integer
 	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "still_invalid"
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
-		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
-		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
-		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3"},
-		{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4"},
-		{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5"},
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 		{Pools: []*osdapi.StoragePool{}},
 		{},
 	}
@@ -13283,7 +13283,7 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nil, fmt.Errorf("NodeEnumerate error")).
-		Times(1)
+		AnyTimes()
 	cluster.Spec.Security.Enabled = false
 
 	err = driver.PreInstall(cluster)
@@ -13315,9 +13315,9 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
-			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
-			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
-			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3"},
+			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 		},
 	}
 	mockNodeServer.EXPECT().
@@ -13425,11 +13425,13 @@ func TestNodePodDisruptionBudget(t *testing.T) {
 
 	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
 	defer testutil.RestoreEtcHosts(t)
+
+	// PDB should not be created for non quorum members
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
-			{SchedulerNodeName: "node1"},
-			{SchedulerNodeName: "node2"},
-			{NonQuorumMember: true, SchedulerNodeName: "node3"},
+			{SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+			{SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+			{NonQuorumMember: true, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
 		},
 	}
 	mockNodeServer.EXPECT().
@@ -13481,20 +13483,36 @@ func TestNodePodDisruptionBudget(t *testing.T) {
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
+	// PDB is created for 2 storage nodes and kvdb
+	pdbList := &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 3)
+
 	storagePDB := &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName+"-node1", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, 1, storagePDB.Spec.MinAvailable.IntValue())
 	require.Equal(t, "node1", storagePDB.Spec.Selector.MatchLabels[constants.OperatorLabelNodeNameKey])
 
-	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName+"-node2", cluster.Namespace)
-	require.NoError(t, err)
-	require.Equal(t, 1, storagePDB.Spec.MinAvailable.IntValue())
-	require.Equal(t, "node2", storagePDB.Spec.Selector.MatchLabels[constants.OperatorLabelNodeNameKey])
-
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName+"-node3", cluster.Namespace)
 	fmt.Println(err)
 	require.Error(t, err, fmt.Errorf("poddisruptionbudgets.policy %s-node3 not found", component.StoragePodDisruptionBudgetName))
+
+	// Testcase : PDB per node should not be created for any node even if 1 node is lesser than 3.1.2
+	// Use cluster wide PDB in this case
+	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
+		{SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+		{SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+		{SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
 
 }
 

@@ -294,6 +294,9 @@ var (
 
 	// ConfigMapNameRegex regex of configMap.
 	ConfigMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
+
+	// ParallelUpgradePDBVersion is the portworx version from which parallel upgrades is supported
+	ParallelUpgradePDBVersion, _ = version.NewVersion("3.1.2")
 )
 
 func getStrippedClusterName(cluster *corev1.StorageCluster) string {
@@ -1590,4 +1593,35 @@ func NodesNeedingPDB(cluster *corev1.StorageCluster, sdkConn *grpc.ClientConn, k
 	}
 
 	return nodesNeedingPDB, nil
+}
+
+func ClusterSupportsParallelUpgrade(cluster *corev1.StorageCluster, sdkConn *grpc.ClientConn, k8sClient client.Client) bool {
+	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
+	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
+	if err != nil {
+		return false
+	}
+	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
+		ctx,
+		&api.SdkNodeEnumerateWithFiltersRequest{},
+	)
+	if err != nil {
+		return false
+	}
+
+	for _, node := range nodeEnumerateResponse.Nodes {
+		if node.Status == api.Status_STATUS_DECOMMISSION {
+			continue
+		}
+		v := node.NodeLabels[NodeLabelPortworxVersion]
+		nodeVersion, err := version.NewVersion(v)
+		if err != nil {
+			logrus.Warnf("Failed to parse node version %s for node %s: %v", v, node.Id, err)
+			return false
+		}
+		if nodeVersion.LessThan(ParallelUpgradePDBVersion) {
+			return false
+		}
+	}
+	return true
 }
