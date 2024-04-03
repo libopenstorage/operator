@@ -1,6 +1,8 @@
 package main
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"flag"
 	"fmt"
@@ -14,6 +16,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"syscall"
 	"time"
 )
@@ -95,12 +98,25 @@ func main() {
 		pxNamespaceFlag string
 	)
 
+	// New resource-specific flags
+	var (
+		colectPVsFlag          bool
+		collectPVCsFlag        bool
+		collectLogsForPodsFlag bool
+		collectPXCentralFlag   bool
+	)
+
 	externalMode := false
 
 	// Initialize flags
 	flag.StringVar(&outputDirFlag, "output_dir", "/var/cores", "Output directory path. Specifies the directory where output files will be stored.")
 	flag.StringVar(&kubeConfigFlag, "kubeconfig", "", "Path to the kubeconfig file. Specifies the path to the kubeconfig file to use for connection to the Kubernetes cluster.")
 	flag.StringVar(&pxNamespaceFlag, "namespace", "portworx", "Portworx namespace. Specifies the Kubernetes namespace in which Portworx is running.")
+
+	flag.BoolVar(&collectPVCsFlag, "collect_pvcs", false, "Set to true to collect PVCs.")
+	flag.BoolVar(&colectPVsFlag, "collect_pvs", false, "Set to true to collect PVs.")
+	flag.BoolVar(&collectLogsForPodsFlag, "collect_logs_for_pods", true, "Set to true to collect logs for pods.")
+	flag.BoolVar(&collectPXCentralFlag, "collect_pxcentral", false, "Set to true to collect PX-Central/PX-Backup resources.")
 
 	// Custom usage function
 	flag.Usage = func() {
@@ -129,10 +145,20 @@ func main() {
 		if err != nil {
 			return
 		}
+		_, err = fmt.Fprintf(flag.CommandLine.Output(), "  %s --namespace portworx --kubeconfig /path/to/kubeconfig --output_dir /var/cores --collect_pxcentral=true\n", os.Args[0])
+		if err != nil {
+			return
+		}
+		// print the default values for the boolean flags
+		_, err = fmt.Fprintf(flag.CommandLine.Output(), "\nDefaults for boolean flags:\n --collect_pvcs=false\n --collect_pvs=false\n --collect_logs_for_pods=true\n --collect_pxcentral=false\n")
+		if err != nil {
+			return
+		}
 		_, err = fmt.Fprintf(flag.CommandLine.Output(), "\nPlease specify --namespace, --kubeconfig (if connecting outside the cluster), and --output_dir when running the tool.\n")
 		if err != nil {
 			return
 		}
+
 	}
 
 	if os.Getenv("KUBERNETES_SERVICE_HOST") == "" {
@@ -292,7 +318,7 @@ func main() {
 
 	for _, pod := range listOfPods {
 		k8sretriever.loggerToUse.Printf("Pod: %s\n", pod.Name)
-		err := k8sretriever.listPods(k8sretriever.pxNamespace, pod.Label)
+		err := k8sretriever.listPods(k8sretriever.pxNamespace, pod.Label, collectLogsForPodsFlag)
 		if err != nil {
 			k8sretriever.loggerToUse.Errorf("Error listing pods: %v", err)
 			return
@@ -329,16 +355,20 @@ func main() {
 		return
 	}
 
-	err = k8sretriever.listAllPVCs()
-	if err != nil {
-		k8sretriever.loggerToUse.Errorf("Error listing PVCs: %v", err)
-		return
+	if collectPVCsFlag {
+		err = k8sretriever.listAllPVCs()
+		if err != nil {
+			k8sretriever.loggerToUse.Errorf("Error listing PVCs: %v", err)
+			return
+		}
 	}
 
-	err = k8sretriever.listAllPVs()
-	if err != nil {
-		k8sretriever.loggerToUse.Errorf("Error listing PVs: %v", err)
-		return
+	if colectPVsFlag {
+		err = k8sretriever.listAllPVs()
+		if err != nil {
+			k8sretriever.loggerToUse.Errorf("Error listing PVs: %v", err)
+			return
+		}
 	}
 
 	err = k8sretriever.listKubernetesWorkerNodes()
@@ -416,10 +446,12 @@ func main() {
 		}
 	}
 
-	err = k8sretriever.retrievePXCentralResources("")
-	if err != nil {
-		k8sretriever.loggerToUse.Errorf("Error retrieving PX-Central/PX-Backup resources: %v", err)
-		return
+	if collectPXCentralFlag {
+		err = k8sretriever.retrievePXCentralResources("")
+		if err != nil {
+			k8sretriever.loggerToUse.Errorf("Error retrieving PX-Central/PX-Backup resources: %v", err)
+			return
+		}
 	}
 
 	err = k8sretriever.deleteEmptyDirs(k8sretriever.outputDir)
@@ -435,6 +467,23 @@ func main() {
 			return
 		}
 	}
+
+	// compress the directory logs into a tar.gz file
+	err = k8sretriever.compressDirectoryLogs(k8sretriever.outputDir)
+	if err != nil {
+		k8sretriever.loggerToUse.Errorf("Error compressing directory logs: %v", err)
+		return
+	}
+
+	// delete the directory and its contents
+	err = os.RemoveAll(k8sretriever.outputDir)
+	if err != nil {
+		k8sretriever.loggerToUse.Errorf("Error deleting directory: %v", err)
+		return
+
+	}
+
+	k8sretriever.loggerToUse.Infof("Kubernetes objects and Portworx volume information have been successfully retrieved and stored in %s", k8sretriever.outputDir+".tar.gz")
 
 }
 
@@ -471,7 +520,7 @@ func (k8s *k8sRetriever) retrievePXCentralResources(pxcentralns string) error {
 
 	for _, namespace := range existingNamespaces {
 
-		err := k8s.listPods(namespace, "")
+		err := k8s.listPods(namespace, "", true)
 		if err != nil {
 			k8s.loggerToUse.Errorf("Error listing pods: %v", err)
 			return err
@@ -520,6 +569,102 @@ func (k8s *k8sRetriever) retrievePXCentralResources(pxcentralns string) error {
 
 	// change back to the original path
 	k8s.outputDir = originalPath
+
+	return nil
+}
+
+// compressDirectoryLogs compresses the directory logs into a tar.gz file
+func (k8s *k8sRetriever) compressDirectoryLogs(directory string) (err error) {
+
+	tarFile, err := os.Create(directory + ".tar.gz")
+
+	if err != nil {
+		newError := fmt.Errorf("error creating tar file: %v", err)
+		return newError
+	}
+
+	defer func(tarFile *os.File) {
+		err := tarFile.Close()
+		if err != nil {
+			k8s.loggerToUse.Errorf("Failed to close file: %v", err)
+		}
+	}(tarFile)
+
+	gzipWriter := gzip.NewWriter(tarFile)
+	defer func(gzipWriter *gzip.Writer) {
+		err := gzipWriter.Close()
+		if err != nil {
+			k8s.loggerToUse.Errorf("Failed to close gzip writer: %v", err)
+		}
+	}(gzipWriter)
+
+	tarWriter := tar.NewWriter(gzipWriter)
+	defer func(tarWriter *tar.Writer) {
+		err := tarWriter.Close()
+		if err != nil {
+			k8s.loggerToUse.Errorf("Failed to close tar writer: %v", err)
+		}
+	}(tarWriter)
+
+	dir := k8s.outputDir
+	baseDir := filepath.Clean(dir) + string(filepath.Separator)
+
+	err = filepath.Walk(dir, func(file string, fileInfo os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip symbolic links
+		if fileInfo.Mode()&os.ModeSymlink != 0 {
+			k8s.loggerToUse.Infof("Skipping symbolic link: %s", file)
+			return nil
+		}
+
+		// Create a relative path for files to preserve the directory structure
+		relPath, err := filepath.Rel(baseDir, file)
+		if err != nil {
+			return err
+		}
+
+		header, err := tar.FileInfoHeader(fileInfo, "")
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
+
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
+
+		if !fileInfo.IsDir() {
+			fileToTar, err := os.Open(file)
+			if err != nil {
+				return err
+			}
+			defer func(fileToTar *os.File) {
+				err := fileToTar.Close()
+				if err != nil {
+					k8s.loggerToUse.Errorf("Failed to close file: %v", err)
+				}
+			}(fileToTar)
+
+			// Copy the file data into the tar archive
+			_, err = io.Copy(tarWriter, fileToTar)
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		k8s.loggerToUse.Errorf("Failed to compress directory logs: %v", err)
+		return fmt.Errorf("error walking the path %v: %w", dir, err)
+	}
+
+	if err != nil {
+		newError := fmt.Errorf("error walking the path: %v", err)
+		return newError
+	}
 
 	return nil
 }

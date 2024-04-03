@@ -23,16 +23,31 @@ The client retrieves the list of Deployments, Pods, and Services, and saves them
 This tool retrieves Kubernetes objects and Portworx volume information.
 
 Flags:
+  -collect_logs_for_pods
+    	Set to true to collect logs for pods. (default true)
+  -collect_pvcs
+    	Set to true to collect PVCs.
+  -collect_pvs
+    	Set to true to collect PVs.
+  -collect_pxcentral
+    	Set to true to collect PX-Central/PX-Backup resources.
   -kubeconfig string
     	Path to the kubeconfig file. Specifies the path to the kubeconfig file to use for connection to the Kubernetes cluster.
   -namespace string
     	Portworx namespace. Specifies the Kubernetes namespace in which Portworx is running. (default "portworx")
   -output_dir string
-    	Output directory path. Specifies the directory where output files will be stored. (default "/var/cores/px-k8s-retriever")
+    	Output directory path. Specifies the directory where output files will be stored. (default "/var/cores")
 
 Examples:
   ./retriever --namespace portworx --kubeconfig /path/to/kubeconfig --output_dir /var/cores
   ./retriever --namespace kube-system --output_dir /tmp
+  ./retriever --namespace portworx --kubeconfig /path/to/kubeconfig --output_dir /var/cores --collect_pxcentral=true
+
+Defaults for boolean flags:
+ --collect_pvcs=false
+ --collect_pvs=false
+ --collect_logs_for_pods=true
+ --collect_pxcentral=false
 
 Please specify --namespace, --kubeconfig (if connecting outside the cluster), and --output_dir when running the tool.
 ```
@@ -104,7 +119,7 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-          command: ["/bin/sh", "-c", "/retriever --output_dir $OUTPUT_PATH --namespace $PX_NAMESPACE"]
+          command: ["/bin/sh", "-c", "/retriever --output_dir $OUTPUT_PATH --namespace $PX_NAMESPACE --collect_pxcentral=true"]
           imagePullPolicy: Always
           securityContext:
             privileged: true

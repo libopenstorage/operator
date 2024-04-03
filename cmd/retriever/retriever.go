@@ -218,7 +218,8 @@ func (k8s *k8sRetriever) listDeployments(namespace string) error {
 }
 
 // listPods lists all pods in a namespace and writes them to a file in the output directory
-func (k8s *k8sRetriever) listPods(namespace string, labelSelector string) error {
+// if retrieveLogs is true, it will also retrieve the logs for each container in the pod
+func (k8s *k8sRetriever) listPods(namespace string, labelSelector string, retrieveLogs bool) error {
 
 	saveFilesPath := k8s.outputDir + "/px-pods"
 	err := os.MkdirAll(saveFilesPath, 0750)
@@ -273,38 +274,40 @@ func (k8s *k8sRetriever) listPods(namespace string, labelSelector string) error 
 			k8s.loggerToUse.Errorf("Error writing pod YAML to file: %s", err.Error())
 		}
 
-		// Fetch logs for each container within the pod
-		for _, container := range pod.Spec.Containers {
+		// Retrieve logs for each container in the pod if retrieveLogs is true
+		if retrieveLogs {
+			for _, container := range pod.Spec.Containers {
 
-			podLogOptions := &core.PodLogOptions{
-				Container: container.Name,
-			}
-			req := k8s.k8sClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, podLogOptions)
-			podLogs, err := req.Stream(k8s.context)
-			if err != nil {
-				k8s.loggerToUse.Errorf("Error in opening stream: %s", err.Error())
-				continue
-			}
+				podLogOptions := &core.PodLogOptions{
+					Container: container.Name,
+				}
+				req := k8s.k8sClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, podLogOptions)
+				podLogs, err := req.Stream(k8s.context)
+				if err != nil {
+					k8s.loggerToUse.Errorf("Error in opening stream: %s", err.Error())
+					continue
+				}
 
-			buf := new(bytes.Buffer)
-			_, err = io.Copy(buf, podLogs)
-			if err != nil {
-				k8s.loggerToUse.Errorf("Error in copy information from podLogs to buf: %s", err.Error())
-				continue
-			}
+				buf := new(bytes.Buffer)
+				_, err = io.Copy(buf, podLogs)
+				if err != nil {
+					k8s.loggerToUse.Errorf("Error in copy information from podLogs to buf: %s", err.Error())
+					continue
+				}
 
-			err = podLogs.Close()
-			if err != nil {
-				k8s.loggerToUse.Errorf("Error in closing stream: %s", err.Error())
-				continue
-			}
+				err = podLogs.Close()
+				if err != nil {
+					k8s.loggerToUse.Errorf("Error in closing stream: %s", err.Error())
+					continue
+				}
 
-			str := buf.String()
+				str := buf.String()
 
-			// Write logs to a separate file with .log extension
-			logFileName := fmt.Sprintf("%s-%s-%s", pod.Spec.NodeName, pod.Name, container.Name)
-			if err := k8s.writeToFile(logFileName, "logs", str, saveFilesPath, "log"); err != nil {
-				k8s.loggerToUse.Errorf("Error writing pod logs to file: %s", err.Error())
+				// Write logs to a separate file with .log extension
+				logFileName := fmt.Sprintf("%s-%s-%s", pod.Spec.NodeName, pod.Name, container.Name)
+				if err := k8s.writeToFile(logFileName, "logs", str, saveFilesPath, "log"); err != nil {
+					k8s.loggerToUse.Errorf("Error writing pod logs to file: %s", err.Error())
+				}
 			}
 		}
 	}
