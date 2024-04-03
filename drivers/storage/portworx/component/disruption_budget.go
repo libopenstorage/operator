@@ -32,11 +32,6 @@ const (
 	DefaultKVDBClusterSize = 3
 )
 
-var (
-	// ParallelUpgradePDBVersion is the portworx version from which parallel upgrades is supported
-	ParallelUpgradePDBVersion, _ = version.NewVersion("3.1.2")
-)
-
 type disruptionBudget struct {
 	k8sClient client.Client
 	sdkConn   *grpc.ClientConn
@@ -77,13 +72,17 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 		return err
 	}
 	// Create node PDB only if parallel upgrade is supported
-	clusterPXver := pxutil.GetPortworxVersion(cluster)
-	if clusterPXver.GreaterThanOrEqual(ParallelUpgradePDBVersion) {
-		if err := c.createPortworxNodePodDisruptionBudget(cluster, ownerRef); err != nil {
+	var err error
+	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.k8sClient, cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	if pxutil.ClusterSupportsParallelUpgrade(cluster, c.sdkConn, c.k8sClient) {
+		if err := c.createPortworxNodePodDisruptionBudget(cluster, ownerRef, c.sdkConn); err != nil {
 			return err
 		}
 	} else {
-		if err := c.createPortworxPodDisruptionBudget(cluster, ownerRef); err != nil {
+		if err := c.createPortworxPodDisruptionBudget(cluster, ownerRef, c.sdkConn); err != nil {
 			return err
 		}
 	}
@@ -114,6 +113,7 @@ func (c *disruptionBudget) MarkDeleted() {}
 func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
+	sdkConn *grpc.ClientConn,
 ) error {
 	userProvidedMinValue, err := pxutil.MinAvailableForStoragePDB(cluster)
 	if err != nil {
@@ -122,12 +122,8 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 	}
 
 	var minAvailable int
-	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.k8sClient, cluster.Namespace)
-	if err != nil {
-		return err
-	}
 
-	storageNodesCount, err := pxutil.CountStorageNodes(cluster, c.sdkConn, c.k8sClient)
+	storageNodesCount, err := pxutil.CountStorageNodes(cluster, sdkConn, c.k8sClient)
 	if err != nil {
 		c.closeSdkConn()
 		return err
@@ -174,14 +170,9 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 func (c *disruptionBudget) createPortworxNodePodDisruptionBudget(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
+	sdkConn *grpc.ClientConn,
 ) error {
-
-	var err error
-	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.k8sClient, cluster.Namespace)
-	if err != nil {
-		return err
-	}
-	nodesNeedingPDB, err := pxutil.NodesNeedingPDB(cluster, c.sdkConn, c.k8sClient)
+	nodesNeedingPDB, err := pxutil.NodesNeedingPDB(cluster, sdkConn, c.k8sClient)
 	if err != nil {
 		return err
 	}
