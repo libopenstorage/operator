@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -12,6 +13,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -49,6 +51,12 @@ const (
 	AksPVCControllerInsecurePort = "10260"
 	// AksPVCControllerSecurePort is the PVC controller secure port.
 	AksPVCControllerSecurePort = "10261"
+
+	// K3sPVCControllerInsecurePort is the PVC controller port and health check port, due to the default port
+	// is already used on K3S we use different port for K3S.
+	K3sPVCControllerInsecurePort = "10260"
+	// K3SPVCControllerSecurePort is the PVC controller secure port.
+	K3sPVCControllerSecurePort = "10261"
 )
 
 var (
@@ -66,6 +74,7 @@ type pvcController struct {
 	isCreated  bool
 	k8sClient  client.Client
 	k8sVersion version.Version
+	isK3s      *bool
 }
 
 func (c *pvcController) Name() string {
@@ -333,6 +342,8 @@ func (c *pvcController) createDeployment(
 			command = append(command, "--port="+port)
 		} else if pxutil.IsAKS(cluster) {
 			command = append(command, "--port="+AksPVCControllerInsecurePort)
+		} else if c.isK3sDeployment() {
+			command = append(command, "--port="+K3sPVCControllerInsecurePort)
 		}
 	}
 
@@ -340,6 +351,8 @@ func (c *pvcController) createDeployment(
 		command = append(command, "--secure-port="+securePort)
 	} else if pxutil.IsAKS(cluster) {
 		command = append(command, "--secure-port="+AksPVCControllerSecurePort)
+	} else if c.isK3sDeployment() {
+		command = append(command, "--secure-port="+K3sPVCControllerSecurePort)
 	}
 
 	if min, err := pxutil.GetTLSMinVersion(cluster); err != nil {
@@ -422,6 +435,8 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 			healthCheckPort = port
 		} else if pxutil.IsAKS(cluster) {
 			healthCheckPort = AksPVCControllerSecurePort
+		} else if c.isK3sDeployment() {
+			healthCheckPort = K3sPVCControllerSecurePort
 		} else {
 			healthCheckPort = defaultPVCControllerSecurePort
 		}
@@ -430,6 +445,8 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 		healthCheckPort = port
 	} else if pxutil.IsAKS(cluster) {
 		healthCheckPort = AksPVCControllerInsecurePort
+	} else if c.isK3sDeployment() {
+		healthCheckPort = K3sPVCControllerInsecurePort
 	}
 
 	deployment := &appsv1.Deployment{
@@ -549,6 +566,31 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	return deployment
+}
+
+func (c *pvcController) isK3sDeployment() bool {
+
+	if c.isK3s != nil {
+		return *c.isK3s
+	} else {
+		// Fetch the list of nodes
+		nodes, err := coreops.Instance().GetNodes()
+		if err != nil {
+			logrus.Errorf("error during fetching nodes %s", err)
+			return false
+		}
+
+		// Iterate over nodes and check their versions for "k3s"
+		for _, node := range nodes.Items {
+			if strings.Contains(node.Status.NodeInfo.KubeletVersion, "k3s") {
+				c.isK3s = boolPtr(true)
+				return true
+			}
+		}
+		c.isK3s = boolPtr(false)
+	}
+
+	return false
 }
 
 // RegisterPVCControllerComponent registers the PVC Controller component

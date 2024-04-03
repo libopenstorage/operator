@@ -2054,6 +2054,51 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, pvcControllerDeployment)
 }
 
+func TestPVCControllerInstallForK3s(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Status: v1.NodeStatus{NodeInfo: v1.NodeSystemInfo{KubeletVersion: "v1.27.5+k3s1"}}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}, Status: v1.NodeStatus{NodeInfo: v1.NodeSystemInfo{KubeletVersion: "v1.26.5+k3s1"}}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}, Status: v1.NodeStatus{NodeInfo: v1.NodeSystemInfo{KubeletVersion: "v1.27.5+k3s1"}}},
+	}}
+
+	k8sClient := testutil.FakeK8sClient(fakeK8sNodes)
+
+	versionClient := fakek8sclient.NewSimpleClientset(fakeK8sNodes)
+	coreops.SetInstance(coreops.New(versionClient))
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
+
+	specFileName := "pvcControllerDeployment.yaml"
+	pvcControllerDeployment := testutil.GetExpectedDeployment(t, specFileName)
+	command := pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command
+	command = append(command, "--port="+component.K3sPVCControllerInsecurePort)
+	command = append(command, "--secure-port="+component.K3sPVCControllerSecurePort)
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command = command
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Port = intstr.Parse(component.K3sPVCControllerInsecurePort)
+
+	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, pvcControllerDeployment)
+}
+
 func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
@@ -2152,6 +2197,9 @@ func verifyPVCControllerInstall(
 	serviceAccountList := &v1.ServiceAccountList{}
 	err := testutil.List(k8sClient, serviceAccountList)
 	require.NoError(t, err)
+	fmt.Println(serviceAccountList.Items[0].Name)
+	// fmt.Println(serviceAccountList.Items[1].Name)
+
 	require.Len(t, serviceAccountList.Items, 2)
 
 	sa := &v1.ServiceAccount{}
