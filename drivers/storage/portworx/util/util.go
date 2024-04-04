@@ -328,7 +328,7 @@ var (
 	// flag in the node object of the PX SDK response.
 	MinimumPxVersionQuorumFlag, _ = version.NewVersion("3.1.0")
 
-	//MinimumPxVersionClusterDomain is a minimal PX version that exposes cluster domain field in enumerate nodes response
+	// MinimumPxVersionClusterDomain is a minimal PX version that exposes cluster domain field in enumerate nodes response
 	MinimumPxVersionClusterDomain, _ = version.NewVersion("3.1.1")
 
 	// ConfigMapNameRegex regex of configMap.
@@ -1901,4 +1901,8 @@ func isVersionSupported(current, target string) bool {
 	}
 
 	return currentVersion.Core().GreaterThanOrEqual(targetVersion)
+}
+
+func IsK3sClusterExt(ext string) bool {
+	return strings.HasPrefix(ext[1:], "k3s") || strings.HasPrefix(ext[1:], "rke2")
 }

@@ -1950,7 +1950,7 @@ func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
 
 func isK3sClusterExt(ext string) bool {
 	if len(ext) > 0 {
-		return strings.HasPrefix(ext[1:], "k3s") || strings.HasPrefix(ext[1:], "rke2")
+		return pxutil.IsK3sClusterExt(ext)
 	}
 	return false
 }
