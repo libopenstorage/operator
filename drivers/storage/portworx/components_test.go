@@ -1865,10 +1865,10 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 	specFileName := "pvcControllerDeployment.yaml"
 	pvcControllerDeployment := testutil.GetExpectedDeployment(t, specFileName)
 	command := pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command
-	command = append(command, "--port="+component.AksPVCControllerInsecurePort)
-	command = append(command, "--secure-port="+component.AksPVCControllerSecurePort)
+	command = append(command, "--port="+component.CustomPVCControllerInsecurePort)
+	command = append(command, "--secure-port="+component.CustomPVCControllerSecurePort)
 	pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command = command
-	pvcControllerDeployment.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Port = intstr.Parse(component.AksPVCControllerInsecurePort)
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Port = intstr.Parse(component.CustomPVCControllerInsecurePort)
 
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, pvcControllerDeployment)
 
@@ -1886,15 +1886,12 @@ func TestPVCControllerInstallForK3s(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 
-	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
-		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}, Status: v1.NodeStatus{NodeInfo: v1.NodeSystemInfo{KubeletVersion: "v1.27.5+k3s1"}}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}, Status: v1.NodeStatus{NodeInfo: v1.NodeSystemInfo{KubeletVersion: "v1.26.5+k3s1"}}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}, Status: v1.NodeStatus{NodeInfo: v1.NodeSystemInfo{KubeletVersion: "v1.27.5+k3s1"}}},
-	}}
+	k8sClient := testutil.FakeK8sClient()
 
-	k8sClient := testutil.FakeK8sClient(fakeK8sNodes)
-
-	versionClient := fakek8sclient.NewSimpleClientset(fakeK8sNodes)
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.18.0+k3s1",
+	}
 	coreops.SetInstance(coreops.New(versionClient))
 
 	driver := portworx{}
@@ -1919,10 +1916,11 @@ func TestPVCControllerInstallForK3s(t *testing.T) {
 	specFileName := "pvcControllerDeployment.yaml"
 	pvcControllerDeployment := testutil.GetExpectedDeployment(t, specFileName)
 	command := pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command
-	command = append(command, "--port="+component.K3sPVCControllerInsecurePort)
-	command = append(command, "--secure-port="+component.K3sPVCControllerSecurePort)
+	command = append(command, "--port="+component.CustomPVCControllerInsecurePort)
+	command = append(command, "--secure-port="+component.CustomPVCControllerSecurePort)
 	pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command = command
-	pvcControllerDeployment.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Port = intstr.Parse(component.K3sPVCControllerInsecurePort)
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].Image = "gcr.io/google_containers/kube-controller-manager-amd64:v1.18.0"
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Port = intstr.Parse(component.CustomPVCControllerInsecurePort)
 
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, pvcControllerDeployment)
 }
