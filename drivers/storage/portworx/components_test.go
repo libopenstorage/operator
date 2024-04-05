@@ -13339,6 +13339,115 @@ func TestSCC(t *testing.T) {
 	require.Equal(t, *scc.Priority, int32(2))
 }
 
+func TestSCCOnOpenshift(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.15",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+		},
+	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// Install with no SCC
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedSCC := testutil.GetExpectedSCC(t, "portworxSCC_Openshift.yaml")
+	scc := &ocp_secv1.SecurityContextConstraints{}
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NotNil(t, err)
+
+	expectedPxRestrictedSCC := testutil.GetExpectedSCC(t, "portworxRestrictedSCC.yaml")
+	pxRestrictedSCC := &ocp_secv1.SecurityContextConstraints{}
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NotNil(t, err)
+
+	// Install with SCC enabled
+	crd := testutil.GetExpectedCRDV1(t, "sccCrd.yaml")
+	err = k8sClient.Create(context.TODO(), crd)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSCC, scc)
+
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSCC, scc)
+
+	// Update SCC
+	scc.AllowHostNetwork = false
+	err = k8sClient.Update(context.TODO(), scc)
+	require.NoError(t, err)
+
+	pxRestrictedSCC.AllowHostNetwork = true
+	err = k8sClient.Update(context.TODO(), pxRestrictedSCC)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NoError(t, err)
+
+	// Update SCC priority
+	cluster.Annotations[pxutil.AnnotationSCCPriority] = "2"
+	err = k8sClient.Update(context.TODO(), scc)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, *scc.Priority, int32(2))
+}
+
 func TestPodSecurityPoliciesEnabled(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
