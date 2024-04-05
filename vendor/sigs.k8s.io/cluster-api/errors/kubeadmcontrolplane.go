@@ -16,17 +16,16 @@ limitations under the License.
 
 package errors
 
-// MachineStatusErrorPtr converts a MachineStatusError to a pointer.
-func MachineStatusErrorPtr(v MachineStatusError) *MachineStatusError {
-	return &v
+// KubeadmControlPlaneError is a more descriptive kind of error that represents an error condition that
+// should be set in the KubeadmControlPlane.Status. The "Reason" field is meant for short,
+// enum-style constants meant to be interpreted by control planes. The "Message"
+// field is meant to be read by humans.
+type KubeadmControlPlaneError struct {
+	Reason  KubeadmControlPlaneStatusError
+	Message string
 }
 
-// MachinePoolStatusErrorPtr converts a MachinePoolStatusError to a pointer.
-func MachinePoolStatusErrorPtr(v MachinePoolStatusFailure) *MachinePoolStatusFailure {
-	return &v
-}
-
-// ClusterStatusErrorPtr converts a MachineStatusError to a pointer.
-func ClusterStatusErrorPtr(v ClusterStatusError) *ClusterStatusError {
-	return &v
+// Error satisfies the error interface.
+func (e *KubeadmControlPlaneError) Error() string {
+	return e.Message
 }
