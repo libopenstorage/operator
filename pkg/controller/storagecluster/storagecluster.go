@@ -1409,7 +1409,7 @@ func (c *Controller) CreatePodTemplate(
 	}
 
 	if pxutil.IsOpenshift(cluster) {
-		newTemplate.Annotations[constants.AnnotationOpenshiftRequiredSCC] = component.PxSCCName
+		newTemplate.Annotations[component.OpenshiftRequiredSCCAnnotation] = component.PxSCCName
 	}
 
 	if len(node.Labels) > 0 {

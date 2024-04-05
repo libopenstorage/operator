@@ -65,3 +65,6 @@ rules:
 - apiGroups: ["kubevirt.io"]
   resources: ["virtualmachineinstancemigrations"]
   verbs: ["get", "list", "create", "watch", "delete", "update"]
+- apiGroups: [ "" ]
+  resources: [ "namespaces" ]
+  verbs: [ "get", "list" ]
