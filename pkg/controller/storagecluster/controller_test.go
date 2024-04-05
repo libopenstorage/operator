@@ -39,7 +39,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	k8scontroller "k8s.io/kubernetes/pkg/controller"
-	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+	cluster_v1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -9071,7 +9071,7 @@ func TestNodeShouldRunStoragePod(t *testing.T) {
 	cluster := createStorageCluster()
 
 	now := metav1.Now()
-	m2 := &cluster_v1alpha1.Machine{
+	m2 := &cluster_v1beta1.Machine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "m2",
 			Namespace:         "default",

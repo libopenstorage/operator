@@ -24,7 +24,7 @@ import (
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+	cluster_v1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -845,7 +845,7 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 		},
 	}
 
-	machine := &cluster_v1alpha1.Machine{
+	machine := &cluster_v1beta1.Machine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "machine",
 			Namespace: "default",
