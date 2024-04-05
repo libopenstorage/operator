@@ -1,11 +1,13 @@
 package component
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
 
 	"github.com/hashicorp/go-version"
+	"github.com/libopenstorage/openstorage/api"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	policyv1 "k8s.io/api/policy/v1"
@@ -83,12 +85,27 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 	if err != nil {
 		return err
 	}
-	if pxutil.ClusterSupportsParallelUpgrade(cluster, c.sdkConn, c.k8sClient) {
-		if err := c.createPortworxNodePodDisruptionBudget(cluster, ownerRef, c.sdkConn); err != nil {
+
+	// Get list of portworx storage nodes
+	nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, c.k8sClient)
+	if err != nil {
+		return err
+	}
+	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
+		ctx,
+		&api.SdkNodeEnumerateWithFiltersRequest{},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to enumerate nodes: %v", err)
+	}
+
+	if pxutil.ClusterSupportsParallelUpgrade(nodeEnumerateResponse) {
+		if err := c.createPortworxNodePodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse); err != nil {
 			return err
 		}
 	} else {
-		if err := c.createPortworxPodDisruptionBudget(cluster, ownerRef, c.sdkConn); err != nil {
+		if err := c.createPortworxPodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse); err != nil {
 			return err
 		}
 	}
@@ -119,7 +136,7 @@ func (c *disruptionBudget) MarkDeleted() {}
 func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
-	sdkConn *grpc.ClientConn,
+	nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse,
 ) error {
 	userProvidedMinValue, err := pxutil.MinAvailableForStoragePDB(cluster)
 	if err != nil {
@@ -129,7 +146,7 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 
 	var minAvailable int
 
-	storageNodesCount, err := pxutil.CountStorageNodes(cluster, sdkConn, c.k8sClient)
+	storageNodesCount, err := pxutil.CountStorageNodes(cluster, c.sdkConn, c.k8sClient, nodeEnumerateResponse)
 	if err != nil {
 		c.closeSdkConn()
 		return err
@@ -191,15 +208,15 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 func (c *disruptionBudget) createPortworxNodePodDisruptionBudget(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
-	sdkConn *grpc.ClientConn,
+	nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse,
 ) error {
-	nodesNeedingPDB, err := pxutil.NodesNeedingPDB(cluster, sdkConn, c.k8sClient)
+	nodesNeedingPDB, err := pxutil.NodesNeedingPDB(c.k8sClient, nodeEnumerateResponse)
 	if err != nil {
 		return err
 	}
 	for _, node := range nodesNeedingPDB {
 		minAvailable := intstr.FromInt(1)
-		PDBName := "px-storage-" + node
+		PDBName := "px-" + node
 		pdb := &policyv1.PodDisruptionBudget{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            PDBName,
@@ -217,6 +234,10 @@ func (c *disruptionBudget) createPortworxNodePodDisruptionBudget(
 			},
 		}
 		err = k8sutil.CreateOrUpdatePodDisruptionBudget(c.k8sClient, pdb, ownerRef)
+		if err != nil {
+			logrus.Warnf("Failed to create PDB for node %s: %v", node, err)
+			break
+		}
 	}
 	return err
 
@@ -230,7 +251,6 @@ func (c *disruptionBudget) createKVDBPodDisruptionBudget(
 	if cluster.Spec.Kvdb != nil && !cluster.Spec.Kvdb.Internal {
 		return nil
 	}
-
 	clusterSize := kvdbClusterSize(cluster)
 	minAvailable := intstr.FromInt(clusterSize - 1)
 	pdb := &policyv1.PodDisruptionBudget{

@@ -13426,12 +13426,14 @@ func TestNodePodDisruptionBudget(t *testing.T) {
 	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
 	defer testutil.RestoreEtcHosts(t)
 
-	// PDB should not be created for non quorum members
+	// PDB should not be created for non quorum members, nodes not part of current cluster and nodes in decommissioned state
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
 			{SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
 			{SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
 			{NonQuorumMember: true, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+			{SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+			{NonQuorumMember: false, Status: osdapi.Status_STATUS_DECOMMISSION},
 		},
 	}
 	mockNodeServer.EXPECT().
@@ -13454,6 +13456,7 @@ func TestNodePodDisruptionBudget(t *testing.T) {
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
 		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
 	},
 	}
 
@@ -13490,14 +13493,15 @@ func TestNodePodDisruptionBudget(t *testing.T) {
 	require.Len(t, pdbList.Items, 3)
 
 	storagePDB := &policyv1.PodDisruptionBudget{}
-	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName+"-node1", cluster.Namespace)
+	err = testutil.Get(k8sClient, storagePDB, "px-node1", cluster.Namespace)
 	require.NoError(t, err)
 	require.Equal(t, 1, storagePDB.Spec.MinAvailable.IntValue())
 	require.Equal(t, "node1", storagePDB.Spec.Selector.MatchLabels[constants.OperatorLabelNodeNameKey])
 
-	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName+"-node3", cluster.Namespace)
-	fmt.Println(err)
-	require.Error(t, err, fmt.Errorf("poddisruptionbudgets.policy %s-node3 not found", component.StoragePodDisruptionBudgetName))
+	err = testutil.Get(k8sClient, storagePDB, "px-node3", cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, storagePDB, "px-node4", cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
 
 	// Testcase : PDB per node should not be created for any node even if 1 node is lesser than 3.1.2
 	// Use cluster wide PDB in this case
