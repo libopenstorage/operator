@@ -120,6 +120,9 @@ const (
 
 	pxAnnotationPrefix = "portworx.io"
 
+	// PvcControllerAnnotation annotation indicating whether to deploy a PVC controller
+	PvcControllerAnnotation = pxAnnotationPrefix + "/pvc-controller"
+
 	// TelemetryCertName is name of the telemetry cert.
 	TelemetryCertName = "pure-telemetry-certs"
 
@@ -193,27 +196,28 @@ const (
 var TestSpecPath = "testspec"
 
 var (
-	opVer1_5_0, _                     = version.NewVersion("1.5.0-")
-	opVer1_9_1, _                     = version.NewVersion("1.9.1-")
-	opVer1_10, _                      = version.NewVersion("1.10.0-")
-	opVer23_3, _                      = version.NewVersion("23.3.0-")
-	opVer23_8, _                      = version.NewVersion("23.8.0-")
-	opVer23_5, _                      = version.NewVersion("23.5.0-")
-	opVer23_5_1, _                    = version.NewVersion("23.5.1-")
-	opVer23_7, _                      = version.NewVersion("23.7.0-")
+	opVer1_5_0, _   = version.NewVersion("1.5.0-")
+	opVer1_9_1, _   = version.NewVersion("1.9.1-")
+	opVer1_10, _    = version.NewVersion("1.10.0-")
+	opVer23_3, _    = version.NewVersion("23.3.0-")
+	opVer23_5, _    = version.NewVersion("23.5.0-")
+	opVer23_5_1, _  = version.NewVersion("23.5.1-")
+	opVer23_7, _    = version.NewVersion("23.7.0-")
+	opVer23_8, _    = version.NewVersion("23.8.0-")
+	OpVer23_10_3, _ = version.NewVersion("23.10.3-")
+	opVer24_1_0, _  = version.NewVersion("24.1.0-")
+
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
-	OpVer23_10_3, _                   = version.NewVersion("23.10.3-")
+	minimumCcmGoVersionCO, _          = version.NewVersion("1.2.3")
+	minimumPxVersionCO, _             = version.NewVersion("3.2")
 
-	minimumPxVersionCO, _    = version.NewVersion("3.2")
-	minimumCcmGoVersionCO, _ = version.NewVersion("1.2.3")
-
-	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
-	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
 	// PodDisruptionBudget is only supported in starting with k8s v1.21.0+
 	minSupportedK8sVersionForPdb, _ = version.NewVersion("1.21.0")
+	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
+	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
 
-	pxVer3_0, _  = version.NewVersion("3.0")
 	pxVer2_13, _ = version.NewVersion("2.13")
+	pxVer3_0, _  = version.NewVersion("3.0")
 
 	// minimumPxVersionCCMJAVA minimum PX version to install ccm-java
 	minimumPxVersionCCMJAVA, _ = version.NewVersion("2.8")
@@ -2022,8 +2026,14 @@ func ValidatePvcController(pxImageList map[string]string, cluster *corev1.Storag
 		},
 	}
 
+	// Get PX Operator version
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get PX Operator version, Err: %v", err)
+	}
+
 	// Check if PVC Controller is enabled or disabled
-	if isPVCControllerEnabled(cluster) {
+	if isPVCControllerEnabled(cluster, opVersion) {
 		return ValidatePvcControllerEnabled(pvcControllerDp, cluster, timeout, interval)
 	}
 	return ValidatePvcControllerDisabled(pvcControllerDp, timeout, interval)
@@ -5253,22 +5263,31 @@ func validatePodTopologySpreadConstraints(deployment *appsv1.Deployment, timeout
 	return nil
 }
 
-func isPVCControllerEnabled(cluster *corev1.StorageCluster) bool {
-	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/pvc-controller"])
+// isPVCControllerEnabled return if PVC controller should or should not be enabled in the cluster
+func isPVCControllerEnabled(cluster *corev1.StorageCluster, opVersion *version.Version) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[PvcControllerAnnotation])
 	if err == nil {
+		logrus.Debugf("PVC Controller is explicitly set via annotation [%s: %v]", PvcControllerAnnotation, enabled)
 		return enabled
 	}
 
-	// If portworx is disabled, then do not run pvc controller unless explicitly told to.
+	// If portworx is disabled, then do not run pvc controller unless explicitly told to
 	if !isPortworxEnabled(cluster) {
+		logrus.Debug("PVC Controller is disabled since PX is not enabled")
 		return false
 	}
 
-	// Enable PVC controller for managed kubernetes services. Also enable it for openshift,
-	// only if Portworx service is not deployed in kube-system namespace.
-	if isPKS(cluster) || isEKS(cluster) ||
-		isGKE(cluster) || isAKS(cluster) ||
-		isOKE(cluster) || cluster.Namespace != "kube-system" {
+	// Enable PVC controller for managed kubernetes services.
+	// Also enable it, if Portworx service is not deployed in kube-system namespace
+	if isOpenshift(cluster) && opVersion.GreaterThanOrEqual(opVer24_1_0) {
+		logrus.Debugf("PVC Controller is disabled for OCP clusters starting from PX Operator [24.1.0+], current PX Operator version [%s]", opVersion.String())
+		return false
+	} else if isPKS(cluster) || isEKS(cluster) ||
+		isGKE(cluster) || isAKS(cluster) || isOKE(cluster) {
+		logrus.Debugf("PVC Controller is enabled for Managed Kubernetes Serivces")
+		return true
+	} else if cluster.Namespace != "kube-system" {
+		logrus.Debugf("PVC Controller is enabled since PX is deployed outside of [kube-system] in [%s] namespace", cluster.Namespace)
 		return true
 	}
 	return false
