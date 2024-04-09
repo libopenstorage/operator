@@ -5257,6 +5257,9 @@ func TestGuestAccessSecurity(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+
 	k8sClient := testutil.FakeK8sClient(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pxutil.PortworxServiceName,
@@ -12381,6 +12384,9 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
 	require.NoError(t, err)
 	defer mockSdk.Stop()
+
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
 
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
