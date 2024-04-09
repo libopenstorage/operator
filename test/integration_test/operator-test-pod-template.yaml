@@ -73,6 +73,14 @@ spec:
     - -log-level=LOG_LEVEL
     - -test.run=FOCUS_TESTS
     - -px-namespace=PX_NAMESPACE
+    - -enable-dash=ENABLE_DASH
+    - -testset-id=TESTSET_ID
+    - -user=USER
+    - -product=PRODUCT
+    - -branch=TEST_BRANCH
+    - -test-type=TEST_TYPE
+    - -test-tags=TEST_TAG
+    - -test-desc=TEST_DESCRIPTION
     imagePullPolicy: Always
     image: openstorage/px-operator-test:latest
     securityContext:
