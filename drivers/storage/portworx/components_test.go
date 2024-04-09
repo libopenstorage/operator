@@ -12650,6 +12650,9 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+
 	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
 		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
