@@ -13,6 +13,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -214,6 +215,7 @@ func (c *disruptionBudget) createPortworxNodePodDisruptionBudget(
 	if err != nil {
 		return err
 	}
+	errors := []error{}
 	for _, node := range nodesNeedingPDB {
 		minAvailable := intstr.FromInt(1)
 		PDBName := "px-" + node
@@ -236,10 +238,10 @@ func (c *disruptionBudget) createPortworxNodePodDisruptionBudget(
 		err = k8sutil.CreateOrUpdatePodDisruptionBudget(c.k8sClient, pdb, ownerRef)
 		if err != nil {
 			logrus.Warnf("Failed to create PDB for node %s: %v", node, err)
-			break
+			errors = append(errors, err)
 		}
 	}
-	return err
+	return utilerrors.NewAggregate(errors)
 
 }
 
