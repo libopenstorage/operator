@@ -38,8 +38,14 @@ func DeployAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
 	// Parsing PX Operator tag version
 	opRegistryTag := parsePxOperatorImageTagForMarketplace(operatorVersion)
 
+	// Use explicit registry, if passed in the parameters, otherwise use default one
+	opRegistryImageName := defaultOperatorRegistryImageName
+	if PxOperatorRegistryImageName != "" {
+		opRegistryImageName = PxOperatorRegistryImageName
+	}
+
 	// Deploy CatalogSource
-	opRegistryImage := fmt.Sprintf("%s:%s", defaultOperatorRegistryImageName, opRegistryTag)
+	opRegistryImage := fmt.Sprintf("%s:%s", opRegistryImageName, opRegistryTag)
 	testCatalogSource, err := DeployCatalogSource(defaultCatalogSourceName, defaultCatalogSourceNamespace, opRegistryImage)
 	if err != nil {
 		return err
@@ -76,9 +82,15 @@ func UpdateAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
 	// Parsing PX Operator tag version
 	opRegistryTag := parsePxOperatorImageTagForMarketplace(operatorVersion)
 
+	// Use explicit registry, if passed in the parameters, otherwise use default one
+	opRegistryImageName := defaultOperatorRegistryImageName
+	if PxOperatorRegistryImageName != "" {
+		opRegistryImageName = PxOperatorRegistryImageName
+	}
+
 	// Edit CatalogSource with the new PX Operator version
 	updateParamFunc := func(testCatalogSource *v1alpha1.CatalogSource) *v1alpha1.CatalogSource {
-		testCatalogSource.Spec.Image = fmt.Sprintf("%s:%s", defaultOperatorRegistryImageName, opRegistryTag)
+		testCatalogSource.Spec.Image = fmt.Sprintf("%s:%s", opRegistryImageName, opRegistryTag)
 		return testCatalogSource
 	}
 

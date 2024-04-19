@@ -27,35 +27,36 @@ import (
 )
 
 const (
-	logLevelFlag            = "log-level"
-	vSphereUsernameFlag     = "portworx-vsphere-username"
-	vSpherePasswordFlag     = "portworx-vsphere-password"
-	dockerUsernameFlag      = "portworx-docker-username"
-	dockerPasswordFlag      = "portworx-docker-password"
-	isOKEFlag               = "is-oke"
-	isGKEFlag               = "is-gke"
-	isAKSFlag               = "is-aks"
-	isEKSFlag               = "is-eks"
-	isOCPFlag               = "is-ocp"
-	pxKVDBSpecFlag          = "portworx-kvdb-spec"
-	pxDeviceSpecsFlag       = "portworx-device-specs"
-	pxUpgradeHopsURLsFlag   = "px-upgrade-hops-url-list"
-	operatorUpgradeHopsFlag = "operator-upgrade-hops-image-list"
-	pxOperatorTagFlag       = "operator-image-tag"
-	cloudProviderFlag       = "cloud-provider"
-	pxEnvVarsFlag           = "portworx-env-vars"
-	pxCustomAnnotationsFlag = "portworx-custom-annotations"
-	pxImageOverrideFlag     = "portworx-image-override"
-	pxSpecGenURLFlag        = "portworx-spec-gen-url"
-	pxNamespaceFlag         = "px-namespace"
-	enableDashBoardFlag     = "enable-dash"
-	userFlag                = "user"
-	testTypeFlag            = "test-type"
-	testDescriptionFlag     = "test-desc"
-	testTagsFlag            = "test-tags"
-	testSetIDFlag           = "testset-id"
-	testBranchFlag          = "branch"
-	testProductFlag         = "product"
+	logLevelFlag                    = "log-level"
+	vSphereUsernameFlag             = "portworx-vsphere-username"
+	vSpherePasswordFlag             = "portworx-vsphere-password"
+	dockerUsernameFlag              = "portworx-docker-username"
+	dockerPasswordFlag              = "portworx-docker-password"
+	isOKEFlag                       = "is-oke"
+	isGKEFlag                       = "is-gke"
+	isAKSFlag                       = "is-aks"
+	isEKSFlag                       = "is-eks"
+	isOCPFlag                       = "is-ocp"
+	pxKVDBSpecFlag                  = "portworx-kvdb-spec"
+	pxDeviceSpecsFlag               = "portworx-device-specs"
+	pxUpgradeHopsURLsFlag           = "px-upgrade-hops-url-list"
+	operatorUpgradeHopsFlag         = "operator-upgrade-hops-image-list"
+	pxOperatorTagFlag               = "operator-image-tag"
+	pxOperatorRegistryImageNameFlag = "operator-registry-image-name"
+	cloudProviderFlag               = "cloud-provider"
+	pxEnvVarsFlag                   = "portworx-env-vars"
+	pxCustomAnnotationsFlag         = "portworx-custom-annotations"
+	pxImageOverrideFlag             = "portworx-image-override"
+	pxSpecGenURLFlag                = "portworx-spec-gen-url"
+	pxNamespaceFlag                 = "px-namespace"
+	enableDashBoardFlag             = "enable-dash"
+	userFlag                        = "user"
+	testTypeFlag                    = "test-type"
+	testDescriptionFlag             = "test-desc"
+	testTagsFlag                    = "test-tags"
+	testSetIDFlag                   = "testset-id"
+	testBranchFlag                  = "branch"
+	testProductFlag                 = "product"
 )
 
 var dash *aetosutil.Dashboard
@@ -115,6 +116,10 @@ func setup() error {
 		pxOperatorTagFlag,
 		"",
 		"Operator tag that is needed for deploying PX Operator via Openshift MarketPlace")
+	flag.StringVar(&ci_utils.PxOperatorRegistryImageName,
+		pxOperatorRegistryImageNameFlag,
+		"",
+		"Portworx Operator Registry Image that is needed for deploying PX Operator via Openshift MarketPlace")
 	flag.StringVar(&operatorUpgradeHopsImages,
 		operatorUpgradeHopsFlag,
 		"",
