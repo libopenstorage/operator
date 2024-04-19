@@ -105,7 +105,9 @@ func OverridePDBUsingValidAnnotation(tc *types.TestCase) func(*testing.T) {
 		k8snodecount = k8snodecount - 1
 
 		// Override PDB value with (number of k8s nodes -2) to check if allowed disruptions is 2
-		cluster.Annotations = make(map[string]string)
+		if cluster.Annotations == nil {
+			cluster.Annotations = make(map[string]string)
+		}
 		logrus.Infof("Validating PDB using minAvailable value: %d", k8snodecount-2)
 		cluster.Annotations["portworx.io/storage-pdb-min-available"] = fmt.Sprintf("%d", k8snodecount-2)
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
