@@ -37,7 +37,7 @@ var testStorageClusterPDBCases = []types.TestCase{
 				return true
 			}
 			k8sVersion, _ := version.NewVersion(kbVer)
-			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_5_0) && k8sVersion.LessThan(minSupportedK8sVersionForPdb)
+			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_5_0) || k8sVersion.LessThan(minSupportedK8sVersionForPdb)
 		},
 		TestFunc: StoragelessNodePDB,
 	},
@@ -54,7 +54,7 @@ var testStorageClusterPDBCases = []types.TestCase{
 				return true
 			}
 			k8sVersion, _ := version.NewVersion(kbVer)
-			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer23_10_2) && k8sVersion.LessThan(minSupportedK8sVersionForPdb)
+			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer23_10_2) || k8sVersion.LessThan(minSupportedK8sVersionForPdb)
 		},
 		TestFunc: OverridePDBUsingValidAnnotation,
 	},
@@ -72,7 +72,7 @@ var testStorageClusterPDBCases = []types.TestCase{
 				return true
 			}
 			k8sVersion, _ := version.NewVersion(kbVer)
-			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer24_1_0) && k8sVersion.LessThan(minSupportedK8sVersionForPdb)
+			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer24_1_0) || k8sVersion.LessThan(minSupportedK8sVersionForPdb)
 		},
 		TestFunc: OverridePDBUsingInvalidAnnotation,
 	},
@@ -101,8 +101,8 @@ func OverridePDBUsingValidAnnotation(tc *types.TestCase) func(*testing.T) {
 
 		k8snodecount, err := ci_utils.GetK8sNodeCount()
 		require.NoError(t, err)
-		// Assuming 1 node is dedicated control plane node
-		k8snodecount = k8snodecount - 1
+		// Assuming 3 nodes are dedicated control plane nodes
+		k8snodecount = k8snodecount - 3
 
 		// Override PDB value with (number of k8s nodes -2) to check if allowed disruptions is 2
 		if cluster.Annotations == nil {
@@ -124,11 +124,13 @@ func OverridePDBUsingInvalidAnnotation(tc *types.TestCase) func(*testing.T) {
 
 		k8snodecount, err := ci_utils.GetK8sNodeCount()
 		require.NoError(t, err)
-		// Assuming 1 node is dedicated control plane node
-		k8snodecount = k8snodecount - 1
+		// Assuming 3 nodes are dedicated control plane nodes
+		k8snodecount = k8snodecount - 3
 
 		// Override PDB with value less than px quorum and ensure minAvailable value uses default calculation
-		cluster.Annotations = make(map[string]string)
+		if cluster.Annotations == nil {
+			cluster.Annotations = make(map[string]string)
+		}
 		quorumValue := math.Floor(float64(k8snodecount)/2) + 1
 		logrus.Infof("Validating PDB using minAvailable value: %d", int(quorumValue)-1)
 		cluster.Annotations["portworx.io/storage-pdb-min-available"] = fmt.Sprintf("%d", int(quorumValue)-1)
