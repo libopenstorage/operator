@@ -46,7 +46,7 @@ func DeployAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
 
 	// Deploy CatalogSource
 	opRegistryImage := fmt.Sprintf("%s:%s", opRegistryImageName, opRegistryTag)
-	testCatalogSource, err := DeployCatalogSource(defaultCatalogSourceName, defaultCatalogSourceNamespace, opRegistryImage)
+	testCatalogSource, err := DeployCatalogSource(defaultCatalogSourceName, defaultCatalogSourceNamespace, opRegistryImage, []string{})
 	if err != nil {
 		return err
 	}
@@ -160,12 +160,13 @@ func DeleteAndValidatePxOperatorViaMarketplace() error {
 }
 
 // DeployCatalogSource creates CatalogSource resource
-func DeployCatalogSource(name, namespace, registryImage string) (*v1alpha1.CatalogSource, error) {
+func DeployCatalogSource(name, namespace, registryImage string, registrySecrets []string) (*v1alpha1.CatalogSource, error) {
 	logrus.Infof("Create test CatalogSrouce [%s] in namespace [%s]", name, namespace)
 	testCatalogSourceTemplate := &v1alpha1.CatalogSource{
 		Spec: v1alpha1.CatalogSourceSpec{
 			Image:      registryImage,
 			SourceType: v1alpha1.SourceTypeGrpc,
+			Secrets:    registrySecrets,
 		},
 	}
 

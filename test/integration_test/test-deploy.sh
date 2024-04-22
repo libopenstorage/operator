@@ -361,7 +361,7 @@ if [ "$operator_registry_image_name" != "" ]; then
     echo "Operator registry image name for Openshift Marketplace: $operator_registry_image_name"
     sed -i 's|'OPERATOR_REGISTRY_IMAGE_NAME'|'"$operator_registry_image_name"'|g' $test_pod_spec
 else
-    sed -i '/OPERATOR_IMAGE_TAG/d' $test_pod_spec
+    sed -i '/OPERATOR_REGISTRY_IMAGE_NAME/d' $test_pod_spec
 fi
 
 # Operator upgrade hops image list
