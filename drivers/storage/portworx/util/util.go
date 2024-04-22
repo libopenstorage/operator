@@ -159,6 +159,8 @@ const (
 	AnnotationServerTLSMinVersion = pxAnnotationPrefix + "/tls-min-version"
 	// AnnotationServerTLSCipherSuites sets up TLS-servers w/ requested cipher suites
 	AnnotationServerTLSCipherSuites = pxAnnotationPrefix + "/tls-cipher-suites"
+	// AnnotationHealthCheck skips the health cheks if set to "skip"
+	AnnotationHealthCheck = pxAnnotationPrefix + "/health-check"
 	// AnnotationsDisableNonDisruptiveUpgrade [=false] is used to disable smart and parallel kubetnetes node upgrades
 	AnnotationsDisableNonDisruptiveUpgrade = pxAnnotationPrefix + "/disable-non-disruptive-upgrade"
 

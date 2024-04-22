@@ -18,6 +18,7 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -53,6 +54,8 @@ import (
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/fake"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
 	"github.com/libopenstorage/operator/pkg/constants"
+	operatorhc "github.com/libopenstorage/operator/pkg/healthcheck"
+	hck8s "github.com/libopenstorage/operator/pkg/healthcheck/checks/kubernetes"
 	"github.com/libopenstorage/operator/pkg/mock"
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
@@ -414,6 +417,7 @@ func TestWaitForMigrationApproval(t *testing.T) {
 			Namespace: "test-ns",
 			Annotations: map[string]string{
 				constants.AnnotationMigrationApproved: "invalid",
+				pxutil.AnnotationHealthCheck:          "skip",
 			},
 		},
 	}
@@ -1501,6 +1505,109 @@ func TestReconcileForNonExistingCluster(t *testing.T) {
 	require.Empty(t, result)
 	require.Empty(t, recorder.Events)
 }
+func TestHealthCheckAnnotationCheck(t *testing.T) {
+	cluster := createStorageCluster()
+	controller := Controller{}
+
+	cluster.Annotations[pxutil.AnnotationHealthCheck] = operatorhc.AnnotationHealthCheckValuePassed
+	err := controller.preInstallHealthChecks(cluster)
+	assert.NoError(t, err)
+
+	cluster.Annotations[pxutil.AnnotationHealthCheck] = operatorhc.AnnotationHealthCheckValueSkip
+	err = controller.preInstallHealthChecks(cluster)
+	assert.NoError(t, err)
+
+	cluster.Annotations[pxutil.AnnotationHealthCheck] = operatorhc.AnnotationHealthCheckValueFailed
+	err = controller.preInstallHealthChecks(cluster)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "rectify the issue")
+}
+
+// Make the k8s client fail to get the server version which will fail the health check.
+// We don't need to test the health checks here in this test. All we need is to make sure
+// that the controller.preInstallHealthChecks() fails and sets the annotation to "failed".
+func TestHealthCheckFailureDetected(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := createStorageCluster()
+
+	// Need to make sure the annotation for health check does not exist
+	delete(cluster.Annotations, pxutil.AnnotationHealthCheck)
+
+	driver := testutil.MockDriver(mockCtrl)
+	k8sClient := testutil.FakeK8sClient(cluster)
+	k8sRestClient := mock.NewMockInterface(mockCtrl)
+	recorder := record.NewFakeRecorder(10)
+	discovery := mock.NewMockDiscoveryInterface(mockCtrl)
+	controller := Controller{
+		client:          k8sClient,
+		k8sSimpleClient: k8sRestClient,
+		recorder:        recorder,
+		Driver:          driver,
+	}
+
+	// Use AnyTimes() to return the same error for each of the retries the health
+	// check framework will do
+	discovery.EXPECT().ServerVersion().Return(&kversion.Info{}, fmt.Errorf("test")).AnyTimes()
+	k8sRestClient.EXPECT().Discovery().Return(discovery).AnyTimes()
+
+	err := controller.preInstallHealthChecks(cluster)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "rectify the issue")
+
+	updatedCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	assert.NoError(t, err)
+	assert.NotNil(t, updatedCluster.Annotations)
+	assert.Equal(t, operatorhc.AnnotationHealthCheckValueFailed, updatedCluster.Annotations[pxutil.AnnotationHealthCheck])
+
+	// Check an event was raised by the health check
+	require.NotZero(t, recorder.Events)
+}
+
+func TestHealthCheckSuccess(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster := createStorageCluster()
+
+	// Need to make sure the annotation for health check does not exist
+	delete(cluster.Annotations, pxutil.AnnotationHealthCheck)
+
+	driver := testutil.MockDriver(mockCtrl)
+	totalNodes := uint32(12)
+	k8sClient, expected := getK8sClientWithNodesZones(t, totalNodes, 1, cluster)
+	k8sRestClient := mock.NewMockInterface(mockCtrl)
+	recorder := record.NewFakeRecorder(10)
+	discovery := mock.NewMockDiscoveryInterface(mockCtrl)
+	controller := Controller{
+		client:          k8sClient,
+		k8sSimpleClient: k8sRestClient,
+		recorder:        recorder,
+		Driver:          driver,
+	}
+
+	// Use AnyTimes() to return the same error for each of the retries the health
+	// check framework will do
+	discovery.EXPECT().ServerVersion().Return(&kversion.Info{
+		GitVersion: "v" + hck8s.KubernetsMaxVersion,
+	}, nil).Times(1)
+	k8sRestClient.EXPECT().Discovery().Return(discovery).Times(1)
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(expected, nil).AnyTimes()
+
+	err := controller.preInstallHealthChecks(cluster)
+	require.NoError(t, err)
+
+	updatedCluster := &corev1.StorageCluster{}
+	err = testutil.Get(k8sClient, updatedCluster, cluster.Name, cluster.Namespace)
+	assert.NoError(t, err)
+	assert.NotNil(t, updatedCluster.Annotations)
+	assert.Equal(t, operatorhc.AnnotationHealthCheckValuePassed, updatedCluster.Annotations[pxutil.AnnotationHealthCheck])
+
+	// Check an event was raised by the health check
+	require.NotZero(t, recorder.Events)
+}
 
 func TestFailureDuringStorkInstallation(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
@@ -1509,9 +1616,7 @@ func TestFailureDuringStorkInstallation(t *testing.T) {
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	cluster.Spec.Stork.Enabled = true
-	cluster.Annotations = map[string]string{
-		annotationStorkCPU: "invalid-cpu",
-	}
+	cluster.Annotations[annotationStorkCPU] = "invalid-cpu"
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
 	k8sClient := testutil.FakeK8sClient(cluster)
@@ -1650,9 +1755,7 @@ func TestStoragePodsShouldNotBeScheduledIfDisabled(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
-	cluster.Annotations = map[string]string{
-		constants.AnnotationDisableStorage: "true",
-	}
+	cluster.Annotations[constants.AnnotationDisableStorage] = "true"
 
 	// Kubernetes node with resources to create a pod
 	k8sNode := createK8sNode("k8s-node-1", 10)
@@ -2677,9 +2780,7 @@ func TestStoragePodsAreRemovedIfDisabled(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
-	cluster.Annotations = map[string]string{
-		constants.AnnotationDisableStorage: "1",
-	}
+	cluster.Annotations[constants.AnnotationDisableStorage] = "1"
 	storageLabels := map[string]string{
 		constants.LabelKeyClusterName: cluster.Name,
 		constants.LabelKeyDriverName:  driverName,
@@ -4131,6 +4232,9 @@ func TestDeleteStorageClusterShouldDeleteStork(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationHealthCheck: "skip",
+			},
 		},
 		Spec: corev1.StorageClusterSpec{
 			Stork: &corev1.StorkSpec{
@@ -4910,7 +5014,7 @@ func TestUpdateStorageClusterBasedOnStorageNodeStatuses(t *testing.T) {
 	// so we cannot get the storage node information - upgrade should continue.
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
-	cluster.Annotations = map[string]string{constants.AnnotationDisableStorage: "true"}
+	cluster.Annotations[constants.AnnotationDisableStorage] = "true"
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 
@@ -5116,6 +5220,7 @@ func TestUpdateStorageClusterWithOpenshiftUpgrade(t *testing.T) {
 	require.NoError(t, err)
 	cluster.Annotations = map[string]string{
 		constants.AnnotationForceContinueUpdate: "true",
+		pxutil.AnnotationHealthCheck:            "skip",
 	}
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
@@ -10544,9 +10649,7 @@ func TestRequiredSCCAnnotationOnPortworxPods(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 
 	cluster := createStorageCluster()
-	cluster.Annotations = map[string]string{
-		"portworx.io/is-openshift": "true",
-	}
+	cluster.Annotations["portworx.io/is-openshift"] = "true"
 	k8sNode := createK8sNode("k8s-node", 10)
 
 	driverName := "mock-driver"
@@ -10593,7 +10696,9 @@ func TestRequiredSCCAnnotationOnPortworxPods(t *testing.T) {
 
 	// TestCase: Pod template should not have the required SCC annotation when not running on OpenShift
 	podControl.Templates = nil
-	cluster.Annotations = nil
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationHealthCheck: "skip",
+	}
 	err = testutil.Update(k8sClient, cluster)
 	require.NoError(t, err)
 
@@ -10769,6 +10874,9 @@ func TestStorageSpecValidation(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster",
 			Namespace: "ns",
+			Annotations: map[string]string{
+				pxutil.AnnotationHealthCheck: "skip",
+			},
 		},
 	}
 	// Testcase: Cluster has both storage types and no node specs
@@ -11079,9 +11187,12 @@ func createStorageCluster() *corev1.StorageCluster {
 	revisionLimit := int32(defaultRevisionHistoryLimit)
 	return &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			UID:        "test-uid",
-			Name:       "test-cluster",
-			Namespace:  "test-ns",
+			UID:       "test-uid",
+			Name:      "test-cluster",
+			Namespace: "test-ns",
+			Annotations: map[string]string{
+				pxutil.AnnotationHealthCheck: "skip",
+			},
 			Finalizers: []string{deleteFinalizerName},
 		},
 		Spec: corev1.StorageClusterSpec{
@@ -11202,8 +11313,12 @@ func createK8sNode(nodeName string, allowedPods int) *v1.Node {
 			Labels: make(map[string]string),
 		},
 		Status: v1.NodeStatus{
+			NodeInfo: v1.NodeSystemInfo{
+				KernelVersion: "99.99.99",
+			},
 			Allocatable: map[v1.ResourceName]resource.Quantity{
-				v1.ResourcePods: resource.MustParse(strconv.Itoa(allowedPods)),
+				v1.ResourcePods:   resource.MustParse(strconv.Itoa(allowedPods)),
+				v1.ResourceMemory: resource.MustParse("16Gi"),
 			},
 		},
 	}

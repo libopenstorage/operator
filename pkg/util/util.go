@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -61,6 +62,8 @@ const (
 	FailedPreFlight = "FailedPreFlight"
 	// PassedPreFlight is added to denote pre-flight Passed.
 	PassPreFlight = "PassedPreFlight"
+	// WarningPreFlight is added to denote the health checks reported a warning
+	WarnPreFlight = "WarningPreFlight"
 
 	// MigrationDryRunCompletedReason is added to an event when dry run is completed
 	MigrationDryRunCompletedReason = "MigrationDryRunCompleted"
@@ -587,23 +590,30 @@ func UpdateLiveStorageClusterLifecycle(
 	cluster *corev1.StorageCluster,
 	clusterState corev1.ClusterState,
 ) error {
-	cluster.Status.Phase = string(clusterState)
-	toUpdate := &corev1.StorageCluster{}
-	if err := k8sClient.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      cluster.Name,
-			Namespace: cluster.Namespace,
-		},
-		toUpdate,
-	); err != nil {
-		return err
-	} else if toUpdate.Status.Phase == string(clusterState) {
-		return nil
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		cluster.Status.Phase = string(clusterState)
+		toUpdate := &corev1.StorageCluster{}
+		if err := k8sClient.Get(
+			context.TODO(),
+			types.NamespacedName{
+				Name:      cluster.Name,
+				Namespace: cluster.Namespace,
+			},
+			toUpdate,
+		); err != nil {
+			return err
+		} else if toUpdate.Status.Phase == string(clusterState) {
+			return nil
+		}
+
+		toUpdate.Status.Phase = string(clusterState)
+		return k8sClient.Status().Update(context.TODO(), toUpdate)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update StorageCluster status phase: %v", err)
 	}
 
-	toUpdate.Status.Phase = string(clusterState)
-	return k8sClient.Status().Update(context.TODO(), toUpdate)
+	return nil
 }
 
 // GetStorageClusterCondition returns the condition based on source and type

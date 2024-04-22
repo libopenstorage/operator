@@ -81,9 +81,6 @@ func (et *enumType) ValueStrings() []string {
 //   - `"value1"` description 1
 //   - `"value2"` description 2
 func (et *enumType) DescriptionLines() []string {
-	if len(et.Values) == 0 {
-		return nil
-	}
 	var lines []string
 	for _, value := range et.Values {
 		lines = append(lines, value.Description())

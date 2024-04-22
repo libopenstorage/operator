@@ -34,6 +34,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/apis"
 	"github.com/libopenstorage/operator/pkg/controller/storagecluster"
 	"github.com/libopenstorage/operator/pkg/controller/storagenode"
+	"github.com/libopenstorage/operator/pkg/healthcheck"
 	_ "github.com/libopenstorage/operator/pkg/log"
 	"github.com/libopenstorage/operator/pkg/migration"
 	"github.com/libopenstorage/operator/pkg/operator-sdk/metrics"
@@ -149,6 +150,11 @@ func run(c *cli.Context) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Fatalf("Error getting cluster config: %v", err)
+	}
+
+	// Check if the cluster is healthy
+	if err := healthcheck.Precheck(config); err != nil {
+		log.Fatal(err)
 	}
 
 	// Set controller client rate limiter
