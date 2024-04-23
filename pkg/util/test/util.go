@@ -94,6 +94,12 @@ func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
 	return mock.NewMockDriver(mockCtrl)
 }
 
+func NoopKubevirtManager(mockCtrl *gomock.Controller) *mock.MockKubevirtManager {
+	kubevirtMock := mock.NewMockKubevirtManager(mockCtrl)
+	kubevirtMock.EXPECT().ClusterHasVMPods().Return(false, nil).AnyTimes()
+	return kubevirtMock
+}
+
 // FakeK8sClient creates a fake controller-runtime Kubernetes client. Also
 // adds the CRDs defined in this repository to the scheme
 func FakeK8sClient(initObjects ...runtime.Object) client.Client {
