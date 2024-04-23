@@ -781,8 +781,10 @@ func (p *portworx) GetKVDBMembers(cluster *corev1.StorageCluster) (map[string]bo
 		return nil, fmt.Errorf("error in connecting to portworx sdk server: %s", err)
 	}
 	serviceClient := pxapi.NewPortworxServiceClient(p.sdkConn)
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
+	if err != nil {
+		return nil, err
+	}
 
 	members, err := serviceClient.GetKvdbMemberInfo(ctx, &pxapi.PxKvdbMemberRequest{})
 
