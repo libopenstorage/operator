@@ -233,7 +233,8 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 	}
 
 	if gte_ocp_412, err := pxutil.IsSupportedOCPVersion(s.k8sClient, pxutil.OpenshiftPrometheusSupportedVersion); err == nil {
-		if !gte_ocp_412 {
+		if !gte_ocp_412 || (cluster.Spec.Monitoring != nil &&
+			cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.Enabled) {
 			pxScc.Users = append(pxScc.Users, fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-prometheus"))
 		}
 	}
