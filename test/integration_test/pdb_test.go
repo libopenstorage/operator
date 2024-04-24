@@ -99,10 +99,9 @@ func OverridePDBUsingValidAnnotation(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		k8snodecount, err := ci_utils.GetK8sNodeCount()
+		// Do not count control plane nodes
+		k8snodecount, err := ci_utils.GetNonMasterK8sNodeCount()
 		require.NoError(t, err)
-		// Assuming 3 nodes are dedicated control plane nodes
-		k8snodecount = k8snodecount - 3
 
 		// Override PDB value with (number of k8s nodes -2) to check if allowed disruptions is 2
 		if cluster.Annotations == nil {
@@ -122,10 +121,9 @@ func OverridePDBUsingInvalidAnnotation(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		k8snodecount, err := ci_utils.GetK8sNodeCount()
+		// Do not count control plane nodes
+		k8snodecount, err := ci_utils.GetNonMasterK8sNodeCount()
 		require.NoError(t, err)
-		// Assuming 3 nodes are dedicated control plane nodes
-		k8snodecount = k8snodecount - 3
 
 		// Override PDB with value less than px quorum and ensure minAvailable value uses default calculation
 		if cluster.Annotations == nil {
