@@ -1936,6 +1936,40 @@ func NodesNeedingPDB(k8sClient client.Client, nodeEnumerateResponse *api.SdkNode
 	return nodesNeedingPDB, nil
 }
 
+// List of nodes that have an existing pdb but are no longer in k8s cluster or not a portworx storage node
+func NodesToDeletePDB (k8sClient client.Client, nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse) ([]string, error) {
+	// nodeCounts map is used to find the elements that are uncommon between list of k8s nodes in cluster
+	// and list of portworx storage nodes. Used to find nodes where PDB needs to be deleted
+	nodeCounts := make(map[string]int)
+	// Get the list of k8s nodes that are part of the current cluster and increase count of each node
+	k8sNodeList := &v1.NodeList{}
+	err := k8sClient.List(context.TODO(), k8sNodeList)
+	if err != nil {
+		return nil, err
+	}
+	for _, node := range k8sNodeList.Items {
+		nodeCounts[node.Name]++
+	}
+
+	// Get list of storage nodes that are part of quorum and increment count of each node
+	nodesToDeletePDB := make([]string, 0)
+	for _, node := range nodeEnumerateResponse.Nodes {
+		if node.Status == api.Status_STATUS_DECOMMISSION || node.NonQuorumMember {
+			continue
+		}
+		nodeCounts[node.SchedulerNodeName]++
+	}
+
+	// Nodes with count 1 might have a node PDB but should not, so delete the PDB for such nodes
+	for node, count := range nodeCounts {
+		if count == 1 {
+			nodesToDeletePDB = append(nodesToDeletePDB, node)
+		}
+	}
+	return nodesToDeletePDB, nil
+	
+}
+
 func ClusterSupportsParallelUpgrade(nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse) bool {
 
 	for _, node := range nodeEnumerateResponse.Nodes {
