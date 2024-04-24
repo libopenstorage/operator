@@ -105,6 +105,9 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 		if err := c.createPortworxNodePodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse); err != nil {
 			return err
 		}
+		if err := c.deletePortworxNodePodDisruptionBudget(cluster,ownerRef, nodeEnumerateResponse); err != nil {
+			return err
+		}
 	} else {
 		if err := c.createPortworxPodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse); err != nil {
 			return err
@@ -243,6 +246,33 @@ func (c *disruptionBudget) createPortworxNodePodDisruptionBudget(
 	}
 	return utilerrors.NewAggregate(errors)
 
+}
+
+// Delete node pod disruption budget when kubertetes is not part of cluster or portworx does not run on it
+func (c *disruptionBudget) deletePortworxNodePodDisruptionBudget(
+	cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+	nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse,
+) error {
+	nodesToDeletePDB, err := pxutil.NodesToDeletePDB(c.k8sClient, nodeEnumerateResponse)
+	if err != nil {
+		return err
+	}
+	errors := []error{}
+
+
+	for _, node := range nodesToDeletePDB {
+		PDBName := "px-" + node
+		err = k8sutil.DeletePodDisruptionBudget(
+			c.k8sClient, PDBName,
+			cluster.Namespace,*ownerRef,
+		)
+		if err != nil {
+			logrus.Warnf("Failed to delete PDB for node %s: %v", node, err)
+			errors = append(errors, err)
+		}
+	}
+	return utilerrors.NewAggregate(errors)
 }
 
 func (c *disruptionBudget) createKVDBPodDisruptionBudget(
