@@ -40,6 +40,9 @@ var (
 	// PxOperatorTag is the version of px operator that will be used for Openshift Marketplace deployment
 	PxOperatorTag string
 
+	// PxOperatorRegistryImageName is an image that used to specify which registry to use when deploying PX Operator via Openshift Marketplace
+	PxOperatorRegistryImageName string
+
 	// PxDeviceSpecs is a list of `;` separated Portworx device specs
 	PxDeviceSpecs string
 

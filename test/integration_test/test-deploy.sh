@@ -7,6 +7,7 @@ test_image_name="openstorage/px-operator-test:latest"
 default_portworx_spec_gen_url="https://install.portworx.com/"
 px_upgrade_hops_url_list=""
 operator_image_tag=""
+operator_registry_image_name=""
 operator_upgrade_hops_image_list=""
 focus_tests=""
 short_test=false
@@ -81,6 +82,12 @@ case $i in
     --operator-image-tag)
         echo "Operator tag that is needed for deploying PX Operator via Openshift MarketPlace: $2"
         operator_image_tag=$2
+        shift
+        shift
+        ;;
+    --operator-registry-image-name)
+        echo "Operator Registry Image name that is needed for deploying PX Operator via Openshift MarketPlace: $2"
+        operator_registry_image_name=$2
         shift
         shift
         ;;
@@ -174,6 +181,54 @@ case $i in
        shift
        shift
        ;;
+   --enable-dash)
+       echo "Enable Portworx Dashboard: $2"
+       enable_dashboard=$2
+       shift
+       shift
+       ;;
+   --testset-id)
+      echo "testset_id: $2"
+      testset_id=$2
+      shift
+      shift
+      ;;
+   --user)
+      echo "user: $2"
+      user=$2
+      shift
+      shift
+      ;;
+   --product)
+      echo "product: $2"
+      product=$2
+      shift
+      shift
+      ;;
+   --branch)
+      echo "test_branch: $2"
+      test_branch=$2
+      shift
+      shift
+      ;;
+   --test-type)
+      echo "test_type: $2"
+      test_type=$2
+      shift
+      shift
+      ;;
+   --test-tags)
+      echo "test_tags: $2"
+      test_tag=$2
+      shift
+      shift
+      ;;
+   --test_desc)
+      echo "test_description: $2"
+      test_description=$2
+      shift
+      shift
+      ;;
 esac
 done
 
@@ -301,6 +356,14 @@ else
     sed -i '/OPERATOR_IMAGE_TAG/d' $test_pod_spec
 fi
 
+# Operator registry image name
+if [ "$operator_registry_image_name" != "" ]; then
+    echo "Operator registry image name for Openshift Marketplace: $operator_registry_image_name"
+    sed -i 's|'OPERATOR_REGISTRY_IMAGE_NAME'|'"$operator_registry_image_name"'|g' $test_pod_spec
+else
+    sed -i '/OPERATOR_REGISTRY_IMAGE_NAME/d' $test_pod_spec
+fi
+
 # Operator upgrade hops image list
 if [ "$operator_upgrade_hops_image_list" != "" ]; then
     sed -i 's|'OPERATOR_UPGRADE_HOPS_IMAGE_LIST'|'"$operator_upgrade_hops_image_list"'|g' $test_pod_spec
@@ -324,6 +387,63 @@ if [ "$portworx_vsphere_username" != "" ] && [ "$portworx_vsphere_password" != "
 else
     sed -i '/PORTWORX_VSPHERE_USERNAME/d' $test_pod_spec
     sed -i '/PORTWORX_VSPHERE_PASSWORD/d' $test_pod_spec
+fi
+
+if [ "$enable_dashboard" != "" ]; then
+	sed -i 's/'ENABLE_DASH'/'"$enable_dashboard"'/g' $test_pod_spec
+else
+  sed -i 's/'ENABLE_DASH'/true/g' $test_pod_spec
+fi
+
+if [ -e /build.properties ]; then
+    testset_id=$(< /build.properties grep -i "DASH_UID=" | grep -Eo '[0-9]+')
+else
+    testset_id=""
+fi
+
+if [ "$testset_id" != "" ]; then
+	sed -i 's/'TESTSET_ID'/'"$testset_id"'/g' $test_pod_spec
+else
+  sed -i 's/'TESTSET_ID'/0/g' $test_pod_spec
+fi
+
+if [ "$user" != "" ]; then
+	# shellcheck disable=SC2026
+	sed -i 's/'USER'/'"$user"'/g' $test_pod_spec
+else
+  # shellcheck disable=SC2026
+  sed -i 's/'USER'/"nouser"/g' $test_pod_spec
+fi
+
+if [ "$product" != "" ]; then
+	# shellcheck disable=SC2026
+	sed -i 's|'PRODUCT'|'"$product"'|g' $test_pod_spec
+else
+  sed -i 's|"PRODUCT"|"operator"|g' $test_pod_spec
+fi
+
+if [ "$test_branch" != "" ]; then
+	sed -i 's/'TEST_BRANCH'/'"$test_branch"'/g' $test_pod_spec
+else
+  sed -i 's/'TEST_BRANCH'/"master"/g' $test_pod_spec
+fi
+
+if [ "$test_type" != "" ]; then
+	sed -i 's/'TEST_TYPE'/'"$test_type"'/g' $test_pod_spec
+else
+  sed -i 's/'TEST_TYPE'/"operator-integration-test"/g' $test_pod_spec
+fi
+
+if [ "$test_tag" != "" ]; then
+	sed -i 's/'TEST_TAG'/'"$test_tag"'/g' $test_pod_spec
+else
+  sed -i 's/'TEST_TAG'/""/g' $test_pod_spec
+fi
+
+if [ "$test_description" != "" ]; then
+	sed -i 's/'TEST_DESCRIPTION'/'"$test_description"'/g' $test_pod_spec
+else
+  sed -i 's/'TEST_DESCRIPTION'/"operator-integration-test workflows"/g' $test_pod_spec
 fi
 
 # Set test image

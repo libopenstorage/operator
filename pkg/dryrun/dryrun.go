@@ -34,7 +34,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/record"
-	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+	cluster_v1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -619,7 +619,7 @@ func (d *DryRun) getRealK8sClient(kubeconfig string) (client.Client, error) {
 		logrus.Fatalf("Failed to add prometheus resources to the scheme: %v", err)
 	}
 
-	if err := cluster_v1alpha1.AddToScheme(d.realControllerMgr.GetScheme()); err != nil {
+	if err := cluster_v1beta1.AddToScheme(d.realControllerMgr.GetScheme()); err != nil {
 		logrus.Fatalf("Failed to add cluster API resources to the scheme: %v", err)
 	}
 

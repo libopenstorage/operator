@@ -67,7 +67,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	affinityhelper "k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
-	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+	cluster_v1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -119,6 +119,9 @@ const (
 	AksPVCControllerSecurePort = "10261"
 
 	pxAnnotationPrefix = "portworx.io"
+
+	// PvcControllerAnnotation annotation indicating whether to deploy a PVC controller
+	PvcControllerAnnotation = pxAnnotationPrefix + "/pvc-controller"
 
 	// TelemetryCertName is name of the telemetry cert.
 	TelemetryCertName = "pure-telemetry-certs"
@@ -193,27 +196,29 @@ const (
 var TestSpecPath = "testspec"
 
 var (
-	opVer1_5_0, _                     = version.NewVersion("1.5.0-")
-	opVer1_9_1, _                     = version.NewVersion("1.9.1-")
-	opVer1_10, _                      = version.NewVersion("1.10.0-")
-	opVer23_3, _                      = version.NewVersion("23.3.0-")
-	opVer23_8, _                      = version.NewVersion("23.8.0-")
-	opVer23_5, _                      = version.NewVersion("23.5.0-")
-	opVer23_5_1, _                    = version.NewVersion("23.5.1-")
-	opVer23_7, _                      = version.NewVersion("23.7.0-")
+	// opVer1_5_0, _   = version.NewVersion("1.5.0-")
+	opVer1_9_1, _   = version.NewVersion("1.9.1-")
+	opVer1_10, _    = version.NewVersion("1.10.0-")
+	opVer23_3, _    = version.NewVersion("23.3.0-")
+	opVer23_5, _    = version.NewVersion("23.5.0-")
+	opVer23_5_1, _  = version.NewVersion("23.5.1-")
+	opVer23_7, _    = version.NewVersion("23.7.0-")
+	opVer23_8, _    = version.NewVersion("23.8.0-")
+	opVer23_10, _   = version.NewVersion("23.10.0-")
+	OpVer23_10_3, _ = version.NewVersion("23.10.3-")
+	opVer24_1_0, _  = version.NewVersion("24.1.0-")
+
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
-	OpVer23_10_3, _                   = version.NewVersion("23.10.3-")
+	minimumCcmGoVersionCO, _          = version.NewVersion("1.2.3")
+	minimumPxVersionCO, _             = version.NewVersion("3.2")
 
-	minimumPxVersionCO, _    = version.NewVersion("3.2")
-	minimumCcmGoVersionCO, _ = version.NewVersion("1.2.3")
-
-	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
-	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
 	// PodDisruptionBudget is only supported in starting with k8s v1.21.0+
 	minSupportedK8sVersionForPdb, _ = version.NewVersion("1.21.0")
+	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
+	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
 
-	pxVer3_0, _  = version.NewVersion("3.0")
 	pxVer2_13, _ = version.NewVersion("2.13")
+	pxVer3_0, _  = version.NewVersion("3.0")
 
 	// minimumPxVersionCCMJAVA minimum PX version to install ccm-java
 	minimumPxVersionCCMJAVA, _ = version.NewVersion("2.8")
@@ -236,7 +241,7 @@ func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 	if err := monitoringv1.AddToScheme(s); err != nil {
 		logrus.Error(err)
 	}
-	if err := cluster_v1alpha1.AddToScheme(s); err != nil {
+	if err := cluster_v1beta1.AddToScheme(s); err != nil {
 		logrus.Error(err)
 	}
 	if err := ocp_configv1.AddToScheme(s); err != nil {
@@ -863,6 +868,14 @@ func ValidateStorageCluster(
 
 func validatePxPodsAnnotations(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	logrus.Debug("Validate PX pods..")
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return err
+	}
+	if opVersion.LessThan(opVer23_10) {
+		logrus.Warnf("Skipping PX pods annotation validation for operator version [%s]", opVersion)
+		return nil
+	}
 	t := func() (interface{}, bool, error) {
 		// Get list of PX pods
 		pods, err := coreops.Instance().GetPodsByOwner(cluster.UID, cluster.Namespace)
@@ -2022,8 +2035,14 @@ func ValidatePvcController(pxImageList map[string]string, cluster *corev1.Storag
 		},
 	}
 
+	// Get PX Operator version
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get PX Operator version, Err: %v", err)
+	}
+
 	// Check if PVC Controller is enabled or disabled
-	if isPVCControllerEnabled(cluster) {
+	if isPVCControllerEnabled(cluster, opVersion) {
 		return ValidatePvcControllerEnabled(pvcControllerDp, cluster, timeout, interval)
 	}
 	return ValidatePvcControllerDisabled(pvcControllerDp, timeout, interval)
@@ -4660,7 +4679,7 @@ func validateTelemetryLogUploaderPortOnPxNodes(cluster *corev1.StorageCluster, e
 			if err != nil {
 				return nil, true, err
 			}
-			cmd = fmt.Sprintf("PXCTL_AUTH_TOKEN=%s; %s", token, cmd)
+			cmd = fmt.Sprintf("PXCTL_AUTH_TOKEN=%s %s", token, cmd)
 		}
 
 		// Get Portworx pods
@@ -4714,7 +4733,7 @@ func validateTelemetryLogUploaderPortOnPxNodes(cluster *corev1.StorageCluster, e
 // validateTelemetryStatusInPxctl validates Telemetry status on each PX node from the pxctl status output
 func validateTelemetryStatusInPxctl(telemetryShouldBeEnabled bool, cluster *corev1.StorageCluster) error {
 	listOptions := map[string]string{"name": "portworx"}
-	cmd := "pxctl status | grep Telemetry:"
+	cmd := "pxctl status |& grep Telemetry:"
 
 	logrus.Infof("Validate Telemetry pxctl status on all PX nodes")
 	t := func() (interface{}, bool, error) {
@@ -4723,7 +4742,7 @@ func validateTelemetryStatusInPxctl(telemetryShouldBeEnabled bool, cluster *core
 			if err != nil {
 				return nil, true, err
 			}
-			cmd = fmt.Sprintf("PXCTL_AUTH_TOKEN=%s; %s", token, cmd)
+			cmd = fmt.Sprintf("PXCTL_AUTH_TOKEN=%s %s", token, cmd)
 		}
 
 		// Get Portworx pods
@@ -5141,7 +5160,8 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 	}
 
 	// PodDisruptionBudget is supported for k8s version greater than or equal to 1.21 and operator version greater than or equal to 1.5.0
-	if k8sVersion.GreaterThanOrEqual(minSupportedK8sVersionForPdb) && opVersion.GreaterThanOrEqual(opVer1_5_0) {
+	// Changing opVersion to 23.10.0 for PTX-23350 | TODO: add better logic with PTX-23407
+	if k8sVersion.GreaterThanOrEqual(minSupportedK8sVersionForPdb) && opVersion.GreaterThanOrEqual(opVer23_10) {
 		// This is only for non async DR setup
 		t := func() (interface{}, bool, error) {
 
@@ -5253,22 +5273,31 @@ func validatePodTopologySpreadConstraints(deployment *appsv1.Deployment, timeout
 	return nil
 }
 
-func isPVCControllerEnabled(cluster *corev1.StorageCluster) bool {
-	enabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/pvc-controller"])
+// isPVCControllerEnabled return if PVC controller should or should not be enabled in the cluster
+func isPVCControllerEnabled(cluster *corev1.StorageCluster, opVersion *version.Version) bool {
+	enabled, err := strconv.ParseBool(cluster.Annotations[PvcControllerAnnotation])
 	if err == nil {
+		logrus.Debugf("PVC Controller is explicitly set via annotation [%s: %v]", PvcControllerAnnotation, enabled)
 		return enabled
 	}
 
-	// If portworx is disabled, then do not run pvc controller unless explicitly told to.
+	// If portworx is disabled, then do not run pvc controller unless explicitly told to
 	if !isPortworxEnabled(cluster) {
+		logrus.Debug("PVC Controller is disabled since PX is not enabled")
 		return false
 	}
 
-	// Enable PVC controller for managed kubernetes services. Also enable it for openshift,
-	// only if Portworx service is not deployed in kube-system namespace.
-	if isPKS(cluster) || isEKS(cluster) ||
-		isGKE(cluster) || isAKS(cluster) ||
-		isOKE(cluster) || cluster.Namespace != "kube-system" {
+	// Enable PVC controller for managed kubernetes services.
+	// Also enable it, if Portworx service is not deployed in kube-system namespace
+	if isOpenshift(cluster) && opVersion.GreaterThanOrEqual(opVer24_1_0) {
+		logrus.Debugf("PVC Controller is disabled for OCP clusters starting from PX Operator [24.1.0+], current PX Operator version [%s]", opVersion.String())
+		return false
+	} else if isPKS(cluster) || isEKS(cluster) ||
+		isGKE(cluster) || isAKS(cluster) || isOKE(cluster) {
+		logrus.Debugf("PVC Controller is enabled for Managed Kubernetes Serivces")
+		return true
+	} else if cluster.Namespace != "kube-system" {
+		logrus.Debugf("PVC Controller is enabled since PX is deployed outside of [kube-system] in [%s] namespace", cluster.Namespace)
 		return true
 	}
 	return false
