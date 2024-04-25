@@ -13508,6 +13508,7 @@ func TestSCCOnOpenshiftWithPXPrometheusEnabled(t *testing.T) {
 	}
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	require.False(t, cluster.Spec.Monitoring.Prometheus.Enabled)
 	require.NotEmpty(t, recorder.Events)
 	require.Contains(t, <-recorder.Events,
