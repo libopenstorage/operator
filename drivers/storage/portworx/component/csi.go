@@ -598,6 +598,7 @@ func getCSIDeploymentSpec(
 			"--leader-election=true",
 			"--default-fstype=ext4",
 			"--extra-create-metadata=true",
+			"--timeout=5m",
 		}
 	} else {
 		args = []string{
