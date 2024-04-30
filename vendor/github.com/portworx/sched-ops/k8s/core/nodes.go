@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/portworx/sched-ops/task"
@@ -36,7 +37,7 @@ type NodeOps interface {
 	AddLabelOnNode(string, string, string) error
 	// RemoveLabelOnNode removes the label with key on given node
 	RemoveLabelOnNode(string, string) error
-	// WatchNode sets up a watcher that listens for the changes on Node.
+	// WatchNode sets up a watcher that listens for the changes on input node.Incase of input node as nil, It will watch on all the nodes
 	WatchNode(node *corev1.Node, fn WatchFunc) error
 	// CordonNode cordons the given node
 	CordonNode(nodeName string, timeout, retryInterval time.Duration) error
@@ -47,6 +48,16 @@ type NodeOps interface {
 	DrainPodsFromNode(nodeName string, pods []corev1.Pod, timeout, retryInterval time.Duration) error
 	// DeleteNode deletes the given node
 	DeleteNode(name string) error
+	// GetWindowsNodes talks to the k8s api server and returns the Windows Nodes in the cluster
+	GetWindowsNodes() (*corev1.NodeList, error)
+	// GetLinuxNodes talks to the k8s api server and returns the Linux Nodes in the cluster
+	GetLinuxNodes() (*corev1.NodeList, error)
+	// GetReadyWindowsNodes talks to the k8s api server and returns the Windows Nodes in the cluster in Ready state
+	GetReadyWindowsNodes() (*corev1.NodeList, error)
+	// GetReadyLinuxNodes talks to the k8s api server and returns the Linux Nodes in the cluster
+	GetReadyLinuxNodes() (*corev1.NodeList, error)
+	// GetNodesUsingVolume returns the nodes using a PV
+	GetNodesUsingVolume(pvName string, readyOnly bool) (*corev1.NodeList, error)
 }
 
 // CreateNode creates the given node
@@ -105,13 +116,7 @@ func (c *Client) GetNodeByName(name string) (*corev1.Node, error) {
 	return node, nil
 }
 
-// IsNodeReady checks if node with given name is ready. Returns nil is ready.
-func (c *Client) IsNodeReady(name string) error {
-	node, err := c.GetNodeByName(name)
-	if err != nil {
-		return err
-	}
-
+func (c *Client) checkReadyStatus(node *corev1.Node, name string) error {
 	for _, condition := range node.Status.Conditions {
 		switch condition.Type {
 		case corev1.NodeConditionType(corev1.NodeReady):
@@ -131,6 +136,15 @@ func (c *Client) IsNodeReady(name string) error {
 	}
 
 	return nil
+}
+
+// IsNodeReady checks if node with given name is ready. Returns nil is ready.
+func (c *Client) IsNodeReady(name string) error {
+	node, err := c.GetNodeByName(name)
+	if err != nil {
+		return err
+	}
+	return c.checkReadyStatus(node, name)
 }
 
 // IsNodeMaster returns true if given node is a kubernetes master node
@@ -272,21 +286,19 @@ func (c *Client) RemoveLabelOnNode(name, key string) error {
 	return err
 }
 
-// WatchNode sets up a watcher that listens for the changes on Node.
+// WatchNode sets up a watcher that listens for the changes on input node and will watch all the nodes when input node is nil.
 func (c *Client) WatchNode(node *corev1.Node, watchNodeFn WatchFunc) error {
-	if node == nil {
-		return fmt.Errorf("no node given to watch")
-	}
-
 	if err := c.initClient(); err != nil {
 		return err
 	}
-
 	listOptions := metav1.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector("metadata.name", node.Name).String(),
-		Watch:         true,
+		Watch: true,
 	}
-
+	if node != nil {
+		listOptions.FieldSelector = fields.OneTermEqualSelector("metadata.name", node.Name).String()
+	} else {
+		fmt.Printf("Watching all nodes")
+	}
 	watchInterface, err := c.kubernetes.CoreV1().Nodes().Watch(context.TODO(), listOptions)
 	if err != nil {
 		return err
@@ -384,4 +396,73 @@ func (c *Client) DrainPodsFromNode(nodeName string, pods []corev1.Pod, timeout t
 	}
 
 	return nil
+}
+
+func (c *Client) getTaggedNodes(partialLabelName, partialLabelValue string, readyOnlyNodes bool) (*corev1.NodeList, error) {
+	if err := c.initClient(); err != nil {
+		return nil, err
+	}
+
+	allNodes, err := c.kubernetes.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var retNodes corev1.NodeList
+	for _, n := range allNodes.Items {
+		if readyOnlyNodes {
+			readyErr := c.checkReadyStatus(&n, n.Name)
+			if readyErr != nil {
+				continue
+			}
+		}
+		if partialLabelName != "" && partialLabelValue != "" {
+			for k, v := range n.GetLabels() {
+				if strings.Contains(k, partialLabelName) {
+					if strings.EqualFold(v, partialLabelValue) {
+						retNodes.Items = append(retNodes.Items, n)
+					}
+					break // break from label, os label found
+				}
+			}
+		} else {
+			retNodes.Items = append(retNodes.Items, n)
+		}
+	}
+	return &retNodes, nil
+}
+
+// GetLinuxNodes talks to the k8s api server and returns the linux nodes in the cluster
+func (c *Client) GetLinuxNodes() (*corev1.NodeList, error) {
+	return c.getTaggedNodes("kubernetes.io/os", "linux", false)
+}
+
+// GetWindowsNodes talks to the k8s api server to get all nodes and filter on labels to get Windows nodes
+func (c *Client) GetWindowsNodes() (*corev1.NodeList, error) {
+	return c.getTaggedNodes("kubernetes.io/os", "windows", false)
+}
+
+// GetReadyLinuxNodes talks to the k8s api server to get all nodes and filters linux nodes that are Ready.
+func (c *Client) GetReadyLinuxNodes() (*corev1.NodeList, error) {
+	return c.getTaggedNodes("kubernetes.io/os", "linux", true)
+}
+
+// GetReadyWindowsNodes talks to the k8s api server to get all nodes and filter on labels to get Windows nodes that are Ready.
+func (c *Client) GetReadyWindowsNodes() (*corev1.NodeList, error) {
+	return c.getTaggedNodes("kubernetes.io/os", "windows", true)
+}
+
+// GetNodesUsingVolume Returns the list of nodes using a Pv.
+func (c *Client) GetNodesUsingVolume(pvName string, readyNodesOnly bool) (*corev1.NodeList, error) {
+	allNodes, err := c.getTaggedNodes("", "", readyNodesOnly)
+	if err != nil {
+		return nil, err
+	}
+	var pvNodes corev1.NodeList
+	for _, n := range allNodes.Items {
+		pods, err := c.GetPodsUsingPVByNodeName(pvName, n.Name)
+		if err == nil && (len(pods) > 0) {
+			pvNodes.Items = append(pvNodes.Items, n)
+		}
+	}
+	return &pvNodes, nil
 }

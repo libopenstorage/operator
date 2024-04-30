@@ -10,9 +10,12 @@ import (
 
 // ScOps is an interface to perform k8s storage class operations
 type ScOps interface {
+	// GetAllStorageClasses returns all storageClasses
+	// Added this function since GetStorageClasses method was failing to list the Storage Classes when an empty label selector is passed
+	GetAllStorageClasses() (*storagev1.StorageClassList, error)
 	// GetStorageClasses returns all storageClasses that match given optional label selector
 	GetStorageClasses(labelSelector map[string]string) (*storagev1.StorageClassList, error)
-	// GetStorageClass returns the storage class for the give namme
+	// GetStorageClass returns the storage class for the give name
 	GetStorageClass(name string) (*storagev1.StorageClass, error)
 	// GetDefaultStorageClasses returns all storageClasses that are set as default
 	GetDefaultStorageClasses() (*storagev1.StorageClassList, error)
@@ -26,6 +29,8 @@ type ScOps interface {
 	// TODO: This is currently the same as GetStorageClass. If no one is using it,
 	// we should remove this method
 	ValidateStorageClass(name string) (*storagev1.StorageClass, error)
+	// AnnotateStorageClassAsDefault annotates a given storage class as default Storage class
+	AnnotateStorageClassAsDefault(name string) error
 }
 
 const (
@@ -105,4 +110,33 @@ func (c *Client) GetStorageClassParams(sc *storagev1.StorageClass) (map[string]s
 // ValidateStorageClass validates the given storage class
 func (c *Client) ValidateStorageClass(name string) (*storagev1.StorageClass, error) {
 	return c.GetStorageClass(name)
+}
+
+// AnnotateStorageClassAsDefault annotates a given storage class as default Storage class
+func (c *Client) AnnotateStorageClassAsDefault(name string) error {
+	if err := c.initClient(); err != nil {
+		return err
+	}
+	sc, err := c.GetStorageClass(name)
+	if err != nil {
+		return err
+	}
+	if sc.Annotations == nil {
+		sc.Annotations = make(map[string]string)
+	}
+	sc.Annotations[defaultStorageclassAnnotationKey] = "true"
+	_, err = c.storage.StorageClasses().Update(context.TODO(), sc, metav1.UpdateOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetAllStorageClasses returns all storageClasses
+// Added this function since GetStorageClasses method was failing to list the Storage Classes when an empty label selector is passed
+func (c *Client) GetAllStorageClasses() (*storagev1.StorageClassList, error) {
+	if err := c.initClient(); err != nil {
+		return nil, err
+	}
+	return c.storage.StorageClasses().List(context.TODO(), metav1.ListOptions{})
 }
