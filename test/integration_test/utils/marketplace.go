@@ -26,7 +26,7 @@ const (
 
 	defaultPxVsphereSecretName = "px-vsphere-secret"
 
-	getInstallPlanListTimeout       = 10 * time.Minute
+	getInstallPlanListTimeout       = 60 * time.Minute
 	getInstallPlanListRetryInterval = 20 * time.Second
 
 	getPxVsphereSecretTimeout       = 10 * time.Minute
