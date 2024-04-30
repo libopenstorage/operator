@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/go-version"
 	"reflect"
 	"sort"
 	"strings"
@@ -54,9 +53,6 @@ const (
 	// K8S scheduler policy decoder changed in this version.
 	// https://github.com/kubernetes/kubernetes/blob/release-1.21/pkg/scheduler/scheduler.go#L306
 	policyDecoderChangeVersion = "1.17.0"
-	// kubescheduler.config.k8s.io/v1 is GA'ed only in k8s 1.25
-	// so for 1.23 <= ver < 1.25 we should continue using kubescheduler.config.k8s.io/v1beta3
-	minK8sVersionForKubeSchedulerV1Configuration = "1.25.0"
 )
 
 const (
@@ -238,15 +234,11 @@ func (c *Controller) createStorkConfigMap(
 	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	// KubeSchedulerConfiguration is beta in 1.23 and GA in 1.25
-	k8sMinVersionForKubeSchedulerV1Configuration, err := version.NewVersion(minK8sVersionForKubeSchedulerV1Configuration)
-	if err != nil {
-		logrus.WithError(err).Errorf("Could not parse version %s", k8sMinVersionForKubeSchedulerV1Configuration)
-		return err
-	}
 
+	// KubeSchedulerConfiguration is beta in 1.23 and GA in 1.25
 	leaderElect := true
 	schedulerName := storkDeploymentName
+
 	leaderElectionConfiguration := schedcomp.LeaderElectionConfiguration{
 		LeaderElect:       &leaderElect,
 		ResourceNamespace: clusterNamespace,
@@ -259,8 +251,9 @@ func (c *Controller) createStorkConfigMap(
 
 	var policyConfig []byte
 	var dataKey string
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerConfiguration) {
-		if c.kubernetesVersion.GreaterThanOrEqual(k8sMinVersionForKubeSchedulerV1Configuration) {
+	var err error
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerV1BetaConfiguration) {
+		if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerV1Configuration) {
 			// enter this branch when k8s ver >= 1.25
 			kubeSchedulerConfigurationV1 := schedconfig.KubeSchedulerConfiguration{
 				TypeMeta: metav1.TypeMeta{
@@ -323,7 +316,6 @@ func (c *Controller) createStorkConfigMap(
 					},
 				},
 			}
-
 			// Auto fill the default configuration params
 			schedconfigapibeta3.SetDefaults_KubeSchedulerConfiguration(&kubeSchedulerConfigurationV1Beta)
 			policyConfig, err = yaml.Marshal(kubeSchedulerConfigurationV1Beta)
@@ -920,7 +912,7 @@ func (c *Controller) createStorkSchedDeployment(
 	imageName = util.GetImageURN(cluster, imageName)
 
 	var command []string
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerConfiguration) {
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerV1BetaConfiguration) {
 		command = []string{
 			"/usr/local/bin/kube-scheduler",
 			"--bind-address=0.0.0.0",
@@ -982,7 +974,7 @@ func (c *Controller) createStorkSchedDeployment(
 		command,
 		targetCPUQuantity,
 		updatedTopologySpreadConstraints,
-		c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerConfiguration))
+		c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerV1BetaConfiguration))
 
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
