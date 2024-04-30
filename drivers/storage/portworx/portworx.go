@@ -993,12 +993,9 @@ func (p *portworx) GetKVDBMembers(cluster *corev1.StorageCluster) (map[string]bo
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	// if security is enabled, use token
-	if cluster.Spec.Security != nil && cluster.Spec.Security.Enabled {
-		ctx, err = pxutil.SetupContextWithToken(ctx, cluster, p.k8sClient)
-		if err != nil {
-			return nil, err
-		}
+	ctx, err = pxutil.SetupContextWithToken(ctx, cluster, p.k8sClient)
+	if err != nil {
+		return nil, err
 	}
 
 	members, err := serviceClient.GetKvdbMemberInfo(ctx, &pxapi.PxKvdbMemberRequest{})
