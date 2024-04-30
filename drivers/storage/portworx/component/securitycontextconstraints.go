@@ -187,92 +187,99 @@ func (s *scc) getSCCs(cluster *opcorev1.StorageCluster) []ocp_secv1.SecurityCont
 		}
 	}
 
-	return []ocp_secv1.SecurityContextConstraints{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: PxSCCName,
-			},
-			AllowHostDirVolumePlugin: true,
-			AllowHostIPC:             false,
-			AllowHostNetwork:         true,
-			AllowHostPID:             false,
-			AllowHostPorts:           true,
-			AllowPrivilegeEscalation: boolPtr(true),
-			AllowPrivilegedContainer: true,
-			AllowedUnsafeSysctls:     []string{"*"},
-			AllowedCapabilities: []corev1.Capability{
-				ocp_secv1.AllowAllCapabilities,
-			},
-			FSGroup: ocp_secv1.FSGroupStrategyOptions{
-				Type: ocp_secv1.FSGroupStrategyRunAsAny,
-			},
-			Priority:               sccPriority,
-			ReadOnlyRootFilesystem: false,
-			RunAsUser: ocp_secv1.RunAsUserStrategyOptions{
-				Type: ocp_secv1.RunAsUserStrategyRunAsAny,
-			},
-			SELinuxContext: ocp_secv1.SELinuxContextStrategyOptions{
-				Type: ocp_secv1.SELinuxStrategyRunAsAny,
-			},
-			SeccompProfiles: []string{"*"},
-			SupplementalGroups: ocp_secv1.SupplementalGroupsStrategyOptions{
-				Type: ocp_secv1.SupplementalGroupsStrategyRunAsAny,
-			},
-			Volumes: []ocp_secv1.FSType{"*"},
-			Groups:  nil,
-			Users: []string{
-				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, pxutil.PortworxServiceAccountName(cluster)),
-				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CSIServiceAccountName),
-				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, LhServiceAccountName),
-				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, PVCServiceAccountName),
-				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CollectorServiceAccountName),
-				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, ServiceAccountNameTelemetry),
-				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-node-wiper"),
-				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-prometheus"),
-				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "stork-scheduler"),
-			},
+	pxScc := ocp_secv1.SecurityContextConstraints{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: PxSCCName,
 		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: PxRestrictedSCCName,
-			},
-			AllowHostDirVolumePlugin: true,
-			AllowHostIPC:             false,
-			AllowHostNetwork:         true,
-			AllowHostPID:             false,
-			AllowHostPorts:           false,
-			AllowPrivilegeEscalation: boolPtr(false),
-			AllowPrivilegedContainer: false,
-			FSGroup: ocp_secv1.FSGroupStrategyOptions{
-				Type: ocp_secv1.FSGroupStrategyMustRunAs,
-			},
-			ReadOnlyRootFilesystem: false,
-			RunAsUser: ocp_secv1.RunAsUserStrategyOptions{
-				Type: ocp_secv1.RunAsUserStrategyMustRunAsRange,
-			},
-			SELinuxContext: ocp_secv1.SELinuxContextStrategyOptions{
-				Type: ocp_secv1.SELinuxStrategyMustRunAs,
-			},
-			SupplementalGroups: ocp_secv1.SupplementalGroupsStrategyOptions{
-				Type: ocp_secv1.SupplementalGroupsStrategyRunAsAny,
-			},
-			Volumes: []ocp_secv1.FSType{
-				ocp_secv1.FSTypeConfigMap,
-				ocp_secv1.FSTypeDownwardAPI,
-				ocp_secv1.FSTypeEmptyDir,
-				ocp_secv1.FSTypeHostPath,
-				ocp_secv1.FSTypePersistentVolumeClaim,
-				ocp_secv1.FSProjected,
-				ocp_secv1.FSTypeSecret,
-			},
-			Groups: nil,
-			Users: []string{
-				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CSIServiceAccountName),
-				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, LhServiceAccountName),
-				fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, PVCServiceAccountName),
-			},
+		AllowHostDirVolumePlugin: true,
+		AllowHostIPC:             false,
+		AllowHostNetwork:         true,
+		AllowHostPID:             false,
+		AllowHostPorts:           true,
+		AllowPrivilegeEscalation: boolPtr(true),
+		AllowPrivilegedContainer: true,
+		AllowedUnsafeSysctls:     []string{"*"},
+		AllowedCapabilities: []corev1.Capability{
+			ocp_secv1.AllowAllCapabilities,
+		},
+		FSGroup: ocp_secv1.FSGroupStrategyOptions{
+			Type: ocp_secv1.FSGroupStrategyRunAsAny,
+		},
+		Priority:               sccPriority,
+		ReadOnlyRootFilesystem: false,
+		RunAsUser: ocp_secv1.RunAsUserStrategyOptions{
+			Type: ocp_secv1.RunAsUserStrategyRunAsAny,
+		},
+		SELinuxContext: ocp_secv1.SELinuxContextStrategyOptions{
+			Type: ocp_secv1.SELinuxStrategyRunAsAny,
+		},
+		SeccompProfiles: []string{"*"},
+		SupplementalGroups: ocp_secv1.SupplementalGroupsStrategyOptions{
+			Type: ocp_secv1.SupplementalGroupsStrategyRunAsAny,
+		},
+		Volumes: []ocp_secv1.FSType{"*"},
+		Groups:  nil,
+		Users: []string{
+			fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, pxutil.PortworxServiceAccountName(cluster)),
+			fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CSIServiceAccountName),
+			fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, LhServiceAccountName),
+			fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, PVCServiceAccountName),
+			fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CollectorServiceAccountName),
+			fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, ServiceAccountNameTelemetry),
+			fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-node-wiper"),
+			fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "stork-scheduler"),
 		},
 	}
+
+	if gte_ocp_412, err := pxutil.IsSupportedOCPVersion(s.k8sClient, pxutil.OpenshiftPrometheusSupportedVersion); err == nil {
+		if !gte_ocp_412 || (cluster.Spec.Monitoring != nil &&
+			cluster.Spec.Monitoring.Prometheus != nil && cluster.Spec.Monitoring.Prometheus.Enabled) {
+			pxScc.Users = append(pxScc.Users, fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, "px-prometheus"))
+		}
+	}
+
+	pxRestrictedScc := ocp_secv1.SecurityContextConstraints{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: PxRestrictedSCCName,
+		},
+		AllowHostDirVolumePlugin: true,
+		AllowHostIPC:             false,
+		AllowHostNetwork:         true,
+		AllowHostPID:             false,
+		AllowHostPorts:           false,
+		AllowPrivilegeEscalation: boolPtr(false),
+		AllowPrivilegedContainer: false,
+		FSGroup: ocp_secv1.FSGroupStrategyOptions{
+			Type: ocp_secv1.FSGroupStrategyMustRunAs,
+		},
+		ReadOnlyRootFilesystem: false,
+		RunAsUser: ocp_secv1.RunAsUserStrategyOptions{
+			Type: ocp_secv1.RunAsUserStrategyMustRunAsRange,
+		},
+		SELinuxContext: ocp_secv1.SELinuxContextStrategyOptions{
+			Type: ocp_secv1.SELinuxStrategyMustRunAs,
+		},
+		SupplementalGroups: ocp_secv1.SupplementalGroupsStrategyOptions{
+			Type: ocp_secv1.SupplementalGroupsStrategyRunAsAny,
+		},
+		Volumes: []ocp_secv1.FSType{
+			ocp_secv1.FSTypeConfigMap,
+			ocp_secv1.FSTypeDownwardAPI,
+			ocp_secv1.FSTypeEmptyDir,
+			ocp_secv1.FSTypeHostPath,
+			ocp_secv1.FSTypePersistentVolumeClaim,
+			ocp_secv1.FSProjected,
+			ocp_secv1.FSTypeSecret,
+		},
+		Groups: nil,
+		Users: []string{
+			fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, CSIServiceAccountName),
+			fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, LhServiceAccountName),
+			fmt.Sprintf("system:serviceaccount:%s:%s", cluster.Namespace, PVCServiceAccountName),
+		},
+	}
+
+	return []ocp_secv1.SecurityContextConstraints{pxScc, pxRestrictedScc}
 }
 
 // RegisterSCCComponent registers a component for installing scc.

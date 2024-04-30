@@ -6,9 +6,9 @@ allowHostPorts: true
 allowPrivilegeEscalation: true
 allowPrivilegedContainer: true
 allowedCapabilities:
-- '*'
+  - '*'
 allowedUnsafeSysctls:
-- '*'
+  - '*'
 apiVersion: security.openshift.io/v1
 defaultAddCapabilities: null
 fsGroup:
@@ -24,18 +24,17 @@ runAsUser:
 seLinuxContext:
   type: RunAsAny
 seccompProfiles:
-- '*'
+  - '*'
 supplementalGroups:
   type: RunAsAny
 users:
-- system:serviceaccount:kube-test:portworx
-- system:serviceaccount:kube-test:px-csi
-- system:serviceaccount:kube-test:px-lighthouse
-- system:serviceaccount:kube-test:portworx-pvc-controller
-- system:serviceaccount:kube-test:px-metrics-collector
-- system:serviceaccount:kube-test:px-telemetry
-- system:serviceaccount:kube-test:px-node-wiper
-- system:serviceaccount:kube-test:stork-scheduler
-- system:serviceaccount:kube-test:px-prometheus
+  - system:serviceaccount:kube-test:portworx
+  - system:serviceaccount:kube-test:px-csi
+  - system:serviceaccount:kube-test:px-lighthouse
+  - system:serviceaccount:kube-test:portworx-pvc-controller
+  - system:serviceaccount:kube-test:px-metrics-collector
+  - system:serviceaccount:kube-test:px-telemetry
+  - system:serviceaccount:kube-test:px-node-wiper
+  - system:serviceaccount:kube-test:stork-scheduler
 volumes:
-- '*'
+  - '*'
