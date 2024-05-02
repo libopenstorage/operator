@@ -1937,7 +1937,7 @@ func NodesNeedingPDB(k8sClient client.Client, nodeEnumerateResponse *api.SdkNode
 }
 
 // List of nodes that have an existing pdb but are no longer in k8s cluster or not a portworx storage node
-func NodesToDeletePDB (k8sClient client.Client, nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse) ([]string, error) {
+func NodesToDeletePDB(k8sClient client.Client, nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse) ([]string, error) {
 	// nodeCounts map is used to find the elements that are uncommon between list of k8s nodes in cluster
 	// and list of portworx storage nodes. Used to find nodes where PDB needs to be deleted
 	nodeCounts := make(map[string]int)
@@ -1967,7 +1967,7 @@ func NodesToDeletePDB (k8sClient client.Client, nodeEnumerateResponse *api.SdkNo
 		}
 	}
 	return nodesToDeletePDB, nil
-	
+
 }
 
 func ClusterSupportsParallelUpgrade(nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse) bool {
