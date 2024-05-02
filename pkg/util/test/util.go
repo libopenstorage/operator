@@ -3322,7 +3322,7 @@ func ValidateSecurity(cluster *corev1.StorageCluster, previouslyEnabled bool, ti
 
 // ValidateSecurityEnabled validates PX Security components are enabled/running as expected
 func ValidateSecurityEnabled(cluster *corev1.StorageCluster, storkDp *appsv1.Deployment, timeout, interval time.Duration) error {
-	logrus.Info("Validate PX Security components are enabled")
+	logrus.Info("Validate PX Security components are enabled...")
 
 	t := func() (interface{}, bool, error) {
 		// Validate Stork ENV vars, if Stork is enabled
@@ -3365,12 +3365,13 @@ func ValidateSecurityEnabled(cluster *corev1.StorageCluster, storkDp *appsv1.Dep
 		return fmt.Errorf("failed to validate PX Auth is enabled on PX nodes, Err: %v", err)
 	}
 
+	logrus.Info("Successfully validated PX Security components are enabled")
 	return nil
 }
 
 // ValidateSecurityDisabled validates PX Security components are disabled/uninstalled as expected
 func ValidateSecurityDisabled(cluster *corev1.StorageCluster, storkDp *appsv1.Deployment, previouslyEnabled bool, timeout, interval time.Duration) error {
-	logrus.Info("Validate PX Security components are not disabled")
+	logrus.Info("Validate PX Security components are disabled/uninstalled...")
 
 	t := func() (interface{}, bool, error) {
 		// Validate Stork ENV vars, if Stork is enabled
@@ -3428,6 +3429,7 @@ func ValidateSecurityDisabled(cluster *corev1.StorageCluster, storkDp *appsv1.De
 		return fmt.Errorf("failed to validate PX Auth is disabled on PX nodes, Err: %v", err)
 	}
 
+	logrus.Info("Successfully validated PX Security components are disabled/uninstalled")
 	return nil
 }
 
