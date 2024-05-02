@@ -105,7 +105,7 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 		if err := c.createPortworxNodePodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse); err != nil {
 			return err
 		}
-		if err := c.deletePortworxNodePodDisruptionBudget(cluster,ownerRef, nodeEnumerateResponse); err != nil {
+		if err := c.deletePortworxNodePodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse); err != nil {
 			return err
 		}
 	} else {
@@ -260,12 +260,11 @@ func (c *disruptionBudget) deletePortworxNodePodDisruptionBudget(
 	}
 	errors := []error{}
 
-
 	for _, node := range nodesToDeletePDB {
 		PDBName := "px-" + node
 		err = k8sutil.DeletePodDisruptionBudget(
 			c.k8sClient, PDBName,
-			cluster.Namespace,*ownerRef,
+			cluster.Namespace, *ownerRef,
 		)
 		if err != nil {
 			logrus.Warnf("Failed to delete PDB for node %s: %v", node, err)
