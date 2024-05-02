@@ -72,8 +72,11 @@ var (
 	ErrDoSkipUpdate = fmt.Errorf("update skipped")
 	// K8sVer1_26 k8s 1.26
 	K8sVer1_26, _ = version.NewVersion("1.26")
-	// MinVersionForKubeSchedulerConfiguration k8s 1.23.0
-	MinVersionForKubeSchedulerConfiguration, _ = version.NewVersion("1.23.0")
+
+	// kubescheduler.config.k8s.io/v1 is GA'ed in k8s 1.25, so for 1.23 <= ver < 1.25
+	// we should continue using kubescheduler.config.k8s.io/v1beta3
+	MinVersionForKubeSchedulerV1BetaConfiguration, _ = version.NewVersion("1.23.0")
+	MinVersionForKubeSchedulerV1Configuration, _     = version.NewVersion("1.25.0")
 )
 
 // NewK8sClient returns a new controller runtime Kubernetes client
@@ -2353,7 +2356,7 @@ func GetDefaultKubeSchedulerImage(k8sVersion *version.Version) string {
 	prefix += "/kube-scheduler-amd64:v"
 
 	if k8sVersion.GreaterThanOrEqual(minVersionForPinnedStorkScheduler) &&
-		k8sVersion.LessThan(MinVersionForKubeSchedulerConfiguration) {
+		k8sVersion.LessThan(MinVersionForKubeSchedulerV1BetaConfiguration) {
 		// Stork scheduler cannot run with kube-scheduler image > v1.22
 		return prefix + "1.21.4"
 	}

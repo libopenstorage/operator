@@ -25,8 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	schedcomp "k8s.io/component-base/config/v1alpha1"
-	schedconfig "k8s.io/kube-scheduler/config/v1beta3"
-	schedconfigapi "k8s.io/kubernetes/pkg/scheduler/apis/config/v1beta3"
+	schedconfig "k8s.io/kube-scheduler/config/v1"
+	schedconfigbeta3 "k8s.io/kube-scheduler/config/v1beta3"
+	schedconfigapi "k8s.io/kubernetes/pkg/scheduler/apis/config/v1"
+	schedconfigapibeta3 "k8s.io/kubernetes/pkg/scheduler/apis/config/v1beta3"
 	"sigs.k8s.io/yaml"
 )
 
@@ -232,76 +234,117 @@ func (c *Controller) createStorkConfigMap(
 	clusterNamespace string,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	policy := SchedulerPolicy{
-		Kind:       "Policy",
-		APIVersion: "kubescheduler.config.k8s.io/v1",
-		Extenders: []SchedulerExtender{
-			{
-				URLPrefix: fmt.Sprintf(
-					"http://%s.%s:%d",
-					storkServiceName, clusterNamespace, storkServicePort,
-				),
-				FilterVerb:       "filter",
-				PrioritizeVerb:   "prioritize",
-				Weight:           5,
-				EnableHTTPS:      false,
-				NodeCacheCapable: false,
-				HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute}.Nanoseconds(),
-			},
-		},
-	}
 
+	// KubeSchedulerConfiguration is beta in 1.23 and GA in 1.25
 	leaderElect := true
 	schedulerName := storkDeploymentName
-	kubeSchedulerConfiguration := schedconfig.KubeSchedulerConfiguration{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "KubeSchedulerConfiguration",
-			APIVersion: "kubescheduler.config.k8s.io/v1beta3",
-		},
-		LeaderElection: schedcomp.LeaderElectionConfiguration{
-			LeaderElect:       &leaderElect,
-			ResourceNamespace: clusterNamespace,
-			ResourceName:      storkSchedDeploymentName,
-			LeaseDuration:     metav1.Duration{Duration: 15 * time.Second},
-			RenewDeadline:     metav1.Duration{Duration: 10 * time.Second},
-			RetryPeriod:       metav1.Duration{Duration: 2 * time.Second},
-			ResourceLock:      "leases",
-		},
-		Profiles: []schedconfig.KubeSchedulerProfile{
-			{
-				SchedulerName: &schedulerName,
-			},
-		},
-		Extenders: []schedconfig.Extender{
-			{
-				URLPrefix: fmt.Sprintf(
-					"http://%s.%s:%d",
-					storkServiceName, clusterNamespace, storkServicePort,
-				),
-				FilterVerb:       "filter",
-				PrioritizeVerb:   "prioritize",
-				Weight:           5,
-				EnableHTTPS:      false,
-				NodeCacheCapable: false,
-				HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
-			},
-		},
-	}
 
-	// Auto fill the default configuration params
-	schedconfigapi.SetDefaults_KubeSchedulerConfiguration(&kubeSchedulerConfiguration)
+	leaderElectionConfiguration := schedcomp.LeaderElectionConfiguration{
+		LeaderElect:       &leaderElect,
+		ResourceNamespace: clusterNamespace,
+		ResourceName:      storkSchedDeploymentName,
+		LeaseDuration:     metav1.Duration{Duration: 15 * time.Second},
+		RenewDeadline:     metav1.Duration{Duration: 10 * time.Second},
+		RetryPeriod:       metav1.Duration{Duration: 2 * time.Second},
+		ResourceLock:      "leases",
+	}
 
 	var policyConfig []byte
 	var dataKey string
 	var err error
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerConfiguration) {
-		policyConfig, err = yaml.Marshal(kubeSchedulerConfiguration)
-		if err != nil {
-			logrus.WithError(err).Errorf("Could not encode policy object")
-			return err
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerV1BetaConfiguration) {
+		if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerV1Configuration) {
+			// enter this branch when k8s ver >= 1.25
+			kubeSchedulerConfigurationV1 := schedconfig.KubeSchedulerConfiguration{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "KubeSchedulerConfiguration",
+					APIVersion: "kubescheduler.config.k8s.io/v1",
+				},
+				LeaderElection: leaderElectionConfiguration,
+				Profiles: []schedconfig.KubeSchedulerProfile{
+					{
+						SchedulerName: &schedulerName,
+					},
+				},
+				Extenders: []schedconfig.Extender{
+					{
+						URLPrefix: fmt.Sprintf(
+							"http://%s.%s:%d",
+							storkServiceName, clusterNamespace, storkServicePort,
+						),
+						FilterVerb:       "filter",
+						PrioritizeVerb:   "prioritize",
+						Weight:           5,
+						EnableHTTPS:      false,
+						NodeCacheCapable: false,
+						HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
+					},
+				},
+			}
+			// Auto fill the default configuration params
+			schedconfigapi.SetDefaults_KubeSchedulerConfiguration(&kubeSchedulerConfigurationV1)
+			policyConfig, err = yaml.Marshal(kubeSchedulerConfigurationV1)
+			if err != nil {
+				logrus.WithError(err).Errorf("Could not encode policy object")
+				return err
+			}
+		} else {
+			// enter this branch when 1.23 <= k8s ver < 1.25
+			kubeSchedulerConfigurationV1Beta := schedconfigbeta3.KubeSchedulerConfiguration{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "KubeSchedulerConfiguration",
+					APIVersion: "kubescheduler.config.k8s.io/v1beta3",
+				},
+				LeaderElection: leaderElectionConfiguration,
+				Profiles: []schedconfigbeta3.KubeSchedulerProfile{
+					{
+						SchedulerName: &schedulerName,
+					},
+				},
+				Extenders: []schedconfigbeta3.Extender{
+					{
+						URLPrefix: fmt.Sprintf(
+							"http://%s.%s:%d",
+							storkServiceName, clusterNamespace, storkServicePort,
+						),
+						FilterVerb:       "filter",
+						PrioritizeVerb:   "prioritize",
+						Weight:           5,
+						EnableHTTPS:      false,
+						NodeCacheCapable: false,
+						HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute},
+					},
+				},
+			}
+			// Auto fill the default configuration params
+			schedconfigapibeta3.SetDefaults_KubeSchedulerConfiguration(&kubeSchedulerConfigurationV1Beta)
+			policyConfig, err = yaml.Marshal(kubeSchedulerConfigurationV1Beta)
+			if err != nil {
+				logrus.WithError(err).Errorf("Could not encode policy object")
+				return err
+			}
 		}
 		dataKey = "stork-config.yaml"
 	} else {
+		// enter this branch when k8s ver < 1.23
+		policy := SchedulerPolicy{
+			Kind:       "Policy",
+			APIVersion: "kubescheduler.config.k8s.io/v1",
+			Extenders: []SchedulerExtender{
+				{
+					URLPrefix: fmt.Sprintf(
+						"http://%s.%s:%d",
+						storkServiceName, clusterNamespace, storkServicePort,
+					),
+					FilterVerb:       "filter",
+					PrioritizeVerb:   "prioritize",
+					Weight:           5,
+					EnableHTTPS:      false,
+					NodeCacheCapable: false,
+					HTTPTimeout:      metav1.Duration{Duration: 5 * time.Minute}.Nanoseconds(),
+				},
+			},
+		}
 		policyConfig, err = json.Marshal(policy)
 		if err != nil {
 			logrus.WithError(err).Errorf("Could not encode policy object")
@@ -869,7 +912,7 @@ func (c *Controller) createStorkSchedDeployment(
 	imageName = util.GetImageURN(cluster, imageName)
 
 	var command []string
-	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerConfiguration) {
+	if c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerV1BetaConfiguration) {
 		command = []string{
 			"/usr/local/bin/kube-scheduler",
 			"--bind-address=0.0.0.0",
@@ -931,7 +974,7 @@ func (c *Controller) createStorkSchedDeployment(
 		command,
 		targetCPUQuantity,
 		updatedTopologySpreadConstraints,
-		c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerConfiguration))
+		c.kubernetesVersion.GreaterThanOrEqual(k8sutil.MinVersionForKubeSchedulerV1BetaConfiguration))
 
 	modified := existingImage != imageName ||
 		!reflect.DeepEqual(existingCommand, command) ||
