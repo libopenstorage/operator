@@ -12,7 +12,6 @@ import (
 
 	version "github.com/hashicorp/go-version"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/util"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -144,10 +143,6 @@ func TestManifestWithNewerPortworxVersionAndFailure(t *testing.T) {
 	ErrReleaseNotFound := fmt.Errorf("StorageCluster reconciliation paused as %v", err)
 	require.Empty(t, rel)
 	require.Error(t, ErrReleaseNotFound)
-	require.Len(t, recorder.Events, 1)
-	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v %v",
-			v1.EventTypeWarning, util.FailedComponentReason, ErrReleaseNotFound))
 }
 
 func TestManifestWithOlderPortworxVersion(t *testing.T) {
@@ -248,10 +243,6 @@ func TestManifestWithOlderPortworxVersionAndFailure(t *testing.T) {
 	ErrReleaseNotFound := fmt.Errorf("StorageCluster reconciliation paused as %v", err)
 	require.Empty(t, rel)
 	require.Error(t, ErrReleaseNotFound)
-	require.Len(t, recorder.Events, 1)
-	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v %v",
-			v1.EventTypeWarning, util.FailedComponentReason, ErrReleaseNotFound))
 }
 
 func TestManifestWithKnownNonSemvarPortworxVersion(t *testing.T) {
@@ -380,10 +371,6 @@ func TestManifestWithUnknownNonSemvarPortworxVersion(t *testing.T) {
 	ErrReleaseNotFound := fmt.Errorf("StorageCluster reconciliation paused as %v", err)
 	require.Empty(t, rel)
 	require.Error(t, ErrReleaseNotFound)
-	require.Len(t, recorder.Events, 1)
-	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v %v",
-			v1.EventTypeWarning, util.FailedComponentReason, ErrReleaseNotFound))
 }
 
 func TestManifestWithoutPortworxVersion(t *testing.T) {
@@ -508,10 +495,6 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	ErrReleaseNotFound := fmt.Errorf("StorageCluster reconciliation paused as %v", err)
 	require.Empty(t, rel)
 	require.Error(t, ErrReleaseNotFound)
-	require.Len(t, recorder.Events, 1)
-	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v %v",
-			v1.EventTypeWarning, util.FailedComponentReason, ErrReleaseNotFound))
 
 	// TestCase: No components at all, without k8s version
 	expected.Components = Release{}
@@ -528,10 +511,7 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	rel, _ = m.GetVersions(cluster, true)
 	require.Empty(t, rel)
 	require.Error(t, ErrReleaseNotFound)
-	require.Len(t, recorder.Events, 1)
-	require.Contains(t, <-recorder.Events,
-		fmt.Sprintf("%v %v %v",
-			v1.EventTypeWarning, util.FailedComponentReason, ErrReleaseNotFound))
+
 	// TestCase: No Nodewiper images
 	expected.PortworxVersion = "3.0.0"
 	expected.Components = Release{

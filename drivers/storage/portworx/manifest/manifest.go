@@ -9,10 +9,8 @@ import (
 	version "github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
-	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/sirupsen/logrus"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -207,13 +205,17 @@ func (m *manifest) GetVersions(
 		return m.cachedVersions.DeepCopy(), nil
 	}
 
-	// Bug: if it fails due to temporarily network issue, we should retry.
-	rel, err := provider.Get()
+	// Retry every 2 seconds for 5 times.
+	var rel *Version
+	for i := 0; i < 5; i++ {
+		rel, err = provider.Get()
+		if err == nil {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
 	if err != nil {
 		msg := fmt.Sprintf("versions from px-versions ConfigMap cannot be fetched and URL is unreachable due to: %v", err)
-		errmsg := fmt.Sprintf("StorageCluster reconciliation paused as %v", msg)
-		logrus.Error(errmsg)
-		m.recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, errmsg)
 		return nil, fmt.Errorf(msg)
 	}
 
