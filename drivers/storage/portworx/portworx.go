@@ -993,7 +993,7 @@ func (p *portworx) GetKVDBMembers(cluster *corev1.StorageCluster) (map[string]bo
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	ctx, err = pxutil.SetupContextWithToken(ctx, cluster, p.k8sClient)
+	ctx, err = pxutil.SetupContextWithToken(ctx, cluster, p.k8sClient, true)
 	if err != nil {
 		return nil, err
 	}
