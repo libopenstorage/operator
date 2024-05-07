@@ -11,7 +11,7 @@ pipeline {
 		}
 		stage ('Run Operator Test') {
 			steps {
-				build(job: "${CBT_OPERATOR_TEST_JOB_NAME}", parameters: [string(name: "GIT_BRANCH", value: GIT_COMMIT)])
+				build(job: "${CBT_OPERATOR_TEST_JOB_NAME}", parameters: [string(name: "GIT_BRANCH", value: GIT_BRANCH)])
 			}
 		}
 	}
