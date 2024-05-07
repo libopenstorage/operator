@@ -944,6 +944,7 @@ func SecurityEnabled(cluster *corev1.StorageCluster) bool {
 // SetupContextWithToken Gets token or from secret for authenticating with the SDK server
 func SetupContextWithToken(ctx context.Context, cluster *corev1.StorageCluster, k8sClient client.Client, skipSecurityCheck bool) (context.Context, error) {
 	// auth not declared in cluster spec
+	// if security enabled check is skipped, proceed without returning context
 	if !SecurityEnabled(cluster) && !skipSecurityCheck {
 		return ctx, nil
 	}
@@ -953,6 +954,8 @@ func SetupContextWithToken(ctx context.Context, cluster *corev1.StorageCluster, 
 		if !skipSecurityCheck {
 			return ctx, fmt.Errorf("failed to get portworx apps secret: %v", err.Error())
 		}
+		// if security enabled check is skipped and secret is not present, proceed with dummy secret value
+		// this is case of fresh install where security was never enabled
 		if errors.IsNotFound(err) && skipSecurityCheck {
 			pxAppsSecret = DummySecretValue
 		}
