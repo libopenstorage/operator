@@ -77,6 +77,8 @@ const (
 	EssentialsOSBEndpointKey = "px-osb-endpoint"
 	// EnvKeyKubeletDir env var to set custom kubelet directory
 	EnvKeyKubeletDir = "KUBELET_DIR"
+	// Dummy Secret value for authentication when Security is disabled
+	DummySecretValue = "dummy-secret-value"
 
 	// AnnotationIsPKS annotation indicating whether it is a PKS cluster
 	AnnotationIsPKS = pxAnnotationPrefix + "/is-pks"
@@ -940,16 +942,25 @@ func SecurityEnabled(cluster *corev1.StorageCluster) bool {
 }
 
 // SetupContextWithToken Gets token or from secret for authenticating with the SDK server
-func SetupContextWithToken(ctx context.Context, cluster *corev1.StorageCluster, k8sClient client.Client) (context.Context, error) {
+func SetupContextWithToken(ctx context.Context, cluster *corev1.StorageCluster, k8sClient client.Client, skipSecurityCheck bool) (context.Context, error) {
 	// auth not declared in cluster spec
-	if !SecurityEnabled(cluster) {
+	// if security enabled check is skipped, proceed without returning context
+	if !SecurityEnabled(cluster) && !skipSecurityCheck {
 		return ctx, nil
 	}
 
 	pxAppsSecret, err := GetSecretValue(ctx, cluster, k8sClient, SecurityPXSystemSecretsSecretName, SecurityAppsSecretKey)
 	if err != nil {
-		return ctx, fmt.Errorf("failed to get portworx apps secret: %v", err.Error())
+		if !skipSecurityCheck {
+			return ctx, fmt.Errorf("failed to get portworx apps secret: %v", err.Error())
+		}
+		// if security enabled check is skipped and secret is not present, proceed with dummy secret value
+		// this is case of fresh install where security was never enabled
+		if errors.IsNotFound(err) && skipSecurityCheck {
+			pxAppsSecret = DummySecretValue
+		}
 	}
+
 	if pxAppsSecret == "" {
 		return ctx, nil
 	}
@@ -1102,7 +1113,7 @@ func CountStorageNodes(
 	k8sClient client.Client,
 ) (int, error) {
 	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
-	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
+	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient, false)
 	if err != nil {
 		return -1, err
 	}

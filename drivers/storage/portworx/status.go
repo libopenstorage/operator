@@ -154,7 +154,7 @@ func (p *portworx) updatePortworxRuntimeStatus(
 	}
 
 	clusterClient := api.NewOpenStorageClusterClient(p.sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient, false)
 	if err != nil {
 		return err
 	}
@@ -419,7 +419,7 @@ func (p *portworx) updateStorageNodes(
 	cluster *corev1.StorageCluster,
 ) error {
 	nodeClient := api.NewOpenStorageNodeClient(p.sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient, false)
 	if err != nil {
 		return err
 	}

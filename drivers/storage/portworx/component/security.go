@@ -534,7 +534,7 @@ func (c *security) updateSystemGuestRole(cluster *corev1.StorageCluster) error {
 	}
 
 	roleClient := api.NewOpenStorageRoleClient(c.sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, c.k8sClient)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, c.k8sClient, false)
 	if err != nil {
 		c.closeSdkConn()
 		return err

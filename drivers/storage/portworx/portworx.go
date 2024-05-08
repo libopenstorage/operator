@@ -759,7 +759,7 @@ func (p *portworx) GetStorageNodes(
 	}
 
 	nodeClient := storageapi.NewOpenStorageNodeClient(p.sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient, false)
 	if err != nil {
 		return nil, err
 	}
@@ -784,7 +784,10 @@ func (p *portworx) GetKVDBMembers(cluster *corev1.StorageCluster) (map[string]bo
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	ctx, err = pxutil.SetupContextWithToken(ctx, cluster, p.k8sClient)
+	// if security was previously enabled and changed to disabled now
+	// the storagenodes might not be in sync since rolling update has not completed
+	// so always pass the token while rolling update
+	ctx, err = pxutil.SetupContextWithToken(ctx, cluster, p.k8sClient, true)
 	if err != nil {
 		return nil, err
 	}
