@@ -324,6 +324,10 @@ func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 		return true
 	}
 
+	if preflight.IsPure() && isSupportedOCP { // Preflight runs on FACD and OCP 4.13+
+		return true
+	}
+
 	return false // All else disable
 }
 

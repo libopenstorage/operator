@@ -382,10 +382,26 @@ func IsVsphere(cluster *corev1.StorageCluster) bool {
 	return false
 }
 
+// IsPure returns true if PURE_SAN_TYPE  is present in the spec
+func IsPure(cluster *corev1.StorageCluster) bool {
+	envValue, exists := GetClusterEnvValue(cluster, "PURE_SAN_TYPE")
+	if exists && len(envValue) > 0 {
+		return true
+	}
+
+	envValue, exists = GetClusterEnvValue(cluster, "PURE_FLASHARRAY_SAN_TYPE")
+	if exists && len(envValue) > 0 {
+		return true
+	}
+	return false
+}
+
 // GetCloudProvider returns the cloud provider string
 func GetCloudProvider(cluster *corev1.StorageCluster) string {
 	if IsVsphere(cluster) {
 		return cloudops.Vsphere
+	} else if IsPure(cluster) {
+	    return cloudops.Pure
 	}
 	// TODO: implement conditions for other providers
 	return ""
