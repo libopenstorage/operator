@@ -82,7 +82,7 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 
 	// get the number of kvdb members which are unavailable in case of internal kvdb
 	numUnavailableKvdb, kvdbNodes, err := c.getKVDBNodeAvailability(cluster)
-	if err != nil {
+	if err != nil && !util.IsFreshInstall(cluster) {
 		return err
 	}
 	logrus.Debugf("Marking old pods for deletion")
@@ -94,9 +94,10 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		}
 
 		// check if pod is running in a node which has internal kvdb running in it
-		if _, isKvdbNode := kvdbNodes[pod.Spec.NodeName]; cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal && isKvdbNode {
-			// if number of unavailable kvdb nodes is greater than or equal to 1, then dont restart portworx on this node
-			if numUnavailableKvdb > 0 {
+		if _, isKvdbNode := kvdbNodes[pod.Spec.NodeName]; err == nil && cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal && isKvdbNode {
+			// if number of unavailable kvdb nodes is greater than or equal to 1, or lesser than 3 entries are present in the kvdb map
+			// then dont restart portworx on this node
+			if numUnavailableKvdb > 0 || len(kvdbNodes) < 3 {
 				logrus.Infof("Number of unavaliable KVDB members exceeds 1, temporarily skipping update for this node to prevent KVDB from going out of quorum ")
 				continue
 			} else {
