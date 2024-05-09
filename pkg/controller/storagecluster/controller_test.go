@@ -3992,6 +3992,12 @@ func TestUpdateStorageClusterWithKVDBDown(t *testing.T) {
 	require.Contains(t, err.Error(), fmt.Sprintf("couldn't get unavailable numbers: couldn't get list of storage nodes during rolling update of storage cluster %s/%s: %s", cluster.Namespace, cluster.Name, getStorageNodeserr))
 
 	// When GetKvdbMembers returns an error
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Status.Phase = "Online"
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
 	getKvdbMemberserr := fmt.Errorf("test error 2")
 	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(nil, getKvdbMemberserr).Times(1)
 	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).AnyTimes()
