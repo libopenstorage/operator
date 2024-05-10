@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Kubernetes Authors.
+Copyright 2018 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,36 +14,43 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package v1alpha1
 
 import (
+	"log"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	metav1validation "k8s.io/apimachinery/pkg/apis/meta/v1/validation"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-
 	capierrors "sigs.k8s.io/cluster-api/errors"
 )
 
-const (
-	// MachineSetTopologyFinalizer is the finalizer used by the topology MachineDeployment controller to
-	// clean up referenced template resources if necessary when a MachineSet is being deleted.
-	MachineSetTopologyFinalizer = "machineset.topology.cluster.x-k8s.io"
-)
+// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ANCHOR: MachineSetSpec
+/// [MachineSet]
+// MachineSet ensures that a specified number of machines replicas are running at any given time.
+// +k8s:openapi-gen=true
+// +kubebuilder:resource:path=machinesets,shortName=ms
+// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.labelSelector
+type MachineSet struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-// MachineSetSpec defines the desired state of MachineSet.
+	Spec   MachineSetSpec   `json:"spec,omitempty"`
+	Status MachineSetStatus `json:"status,omitempty"`
+}
+
+/// [MachineSet]
+
+/// [MachineSetSpec]
+// MachineSetSpec defines the desired state of MachineSet
 type MachineSetSpec struct {
-	// ClusterName is the name of the Cluster this object belongs to.
-	// +kubebuilder:validation:MinLength=1
-	ClusterName string `json:"clusterName"`
-
 	// Replicas is the number of desired replicas.
 	// This is a pointer to distinguish between explicit zero and unspecified.
 	// Defaults to 1.
 	// +optional
-	// +kubebuilder:default=1
 	Replicas *int32 `json:"replicas,omitempty"`
 
 	// MinReadySeconds is the minimum number of seconds for which a newly created machine should be ready.
@@ -54,7 +61,6 @@ type MachineSetSpec struct {
 	// DeletePolicy defines the policy used to identify nodes to delete when downscaling.
 	// Defaults to "Random".  Valid values are "Random, "Newest", "Oldest"
 	// +kubebuilder:validation:Enum=Random;Newest;Oldest
-	// +optional
 	DeletePolicy string `json:"deletePolicy,omitempty"`
 
 	// Selector is a label query over machines that should match the replica count.
@@ -65,16 +71,38 @@ type MachineSetSpec struct {
 
 	// Template is the object that describes the machine that will be created if
 	// insufficient replicas are detected.
-	// Object references to custom resources resources are treated as templates.
 	// +optional
 	Template MachineTemplateSpec `json:"template,omitempty"`
 }
 
-// ANCHOR_END: MachineSetSpec
+// MachineSetDeletePolicy defines how priority is assigned to nodes to delete when
+// downscaling a MachineSet. Defaults to "Random".
+type MachineSetDeletePolicy string
 
-// ANCHOR: MachineTemplateSpec
+const (
+	// RandomMachineSetDeletePolicy prioritizes both Machines that have the annotation
+	// "cluster.k8s.io/delete-machine=yes" and Machines that are unhealthy
+	// (Status.ErrorReason or Status.ErrorMessage are set to a non-empty value).
+	// Finally, it picks Machines at random to delete.
+	RandomMachineSetDeletePolicy MachineSetDeletePolicy = "Random"
 
-// MachineTemplateSpec describes the data needed to create a Machine from a template.
+	// NewestMachineSetDeletePolicy prioritizes both Machines that have the annotation
+	// "cluster.k8s.io/delete-machine=yes" and Machines that are unhealthy
+	// (Status.ErrorReason or Status.ErrorMessage are set to a non-empty value).
+	// It then prioritizes the newest Machines for deletion based on the Machine's CreationTimestamp.
+	NewestMachineSetDeletePolicy MachineSetDeletePolicy = "Newest"
+
+	// OldestMachineSetDeletePolicy prioritizes both Machines that have the annotation
+	// "cluster.k8s.io/delete-machine=yes" and Machines that are unhealthy
+	// (Status.ErrorReason or Status.ErrorMessage are set to a non-empty value).
+	// It then prioritizes the oldest Machines for deletion based on the Machine's CreationTimestamp.
+	OldestMachineSetDeletePolicy MachineSetDeletePolicy = "Oldest"
+)
+
+/// [MachineSetSpec] // doxygen marker
+
+/// [MachineTemplateSpec] // doxygen marker
+// MachineTemplateSpec describes the data needed to create a Machine from a template
 type MachineTemplateSpec struct {
 	// Standard object's metadata.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
@@ -87,69 +115,34 @@ type MachineTemplateSpec struct {
 	Spec MachineSpec `json:"spec,omitempty"`
 }
 
-// ANCHOR_END: MachineTemplateSpec
+/// [MachineTemplateSpec]
 
-// MachineSetDeletePolicy defines how priority is assigned to nodes to delete when
-// downscaling a MachineSet. Defaults to "Random".
-type MachineSetDeletePolicy string
-
-const (
-	// RandomMachineSetDeletePolicy prioritizes both Machines that have the annotation
-	// "cluster.x-k8s.io/delete-machine=yes" and Machines that are unhealthy
-	// (Status.FailureReason or Status.FailureMessage are set to a non-empty value
-	// or NodeHealthy type of Status.Conditions is not true).
-	// Finally, it picks Machines at random to delete.
-	RandomMachineSetDeletePolicy MachineSetDeletePolicy = "Random"
-
-	// NewestMachineSetDeletePolicy prioritizes both Machines that have the annotation
-	// "cluster.x-k8s.io/delete-machine=yes" and Machines that are unhealthy
-	// (Status.FailureReason or Status.FailureMessage are set to a non-empty value
-	// or NodeHealthy type of Status.Conditions is not true).
-	// It then prioritizes the newest Machines for deletion based on the Machine's CreationTimestamp.
-	NewestMachineSetDeletePolicy MachineSetDeletePolicy = "Newest"
-
-	// OldestMachineSetDeletePolicy prioritizes both Machines that have the annotation
-	// "cluster.x-k8s.io/delete-machine=yes" and Machines that are unhealthy
-	// (Status.FailureReason or Status.FailureMessage are set to a non-empty value
-	// or NodeHealthy type of Status.Conditions is not true).
-	// It then prioritizes the oldest Machines for deletion based on the Machine's CreationTimestamp.
-	OldestMachineSetDeletePolicy MachineSetDeletePolicy = "Oldest"
-)
-
-// ANCHOR: MachineSetStatus
-
-// MachineSetStatus defines the observed state of MachineSet.
+/// [MachineSetStatus]
+// MachineSetStatus defines the observed state of MachineSet
 type MachineSetStatus struct {
-	// Selector is the same as the label selector but in the string format to avoid introspection
-	// by clients. The string will be in the same format as the query-param syntax.
-	// More info about label selectors: http://kubernetes.io/docs/user-guide/labels#label-selectors
-	// +optional
-	Selector string `json:"selector,omitempty"`
-
 	// Replicas is the most recently observed number of replicas.
-	// +optional
 	Replicas int32 `json:"replicas"`
 
 	// The number of replicas that have labels matching the labels of the machine template of the MachineSet.
 	// +optional
-	FullyLabeledReplicas int32 `json:"fullyLabeledReplicas"`
+	FullyLabeledReplicas int32 `json:"fullyLabeledReplicas,omitempty"`
 
 	// The number of ready replicas for this MachineSet. A machine is considered ready when the node has been created and is "Ready".
 	// +optional
-	ReadyReplicas int32 `json:"readyReplicas"`
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
 
 	// The number of available replicas (ready for at least minReadySeconds) for this MachineSet.
 	// +optional
-	AvailableReplicas int32 `json:"availableReplicas"`
+	AvailableReplicas int32 `json:"availableReplicas,omitempty"`
 
 	// ObservedGeneration reflects the generation of the most recently observed MachineSet.
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// In the event that there is a terminal problem reconciling the
-	// replicas, both FailureReason and FailureMessage will be set. FailureReason
+	// replicas, both ErrorReason and ErrorMessage will be set. ErrorReason
 	// will be populated with a succinct value suitable for machine
-	// interpretation, while FailureMessage will contain a more verbose
+	// interpretation, while ErrorMessage will contain a more verbose
 	// string suitable for logging and human consumption.
 	//
 	// These fields should not be set for transitive errors that a
@@ -165,17 +158,13 @@ type MachineSetStatus struct {
 	// can be added as events to the MachineSet object and/or logged in the
 	// controller's output.
 	// +optional
-	FailureReason *capierrors.MachineSetStatusError `json:"failureReason,omitempty"`
+	ErrorReason *capierrors.MachineSetStatusError `json:"errorReason,omitempty"`
 	// +optional
-	FailureMessage *string `json:"failureMessage,omitempty"`
-	// Conditions defines current service state of the MachineSet.
-	// +optional
-	Conditions Conditions `json:"conditions,omitempty"`
+	ErrorMessage *string `json:"errorMessage,omitempty"`
 }
 
-// ANCHOR_END: MachineSetStatus
+/// [MachineSetStatus]
 
-// Validate validates the MachineSet fields.
 func (m *MachineSet) Validate() field.ErrorList {
 	errors := field.ErrorList{}
 
@@ -198,40 +187,29 @@ func (m *MachineSet) Validate() field.ErrorList {
 	return errors
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:resource:path=machinesets,shortName=ms,scope=Namespaced,categories=cluster-api
-// +kubebuilder:storageversion
-// +kubebuilder:subresource:status
-// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas,selectorpath=.status.selector
-// +kubebuilder:printcolumn:name="Cluster",type="string",JSONPath=".spec.clusterName",description="Cluster"
-// +kubebuilder:printcolumn:name="Replicas",type="integer",JSONPath=".status.replicas",description="Total number of non-terminated machines targeted by this machineset"
-// +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas",description="Total number of ready machines targeted by this machineset."
-// +kubebuilder:printcolumn:name="Available",type="integer",JSONPath=".status.availableReplicas",description="Total number of available machines (ready for at least minReadySeconds)"
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Time duration since creation of MachineSet"
-// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.template.spec.version",description="Kubernetes version associated with this MachineSet"
+// DefaultingFunction sets default MachineSet field values
+func (m *MachineSet) Default() {
+	log.Printf("Defaulting fields for MachineSet %s\n", m.Name)
 
-// MachineSet is the Schema for the machinesets API.
-type MachineSet struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	if m.Spec.Replicas == nil {
+		m.Spec.Replicas = new(int32)
+		*m.Spec.Replicas = 1
+	}
 
-	Spec   MachineSetSpec   `json:"spec,omitempty"`
-	Status MachineSetStatus `json:"status,omitempty"`
+	if len(m.Namespace) == 0 {
+		m.Namespace = metav1.NamespaceDefault
+	}
+
+	if m.Spec.DeletePolicy == "" {
+		randomPolicy := string(RandomMachineSetDeletePolicy)
+		log.Printf("Defaulting to %s\n", randomPolicy)
+		m.Spec.DeletePolicy = randomPolicy
+	}
 }
 
-// GetConditions returns the set of conditions for the MachineSet.
-func (m *MachineSet) GetConditions() Conditions {
-	return m.Status.Conditions
-}
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// SetConditions updates the set of conditions on the MachineSet.
-func (m *MachineSet) SetConditions(conditions Conditions) {
-	m.Status.Conditions = conditions
-}
-
-// +kubebuilder:object:root=true
-
-// MachineSetList contains a list of MachineSet.
+// MachineSetList contains a list of MachineSet
 type MachineSetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
