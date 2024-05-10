@@ -38,7 +38,7 @@ require (
 	k8s.io/kube-scheduler v0.0.0
 	k8s.io/kubernetes v1.25.1
 	k8s.io/utils v0.0.0-20230505201702-9f6742963106
-	sigs.k8s.io/cluster-api v1.1.6
+	sigs.k8s.io/cluster-api v0.2.11
 	sigs.k8s.io/controller-runtime v0.14.5
 	sigs.k8s.io/controller-tools v0.11.3
 	sigs.k8s.io/yaml v1.4.0
@@ -47,7 +47,6 @@ require (
 require (
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0 // indirect
