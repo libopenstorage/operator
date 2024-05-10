@@ -287,6 +287,9 @@ mockgen: $(GOPATH)/bin/mockgen
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controller.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/controller Controller
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/controllercache.mock.go -package=mock sigs.k8s.io/controller-runtime/pkg/cache Cache
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/preflight.mock.go -package=mock github.com/libopenstorage/operator/pkg/preflight CheckerOps
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/kubevirtmanager.mock.go -package=mock github.com/libopenstorage/operator/pkg/controller/storagecluster KubevirtManager
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/mockcore/core.ops.mock.go -package=mockcore github.com/portworx/sched-ops/k8s/core Ops
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/mockkubevirtdy/kubevirt-dynamic.ops.mock.go -package=mockkubevirtdy github.com/portworx/sched-ops/k8s/kubevirt-dynamic Ops
 
 clean: clean-release-manifest clean-bundle
 	@echo "Cleaning up binaries"
