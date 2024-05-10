@@ -114,6 +114,7 @@ type Controller struct {
 	isStorkDeploymentCreated      bool
 	isStorkSchedDeploymentCreated bool
 	ctrl                          controller.Controller
+	kubevirt                      KubevirtManager
 	// Node to NodeInfo map
 	nodeInfoMap maps.SyncMap[string, *k8s.NodeInfo]
 }
@@ -125,6 +126,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	c.scheme = mgr.GetScheme()
 	c.recorder = mgr.GetEventRecorderFor(ControllerName)
 	c.nodeInfoMap = maps.MakeSyncMap[string, *k8s.NodeInfo]()
+	c.kubevirt = newKubevirtManager()
 
 	// Create a new controller
 	c.ctrl, err = controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
