@@ -138,3 +138,18 @@ func forceContinueUpgrade(
 	}
 	return err == nil && force
 }
+
+func evictVMsDuringUpdate(cluster *corev1.StorageCluster) bool {
+	value, exists := cluster.Annotations[constants.AnnotationEvictVMsDuringUpdate]
+	if !exists {
+		// default to true
+		return true
+	}
+	boolval, err := strconv.ParseBool(value)
+	if err != nil {
+		logrus.Warnf("Invalid value %s for annotation %s; defaulting to true: %v",
+			value, constants.AnnotationEvictVMsDuringUpdate, err)
+		return true
+	}
+	return boolval
+}

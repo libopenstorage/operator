@@ -59,12 +59,29 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 			cluster.Name, err)
 	}
 	_, oldPods := c.groupStorageClusterPods(cluster, nodeToStoragePods, hash)
-	maxUnavailable, numUnavailable, err := c.getUnavailableNumbers(cluster, nodeToStoragePods)
+	maxUnavailable, numUnavailable, availablePods, err := c.getPodAvailability(cluster, nodeToStoragePods)
 	if err != nil {
 		return fmt.Errorf("couldn't get unavailable numbers: %v", err)
 	}
-	oldAvailablePods, oldUnavailablePods := splitByAvailablePods(oldPods)
+	oldPodsMap := map[string]*v1.Pod{}
+	for _, pod := range oldPods {
+		oldPodsMap[pod.Name] = pod
+	}
+	// Remove the unschedulable label on node after PX has been upgraded on the node
+	for _, pods := range nodeToStoragePods {
+		for _, pod := range pods {
+			if _, ok := oldPodsMap[pod.Name]; ok {
+				continue
+			}
+			if _, ok := availablePods[pod.Name]; ok {
+				if err := c.removeStorkUnschedulableLabel(pod.Spec.NodeName); err != nil {
+					return err
+				}
+			}
+		}
+	}
 
+	oldAvailablePods, oldUnavailablePods := splitByAvailablePods(oldPods)
 	// for oldPods delete all not running pods
 	var oldPodsToDelete []string
 	logrus.Debugf("Marking all unavailable old pods for deletion")
@@ -128,7 +145,125 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		}
 	}
 
-	return c.syncNodes(cluster, oldPodsToDelete, []string{}, hash)
+	// check if we should live-migrate VMs before updating the storage node
+	virtLauncherPodsByNode := map[string][]v1.Pod{}
+	if len(oldPodsToDelete) > 0 && !forceContinueUpgrade(cluster) && evictVMsDuringUpdate(cluster) {
+		vmPodsPresent, err := c.kubevirt.ClusterHasVMPods()
+		if err != nil {
+			return err
+		}
+		if vmPodsPresent {
+			// add unschedulable label to the nodes that have pods to be deleted so that
+			// stork does not schedule any new virt-launcher pods on them
+			for _, podName := range oldPodsToDelete {
+				pod := oldPodsMap[podName]
+				if pod == nil {
+					// This should never happen. Log and continue.
+					logrus.Warnf("Pod %s not found in oldPodsMap; cannot add unschedulable label to the node", podName)
+					continue
+				}
+				if pod.Spec.NodeName == "" {
+					logrus.Warnf("Pod %s has no node name; cannot add unschedulable label to the node", podName)
+					continue
+				}
+				if err := c.addStorkUnschedulableAnnotation(pod.Spec.NodeName); err != nil {
+					return err
+				}
+			}
+			// get the VM pods after labeling the nodes since the list may have changed
+			virtLauncherPodsByNode, err = c.kubevirt.GetVMPodsToEvictByNode()
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	var oldPodsToDeletePruned []string
+	for _, podName := range oldPodsToDelete {
+		pod := oldPodsMap[podName]
+		if pod == nil {
+			// This should never happen. Log and continue.
+			logrus.Warnf("Pod %s not found in oldPodsMap; cannot check for VMs", podName)
+			oldPodsToDeletePruned = append(oldPodsToDeletePruned, podName)
+			continue
+		}
+		if len(virtLauncherPodsByNode[pod.Spec.NodeName]) == 0 {
+			oldPodsToDeletePruned = append(oldPodsToDeletePruned, podName)
+			continue
+		}
+		msg := fmt.Sprintf(
+			"The update of the storage node %s has been paused because there are %d KubeVirt VMs running on the node. "+
+				"Portworx will live-migrate the VMs and the storage node will be updated after "+
+				"there are no VMs left on this node.",
+			pod.Spec.NodeName, len(virtLauncherPodsByNode[pod.Spec.NodeName]))
+		logrus.Warnf(msg)
+
+		// raise event on StorageNode object if found, else on StorageCluster. Problem with raising event
+		// on StorageCluster is that the events for different nodes get deduped. So, we don't see all events.
+		var eventObj runtime.Object
+		node, err := operatorops.Instance().GetStorageNode(pod.Spec.NodeName, cluster.Namespace)
+		if err != nil {
+			logrus.Warnf("Failed to get storage node %s/%s; raising event on storageCluster: %v",
+				cluster.Namespace, pod.Spec.NodeName, err)
+			eventObj = cluster
+		} else {
+			eventObj = node
+		}
+		k8s.WarningEvent(c.recorder, eventObj, operatorutil.UpdatePausedReason, msg)
+
+		failedToEvictVMEventFunc := func(msg string) {
+			k8s.WarningEvent(c.recorder, eventObj, operatorutil.FailedToEvictVM, msg)
+		}
+		c.kubevirt.StartEvictingVMPods(virtLauncherPodsByNode[pod.Spec.NodeName], hash, failedToEvictVMEventFunc)
+	}
+
+	return c.syncNodes(cluster, oldPodsToDeletePruned, []string{}, hash)
+}
+
+func (c *Controller) addStorkUnschedulableAnnotation(nodeName string) error {
+	return storkUnschedulableAnnotationHelper(c.client, nodeName, true)
+}
+
+func (c *Controller) removeStorkUnschedulableLabel(nodeName string) error {
+	return storkUnschedulableAnnotationHelper(c.client, nodeName, false)
+}
+
+func storkUnschedulableAnnotationHelper(k8sClient client.Client, nodeName string, unschedulable bool) error {
+	ctx := context.TODO()
+	node := &v1.Node{}
+	err := k8sClient.Get(ctx, types.NamespacedName{Name: nodeName}, node)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logrus.Warnf("Node %s not found; cannot update annotation (unschedulable=%v)", nodeName, unschedulable)
+			return nil
+		}
+		return fmt.Errorf("failed to get node %s: %w", nodeName, err)
+	}
+	needsUpdate := false
+	val, ok := node.Annotations[constants.StorkAnnotationUnschedulable]
+	if unschedulable && val != "true" {
+		if node.Annotations == nil {
+			node.Annotations = make(map[string]string)
+		}
+		node.Annotations[constants.StorkAnnotationUnschedulable] = "true"
+		needsUpdate = true
+	} else if !unschedulable && ok {
+		delete(node.Annotations, constants.StorkAnnotationUnschedulable)
+		needsUpdate = true
+	}
+	if !needsUpdate {
+		return nil
+	}
+	if unschedulable {
+		logrus.Infof("Adding annotation %s to node %s", constants.StorkAnnotationUnschedulable, nodeName)
+	} else {
+		logrus.Infof("Removing annotation %s from node %s", constants.StorkAnnotationUnschedulable, nodeName)
+	}
+	if err := k8sClient.Update(ctx, node); err != nil {
+		return fmt.Errorf("failed to update annotation %s on node %s: %w",
+			constants.StorkAnnotationUnschedulable, nodeName, err)
+	}
+	return nil
 }
 
 // function to return the number of unavailable kvdb members and a list of the nodes which should have kvdb running in them
@@ -460,15 +595,24 @@ func (c *Controller) groupStorageClusterPods(
 	return newPods, oldPods
 }
 
-func (c *Controller) getUnavailableNumbers(
+// getPodAvailability returns info about available and unavailable driver pods.
+//
+// Return values in the order of appearance:
+//
+//	int: configured value for max number of unavailable pods
+//	int: number of pods currently unavailable
+//	map[string]*v1.Pod: map of *available* pods keyed by the pod name
+//	err error: error if any
+func (c *Controller) getPodAvailability(
 	cluster *corev1.StorageCluster,
 	nodeToStoragePods map[string][]*v1.Pod,
-) (int, int, error) {
+) (int, int, map[string]*v1.Pod, error) {
 	logrus.Debugf("Getting unavailable numbers")
+	availablePods := map[string]*v1.Pod{}
 	nodeList := &v1.NodeList{}
 	err := c.client.List(context.TODO(), nodeList, &client.ListOptions{})
 	if err != nil {
-		return -1, -1, fmt.Errorf("couldn't get list of nodes during rolling "+
+		return -1, -1, nil, fmt.Errorf("couldn't get list of nodes during rolling "+
 			"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
 	}
 
@@ -478,7 +622,7 @@ func (c *Controller) getUnavailableNumbers(
 	if storagePodsEnabled(cluster) {
 		storageNodeList, err := c.Driver.GetStorageNodes(cluster)
 		if err != nil {
-			return -1, -1, fmt.Errorf("couldn't get list of storage nodes during rolling "+
+			return -1, -1, nil, fmt.Errorf("couldn't get list of storage nodes during rolling "+
 				"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
 		}
 		for _, storageNode := range storageNodeList {
@@ -511,7 +655,7 @@ func (c *Controller) getUnavailableNumbers(
 			"storageNodeExists": storageNodeExists,
 		}).WithError(err).Debug("check node should run storage pod")
 		if err != nil {
-			return -1, -1, err
+			return -1, -1, nil, err
 		}
 
 		if !wantToRun {
@@ -532,8 +676,10 @@ func (c *Controller) getUnavailableNumbers(
 				// Wait for MinReadySeconds after pod is ready.
 				if podutil.IsPodAvailable(pod, cluster.Spec.UpdateStrategy.RollingUpdate.MinReadySeconds, metav1.Now()) {
 					available = true
+					availablePods[pod.Name] = pod
 				} else {
-					logrus.Infof("Pod %s has not been ready for MinReadySeconds (%d), wait to perform rolling updates", pod.Name, cluster.Spec.UpdateStrategy.RollingUpdate.MinReadySeconds)
+					logrus.Infof("Pod %s has not been ready for MinReadySeconds (%d), wait to perform rolling updates",
+						pod.Name, cluster.Spec.UpdateStrategy.RollingUpdate.MinReadySeconds)
 				}
 				break
 			}
@@ -561,11 +707,11 @@ func (c *Controller) getUnavailableNumbers(
 		true,
 	)
 	if err != nil {
-		return -1, -1, fmt.Errorf("invalid value for MaxUnavailable: %v", err)
+		return -1, -1, nil, fmt.Errorf("invalid value for MaxUnavailable: %v", err)
 	}
 	logrus.Debugf("StorageCluster %s/%s, maxUnavailable: %d, numUnavailable: %d",
 		cluster.Namespace, cluster.Name, maxUnavailable, numUnavailable)
-	return maxUnavailable, numUnavailable, nil
+	return maxUnavailable, numUnavailable, availablePods, nil
 }
 
 func (c *Controller) cleanupHistory(
