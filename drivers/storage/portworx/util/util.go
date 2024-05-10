@@ -77,6 +77,8 @@ const (
 	EssentialsOSBEndpointKey = "px-osb-endpoint"
 	// EnvKeyKubeletDir env var to set custom kubelet directory
 	EnvKeyKubeletDir = "KUBELET_DIR"
+	// OS name for windows node
+	WindowsOsName = "windows"
 	// Dummy Secret value for authentication when Security is disabled
 	DummySecretValue = "dummy-secret-value"
 
@@ -756,55 +758,36 @@ func ParsePxProxyURL(proxy string) (string, string, string, error) {
 	}
 }
 
-// GetValueFromEnvVar returns the value of v1.EnvVar Value or ValueFrom
-func GetValueFromEnvVar(ctx context.Context, client client.Client, envVar *v1.EnvVar, namespace string) (string, error) {
-	if valueFrom := envVar.ValueFrom; valueFrom != nil {
-		if valueFrom.SecretKeyRef != nil {
-			key := valueFrom.SecretKeyRef.Key
-			secretName := valueFrom.SecretKeyRef.Name
-
-			// Get secret key
-			secret := &v1.Secret{}
-			err := client.Get(ctx, types.NamespacedName{
-				Name:      secretName,
-				Namespace: namespace,
-			}, secret)
-			if err != nil {
-				return "", err
-			}
-			value := secret.Data[key]
-			if len(value) == 0 {
-				return "", fmt.Errorf("failed to find env var value %s in secret %s in namespace %s", key, secretName, namespace)
-			}
-
-			return string(value), nil
-		} else if valueFrom.ConfigMapKeyRef != nil {
-			cmName := valueFrom.ConfigMapKeyRef.Name
-			key := valueFrom.ConfigMapKeyRef.Key
-			configMap := &v1.ConfigMap{}
-			if err := client.Get(ctx, types.NamespacedName{
-				Name:      cmName,
-				Namespace: namespace,
-			}, configMap); err != nil {
-				return "", err
-			}
-
-			value, ok := configMap.Data[key]
-			if !ok {
-				return "", fmt.Errorf("failed to find env var value %s in configmap %s in namespace %s", key, cmName, namespace)
-			}
-
-			return value, nil
-		}
-	} else {
-		return envVar.Value, nil
-	}
-
-	return "", nil
-}
-
 func getSpecsBaseDir() string {
 	return PortworxSpecsDir
+}
+func GetStorageNodes(
+	cluster *corev1.StorageCluster, k8sClient client.Client, sdkConn *grpc.ClientConn) (*grpc.ClientConn, []*api.StorageNode, error) {
+
+	sdkConn, err := GetPortworxConn(sdkConn, k8sClient, cluster.Namespace)
+	if err != nil {
+		if IsFreshInstall(cluster) && strings.HasPrefix(err.Error(), ErrMsgGrpcConnection) {
+			// Don't return grpc connection error during initialization,
+			// as SDK server won't be up anyway
+			logrus.Warn(err)
+			return nil, []*api.StorageNode{}, nil
+		}
+		return sdkConn, nil, err
+	}
+
+	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
+	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient, false)
+	if err != nil {
+		return sdkConn, nil, err
+	}
+	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
+		ctx,
+		&api.SdkNodeEnumerateWithFiltersRequest{},
+	)
+	if err != nil {
+		return sdkConn, nil, err
+	}
+	return sdkConn, nodeEnumerateResponse.Nodes, nil
 }
 
 // GetPortworxConn returns a new Portworx SDK client
@@ -945,7 +928,7 @@ func SecurityEnabled(cluster *corev1.StorageCluster) bool {
 func SetupContextWithToken(ctx context.Context, cluster *corev1.StorageCluster, k8sClient client.Client, skipSecurityCheck bool) (context.Context, error) {
 	// auth not declared in cluster spec
 	// if security enabled check is skipped, proceed without returning context
-	if !SecurityEnabled(cluster) && !skipSecurityCheck {
+	if !AuthEnabled(&cluster.Spec) && !skipSecurityCheck {
 		return ctx, nil
 	}
 
@@ -1249,7 +1232,7 @@ func getStorageNodeMappingFromRPC(
 	k8sClient client.Client,
 ) (map[string]string, map[string]string, error) {
 	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
-	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
+	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient, false)
 	if err != nil {
 		return nil, nil, err
 	}

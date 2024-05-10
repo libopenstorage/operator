@@ -188,6 +188,74 @@ func getNodeIDToStatusMap(nodeStatuses []diagv1.NodeStatus) map[string]string {
 	return statuses
 }
 
+func (c *Controller) getNodeIDsWithSelectedVolumes(diag *diagv1.PortworxDiag, stc *corev1.StorageCluster) ([]string, error) {
+	if diag == nil || diag.Spec.Portworx == nil || (diag.Spec.Portworx.VolumeSelector.IDs == nil && diag.Spec.Portworx.VolumeSelector.Labels == nil) {
+		return []string{}, nil
+	}
+
+	nodeIDMap := map[string]bool{}
+
+	volumeClient := api.NewOpenStorageVolumeClient(c.grpcConn)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), stc, c.client, false)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, id := range diag.Spec.Portworx.VolumeSelector.IDs {
+
+		// Inspect volume to get location of replicas
+		volumeInspectResponse, err := volumeClient.Inspect(
+			ctx,
+			&api.SdkVolumeInspectRequest{
+				VolumeId: id,
+			},
+		)
+		if err != nil {
+			logrus.Warnf("Failed to inspect volume %s: %v", id, err)
+			// Try the next volume
+			continue
+		}
+
+		// Add all nodes that have a replica of this volume
+		for _, rs := range volumeInspectResponse.Volume.ReplicaSets {
+			for _, r := range rs.Nodes {
+				nodeIDMap[r] = true
+			}
+		}
+	}
+
+	// Inspect all volumes by labels
+	if len(diag.Spec.Portworx.VolumeSelector.Labels) > 0 {
+		volumeInspectResponse, err := volumeClient.InspectWithFilters(
+			ctx,
+			&api.SdkVolumeInspectWithFiltersRequest{
+				Labels: diag.Spec.Portworx.VolumeSelector.Labels,
+			},
+		)
+		if err != nil {
+			logrus.Warnf("Failed to inspect volumes with labels %v: %v", diag.Spec.Portworx.VolumeSelector.Labels, err)
+		} else {
+			for _, v := range volumeInspectResponse.Volumes {
+
+				// Add all nodes that have a replica of this volume
+				for _, rs := range v.Volume.ReplicaSets {
+					for _, r := range rs.Nodes {
+						nodeIDMap[r] = true
+					}
+				}
+			}
+		}
+	}
+
+	// Convert to slice
+	nodeIDs := make([]string, 0, len(nodeIDMap))
+	for k := range nodeIDMap {
+		nodeIDs = append(nodeIDs, k)
+	}
+
+	return nodeIDs, nil
+}
+
 type podReconcileStatus struct {
 	podsToDelete         []*v1.Pod
 	nodesToCreatePodsFor []string
