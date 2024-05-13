@@ -3886,6 +3886,7 @@ func TestUpdateStorageClusterWithKVDBDown(t *testing.T) {
 	cluster.Spec.Kvdb = &corev1.KvdbSpec{
 		Internal: true,
 	}
+	cluster.Status.Phase = "Online"
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	storageLabels := map[string]string{
 		constants.LabelKeyClusterName: cluster.Name,
