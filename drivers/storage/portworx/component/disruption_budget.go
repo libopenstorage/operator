@@ -102,10 +102,16 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 	}
 
 	if pxutil.ClusterSupportsParallelUpgrade(nodeEnumerateResponse) {
-		if err := c.createPortworxNodePodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse); err != nil {
+		// Get the list of k8s nodes that are part of the current cluster
+		k8sNodeList := &v1.NodeList{}
+		err = c.k8sClient.List(context.TODO(), k8sNodeList)
+		if err != nil {
 			return err
 		}
-		if err := c.deletePortworxNodePodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse); err != nil {
+		if err := c.createPortworxNodePodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse, k8sNodeList); err != nil {
+			return err
+		}
+		if err := c.deletePortworxNodePodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse, k8sNodeList); err != nil {
 			return err
 		}
 	} else {
@@ -213,8 +219,9 @@ func (c *disruptionBudget) createPortworxNodePodDisruptionBudget(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse,
+	k8sNodeList *v1.NodeList,
 ) error {
-	nodesNeedingPDB, err := pxutil.NodesNeedingPDB(c.k8sClient, nodeEnumerateResponse)
+	nodesNeedingPDB, err := pxutil.NodesNeedingPDB(c.k8sClient, nodeEnumerateResponse, k8sNodeList)
 	if err != nil {
 		return err
 	}
@@ -253,8 +260,9 @@ func (c *disruptionBudget) deletePortworxNodePodDisruptionBudget(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse,
+	k8sNodeList *v1.NodeList,
 ) error {
-	nodesToDeletePDB, err := pxutil.NodesToDeletePDB(c.k8sClient, nodeEnumerateResponse)
+	nodesToDeletePDB, err := pxutil.NodesToDeletePDB(c.k8sClient, nodeEnumerateResponse, k8sNodeList)
 	if err != nil {
 		return err
 	}
