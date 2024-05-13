@@ -59,6 +59,8 @@ func TestSetupContextWithToken(t *testing.T) {
 		pxSharedSecretKey string // secret stored as env variable value
 		initialSecrets    []v1.Secret
 		initialConfigMaps []v1.ConfigMap
+		securityEnabled   bool
+		skipSecurityCheck bool
 
 		expectError      bool
 		expectTokenAdded bool
@@ -68,6 +70,8 @@ func TestSetupContextWithToken(t *testing.T) {
 			name:              "Shared secret key should add token to context",
 			pxSecretName:      "",
 			pxSharedSecretKey: "mysecret",
+			securityEnabled:   true,
+			skipSecurityCheck: false,
 
 			expectTokenAdded: true,
 			expectError:      false,
@@ -76,16 +80,40 @@ func TestSetupContextWithToken(t *testing.T) {
 			name:              "Default config map should add token to context",
 			pxConfigMapName:   defaultConfigMap[0].Name,
 			initialConfigMaps: defaultConfigMap,
+			securityEnabled:   true,
+			skipSecurityCheck: false,
 
 			expectTokenAdded: true,
 			expectError:      false,
 		},
 		{
-			name:           "Default secret should generate and add token to context",
-			pxSecretName:   defaultSecret[0].Name,
-			initialSecrets: defaultSecret,
+			name:              "Default secret should generate and add token to context",
+			pxSecretName:      defaultSecret[0].Name,
+			initialSecrets:    defaultSecret,
+			securityEnabled:   true,
+			skipSecurityCheck: false,
 
 			expectTokenAdded: true,
+			expectError:      false,
+		},
+		{
+			name:              "Default secret should generate and add token to context when security is disabled but security check is skipped",
+			pxSecretName:      defaultSecret[0].Name,
+			initialSecrets:    defaultSecret,
+			securityEnabled:   false,
+			skipSecurityCheck: true,
+
+			expectTokenAdded: true,
+			expectError:      false,
+		},
+		{
+			name:              "Default secret should not be generated when security is disabled and security check is not skipped",
+			pxSecretName:      defaultSecret[0].Name,
+			initialSecrets:    defaultSecret,
+			securityEnabled:   false,
+			skipSecurityCheck: false,
+
+			expectTokenAdded: false,
 			expectError:      false,
 		},
 	}
@@ -110,7 +138,7 @@ func TestSetupContextWithToken(t *testing.T) {
 				},
 				Spec: corev1.StorageClusterSpec{
 					Security: &corev1.SecuritySpec{
-						Enabled: true,
+						Enabled: tc.securityEnabled,
 					},
 				},
 			}
@@ -120,7 +148,9 @@ func TestSetupContextWithToken(t *testing.T) {
 			err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 			require.NoError(t, err)
 			setSecuritySpecDefaults(cluster)
-			cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
+			if cluster.Spec.Security != nil && cluster.Spec.Security.Auth != nil {
+				cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
+			}
 
 			err = driver.PreInstall(cluster)
 			assert.NoError(t, err)
@@ -166,7 +196,7 @@ func TestSetupContextWithToken(t *testing.T) {
 			p := portworx{
 				k8sClient: k8sClient,
 			}
-			ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
+			ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient, tc.skipSecurityCheck)
 			if tc.expectError {
 				assert.Error(t, err)
 				assert.EqualError(t, err, tc.expectedError)
