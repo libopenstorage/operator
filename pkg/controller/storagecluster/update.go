@@ -49,6 +49,10 @@ import (
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
+const (
+	k8sNodeUpdateAttempts = 5
+)
+
 // rollingUpdate deletes old storage cluster pods making sure that no more than
 // cluster.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable pods are unavailable
 func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string, nodeList *v1.NodeList) error {
@@ -245,7 +249,7 @@ func nodeUnschedulableAnnotationHelperWithRetries(
 	k8sClient client.Client, nodeName string, unschedulable bool,
 ) error {
 	var err error
-	for i := 0; i < 5; i++ {
+	for i := 0; i < k8sNodeUpdateAttempts; i++ {
 		err = nodeUnschedulableAnnotationHelper(k8sClient, nodeName, unschedulable)
 		if err == nil || !errors.IsConflict(err) {
 			return err
@@ -270,22 +274,19 @@ func nodeUnschedulableAnnotationHelper(k8sClient client.Client, nodeName string,
 	needsUpdate := false
 	val := nodeMarkedUnschedulable(node)
 	if unschedulable && !val {
+		logrus.Infof("Adding annotation %s to node %s", constants.AnnotationUnschedulable, nodeName)
 		if node.Annotations == nil {
 			node.Annotations = make(map[string]string)
 		}
 		node.Annotations[constants.AnnotationUnschedulable] = "true"
 		needsUpdate = true
 	} else if !unschedulable && val {
+		logrus.Infof("Removing annotation %s from node %s", constants.AnnotationUnschedulable, nodeName)
 		delete(node.Annotations, constants.AnnotationUnschedulable)
 		needsUpdate = true
 	}
 	if !needsUpdate {
 		return nil
-	}
-	if unschedulable {
-		logrus.Infof("Adding annotation %s to node %s", constants.AnnotationUnschedulable, nodeName)
-	} else {
-		logrus.Infof("Removing annotation %s from node %s", constants.AnnotationUnschedulable, nodeName)
 	}
 	if err := k8sClient.Update(ctx, node); err != nil {
 		return fmt.Errorf("failed to update annotation %s on node %s: %w",
