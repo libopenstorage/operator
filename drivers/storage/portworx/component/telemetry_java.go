@@ -142,6 +142,10 @@ func (t *telemetry) deployMetricsCollectorV1(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
+	if t.reconcileMetricsCollector == nil || !*t.reconcileMetricsCollector {
+		return nil
+	}
+
 	if err := t.createCollectorServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
@@ -602,7 +606,6 @@ func (t *telemetry) createCollectorConfigMap(
 	config := fmt.Sprintf(
 		`scrapeConfig:
   interval: 10
-  batchSize: 5
   k8sConfig:
     pods:
     - podSelector:%s
