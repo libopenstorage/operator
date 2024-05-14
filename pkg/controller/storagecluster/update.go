@@ -49,9 +49,13 @@ import (
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 )
 
+const (
+	k8sNodeUpdateAttempts = 5
+)
+
 // rollingUpdate deletes old storage cluster pods making sure that no more than
 // cluster.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable pods are unavailable
-func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) error {
+func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string, nodeList *v1.NodeList) error {
 	logrus.Debug("Perform rolling update")
 	nodeToStoragePods, err := c.getNodeToStoragePods(cluster)
 	if err != nil {
@@ -74,7 +78,7 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 				continue
 			}
 			if _, ok := availablePods[pod.Name]; ok {
-				if err := c.removeStorkUnschedulableLabel(pod.Spec.NodeName); err != nil {
+				if err := c.removeNodeUnschedulableLabel(pod.Spec.NodeName); err != nil {
 					return err
 				}
 			}
@@ -94,7 +98,7 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		oldPodsToDelete = append(oldPodsToDelete, pod.Name)
 	}
 
-	// TODO: Max unavaibable kvdb nodes has been set to 1 assuming default setup of 3 KVDB nodes.
+	// TODO: Max unavailable kvdb nodes has been set to 1 assuming default setup of 3 KVDB nodes.
 	// Need to generalise code for 5 KVDB nodes
 
 	// get the number of kvdb members which are unavailable in case of internal kvdb
@@ -107,7 +111,21 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 		}
 	}
 
+	nodesMarkedUnschedulable := map[string]bool{}
+	for _, node := range nodeList.Items {
+		if nodeMarkedUnschedulable(&node) {
+			nodesMarkedUnschedulable[node.Name] = true
+		}
+	}
 	logrus.Debugf("Marking old pods for deletion")
+	// sort the pods such that the pods on the nodes that we marked unschedulable are deleted first
+	// Otherwise, we will end up marking too many nodes as unschedulable (or ping-ponging VMs between the nodes).
+	sort.Slice(oldAvailablePods, func(i, j int) bool {
+		iUnschedulable := nodesMarkedUnschedulable[oldAvailablePods[i].Spec.NodeName]
+		jUnschedulable := nodesMarkedUnschedulable[oldAvailablePods[j].Spec.NodeName]
+
+		return iUnschedulable && !jUnschedulable
+	})
 	for _, pod := range oldAvailablePods {
 		if numUnavailable >= maxUnavailable {
 			logrus.Infof("Number of unavailable StorageCluster pods: %d, is equal "+
@@ -166,7 +184,7 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 					logrus.Warnf("Pod %s has no node name; cannot add unschedulable label to the node", podName)
 					continue
 				}
-				if err := c.addStorkUnschedulableAnnotation(pod.Spec.NodeName); err != nil {
+				if err := c.addNodeUnschedulableAnnotation(pod.Spec.NodeName); err != nil {
 					return err
 				}
 			}
@@ -220,15 +238,30 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string) 
 	return c.syncNodes(cluster, oldPodsToDeletePruned, []string{}, hash)
 }
 
-func (c *Controller) addStorkUnschedulableAnnotation(nodeName string) error {
-	return storkUnschedulableAnnotationHelper(c.client, nodeName, true)
+func (c *Controller) addNodeUnschedulableAnnotation(nodeName string) error {
+	return nodeUnschedulableAnnotationHelperWithRetries(c.client, nodeName, true)
 }
 
-func (c *Controller) removeStorkUnschedulableLabel(nodeName string) error {
-	return storkUnschedulableAnnotationHelper(c.client, nodeName, false)
+func (c *Controller) removeNodeUnschedulableLabel(nodeName string) error {
+	return nodeUnschedulableAnnotationHelperWithRetries(c.client, nodeName, false)
 }
 
-func storkUnschedulableAnnotationHelper(k8sClient client.Client, nodeName string, unschedulable bool) error {
+func nodeUnschedulableAnnotationHelperWithRetries(
+	k8sClient client.Client, nodeName string, unschedulable bool,
+) error {
+	var err error
+	for i := 0; i < k8sNodeUpdateAttempts; i++ {
+		err = nodeUnschedulableAnnotationHelper(k8sClient, nodeName, unschedulable)
+		if err == nil || !errors.IsConflict(err) {
+			return err
+		}
+		logrus.Warnf("Conflict while updating annotation %s on node %s in attempt %d: %v",
+			constants.AnnotationUnschedulable, nodeName, i, err)
+	}
+	return err
+}
+
+func nodeUnschedulableAnnotationHelper(k8sClient client.Client, nodeName string, unschedulable bool) error {
 	ctx := context.TODO()
 	node := &v1.Node{}
 	err := k8sClient.Get(ctx, types.NamespacedName{Name: nodeName}, node)
@@ -240,28 +273,25 @@ func storkUnschedulableAnnotationHelper(k8sClient client.Client, nodeName string
 		return fmt.Errorf("failed to get node %s: %w", nodeName, err)
 	}
 	needsUpdate := false
-	val, ok := node.Annotations[constants.StorkAnnotationUnschedulable]
-	if unschedulable && val != "true" {
+	val := nodeMarkedUnschedulable(node)
+	if unschedulable && !val {
+		logrus.Infof("Adding annotation %s to node %s", constants.AnnotationUnschedulable, nodeName)
 		if node.Annotations == nil {
 			node.Annotations = make(map[string]string)
 		}
-		node.Annotations[constants.StorkAnnotationUnschedulable] = "true"
+		node.Annotations[constants.AnnotationUnschedulable] = "true"
 		needsUpdate = true
-	} else if !unschedulable && ok {
-		delete(node.Annotations, constants.StorkAnnotationUnschedulable)
+	} else if !unschedulable && val {
+		logrus.Infof("Removing annotation %s from node %s", constants.AnnotationUnschedulable, nodeName)
+		delete(node.Annotations, constants.AnnotationUnschedulable)
 		needsUpdate = true
 	}
 	if !needsUpdate {
 		return nil
 	}
-	if unschedulable {
-		logrus.Infof("Adding annotation %s to node %s", constants.StorkAnnotationUnschedulable, nodeName)
-	} else {
-		logrus.Infof("Removing annotation %s from node %s", constants.StorkAnnotationUnschedulable, nodeName)
-	}
 	if err := k8sClient.Update(ctx, node); err != nil {
 		return fmt.Errorf("failed to update annotation %s on node %s: %w",
-			constants.StorkAnnotationUnschedulable, nodeName, err)
+			constants.AnnotationUnschedulable, nodeName, err)
 	}
 	return nil
 }
