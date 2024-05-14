@@ -3066,9 +3066,9 @@ func TestKubevirtVMsDuringUpgrade(t *testing.T) {
 	}
 
 	// add unschedulable label to the nodes and then verify that they get removed
-	err = storkUnschedulableAnnotationHelper(k8sClient, k8sNodes[0].Name, true)
+	err = nodeUnschedulableAnnotationHelper(k8sClient, k8sNodes[0].Name, true)
 	require.NoError(t, err)
-	err = storkUnschedulableAnnotationHelper(k8sClient, k8sNodes[2].Name, true)
+	err = nodeUnschedulableAnnotationHelper(k8sClient, k8sNodes[2].Name, true)
 	require.NoError(t, err)
 	verifyUnschedulableAnnotation(t, k8sClient, k8sNodes[0].Name, true)
 	verifyUnschedulableAnnotation(t, k8sClient, k8sNodes[1].Name, false)
@@ -3132,7 +3132,7 @@ func TestKubevirtVMsDuringUpgrade(t *testing.T) {
 
 	// reset the state before the next test
 	for _, k8sNode := range k8sNodes {
-		err = storkUnschedulableAnnotationHelper(k8sClient, k8sNode.Name, false)
+		err = nodeUnschedulableAnnotationHelper(k8sClient, k8sNode.Name, false)
 		require.NoError(t, err)
 		verifyUnschedulableAnnotation(t, k8sClient, k8sNode.Name, false)
 	}
@@ -10557,7 +10557,7 @@ func createPxApiPod(
 
 func verifyUnschedulableAnnotation(t *testing.T, k8sClient client.Client, nodeName string, expectUnschedulable bool) {
 	node := getNode(t, k8sClient, nodeName)
-	val, ok := node.Annotations[constants.StorkAnnotationUnschedulable]
+	val, ok := node.Annotations[constants.AnnotationUnschedulable]
 	if expectUnschedulable {
 		require.True(t, ok && val == "true")
 	} else {

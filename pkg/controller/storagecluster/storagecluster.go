@@ -797,9 +797,16 @@ func (c *Controller) syncStorageCluster(
 	}
 	hash := cur.Labels[util.DefaultStorageClusterUniqueLabelKey]
 
+	nodeList := &v1.NodeList{}
+	err = c.client.List(context.TODO(), nodeList, &client.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("couldn't get list of nodes when syncing storage cluster %#v: %v",
+			cluster, err)
+	}
+
 	// TODO: Don't process a storage cluster until all its previous creations and
 	// deletions have been processed.
-	err = c.manage(cluster, hash)
+	err = c.manage(cluster, hash, nodeList)
 	if err != nil {
 		return fmt.Errorf("manage failed: %s", err)
 	}
@@ -807,7 +814,7 @@ func (c *Controller) syncStorageCluster(
 	switch cluster.Spec.UpdateStrategy.Type {
 	case corev1.OnDeleteStorageClusterStrategyType:
 	case corev1.RollingUpdateStorageClusterStrategyType:
-		if err := c.rollingUpdate(cluster, hash); err != nil {
+		if err := c.rollingUpdate(cluster, hash, nodeList); err != nil {
 			return fmt.Errorf("rolling update failed: %s", err)
 		}
 	}
@@ -969,6 +976,7 @@ func (c *Controller) updateStorageClusterStatus(
 func (c *Controller) manage(
 	cluster *corev1.StorageCluster,
 	hash string,
+	nodeList *v1.NodeList,
 ) error {
 	// Run the pre install hook for the driver to ensure we are ready to create storage pods
 	if err := c.Driver.PreInstall(cluster); err != nil {
@@ -982,13 +990,6 @@ func (c *Controller) manage(
 			cluster.Name, err)
 	}
 	var nodesNeedingStoragePods, podsToDelete []string
-
-	nodeList := &v1.NodeList{}
-	err = c.client.List(context.TODO(), nodeList, &client.ListOptions{})
-	if err != nil {
-		return fmt.Errorf("couldn't get list of nodes when syncing storage cluster %#v: %v",
-			cluster, err)
-	}
 
 	// For each node, if the node is running the storage pod but isn't supposed to, kill the storage pod.
 	// If the node is supposed to run the storage pod, but isn't, create the storage pod on the node.
