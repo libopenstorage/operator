@@ -45,8 +45,8 @@ const (
 	// the custom registry, there is a list of hardcoded common registries, however the list
 	// may not be complete, users can use this annotation to add more.
 	AnnotationCommonImageRegistries = OperatorPrefix + "/common-image-registries"
-	// StorkAnnotationUnschedulable tells Stork to consider the node unschedulable
-	StorkAnnotationUnschedulable = "stork.libopenstorage.org/unschedulable"
+	// AnnotationUnschedulable tells Stork to consider the node unschedulable
+	AnnotationUnschedulable = OperatorPrefix + "/unschedulable"
 	// OperatorLabelManagedByKey is a label key that is added to any object that is
 	// managed the Portworx operator.
 	OperatorLabelManagedByKey = OperatorPrefix + "/managed-by"
