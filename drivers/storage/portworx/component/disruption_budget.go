@@ -1,6 +1,7 @@
 package component
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	v1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -33,8 +35,10 @@ const (
 )
 
 type disruptionBudget struct {
-	k8sClient client.Client
-	sdkConn   *grpc.ClientConn
+	k8sClient             client.Client
+	sdkConn               *grpc.ClientConn
+	recorder              record.EventRecorder
+	annotatedMinAvailable int
 }
 
 func (c *disruptionBudget) Name() string {
@@ -49,9 +53,11 @@ func (c *disruptionBudget) Initialize(
 	k8sClient client.Client,
 	_ version.Version,
 	_ *runtime.Scheme,
-	_ record.EventRecorder,
+	recorder record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
+	c.recorder = recorder
+	c.annotatedMinAvailable = -1
 }
 
 func (c *disruptionBudget) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
@@ -104,7 +110,7 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 	userProvidedMinValue, err := pxutil.MinAvailableForStoragePDB(cluster)
 	if err != nil {
 		logrus.Warnf("Invalid value for annotation %s: %v", pxutil.AnnotationStoragePodDisruptionBudget, err)
-		userProvidedMinValue = -1
+		userProvidedMinValue = -2
 	}
 
 	var minAvailable int
@@ -124,11 +130,26 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 	// or greater than or equal to the number of storage nodes.
 	quorumValue := math.Floor(float64(storageNodesCount)/2) + 1
 	if userProvidedMinValue < int(quorumValue) || userProvidedMinValue >= storageNodesCount {
-		logrus.Warnf("Value for px-storage pod disruption budget not provided or is invalid, using default calculated value %d: ", storageNodesCount-1)
+		logrus.Warnf("Value for px-storage pod disruption budget not provided or is invalid, using default calculated value: %d ", storageNodesCount-1)
+
+		// If the user provided value is invalid and it is different from the previously given value, raise an event in storagecluster
+		if cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] != "" && userProvidedMinValue != c.annotatedMinAvailable {
+			errmsg := fmt.Sprintf("Invalid annotation value for px-storage pod disruption budget: %d. Using default value: %d", userProvidedMinValue, storageNodesCount-1)
+			c.recorder.Event(cluster, v1.EventTypeWarning, util.InvalidMinAvailable, errmsg)
+		}
+		if cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] == "" && userProvidedMinValue != c.annotatedMinAvailable {
+			defaultmsg := fmt.Sprintf("Using default value for px-storage pod disruption budget: %d", storageNodesCount-1)
+			c.recorder.Event(cluster, v1.EventTypeNormal, util.ValidMinAvailable, defaultmsg)
+		}
 		minAvailable = storageNodesCount - 1
 	} else {
+		if userProvidedMinValue != c.annotatedMinAvailable {
+			validAnnotation := fmt.Sprintf("Using annotated value for px-storage pod disruption budget: %d", userProvidedMinValue)
+			c.recorder.Event(cluster, v1.EventTypeNormal, util.ValidMinAvailable, validAnnotation)
+		}
 		minAvailable = userProvidedMinValue
 	}
+	c.annotatedMinAvailable = userProvidedMinValue
 
 	// Create PDB only if there are at least 3 nodes. With 2 nodes or less, if 1
 	// node goes down Portworx will lose quorum anyway. Such clusters would be
