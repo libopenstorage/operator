@@ -324,6 +324,7 @@ func (c *Controller) syncStorage(
 	cluster *corev1.StorageCluster,
 	storageNode *corev1.StorageNode,
 ) error {
+
 	// sync the storage labels on pods
 	portworxPodList := &v1.PodList{}
 	pxLabels := c.Driver.GetSelectorLabels()
@@ -344,16 +345,37 @@ func (c *Controller) syncStorage(
 	if err != nil {
 		return err
 	}
-	nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
-	nodeResp, err := nodeClient.Inspect(context.Background(), &api.SdkNodeInspectRequest{NodeId: storageNode.Name})
-	if err != nil {
-		return err
-	}
-	shouldUseQuorumMember, err := pxutil.ShouldUseQuorumFlag(nodeResp.Node)
-	if err != nil {
-		return err
-	}
 	fmt.Println("---------------------------------------------")
+
+	nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
+	fmt.Println("Node Name : ", storageNode.Name)
+	fmt.Println()
+
+	nodeIDS, err := nodeClient.Enumerate(context.Background(), &api.SdkNodeEnumerateRequest{})
+	if err != nil {
+		return err
+	}
+
+	for _, nodeID := range nodeIDS.NodeIds {
+		fmt.Println("Node ID : ", nodeID)
+		if nodeID == storageNode.Name {
+			fmt.Println("Found node ID : ", nodeID)
+		}
+	}
+
+	nodeResp, err := nodeClient.EnumerateWithFilters(context.Background(), &api.SdkNodeEnumerateWithFiltersRequest{})
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Node Scheduler name : ", nodeResp.Nodes[0].SchedulerNodeName)
+	fmt.Println("Node ID : ", nodeResp.Nodes[0].Id)
+	fmt.Println("Node Hostname : ", nodeResp.Nodes[0].Hostname)
+	
+	/*shouldUseQuorumMember, err := pxutil.ShouldUseQuorumFlag(nil)
+	if err != nil {
+		return err
+	}
 	fmt.Println("shouldUseQuorumMember: ", shouldUseQuorumMember, " for node: ", storageNode.Name)
 
 	// Update the storage label on the pod
@@ -425,7 +447,7 @@ func (c *Controller) syncStorage(
 			}
 			break // found pod we were looking for, no need to check other pods
 		}
-	}
+	}*/
 	return nil
 }
 
