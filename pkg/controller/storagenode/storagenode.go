@@ -351,32 +351,28 @@ func (c *Controller) syncStorage(
 	fmt.Println("Node Name : ", storageNode.Name)
 	fmt.Println()
 
-	nodeIDS, err := nodeClient.Enumerate(context.Background(), &api.SdkNodeEnumerateRequest{})
-	if err != nil {
-		return err
-	}
-
-	for _, nodeID := range nodeIDS.NodeIds {
-		fmt.Println("Node ID : ", nodeID)
-		if nodeID == storageNode.Name {
-			fmt.Println("Found node ID : ", nodeID)
-		}
-	}
-
 	nodeResp, err := nodeClient.EnumerateWithFilters(context.Background(), &api.SdkNodeEnumerateWithFiltersRequest{})
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Node Scheduler name : ", nodeResp.Nodes[0].SchedulerNodeName)
-	fmt.Println("Node ID : ", nodeResp.Nodes[0].Id)
-	fmt.Println("Node Hostname : ", nodeResp.Nodes[0].Hostname)
-	
-	/*shouldUseQuorumMember, err := pxutil.ShouldUseQuorumFlag(nil)
-	if err != nil {
-		return err
+	var nodeName string
+	var shouldUseQuorumMember, isQuorumMember bool
+	node := &api.StorageNode{}
+	for _, n := range nodeResp.Nodes {
+		fmt.Println("Node ID : ", n.SchedulerNodeName)
+		if n.SchedulerNodeName == storageNode.Name {
+			fmt.Println("Found node ID : ", n.SchedulerNodeName)
+			shouldUseQuorumMember, err = pxutil.ShouldUseQuorumFlag(node)
+			if err != nil {
+				fmt.Println("Error in ShouldUseQuorumFlag: ", err)
+				return err
+			}
+			isQuorumMember = !node.NonQuorumMember
+			nodeName = node.SchedulerNodeName
+			fmt.Println("shouldUseQuorumMember: ", shouldUseQuorumMember, " for node: ", nodeName, " isQuorumMember: ", isQuorumMember)
+		}
 	}
-	fmt.Println("shouldUseQuorumMember: ", shouldUseQuorumMember, " for node: ", storageNode.Name)
 
 	// Update the storage label on the pod
 	// fetch version on px on the nade by checking  the node labels
@@ -392,7 +388,7 @@ func (c *Controller) syncStorage(
 			updateNeeded := false
 			value, storageLabelPresent := podCopy.GetLabels()[constants.LabelKeyStoragePod]
 			fmt.Println(" Should use Quorum member ? ", shouldUseQuorumMember)
-			fmt.Println("Quorum member ? ", !nodeResp.Node.NonQuorumMember)
+			fmt.Println("Quorum member ? ", isQuorumMember)
 
 			if canNodeServeStorage(storageNode) { // node has storage
 				if value != constants.LabelValueTrue {
@@ -400,7 +396,7 @@ func (c *Controller) syncStorage(
 						podCopy.Labels = make(map[string]string)
 					}
 
-					if !shouldUseQuorumMember || !nodeResp.Node.NonQuorumMember {
+					if !shouldUseQuorumMember || isQuorumMember {
 						c.log(storageNode).Debugf("Adding storage label to pod: %s/%s", podCopy.Namespace, pod.Name)
 						podCopy.Labels[constants.LabelKeyStoragePod] = constants.LabelValueTrue
 						updateNeeded = true
@@ -409,7 +405,7 @@ func (c *Controller) syncStorage(
 			} else {
 				if storageLabelPresent {
 
-					if !shouldUseQuorumMember || !nodeResp.Node.NonQuorumMember {
+					if !shouldUseQuorumMember || isQuorumMember {
 						c.log(storageNode).Debugf("Removing storage label from pod: %s/%s", podCopy.Namespace, pod.Name)
 						delete(podCopy.Labels, constants.LabelKeyStoragePod)
 						updateNeeded = true
@@ -447,7 +443,7 @@ func (c *Controller) syncStorage(
 			}
 			break // found pod we were looking for, no need to check other pods
 		}
-	}*/
+	}
 	return nil
 }
 
