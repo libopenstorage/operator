@@ -12515,7 +12515,8 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	component.RegisterDisruptionBudgetComponent()
 
 	driver := portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	recorder := record.NewFakeRecorder(50)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
 	// TestCase: Do not create KVDB PDB if not using internal KVDB
@@ -12574,6 +12575,10 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	storagePDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Invalid annotation value for px-storage pod disruption budget. Using default value: %d",
+			v1.EventTypeWarning, util.InvalidMinAvailable, 1),
+	)
 
 	// TestCase: Create storage PDB if total nodes with storage is at least 3.
 	// Also, ignore the annotation if the value is an invalid integer
@@ -12597,6 +12602,10 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.Len(t, storagePDB.Spec.Selector.MatchLabels, 2)
 	require.Equal(t, cluster.Name, storagePDB.Spec.Selector.MatchLabels[constants.LabelKeyClusterName])
 	require.Equal(t, constants.LabelValueTrue, storagePDB.Spec.Selector.MatchLabels[constants.LabelKeyStoragePod])
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Invalid annotation value for px-storage pod disruption budget. Using default value: %d",
+			v1.EventTypeWarning, util.InvalidMinAvailable, 2),
+	)
 
 	// TestCase: Update storage PDB if count of nodes with storage changes.
 	// Also, ignore the annotation if the value is an invalid integer
@@ -12629,8 +12638,11 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	storagePDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
-
 	require.Equal(t, 3, storagePDB.Spec.MinAvailable.IntValue())
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Using annotated value for px-storage pod disruption budget: %d",
+			v1.EventTypeNormal, util.ValidMinAvailable, 3),
+	)
 
 	// TestCase: Ignore annotation and go back to default PDB calculation
 	// if annotation value is greater than or equal to storagenodes
@@ -12644,6 +12656,10 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Invalid annotation value for px-storage pod disruption budget. Using default value: %d",
+			v1.EventTypeWarning, util.InvalidMinAvailable, 4),
+	)
 
 	// TestCase: When annotation to override PDB value is lesser than num(storagenodes)/2 +1
 	// Ignore annotation and use default PDB calculation
@@ -12657,6 +12673,10 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Invalid annotation value for px-storage pod disruption budget. Using default value: %d",
+			v1.EventTypeWarning, util.InvalidMinAvailable, 4),
+	)
 
 	// TestCase: Use NonQuorumMember flag to determine storage node count
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
@@ -12681,6 +12701,10 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Using default value for px-storage pod disruption budget: %d",
+			v1.EventTypeNormal, util.ValidMinAvailable, 4),
+	)
 
 	// TestCase: Do not use NonQuorumMember flag if there is at least one old unsupported node
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
