@@ -353,6 +353,8 @@ func (c *Controller) syncStorage(
 	if err != nil {
 		return err
 	}
+	fmt.Println("---------------------------------------------")
+	fmt.Println("shouldUseQuorumMember: ", shouldUseQuorumMember, " for node: ", storageNode.Name)
 
 	// Update the storage label on the pod
 	// fetch version on px on the nade by checking  the node labels
@@ -367,6 +369,9 @@ func (c *Controller) syncStorage(
 			storageNode.Name == pod.Spec.NodeName {
 			updateNeeded := false
 			value, storageLabelPresent := podCopy.GetLabels()[constants.LabelKeyStoragePod]
+			fmt.Println(" Should use Quorum member ? ", shouldUseQuorumMember)
+			fmt.Println("Quorum member ? ", !nodeResp.Node.NonQuorumMember)
+
 			if canNodeServeStorage(storageNode) { // node has storage
 				if value != constants.LabelValueTrue {
 					if podCopy.Labels == nil {
@@ -381,6 +386,7 @@ func (c *Controller) syncStorage(
 				}
 			} else {
 				if storageLabelPresent {
+
 					if !shouldUseQuorumMember || !nodeResp.Node.NonQuorumMember {
 						c.log(storageNode).Debugf("Removing storage label from pod: %s/%s", podCopy.Namespace, pod.Name)
 						delete(podCopy.Labels, constants.LabelKeyStoragePod)
@@ -400,6 +406,7 @@ func (c *Controller) syncStorage(
 					updateNeeded = true
 				}
 			}
+			fmt.Println("---------------------------------------------")
 
 			value, present := podCopy.Labels[constants.OperatorLabelManagedByKey]
 			if !present || value != constants.OperatorLabelManagedByValue {
