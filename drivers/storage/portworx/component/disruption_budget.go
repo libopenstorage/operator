@@ -134,7 +134,7 @@ func (c *disruptionBudget) createPortworxPodDisruptionBudget(
 
 		// If the user provided value is invalid and it is different from the previously given value, raise an event in storagecluster
 		if cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] != "" && userProvidedMinValue != c.annotatedMinAvailable {
-			errmsg := fmt.Sprintf("Invalid annotation value for px-storage pod disruption budget: %d. Using default value: %d", userProvidedMinValue, storageNodesCount-1)
+			errmsg := fmt.Sprintf("Invalid annotation value for px-storage pod disruption budget. Using default value: %d", storageNodesCount-1)
 			c.recorder.Event(cluster, v1.EventTypeWarning, util.InvalidMinAvailable, errmsg)
 		}
 		if cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] == "" && userProvidedMinValue != c.annotatedMinAvailable {
