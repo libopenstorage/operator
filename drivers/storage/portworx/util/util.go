@@ -1141,23 +1141,15 @@ func CountStorageNodes(
 		if node.Status == api.Status_STATUS_DECOMMISSION {
 			continue
 		}
-		v := node.NodeLabels[NodeLabelPortworxVersion]
-		nodeVersion, err := version.NewVersion(v)
+
+		useQuorumFlag, err = ShouldUseQuorumFlag(node)
 		if err != nil {
-			logrus.Warnf("Failed to parse node version %s for node %s: %v", v, node.Id, err)
-			useQuorumFlag = false
-			useClusterDomain = false
 			break
 		}
-		if nodeVersion.LessThan(MinimumPxVersionQuorumFlag) {
-			logrus.Tracef("Node %s is older than %s. Not using quorum member flag", node.Id, MinimumPxVersionQuorumFlag.String())
-			useQuorumFlag = false
-			useClusterDomain = false
+
+		useClusterDomain, err = ShouldUseClusterDomain(node)
+		if err != nil {
 			break
-		}
-		if nodeVersion.LessThan(MinimumPxVersionClusterDomain) {
-			logrus.Tracef("Node %s is older than %s. Cannot using cluster domain field", node.Id, MinimumPxVersionClusterDomain.String())
-			useClusterDomain = false
 		}
 	}
 
@@ -1241,6 +1233,35 @@ func CountStorageNodes(
 
 	logrus.Debugf("storageNodesCount: %d", storageNodesCount)
 	return storageNodesCount, nil
+}
+
+func ShouldUseQuorumFlag(node *api.StorageNode) (bool, error) {
+
+	v := node.NodeLabels[NodeLabelPortworxVersion]
+	nodeVersion, err := version.NewVersion(v)
+	if err != nil {
+		logrus.Warnf("Failed to parse node version %s for node %s: %v", v, node.Id, err)
+		return false, err
+	}
+	if nodeVersion.LessThan(MinimumPxVersionQuorumFlag) {
+		logrus.Tracef("Node %s is older than %s. Not using quorum member flag", node.Id, MinimumPxVersionQuorumFlag.String())
+		return false, nil
+	}
+	return true, nil
+}
+
+func ShouldUseClusterDomain(node *api.StorageNode) (bool, error) {
+	v := node.NodeLabels[NodeLabelPortworxVersion]
+	nodeVersion, err := version.NewVersion(v)
+	if err != nil {
+		logrus.Warnf("Failed to parse node version %s for node %s: %v", v, node.Id, err)
+		return false, err
+	}
+	if nodeVersion.LessThan(MinimumPxVersionClusterDomain) {
+		logrus.Tracef("Node %s is older than %s. Cannot using cluster domain field", node.Id, MinimumPxVersionClusterDomain.String())
+		return false, nil
+	}
+	return true, nil
 }
 
 func CleanupObject(obj client.Object) {

@@ -3,6 +3,9 @@ package storagenode
 import (
 	"context"
 	"fmt"
+	"github.com/libopenstorage/openstorage/api"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	"google.golang.org/grpc"
 	"strings"
 	"time"
 
@@ -59,6 +62,7 @@ type Controller struct {
 	ctrl     controller.Controller
 	// Node to NodeInfo map
 	nodeInfoMap maps.SyncMap[string, *k8s.NodeInfo]
+	sdkConn     *grpc.ClientConn
 }
 
 // Init initialize the storage storagenode controller
@@ -336,6 +340,25 @@ func (c *Controller) syncStorage(
 		return fmt.Errorf("failed to get list of portworx pods. %v", err)
 	}
 
+	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.client, cluster.Namespace)
+	if err != nil {
+		return err
+	}
+	nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
+	nodeResp, err := nodeClient.Inspect(context.Background(), &api.SdkNodeInspectRequest{NodeId: storageNode.Name})
+	if err != nil {
+		return err
+	}
+	shouldUseQuorumMember, err := pxutil.ShouldUseQuorumFlag(nodeResp.Node)
+	if err != nil {
+		return err
+	}
+
+	// Update the storage label on the pod
+	// fetch version on px on the nade by checking  the node labels
+	// if the node has storage, add the storage label to the pod
+	// if the node does not have storage, remove the storage label from the pod
+
 	for _, pod := range portworxPodList.Items {
 		podCopy := pod.DeepCopy()
 		controllerRef := metav1.GetControllerOf(podCopy)
@@ -349,15 +372,20 @@ func (c *Controller) syncStorage(
 					if podCopy.Labels == nil {
 						podCopy.Labels = make(map[string]string)
 					}
-					podCopy.Labels[constants.LabelKeyStoragePod] = constants.LabelValueTrue
-					updateNeeded = true
+
+					if !shouldUseQuorumMember || !nodeResp.Node.NonQuorumMember {
+						c.log(storageNode).Debugf("Adding storage label to pod: %s/%s", podCopy.Namespace, pod.Name)
+						podCopy.Labels[constants.LabelKeyStoragePod] = constants.LabelValueTrue
+						updateNeeded = true
+					}
 				}
 			} else {
 				if storageLabelPresent {
-					c.log(storageNode).Debugf("Removing storage label from pod: %s/%s",
-						podCopy.Namespace, pod.Name)
-					delete(podCopy.Labels, constants.LabelKeyStoragePod)
-					updateNeeded = true
+					if !shouldUseQuorumMember || !nodeResp.Node.NonQuorumMember {
+						c.log(storageNode).Debugf("Removing storage label from pod: %s/%s", podCopy.Namespace, pod.Name)
+						delete(podCopy.Labels, constants.LabelKeyStoragePod)
+						updateNeeded = true
+					}
 				}
 
 				value, present := podCopy.Annotations[constants.AnnotationPodSafeToEvict]
