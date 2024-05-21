@@ -810,7 +810,7 @@ func TestReconcileWithStorageLabel(t *testing.T) {
 	_, present = pod1.Annotations[constants.LabelKeyStoragePod]
 	require.True(t, present)
 
-	// TestCase 4: storage label should be added for PX >= 3.1.0 if node is not QuorumMember
+	// TestCase 4: storage label should not be added for PX >= 3.1.0 if node is not QuorumMember
 	podNode1 = createStoragePod(cluster, "pod-node1", storageNode.Name, nil, clusterRef)
 	err = k8sClient.Update(context.TODO(), podNode1)
 	require.NoError(t, err)
