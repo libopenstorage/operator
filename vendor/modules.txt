@@ -52,9 +52,6 @@ github.com/aws/aws-sdk-go/service/sts/stsiface
 # github.com/beorn7/perks v1.0.1
 ## explicit; go 1.11
 github.com/beorn7/perks/quantile
-# github.com/blang/semver v3.5.1+incompatible
-## explicit
-github.com/blang/semver
 # github.com/blang/semver/v4 v4.0.0
 ## explicit; go 1.14
 github.com/blang/semver/v4
@@ -334,13 +331,14 @@ github.com/portworx/kvdb/etcd/common
 github.com/portworx/kvdb/etcd/v2
 github.com/portworx/kvdb/etcd/v3
 github.com/portworx/kvdb/mem
-# github.com/portworx/sched-ops v1.20.4-rc1.0.20240214081459-b1e25baf33c9 => github.com/portworx/sched-ops v1.20.4-rc1.0.20240214081459-b1e25baf33c9
+# github.com/portworx/sched-ops v1.20.4-rc1.0.20240502044614-dc8638ea15f9 => github.com/portworx/sched-ops v1.20.4-rc1.0.20240502044614-dc8638ea15f9
 ## explicit; go 1.19
 github.com/portworx/sched-ops/k8s/apiextensions
 github.com/portworx/sched-ops/k8s/apps
 github.com/portworx/sched-ops/k8s/common
 github.com/portworx/sched-ops/k8s/core
 github.com/portworx/sched-ops/k8s/errors
+github.com/portworx/sched-ops/k8s/kubevirt-dynamic
 github.com/portworx/sched-ops/k8s/openshift
 github.com/portworx/sched-ops/k8s/operator
 github.com/portworx/sched-ops/k8s/operatormarketplace
@@ -1010,12 +1008,10 @@ k8s.io/utils/net
 k8s.io/utils/pointer
 k8s.io/utils/strings/slices
 k8s.io/utils/trace
-# sigs.k8s.io/cluster-api v1.1.6
-## explicit; go 1.17
-sigs.k8s.io/cluster-api/api/v1beta1
+# sigs.k8s.io/cluster-api v0.2.11
+## explicit; go 1.12
 sigs.k8s.io/cluster-api/errors
-sigs.k8s.io/cluster-api/feature
-sigs.k8s.io/cluster-api/util/version
+sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1
 # sigs.k8s.io/controller-runtime v0.14.5 => sigs.k8s.io/controller-runtime v0.13.0
 ## explicit; go 1.17
 sigs.k8s.io/controller-runtime
@@ -1092,7 +1088,7 @@ sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
 # github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
 # github.com/libopenstorage/openstorage => github.com/libopenstorage/openstorage v1.0.1-0.20240221210452-7757fdc2b8ff
-# github.com/portworx/sched-ops => github.com/portworx/sched-ops v1.20.4-rc1.0.20240214081459-b1e25baf33c9
+# github.com/portworx/sched-ops => github.com/portworx/sched-ops v1.20.4-rc1.0.20240502044614-dc8638ea15f9
 # golang.org/x/tools => golang.org/x/tools v0.1.11
 # google.golang.org/grpc => google.golang.org/grpc v1.29.1
 # google.golang.org/grpc/examples/helloworld/helloworld => google.golang.org/grpc/examples/helloworld/helloworld v1.29.1

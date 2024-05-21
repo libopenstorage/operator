@@ -552,10 +552,17 @@ func ValidateStorageClusterComponents(cluster *corev1.StorageCluster) error {
 	return nil
 }
 
-func GetK8sNodeCount() (int, error) {
+func GetNonMasterK8sNodeCount() (int, error) {
 	nodes, err := schedopsCore.Instance().GetNodes()
 	if err != nil {
 		return -1, err
 	}
-	return len(nodes.Items), nil
+	nodesCount := 0
+	for _, node := range nodes.Items {
+		if schedopsCore.Instance().IsNodeMaster(node) {
+			continue
+		}
+		nodesCount++
+	}
+	return nodesCount, nil
 }

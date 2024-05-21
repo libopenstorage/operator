@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	cluster_v1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -39,7 +39,7 @@ func TestIsNodeBeingDeleted(t *testing.T) {
 	}
 
 	now := metav1.Now()
-	m2 := &cluster_v1beta1.Machine{
+	m2 := &cluster_v1alpha1.Machine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "m2",
 			Namespace:         "default",
