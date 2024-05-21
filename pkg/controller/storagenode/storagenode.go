@@ -343,6 +343,7 @@ func (c *Controller) syncStorage(
 
 	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.client, cluster.Namespace)
 	if err != nil {
+		fmt.Println("error in GetPortworxConn: ", err)
 		return err
 	}
 	fmt.Println("---------------------------------------------")
