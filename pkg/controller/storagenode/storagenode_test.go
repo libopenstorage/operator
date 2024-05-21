@@ -2,7 +2,10 @@ package storagenode
 
 import (
 	"context"
+	osdapi "github.com/libopenstorage/openstorage/api"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -280,6 +283,29 @@ func TestReconcile(t *testing.T) {
 		},
 	}
 
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.0"}},
+			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.0"}},
+			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.0"}},
+			{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.0"}},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
 	controllerKind := corev1.SchemeGroupVersion.WithKind("StorageCluster")
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 	testStorageNode := "node1"
@@ -330,7 +356,25 @@ func TestReconcile(t *testing.T) {
 		},
 	}
 
-	k8sClient := testutil.FakeK8sClient(storageNode, storageLessNode, cluster)
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	},
+		storageNode,
+		storageLessNode,
+		cluster)
+
 	recorder := record.NewFakeRecorder(10)
 	driver := testutil.MockDriver(mockCtrl)
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -338,7 +382,7 @@ func TestReconcile(t *testing.T) {
 
 	// reconcile storage node
 	podNode1 := createStoragePod(cluster, "pod-node1", testStorageNode, nil, clusterRef)
-	err := k8sClient.Create(context.TODO(), podNode1)
+	err = k8sClient.Create(context.TODO(), podNode1)
 	require.NoError(t, err)
 
 	podNode2 := createStoragePod(cluster, "pod-node2", testStoragelessNode, nil, clusterRef)
@@ -413,6 +457,29 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.0"}},
+			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.0"}},
+			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.0"}},
+			{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.0"}},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
@@ -462,7 +529,25 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 		},
 	}
 
-	k8sClient := testutil.FakeK8sClient(storageNode, storageLessNode, cluster)
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	},
+		storageNode,
+		storageLessNode,
+		cluster)
+
 	recorder := record.NewFakeRecorder(10)
 	driver := testutil.MockDriver(mockCtrl)
 	controller := Controller{
@@ -476,7 +561,7 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 	driver.EXPECT().String().Return("ut-driver").AnyTimes()
 
 	podNode1 := createStoragePod(cluster, "pod-node1", storageNode.Name, nil, clusterRef)
-	err := k8sClient.Create(context.TODO(), podNode1)
+	err = k8sClient.Create(context.TODO(), podNode1)
 	require.NoError(t, err)
 
 	podNode2 := createStoragePod(cluster, "pod-node2", storageLessNode.Name, nil, clusterRef)
