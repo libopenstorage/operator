@@ -635,6 +635,218 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 	require.False(t, present)
 }
 
+func TestReconcileWithStorageLabel(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "test-ns",
+		},
+	}
+	controllerKind := corev1.SchemeGroupVersion.WithKind("StorageCluster")
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
+
+	trueValue := true
+	storageNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "node1",
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:   corev1.NodeStateCondition,
+					Status: corev1.NodeOnlineStatus,
+				},
+			},
+			NodeAttributes: &corev1.NodeAttributes{
+				Storage: &trueValue,
+			},
+		},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	},
+		storageNode,
+		cluster)
+
+	recorder := record.NewFakeRecorder(10)
+	driver := testutil.MockDriver(mockCtrl)
+	controller := Controller{
+		client:      k8sClient,
+		recorder:    recorder,
+		Driver:      driver,
+		nodeInfoMap: maps.MakeSyncMap[string, *k8s.NodeInfo](),
+	}
+
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("ut-driver").AnyTimes()
+
+	// TestCase 1: storage label should not be added for PX < 3.1.0 if node pools are empty
+	podNode1 := createStoragePod(cluster, "pod-node1", storageNode.Name, nil, clusterRef)
+	err = k8sClient.Create(context.TODO(), podNode1)
+	require.NoError(t, err)
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{Pools: []*osdapi.StoragePool{}, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.0"}},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	storageNodeRequest := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      storageNode.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	_, err = controller.Reconcile(context.TODO(), storageNodeRequest)
+	require.NoError(t, err)
+
+	pod1 := &v1.Pod{}
+	err = testutil.Get(controller.client, pod1, podNode1.Name, podNode1.Namespace)
+	require.NoError(t, err)
+
+	_, present := pod1.Annotations[constants.LabelKeyStoragePod]
+	require.False(t, present)
+
+	// TestCase 2: storage label should be added for PX < 3.1.0 if node pools are not empty
+	podNode1 = createStoragePod(cluster, "pod-node1", storageNode.Name, nil, clusterRef)
+	podNode1.Annotations = make(map[string]string, 0)
+	podNode1.Annotations[constants.LabelKeyStoragePod] = constants.LabelValueTrue
+	err = k8sClient.Update(context.TODO(), podNode1)
+	require.NoError(t, err)
+
+	expectedNodeEnumerateResp = &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.0.0"}},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	storageNodeRequest = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      storageNode.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	_, err = controller.Reconcile(context.TODO(), storageNodeRequest)
+	require.NoError(t, err)
+
+	pod1 = &v1.Pod{}
+	err = testutil.Get(controller.client, pod1, podNode1.Name, podNode1.Namespace)
+	require.NoError(t, err)
+
+	_, present = pod1.Annotations[constants.LabelKeyStoragePod]
+	require.True(t, present)
+
+	// TestCase 3: storage label should be added for PX >= 3.1.0 if node is QuorumMember
+	podNode1 = createStoragePod(cluster, "pod-node1", storageNode.Name, nil, clusterRef)
+	podNode1.Annotations = make(map[string]string, 0)
+	podNode1.Annotations[constants.LabelKeyStoragePod] = constants.LabelValueTrue
+	err = k8sClient.Update(context.TODO(), podNode1)
+	require.NoError(t, err)
+
+	storageNode.Annotations = nil
+	err = k8sClient.Update(context.TODO(), storageNode)
+	require.NoError(t, err)
+
+	expectedNodeEnumerateResp = &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}, NonQuorumMember: false},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	storageNodeRequest = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      storageNode.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	_, err = controller.Reconcile(context.TODO(), storageNodeRequest)
+	require.NoError(t, err)
+
+	pod1 = &v1.Pod{}
+	err = testutil.Get(controller.client, pod1, podNode1.Name, podNode1.Namespace)
+	require.NoError(t, err)
+
+	_, present = pod1.Annotations[constants.LabelKeyStoragePod]
+	require.True(t, present)
+
+	// TestCase 4: storage label should be added for PX >= 3.1.0 if node is not QuorumMember
+	podNode1 = createStoragePod(cluster, "pod-node1", storageNode.Name, nil, clusterRef)
+	err = k8sClient.Update(context.TODO(), podNode1)
+	require.NoError(t, err)
+
+	storageNode.Annotations = nil
+	err = k8sClient.Update(context.TODO(), storageNode)
+	require.NoError(t, err)
+
+	expectedNodeEnumerateResp = &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}, NonQuorumMember: true},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	storageNodeRequest = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      storageNode.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+
+	_, err = controller.Reconcile(context.TODO(), storageNodeRequest)
+	require.NoError(t, err)
+
+	pod1 = &v1.Pod{}
+	err = testutil.Get(controller.client, pod1, podNode1.Name, podNode1.Namespace)
+	require.NoError(t, err)
+
+	_, present = pod1.Annotations[constants.LabelKeyStoragePod]
+	require.False(t, present)
+}
+
 // TestReconcileKVDB focuses on reconciling a StorageNode which is running KVDB
 func TestReconcileKVDB(t *testing.T) {
 	logrus.SetLevel(logrus.TraceLevel)
