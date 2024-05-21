@@ -528,7 +528,7 @@ func (c *Controller) isStorageNode(storageNode *corev1.StorageNode, cluster *cor
 			} else {
 				isQuorumMember = len(n.Pools) > 0 && n.Pools[0] != nil
 			}
-			logrus.Infof("shouldUseQuorumMembe for node %v: %v , isQuorumMember? %v", shouldUseQuorumMember, storageNode.Name, isQuorumMember)
+			logrus.Infof("shouldUseQuorumMembe for node %v: %v , isQuorumMember? %v", storageNode.Name, shouldUseQuorumMember, isQuorumMember)
 		}
 	}
 
