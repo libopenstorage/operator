@@ -478,9 +478,7 @@ func (c *Controller) canNodeServeStorage(storagenode *corev1.StorageNode, cluste
 	// look for node status condition
 	for _, cond := range storagenode.Status.Conditions {
 		if cond.Type == corev1.NodeStateCondition {
-			if cond.Status == corev1.NodeOnlineStatus ||
-				cond.Status == corev1.NodeMaintenanceStatus ||
-				cond.Status == corev1.NodeDegradedStatus {
+			if cond.Status != corev1.NodeInitStatus {
 				if ok, err := c.isStorageNode(storagenode, cluster); err == nil {
 					return ok
 				}
