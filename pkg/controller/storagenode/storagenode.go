@@ -497,7 +497,7 @@ func isNodeRunningKVDB(storagenode *corev1.StorageNode) bool {
 
 // isStorageNode return true if we should use quorum memebr flag, and the node is a quorum member
 // isStorageNode return false if we should use quorum member flag, and the node is not a quorum member
-// isStorageNode return true if we should not use quorum member flag
+// isStorageNode return true if we should not use quorum member flag and node pools are not empty
 func (c *Controller) isStorageNode(storageNode *corev1.StorageNode, cluster *corev1.StorageCluster) (bool, error) {
 	var shouldUseQuorumMember, isQuorumMember bool
 	var err error
@@ -522,9 +522,15 @@ func (c *Controller) isStorageNode(storageNode *corev1.StorageNode, cluster *cor
 				logrus.Errorf("failed to get shouldUseQuorumFlag: %v", err)
 				return false, err
 			}
-			isQuorumMember = !n.NonQuorumMember
-			logrus.Infof("shouldUseQuorumMembe for node %s: %v , isQuorumMember? %v", shouldUseQuorumMember, storageNode.Name, isQuorumMember)
+
+			if shouldUseQuorumMember {
+				isQuorumMember = !n.NonQuorumMember
+			} else {
+				isQuorumMember = len(n.Pools) > 0 && n.Pools[0] != nil
+			}
+			logrus.Infof("shouldUseQuorumMembe for node %v: %v , isQuorumMember? %v", shouldUseQuorumMember, storageNode.Name, isQuorumMember)
 		}
 	}
-	return !shouldUseQuorumMember || isQuorumMember, nil
+
+	return isQuorumMember, nil
 }
