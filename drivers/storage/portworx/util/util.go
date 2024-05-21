@@ -1141,7 +1141,7 @@ func CountStorageNodes(
 		if node.Status == api.Status_STATUS_DECOMMISSION {
 			continue
 		}
-
+		fmt.Println("call from CountStorageNodes")
 		useQuorumFlag, err = ShouldUseQuorumFlag(node)
 		if err != nil {
 			break
@@ -1236,9 +1236,11 @@ func CountStorageNodes(
 }
 
 func ShouldUseQuorumFlag(node *api.StorageNode) (bool, error) {
-
+	fmt.Println("ShouldUseQuorumFlag ##3###############################")
 	v := node.NodeLabels[NodeLabelPortworxVersion]
+	fmt.Println("version : ", v)
 	nodeVersion, err := version.NewVersion(v)
+	fmt.Println("nodeversion : ", nodeVersion)
 	if err != nil {
 		logrus.Warnf("Failed to parse node version %s for node %s: %v", v, node.Id, err)
 		return false, err
