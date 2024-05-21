@@ -1428,12 +1428,20 @@ func CountStorageNodes(
 		}
 		useQuorumFlag, err = ShouldUseQuorumFlag(node)
 		if err != nil {
-			logrus.Errorf("error while checking quorum flag for node %s: %v", node.Id, err)
+			logrus.Errorf("failed to determine if quorum flag should be used: %v", err)
+			useQuorumFlag = false
+			useClusterDomain = false
 			break
 		}
+
+		if !useQuorumFlag {
+			useClusterDomain = false
+			break
+		}
+
 		useClusterDomain, err = ShouldUseClusterDomain(node)
 		if err != nil {
-			logrus.Errorf("error while checking cluster domain for node %s: %v", node.Id, err)
+			logrus.Errorf("failed to determine if cluster domain should be used: %v", err)
 			break
 		}
 	}
