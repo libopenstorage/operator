@@ -341,38 +341,53 @@ func (c *Controller) syncStorage(
 		return fmt.Errorf("failed to get list of portworx pods. %v", err)
 	}
 
-	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.client, cluster.Namespace)
-	if err != nil {
-		fmt.Println("error in GetPortworxConn: ", err)
-		return err
-	}
-	fmt.Println("---------------------------------------------")
+	var isStorageNodeOnline, shouldUseQuorumMember, isQuorumMember bool
 
-	nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
-	fmt.Println("Node Name : ", storageNode.Name)
-	fmt.Println()
+	// check if storagenode is online
 
-	nodeResp, err := nodeClient.EnumerateWithFilters(context.Background(), &api.SdkNodeEnumerateWithFiltersRequest{})
-	if err != nil {
-		return err
-	}
-
-	var nodeName string
-	var shouldUseQuorumMember, isQuorumMember bool
-	node := &api.StorageNode{}
-	for _, n := range nodeResp.Nodes {
-		fmt.Println("Node ID : ", n.SchedulerNodeName)
-		if n.SchedulerNodeName == storageNode.Name {
-			fmt.Println("Found node ID : ", n.SchedulerNodeName)
-			shouldUseQuorumMember, err = pxutil.ShouldUseQuorumFlag(node)
-			if err != nil {
-				fmt.Println("Error in ShouldUseQuorumFlag: ", err)
-				return err
+	for _, cond := range storageNode.Status.Conditions {
+		if cond.Type == corev1.NodeStateCondition {
+			if cond.Status == corev1.NodeOnlineStatus {
+				isStorageNodeOnline = true
+				break
 			}
-			isQuorumMember = !node.NonQuorumMember
-			nodeName = node.SchedulerNodeName
-			fmt.Println("shouldUseQuorumMember: ", shouldUseQuorumMember, " for node: ", nodeName, " isQuorumMember: ", isQuorumMember)
 		}
+	}
+
+	if isStorageNodeOnline {
+		c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.client, cluster.Namespace)
+		if err != nil {
+			fmt.Println("error in GetPortworxConn: ", err)
+			return err
+		}
+		fmt.Println("---------------------------------------------")
+
+		nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
+		fmt.Println("Node Name : ", storageNode.Name)
+
+		nodeResp, err := nodeClient.EnumerateWithFilters(context.Background(), &api.SdkNodeEnumerateWithFiltersRequest{})
+		if err != nil {
+			return err
+		}
+
+		var nodeName string
+		node := &api.StorageNode{}
+		for _, n := range nodeResp.Nodes {
+			fmt.Println("Node ID : ", n.SchedulerNodeName)
+			if n.SchedulerNodeName == storageNode.Name {
+				fmt.Println("Found node ID : ", n.SchedulerNodeName)
+				shouldUseQuorumMember, err = pxutil.ShouldUseQuorumFlag(node)
+				if err != nil {
+					fmt.Println("Error in ShouldUseQuorumFlag: ", err)
+					return err
+				}
+				isQuorumMember = !node.NonQuorumMember
+				nodeName = node.SchedulerNodeName
+				fmt.Println("shouldUseQuorumMember: ", shouldUseQuorumMember, " for node: ", nodeName, " isQuorumMember: ", isQuorumMember)
+			}
+		}
+	} else {
+		fmt.Println("Storage node %s is not online yet, skipping the storage label update", storageNode.Name)
 	}
 
 	// Update the storage label on the pod
