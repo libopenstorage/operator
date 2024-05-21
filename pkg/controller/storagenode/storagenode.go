@@ -480,7 +480,7 @@ func (c *Controller) canNodeServeStorage(storagenode *corev1.StorageNode, cluste
 	for _, cond := range storagenode.Status.Conditions {
 		if cond.Type == corev1.NodeStateCondition {
 			if cond.Status != corev1.NodeInitStatus {
-				if ok, err := c.isStorageNode(storagenode, cluster); err != nil {
+				if ok, err := c.isStorageNode(storagenode, cluster); err == nil {
 					return ok
 				}
 			}
