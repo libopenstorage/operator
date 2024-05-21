@@ -12460,6 +12460,9 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
 			{SchedulerNodeName: "node1"},
@@ -12679,6 +12682,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	)
 
 	// TestCase: Use NonQuorumMember flag to determine storage node count
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = ""
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
 		{NonQuorumMember: false, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.0"}},
 		{NonQuorumMember: false, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.2.0"}},
