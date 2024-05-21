@@ -324,7 +324,6 @@ func (c *Controller) syncStorage(
 	cluster *corev1.StorageCluster,
 	storageNode *corev1.StorageNode,
 ) error {
-
 	// sync the storage labels on pods
 	portworxPodList := &v1.PodList{}
 	pxLabels := c.Driver.GetSelectorLabels()
@@ -341,60 +340,6 @@ func (c *Controller) syncStorage(
 		return fmt.Errorf("failed to get list of portworx pods. %v", err)
 	}
 
-	var isStorageNodeOnline, shouldUseQuorumMember, isQuorumMember bool
-
-	// check if storagenode is online
-
-	for _, cond := range storageNode.Status.Conditions {
-		if cond.Type == corev1.NodeStateCondition {
-			if cond.Status == corev1.NodeOnlineStatus {
-				isStorageNodeOnline = true
-				break
-			}
-		}
-	}
-
-	if isStorageNodeOnline {
-		c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.client, cluster.Namespace)
-		if err != nil {
-			fmt.Println("error in GetPortworxConn: ", err)
-			return err
-		}
-		fmt.Println("---------------------------------------------")
-
-		nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
-		fmt.Println("Node Name : ", storageNode.Name)
-
-		nodeResp, err := nodeClient.EnumerateWithFilters(context.Background(), &api.SdkNodeEnumerateWithFiltersRequest{})
-		if err != nil {
-			return err
-		}
-
-		var nodeName string
-		node := &api.StorageNode{}
-		for _, n := range nodeResp.Nodes {
-			fmt.Println("Node ID : ", n.SchedulerNodeName)
-			if n.SchedulerNodeName == storageNode.Name {
-				fmt.Println("Found node ID : ", n.SchedulerNodeName)
-				shouldUseQuorumMember, err = pxutil.ShouldUseQuorumFlag(node)
-				if err != nil {
-					fmt.Println("Error in ShouldUseQuorumFlag: ", err)
-					return err
-				}
-				isQuorumMember = !node.NonQuorumMember
-				nodeName = node.SchedulerNodeName
-				fmt.Println("shouldUseQuorumMember: ", shouldUseQuorumMember, " for node: ", nodeName, " isQuorumMember: ", isQuorumMember)
-			}
-		}
-	} else {
-		fmt.Println("Storage node %s is not online yet, skipping the storage label update", storageNode.Name)
-	}
-
-	// Update the storage label on the pod
-	// fetch version on px on the nade by checking  the node labels
-	// if the node has storage, add the storage label to the pod
-	// if the node does not have storage, remove the storage label from the pod
-
 	for _, pod := range portworxPodList.Items {
 		podCopy := pod.DeepCopy()
 		controllerRef := metav1.GetControllerOf(podCopy)
@@ -403,29 +348,20 @@ func (c *Controller) syncStorage(
 			storageNode.Name == pod.Spec.NodeName {
 			updateNeeded := false
 			value, storageLabelPresent := podCopy.GetLabels()[constants.LabelKeyStoragePod]
-			fmt.Println(" Should use Quorum member ? ", shouldUseQuorumMember)
-			fmt.Println("Quorum member ? ", isQuorumMember)
-
-			if canNodeServeStorage(storageNode) { // node has storage
+			if c.canNodeServeStorage(storageNode, cluster) { // node has storage
 				if value != constants.LabelValueTrue {
 					if podCopy.Labels == nil {
 						podCopy.Labels = make(map[string]string)
 					}
-
-					if !shouldUseQuorumMember || isQuorumMember {
-						c.log(storageNode).Debugf("Adding storage label to pod: %s/%s", podCopy.Namespace, pod.Name)
-						podCopy.Labels[constants.LabelKeyStoragePod] = constants.LabelValueTrue
-						updateNeeded = true
-					}
+					podCopy.Labels[constants.LabelKeyStoragePod] = constants.LabelValueTrue
+					updateNeeded = true
 				}
 			} else {
 				if storageLabelPresent {
-
-					if !shouldUseQuorumMember || isQuorumMember {
-						c.log(storageNode).Debugf("Removing storage label from pod: %s/%s", podCopy.Namespace, pod.Name)
-						delete(podCopy.Labels, constants.LabelKeyStoragePod)
-						updateNeeded = true
-					}
+					c.log(storageNode).Debugf("Removing storage label from pod: %s/%s",
+						podCopy.Namespace, pod.Name)
+					delete(podCopy.Labels, constants.LabelKeyStoragePod)
+					updateNeeded = true
 				}
 
 				value, present := podCopy.Annotations[constants.AnnotationPodSafeToEvict]
@@ -440,7 +376,6 @@ func (c *Controller) syncStorage(
 					updateNeeded = true
 				}
 			}
-			fmt.Println("---------------------------------------------")
 
 			value, present := podCopy.Labels[constants.OperatorLabelManagedByKey]
 			if !present || value != constants.OperatorLabelManagedByValue {
@@ -533,7 +468,7 @@ func getDeprecatedCRDBasePath() string {
 	return deprecatedCRDBasePath
 }
 
-func canNodeServeStorage(storagenode *corev1.StorageNode) bool {
+func (c *Controller) canNodeServeStorage(storagenode *corev1.StorageNode, cluster *corev1.StorageCluster) bool {
 	if storagenode.Status.NodeAttributes == nil ||
 		storagenode.Status.NodeAttributes.Storage == nil ||
 		!*storagenode.Status.NodeAttributes.Storage {
@@ -546,11 +481,55 @@ func canNodeServeStorage(storagenode *corev1.StorageNode) bool {
 			if cond.Status == corev1.NodeOnlineStatus ||
 				cond.Status == corev1.NodeMaintenanceStatus ||
 				cond.Status == corev1.NodeDegradedStatus {
-				return true
+				if ok, err := c.isStorageNode(storagenode, cluster); err == nil {
+					return ok
+				}
 			}
 		}
 	}
 	return false
+}
+
+func (c *Controller) isStorageNode(storageNode *corev1.StorageNode, cluster *corev1.StorageCluster) (bool, error) {
+	var shouldUseQuorumMember, isQuorumMember bool
+	var err error
+
+	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.client, cluster.Namespace)
+	if err != nil {
+		fmt.Println("error in GetPortworxConn: ", err)
+		return false, err
+	}
+	fmt.Println("---------------------------------------------")
+
+	nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
+	fmt.Println("Node Name : ", storageNode.Name)
+
+	nodeResp, err := nodeClient.EnumerateWithFilters(context.Background(), &api.SdkNodeEnumerateWithFiltersRequest{})
+	if err != nil {
+		fmt.Println("Error in EnumerateWithFilters: ", err)
+		return false, err
+	}
+
+	var nodeName string
+	node := &api.StorageNode{}
+	for _, n := range nodeResp.Nodes {
+		fmt.Println("Node ID : ", n.SchedulerNodeName)
+		if n.SchedulerNodeName == storageNode.Name {
+			fmt.Println("Found node ID : ", n.SchedulerNodeName)
+			shouldUseQuorumMember, err = pxutil.ShouldUseQuorumFlag(node)
+			if err != nil {
+				fmt.Println("Error in ShouldUseQuorumFlag: ", err)
+				return false, err
+			}
+			isQuorumMember = !node.NonQuorumMember
+			nodeName = node.SchedulerNodeName
+			fmt.Println("shouldUseQuorumMember: ", shouldUseQuorumMember, " for node: ", nodeName, " isQuorumMember: ", isQuorumMember)
+		}
+	}
+	// return true if we should use quorum memebr and it is a quorum member
+	// return false if we should use quorum member and it is not a quorum member
+	// return true if we should not use quorum member
+	return !shouldUseQuorumMember || isQuorumMember, nil
 }
 
 func isNodeRunningKVDB(storagenode *corev1.StorageNode) bool {
