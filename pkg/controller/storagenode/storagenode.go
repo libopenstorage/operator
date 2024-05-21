@@ -511,18 +511,17 @@ func (c *Controller) isStorageNode(storageNode *corev1.StorageNode, cluster *cor
 	}
 
 	var nodeName string
-	node := &api.StorageNode{}
 	for _, n := range nodeResp.Nodes {
 		fmt.Println("Node ID : ", n.SchedulerNodeName)
 		if n.SchedulerNodeName == storageNode.Name {
 			fmt.Println("Found node ID : ", n.SchedulerNodeName)
-			shouldUseQuorumMember, err = pxutil.ShouldUseQuorumFlag(node)
+			shouldUseQuorumMember, err = pxutil.ShouldUseQuorumFlag(n)
 			if err != nil {
 				fmt.Println("Error in ShouldUseQuorumFlag: ", err)
 				return false, err
 			}
-			isQuorumMember = !node.NonQuorumMember
-			nodeName = node.SchedulerNodeName
+			isQuorumMember = !n.NonQuorumMember
+			nodeName = n.SchedulerNodeName
 			fmt.Println("shouldUseQuorumMember: ", shouldUseQuorumMember, " for node: ", nodeName, " isQuorumMember: ", isQuorumMember)
 		}
 	}
