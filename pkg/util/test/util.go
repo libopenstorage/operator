@@ -116,8 +116,8 @@ const (
 	// PxOperatorMasterVersion is a tag for PX Operator master version
 	PxOperatorMasterVersion = "99.9.9"
 
-	// AksPVCControllerSecurePort is the PVC controller secure port.
-	AksPVCControllerSecurePort = "10261"
+	// CustomPVCControllerSecurePort is the PVC controller secure port.
+	CustomPVCControllerSecurePort = "10261"
 
 	pxAnnotationPrefix = "portworx.io"
 
@@ -3156,7 +3156,7 @@ func validatePvcControllerPorts(cluster *corev1.StorageCluster, pvcControllerDep
 							if strings.Contains(containerCommand, "--secure-port") {
 								if len(pvcSecurePort) == 0 {
 									if isAKS(cluster) || IsK3sCluster() {
-										if strings.Split(containerCommand, "=")[1] != AksPVCControllerSecurePort {
+										if strings.Split(containerCommand, "=")[1] != CustomPVCControllerSecurePort {
 											return nil, true, fmt.Errorf("failed to validate secure-port, secure-port is missing in the PVC Controler pod %s", pod.Name)
 										}
 									} else {
