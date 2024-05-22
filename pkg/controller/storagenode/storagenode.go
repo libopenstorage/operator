@@ -509,7 +509,13 @@ func (c *Controller) isStorageNode(storageNode *corev1.StorageNode, cluster *cor
 	}
 
 	nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
-	nodeResp, err := nodeClient.EnumerateWithFilters(context.Background(), &api.SdkNodeEnumerateWithFiltersRequest{})
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, c.client, false)
+	if err != nil {
+		logrus.Errorf("failed to setup context with token: %v", err)
+		return false, err
+	}
+
+	nodeResp, err := nodeClient.EnumerateWithFilters(ctx, &api.SdkNodeEnumerateWithFiltersRequest{})
 	if err != nil {
 		logrus.Errorf("failed to get node list: %v", err)
 		return false, err
