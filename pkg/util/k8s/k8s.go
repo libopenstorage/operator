@@ -632,6 +632,30 @@ func DeleteConfigMap(
 	return k8sClient.Update(context.TODO(), configMap)
 }
 
+// GetConfigMap get config map
+func GetConfigMap(
+	k8sClient client.Client,
+	name string,
+	namespace string,
+	cm *v1.ConfigMap,
+) error {
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      name,
+			Namespace: namespace,
+		},
+		cm,
+	)
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // CreateStorageClass creates a storage class only if not present.
 // It will not return error if already present.
 func CreateStorageClass(

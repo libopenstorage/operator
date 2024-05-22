@@ -331,14 +331,14 @@ func (c *pvcController) createDeployment(
 		command = append(command, "--address=0.0.0.0")
 		if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
 			command = append(command, "--port="+port)
-		} else if pxutil.IsAKS(cluster) || c.isK3sDeployment() {
+		} else if pxutil.IsAKS(cluster) || c.isK3sDeployment() || c.isRKE2Cluster() {
 			command = append(command, "--port="+CustomPVCControllerInsecurePort)
 		}
 	}
 
 	if securePort, ok := cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort]; ok && securePort != "" {
 		command = append(command, "--secure-port="+securePort)
-	} else if pxutil.IsAKS(cluster) || c.isK3sDeployment() {
+	} else if pxutil.IsAKS(cluster) || c.isK3sDeployment() || c.isRKE2Cluster() {
 		command = append(command, "--secure-port="+CustomPVCControllerSecurePort)
 	}
 
@@ -420,7 +420,7 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 	if c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
 		if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort]; ok && port != "" {
 			healthCheckPort = port
-		} else if pxutil.IsAKS(cluster) || c.isK3sDeployment() {
+		} else if pxutil.IsAKS(cluster) || c.isK3sDeployment() || c.isRKE2Cluster() {
 			healthCheckPort = CustomPVCControllerSecurePort
 		} else {
 			healthCheckPort = defaultPVCControllerSecurePort
@@ -428,7 +428,7 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 		healthCheckScheme = v1.URISchemeHTTPS
 	} else if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
 		healthCheckPort = port
-	} else if pxutil.IsAKS(cluster) || c.isK3sDeployment() {
+	} else if pxutil.IsAKS(cluster) || c.isK3sDeployment() || c.isRKE2Cluster() {
 		healthCheckPort = CustomPVCControllerInsecurePort
 	}
 
@@ -568,6 +568,18 @@ func (c *pvcController) isK3sDeployment() bool {
 	}
 
 	return false
+}
+
+// check RKE2 cluster
+func (c *pvcController) isRKE2Cluster() bool {
+	cm := &v1.ConfigMap{}
+	err := k8sutil.GetConfigMap(c.k8sClient, "cluster.rkestate", "kube-system", cm)
+	if err != nil {
+		logrus.Errorf("error during fetching configmap : %s ", err)
+		return false
+	}
+	// if configmap exists is the cluster, return true
+	return true
 }
 
 // RegisterPVCControllerComponent registers the PVC Controller component
