@@ -293,7 +293,7 @@ func TestReconcile(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".test-ns")
 	defer testutil.RestoreEtcHosts(t)
 
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
@@ -470,7 +470,7 @@ func TestReconcileForSafeToEvictAnnotation(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".test-ns")
 	defer testutil.RestoreEtcHosts(t)
 
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
@@ -655,7 +655,7 @@ func TestReconcileWithStorageLabel(t *testing.T) {
 	require.NoError(t, err)
 	defer mockSdk.Stop()
 
-	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".test-ns")
 	defer testutil.RestoreEtcHosts(t)
 
 	cluster := &corev1.StorageCluster{
