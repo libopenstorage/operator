@@ -1914,7 +1914,7 @@ func isVersionSupported(current, target string) bool {
 	return currentVersion.Core().GreaterThanOrEqual(targetVersion)
 }
 
-func IsK3sClusterExt(ext string) bool {
+func IsK3sOrRke2ClusterExt(ext string) bool {
 	return strings.HasPrefix(ext[1:], "k3s") || strings.HasPrefix(ext[1:], "rke2")
 }
 

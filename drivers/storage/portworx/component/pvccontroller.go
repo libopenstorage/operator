@@ -331,14 +331,14 @@ func (c *pvcController) createDeployment(
 		command = append(command, "--address=0.0.0.0")
 		if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
 			command = append(command, "--port="+port)
-		} else if pxutil.IsAKS(cluster) || c.isK3sDeployment() {
+		} else if pxutil.IsAKS(cluster) || c.isK3sOrRke2Deployment() {
 			command = append(command, "--port="+CustomPVCControllerInsecurePort)
 		}
 	}
 
 	if securePort, ok := cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort]; ok && securePort != "" {
 		command = append(command, "--secure-port="+securePort)
-	} else if pxutil.IsAKS(cluster) || c.isK3sDeployment() {
+	} else if pxutil.IsAKS(cluster) || c.isK3sOrRke2Deployment() {
 		command = append(command, "--secure-port="+CustomPVCControllerSecurePort)
 	}
 
@@ -420,7 +420,7 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 	if c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
 		if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort]; ok && port != "" {
 			healthCheckPort = port
-		} else if pxutil.IsAKS(cluster) || c.isK3sDeployment() {
+		} else if pxutil.IsAKS(cluster) || c.isK3sOrRke2Deployment() {
 			healthCheckPort = CustomPVCControllerSecurePort
 		} else {
 			healthCheckPort = defaultPVCControllerSecurePort
@@ -428,7 +428,7 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 		healthCheckScheme = v1.URISchemeHTTPS
 	} else if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
 		healthCheckPort = port
-	} else if pxutil.IsAKS(cluster) || c.isK3sDeployment() {
+	} else if pxutil.IsAKS(cluster) || c.isK3sOrRke2Deployment() {
 		healthCheckPort = CustomPVCControllerInsecurePort
 	}
 
@@ -551,7 +551,7 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 	return deployment
 }
 
-func (c *pvcController) isK3sDeployment() bool {
+func (c *pvcController) isK3sOrRke2Deployment() bool {
 
 	if c.isK3s != nil {
 		return *c.isK3s
@@ -562,7 +562,7 @@ func (c *pvcController) isK3sDeployment() bool {
 		return false
 	}
 	if len(ext) > 0 {
-		ok := pxutil.IsK3sClusterExt(ext)
+		ok := pxutil.IsK3sOrRke2ClusterExt(ext)
 		c.isK3s = boolPtr(ok)
 		return *c.isK3s
 	}
