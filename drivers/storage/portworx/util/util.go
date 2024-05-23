@@ -1915,5 +1915,5 @@ func isVersionSupported(current, target string) bool {
 }
 
 func IsK3sClusterExt(ext string) bool {
-	return strings.HasPrefix(ext[1:], "k3s")
+	return strings.HasPrefix(ext[1:], "k3s") || strings.HasPrefix(ext[1:], "rke2")
 }
