@@ -1925,6 +1925,49 @@ func TestPVCControllerInstallForK3s(t *testing.T) {
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, pvcControllerDeployment)
 }
 
+func TestPVCControllerInstallForRke2(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+
+	k8sClient := testutil.FakeK8sClient()
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.18.0+rke2r1",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
+
+	specFileName := "pvcControllerDeployment.yaml"
+	pvcControllerDeployment := testutil.GetExpectedDeployment(t, specFileName)
+	command := pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command
+	command = append(command, "--port="+component.CustomPVCControllerInsecurePort)
+	command = append(command, "--secure-port="+component.CustomPVCControllerSecurePort)
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command = command
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].Image = "gcr.io/google_containers/kube-controller-manager-amd64:v1.18.0"
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Port = intstr.Parse(component.CustomPVCControllerInsecurePort)
+
+	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, pvcControllerDeployment)
+}
+
 func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
