@@ -503,6 +503,7 @@ func (c *Controller) isStorageNode(storageNode *corev1.StorageNode, cluster *cor
 	var err error
 
 	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.client, cluster.Namespace)
+	defer c.closeSdkConn()
 	if err != nil {
 		logrus.Errorf("failed to get portworx connection: %v", err)
 		return false, err
@@ -539,4 +540,16 @@ func (c *Controller) isStorageNode(storageNode *corev1.StorageNode, cluster *cor
 	}
 
 	return isQuorumMember, nil
+}
+
+// closeSdkConn closes the sdk connection and resets it to nil
+func (c *Controller) closeSdkConn() {
+	if c.sdkConn == nil {
+		return
+	}
+
+	if err := c.sdkConn.Close(); err != nil {
+		logrus.Errorf("Failed to close sdk connection: %s", err.Error())
+	}
+	c.sdkConn = nil
 }
