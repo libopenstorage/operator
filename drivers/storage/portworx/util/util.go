@@ -390,10 +390,21 @@ func IsVsphere(cluster *corev1.StorageCluster) bool {
 	return false
 }
 
+// IsPure returns true if PURE_SAN_TYPE  is present in the spec
+func IsPure(cluster *corev1.StorageCluster) bool {
+	envValue, exists := GetClusterEnvValue(cluster, "PURE_FLASHARRAY_SAN_TYPE")
+	if exists && len(envValue) > 0 {
+		return true
+	}
+	return false
+}
+
 // GetCloudProvider returns the cloud provider string
 func GetCloudProvider(cluster *corev1.StorageCluster) string {
 	if IsVsphere(cluster) {
 		return cloudops.Vsphere
+	} else if IsPure(cluster) {
+		return cloudops.Pure
 	}
 	// TODO: implement conditions for other providers
 	return ""
@@ -555,6 +566,14 @@ func IncludeCSISnapshotController(cluster *corev1.StorageCluster) bool {
 	return cluster.Spec.CSI != nil && cluster.Spec.CSI.InstallSnapshotController != nil && *cluster.Spec.CSI.InstallSnapshotController
 }
 
+func TrimVersionString(version string) string {
+	if idx := strings.Index(version, "-"); idx != -1 {
+		return version[:idx]
+	}
+
+	return version
+}
+
 // GetPortworxVersion returns the Portworx version based on the Spec data provided.
 // We first try to extract the image from the PX_IMAGE env variable if specified,
 // If not specified then we use Spec.Image, if the version extraction fails for any
@@ -581,6 +600,7 @@ func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
 	parts := strings.Split(pxImage, ":")
 	if len(parts) >= 2 {
 		pxVersionStr := parts[len(parts)-1]
+		pxVersionStr = TrimVersionString(pxVersionStr)
 		pxVersion, err = version.NewSemver(pxVersionStr)
 		if err == nil {
 			logrus.Infof("Using version extracted from image name: %s", pxVersionStr)

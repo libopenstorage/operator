@@ -36,7 +36,9 @@ const (
 	// DefCmetaData default metadata cloud device for DMthin AWS
 	DefCmetaAWS = "type=gp3,size=64"
 	// DefCmetaVsphere default metadata cloud device for DMthin Vsphere
-	DefCmetaVsphere    = "type=eagerzeroedthick,size=64"
+	DefCmetaVsphere = "type=eagerzeroedthick,size=64"
+	// DefCmetaFACD default metadata cloud device for DMthin FACD
+	DefCmetaFACD = "size=64"
 	preFlightOutputLog = "/var/cores/px-pre-flight-output.log"
 	// Fatal result string from pre-flight check
 	Fatal = "fatal"
@@ -407,6 +409,8 @@ func (u *preFlightPortworx) processPassedChecks(recorder record.EventRecorder) {
 		cmetaData := DefCmetaAWS
 		if pxutil.IsVsphere(u.cluster) {
 			cmetaData = DefCmetaVsphere
+		} else if pxutil.IsPure(u.cluster) {
+			cmetaData = DefCmetaFACD
 		}
 		u.cluster.Spec.CloudStorage.SystemMdDeviceSpec = &cmetaData
 	}

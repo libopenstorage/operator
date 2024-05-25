@@ -320,8 +320,19 @@ func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 		logrus.Errorf("Error checking for OpenShift version %s", err.Error())
 		return false
 	}
-	if preflight.IsVsphere() && isSupportedOCP { // Preflight runs on Vsphere and OCP 4.13+
-		return true
+
+	pxVer31, _ := version.NewVersion("3.1")
+	if clusterPXver.GreaterThanOrEqual(pxVer31) { // PX version is 3.1.0 or above
+		if pxutil.IsVsphere(toUpdate) && isSupportedOCP { // Preflight runs on Vsphere and OCP 4.13+
+			return true
+		}
+	}
+
+	pxVer312, _ := version.NewVersion("3.1.2")
+	if clusterPXver.GreaterThanOrEqual(pxVer312) { // PX version is 3.1.2 or above
+		if pxutil.IsPure(toUpdate) && isSupportedOCP { // Preflight runs on FACD and OCP 4.13+
+			return true
+		}
 	}
 
 	return false // All else disable
