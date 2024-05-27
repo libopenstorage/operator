@@ -123,7 +123,7 @@ func newTemplate(
 		return nil, err
 	}
 
-	t.isK3s = isK3sClusterExt(ext)
+	t.isK3s = isK3sOrRke2ClusterExt(ext)
 	t.runOnMaster = t.isK3s || pxutil.RunOnMaster(cluster)
 	t.pxVersion = pxutil.GetPortworxVersion(cluster)
 	deprecatedCSIDriverName := pxutil.UseDeprecatedCSIDriverName(cluster)
@@ -1948,9 +1948,9 @@ func getCommonVolumeList(pxVersion *version.Version) []volumeInfo {
 	return list
 }
 
-func isK3sClusterExt(ext string) bool {
+func isK3sOrRke2ClusterExt(ext string) bool {
 	if len(ext) > 0 {
-		return pxutil.IsK3sClusterExt(ext) || strings.HasPrefix(ext[1:], "rke2")
+		return pxutil.IsK3sOrRke2ClusterExt(ext)
 	}
 	return false
 }

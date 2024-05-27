@@ -26,7 +26,7 @@ const (
 
 	defaultPxVsphereSecretName = "px-vsphere-secret"
 
-	getInstallPlanListTimeout       = 10 * time.Minute
+	getInstallPlanListTimeout       = 60 * time.Minute
 	getInstallPlanListRetryInterval = 20 * time.Second
 
 	getPxVsphereSecretTimeout       = 10 * time.Minute
@@ -38,9 +38,15 @@ func DeployAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
 	// Parsing PX Operator tag version
 	opRegistryTag := parsePxOperatorImageTagForMarketplace(operatorVersion)
 
+	// Use explicit registry, if passed in the parameters, otherwise use default one
+	opRegistryImageName := defaultOperatorRegistryImageName
+	if PxOperatorRegistryImageName != "" {
+		opRegistryImageName = PxOperatorRegistryImageName
+	}
+
 	// Deploy CatalogSource
-	opRegistryImage := fmt.Sprintf("%s:%s", defaultOperatorRegistryImageName, opRegistryTag)
-	testCatalogSource, err := DeployCatalogSource(defaultCatalogSourceName, defaultCatalogSourceNamespace, opRegistryImage)
+	opRegistryImage := fmt.Sprintf("%s:%s", opRegistryImageName, opRegistryTag)
+	testCatalogSource, err := DeployCatalogSource(defaultCatalogSourceName, defaultCatalogSourceNamespace, opRegistryImage, []string{})
 	if err != nil {
 		return err
 	}
@@ -76,9 +82,15 @@ func UpdateAndValidatePxOperatorViaMarketplace(operatorVersion string) error {
 	// Parsing PX Operator tag version
 	opRegistryTag := parsePxOperatorImageTagForMarketplace(operatorVersion)
 
+	// Use explicit registry, if passed in the parameters, otherwise use default one
+	opRegistryImageName := defaultOperatorRegistryImageName
+	if PxOperatorRegistryImageName != "" {
+		opRegistryImageName = PxOperatorRegistryImageName
+	}
+
 	// Edit CatalogSource with the new PX Operator version
 	updateParamFunc := func(testCatalogSource *v1alpha1.CatalogSource) *v1alpha1.CatalogSource {
-		testCatalogSource.Spec.Image = fmt.Sprintf("%s:%s", defaultOperatorRegistryImageName, opRegistryTag)
+		testCatalogSource.Spec.Image = fmt.Sprintf("%s:%s", opRegistryImageName, opRegistryTag)
 		return testCatalogSource
 	}
 
@@ -148,12 +160,13 @@ func DeleteAndValidatePxOperatorViaMarketplace() error {
 }
 
 // DeployCatalogSource creates CatalogSource resource
-func DeployCatalogSource(name, namespace, registryImage string) (*v1alpha1.CatalogSource, error) {
+func DeployCatalogSource(name, namespace, registryImage string, registrySecrets []string) (*v1alpha1.CatalogSource, error) {
 	logrus.Infof("Create test CatalogSrouce [%s] in namespace [%s]", name, namespace)
 	testCatalogSourceTemplate := &v1alpha1.CatalogSource{
 		Spec: v1alpha1.CatalogSourceSpec{
 			Image:      registryImage,
 			SourceType: v1alpha1.SourceTypeGrpc,
+			Secrets:    registrySecrets,
 		},
 	}
 

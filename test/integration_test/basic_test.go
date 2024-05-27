@@ -17,6 +17,7 @@ import (
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 	"github.com/libopenstorage/operator/test/integration_test/types"
 	ci_utils "github.com/libopenstorage/operator/test/integration_test/utils"
+	aetos "github.com/libopenstorage/operator/test/integration_test/utils/aetos"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
@@ -304,6 +305,49 @@ func BasicInstall(tc *types.TestCase) func(*testing.T) {
 
 		// Deploy PX and validate
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+	}
+}
+
+func TestBasicInstall(t *testing.T) {
+	testCase := &types.TestCase{
+		TestName: "BasicInstall",
+		TestSpec: func(t *testing.T) interface{} {
+			objects, err := ci_utils.ParseSpecs("storagecluster/storagecluster-with-all-components.yaml")
+			require.NoError(t, err)
+			cluster, ok := objects[0].(*corev1.StorageCluster)
+			require.True(t, ok)
+			cluster.Name = "test-basic-stc"
+			cluster.Namespace = ci_utils.PxNamespace
+			return cluster
+		},
+		TestFunc: BasicInstallAetosDemo,
+	}
+	BasicInstallAetosDemo(testCase)(t)
+}
+
+func BasicInstallAetosDemo(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		dash.VerifyFatal(t, ok, true, fmt.Sprintf("Get StorageCluster from test spec"))
+
+		defer dash.TestCaseEnd()
+		dash.TestCaseBegin("BasicInstall", "Deploying and validating StorageCluster", "", nil)
+
+		// Construct StorageCluster
+		aetos.Infof("Constructing StorageCluster %s", cluster.Name)
+		err := ci_utils.ConstructStorageCluster(cluster, ci_utils.PxSpecGenURL, ci_utils.PxSpecImages)
+		dash.VerifyFatal(t, err, nil, fmt.Sprintf("Constructed StorageCluster %s? %v", cluster.Name, err))
+
+		// Deploy PX and validate
+		aetos.Infof("Deploying & Validating StorageCluster %s", cluster.Name)
+		_, err = ci_utils.DeployAndValidateStorageClusterAetosDemo(cluster, ci_utils.PxSpecImages)
+		dash.VerifyFatal(t, err, nil, fmt.Sprintf("Deployed and validated StorageCluster %s? %v", cluster.Name, err))
+
+		// Uninstall and validate
+		aetos.Infof("Uninstalling & Validating StorageCluster %s", cluster.Name)
+		err = ci_utils.UninstallAndValidateStorageClusterAetosDemo(cluster)
+		dash.VerifyFatal(t, err, nil, fmt.Sprintf("Uninstalled and validate StorageCluster %s? %v", cluster.Name, err))
 	}
 }
 

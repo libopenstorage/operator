@@ -2097,6 +2097,49 @@ func TestPVCControllerInstallForK3s(t *testing.T) {
 	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, pvcControllerDeployment)
 }
 
+func TestPVCControllerInstallForRke2(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+
+	k8sClient := testutil.FakeK8sClient()
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.18.0+rke2r1",
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-system",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	verifyPVCControllerInstall(t, cluster, k8sClient, "pvcControllerClusterRole.yaml")
+
+	specFileName := "pvcControllerDeployment.yaml"
+	pvcControllerDeployment := testutil.GetExpectedDeployment(t, specFileName)
+	command := pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command
+	command = append(command, "--port="+component.CustomPVCControllerInsecurePort)
+	command = append(command, "--secure-port="+component.CustomPVCControllerSecurePort)
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].Command = command
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].Image = "gcr.io/google_containers/kube-controller-manager-amd64:v1.18.0"
+	pvcControllerDeployment.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Port = intstr.Parse(component.CustomPVCControllerInsecurePort)
+
+	verifyPVCControllerDeploymentObject(t, cluster, k8sClient, pvcControllerDeployment)
+}
+
 func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
@@ -12615,7 +12658,8 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	component.RegisterDisruptionBudgetComponent()
 
 	driver := portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	recorder := record.NewFakeRecorder(50)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
 	// TestCase: Do not create KVDB PDB if not using internal KVDB
@@ -12674,6 +12718,10 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	storagePDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Invalid annotation value for px-storage pod disruption budget. Using default value: %d",
+			v1.EventTypeWarning, util.InvalidMinAvailable, 1),
+	)
 
 	// TestCase: Create storage PDB if total nodes with storage is at least 3.
 	// Also, ignore the annotation if the value is an invalid integer
@@ -12697,6 +12745,10 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.Len(t, storagePDB.Spec.Selector.MatchLabels, 2)
 	require.Equal(t, cluster.Name, storagePDB.Spec.Selector.MatchLabels[constants.LabelKeyClusterName])
 	require.Equal(t, constants.LabelValueTrue, storagePDB.Spec.Selector.MatchLabels[constants.LabelKeyStoragePod])
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Invalid annotation value for px-storage pod disruption budget. Using default value: %d",
+			v1.EventTypeWarning, util.InvalidMinAvailable, 2),
+	)
 
 	// TestCase: Update storage PDB if count of nodes with storage changes.
 	// Also, ignore the annotation if the value is an invalid integer
@@ -12729,8 +12781,11 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	storagePDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
 	require.NoError(t, err)
-
 	require.Equal(t, 3, storagePDB.Spec.MinAvailable.IntValue())
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Using annotated value for px-storage pod disruption budget: %d",
+			v1.EventTypeNormal, util.ValidMinAvailable, 3),
+	)
 
 	// TestCase: Ignore annotation and go back to default PDB calculation
 	// if annotation value is greater than or equal to storagenodes
@@ -12744,6 +12799,10 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Invalid annotation value for px-storage pod disruption budget. Using default value: %d",
+			v1.EventTypeWarning, util.InvalidMinAvailable, 4),
+	)
 
 	// TestCase: When annotation to override PDB value is lesser than num(storagenodes)/2 +1
 	// Ignore annotation and use default PDB calculation
@@ -12757,6 +12816,10 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Invalid annotation value for px-storage pod disruption budget. Using default value: %d",
+			v1.EventTypeWarning, util.InvalidMinAvailable, 4),
+	)
 
 	// TestCase: Use NonQuorumMember flag to determine storage node count
 	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = ""
@@ -12782,6 +12845,10 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 4, storagePDB.Spec.MinAvailable.IntValue())
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Using default value for px-storage pod disruption budget: %d",
+			v1.EventTypeNormal, util.ValidMinAvailable, 4),
+	)
 
 	// TestCase: Do not use NonQuorumMember flag if there is at least one old unsupported node
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
@@ -13698,6 +13765,246 @@ func TestSCC(t *testing.T) {
 	require.NoError(t, err)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
+
+	// Install with no SCC
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedSCC := testutil.GetExpectedSCC(t, "portworxSCC.yaml")
+	scc := &ocp_secv1.SecurityContextConstraints{}
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NotNil(t, err)
+
+	expectedPxRestrictedSCC := testutil.GetExpectedSCC(t, "portworxRestrictedSCC.yaml")
+	pxRestrictedSCC := &ocp_secv1.SecurityContextConstraints{}
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NotNil(t, err)
+
+	// Install with SCC enabled
+	crd := testutil.GetExpectedCRDV1(t, "sccCrd.yaml")
+	err = k8sClient.Create(context.TODO(), crd)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSCC, scc)
+
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSCC, scc)
+
+	// Update SCC
+	scc.AllowHostNetwork = false
+	err = k8sClient.Update(context.TODO(), scc)
+	require.NoError(t, err)
+
+	pxRestrictedSCC.AllowHostNetwork = true
+	err = k8sClient.Update(context.TODO(), pxRestrictedSCC)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NoError(t, err)
+
+	// Update SCC priority
+	cluster.Annotations[pxutil.AnnotationSCCPriority] = "2"
+	err = k8sClient.Update(context.TODO(), scc)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, *scc.Priority, int32(2))
+}
+
+func TestSCCOnOpenshift(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.15",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+		},
+	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// Install with no SCC
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	expectedSCC := testutil.GetExpectedSCC(t, "portworxSCC_Openshift.yaml")
+	scc := &ocp_secv1.SecurityContextConstraints{}
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NotNil(t, err)
+
+	expectedPxRestrictedSCC := testutil.GetExpectedSCC(t, "portworxRestrictedSCC.yaml")
+	pxRestrictedSCC := &ocp_secv1.SecurityContextConstraints{}
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NotNil(t, err)
+
+	// Install with SCC enabled
+	crd := testutil.GetExpectedCRDV1(t, "sccCrd.yaml")
+	err = k8sClient.Create(context.TODO(), crd)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSCC, scc)
+
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedSCC, scc)
+
+	// Update SCC
+	scc.AllowHostNetwork = false
+	err = k8sClient.Update(context.TODO(), scc)
+	require.NoError(t, err)
+
+	pxRestrictedSCC.AllowHostNetwork = true
+	err = k8sClient.Update(context.TODO(), pxRestrictedSCC)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, pxRestrictedSCC, expectedPxRestrictedSCC.Name, "")
+	require.NoError(t, err)
+
+	// Update SCC priority
+	cluster.Annotations[pxutil.AnnotationSCCPriority] = "2"
+	err = k8sClient.Update(context.TODO(), scc)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, scc, expectedSCC.Name, "")
+	require.NoError(t, err)
+	require.Equal(t, *scc.Priority, int32(2))
+}
+
+func TestSCCOnOpenshiftWithPXPrometheusEnabled(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.15",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	recorder := record.NewFakeRecorder(1)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "px/image:2.1.5.1",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{},
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.False(t, cluster.Spec.Monitoring.Prometheus.Enabled)
+	require.NotEmpty(t, recorder.Events)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %s", v1.EventTypeWarning, util.FailedComponentReason,
+			"Disabling Portworx managed Prometheus in lieu of OpenShift managed Prometheus starting OpenShift 4.12"))
+
+	// Do not disable prometheus on existing install if set by the user
+	// if PX Prometheus is explicitly enabled, then add px-prometheus user to Portworx SCC
+	cluster.Spec.Monitoring.Prometheus.Enabled = true
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	require.True(t, cluster.Spec.Monitoring.Prometheus.Enabled)
 
 	// Install with no SCC
 	err = driver.PreInstall(cluster)
