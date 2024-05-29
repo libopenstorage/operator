@@ -5345,6 +5345,8 @@ func TestTelemetryMigrationWithPX2_12(t *testing.T) {
 	err = testutil.Get(k8sClient, telemetryConfig, component.TelemetryConfigMapName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
+	// attempt to fix a panic: "send on closed channel" at migration.go:128
+	time.Sleep(500 * time.Millisecond)
 	close(recorder.Events)
 	var msg string
 	for e := range recorder.Events {
