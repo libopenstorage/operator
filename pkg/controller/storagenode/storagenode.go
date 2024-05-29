@@ -349,7 +349,9 @@ func (c *Controller) syncStorage(
 			storageNode.Name == pod.Spec.NodeName {
 			updateNeeded := false
 			value, storageLabelPresent := podCopy.GetLabels()[constants.LabelKeyStoragePod]
+			c.log(storageNode).Infof("Checking if pod can serve storage for pod: %s which is on node %s ", podCopy.Name, storageNode.Name)
 			if c.canNodeServeStorage(storageNode, cluster) { // node has storage
+				logrus.Infof("Node %s can serve storage for pod: %s", storageNode.Name, podCopy.Name)
 				if value != constants.LabelValueTrue {
 					if podCopy.Labels == nil {
 						podCopy.Labels = make(map[string]string)
@@ -358,6 +360,7 @@ func (c *Controller) syncStorage(
 					updateNeeded = true
 				}
 			} else {
+				logrus.Infof("Node %s cannot serve storage for pod: %s", storageNode.Name, podCopy.Name)
 				if storageLabelPresent {
 					c.log(storageNode).Debugf("Removing storage label from pod: %s/%s",
 						podCopy.Namespace, pod.Name)
@@ -470,6 +473,7 @@ func getDeprecatedCRDBasePath() string {
 }
 
 func (c *Controller) canNodeServeStorage(storagenode *corev1.StorageNode, cluster *corev1.StorageCluster) bool {
+	c.log(storagenode).Info("inside canNodeServeStorage")
 	if storagenode.Status.NodeAttributes == nil ||
 		storagenode.Status.NodeAttributes.Storage == nil ||
 		!*storagenode.Status.NodeAttributes.Storage {
@@ -479,6 +483,7 @@ func (c *Controller) canNodeServeStorage(storagenode *corev1.StorageNode, cluste
 	// look for node status condition
 	for _, cond := range storagenode.Status.Conditions {
 		if cond.Type == corev1.NodeStateCondition {
+			c.log(storagenode).Infof("Node %s has condition %s", storagenode.Name, cond.Type)
 			if cond.Status != corev1.NodeInitStatus {
 				if ok, err := c.isStorageNode(storagenode, cluster); err == nil {
 					return ok
@@ -486,6 +491,7 @@ func (c *Controller) canNodeServeStorage(storagenode *corev1.StorageNode, cluste
 			}
 		}
 	}
+	c.log(storagenode).Infof("Did not find node status condition or failed to get storage node status")
 	return false
 }
 
@@ -499,6 +505,7 @@ func isNodeRunningKVDB(storagenode *corev1.StorageNode) bool {
 // isStorageNode return false if we should use quorum member flag, and the node is not a quorum member
 // isStorageNode return true if we should not use quorum member flag and node pools are not empty
 func (c *Controller) isStorageNode(storageNode *corev1.StorageNode, cluster *corev1.StorageCluster) (bool, error) {
+	c.log(storageNode).Info("inside isStorageNode")
 	var shouldUseQuorumMember, isQuorumMember bool
 	var err error
 
@@ -524,6 +531,7 @@ func (c *Controller) isStorageNode(storageNode *corev1.StorageNode, cluster *cor
 
 	for _, n := range nodeResp.Nodes {
 		if n.SchedulerNodeName == storageNode.Name {
+			c.log(storageNode).Infof("Found node %s in node list", storageNode.Name)
 			shouldUseQuorumMember, err = pxutil.ShouldUseQuorumFlag(n)
 			if err != nil {
 				logrus.Errorf("failed to get shouldUseQuorumFlag: %v", err)
