@@ -1969,6 +1969,20 @@ func (mr *MockOpsMockRecorder) WatchConfigMap(arg0, arg1 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WatchConfigMap", reflect.TypeOf((*MockOps)(nil).WatchConfigMap), arg0, arg1)
 }
 
+// WatchEvents mocks base method.
+func (m *MockOps) WatchEvents(arg0 string, arg1 core.WatchFunc, arg2 v13.ListOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WatchEvents", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WatchEvents indicates an expected call of WatchEvents.
+func (mr *MockOpsMockRecorder) WatchEvents(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WatchEvents", reflect.TypeOf((*MockOps)(nil).WatchEvents), arg0, arg1, arg2)
+}
+
 // WatchLimitRange mocks base method.
 func (m *MockOps) WatchLimitRange(arg0 *v10.LimitRange, arg1 core.WatchFunc) error {
 	m.ctrl.T.Helper()
