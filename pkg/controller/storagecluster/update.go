@@ -173,6 +173,7 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string, 
 		if vmPodsPresent {
 			// add unschedulable label to the nodes that have pods to be deleted so that
 			// stork does not schedule any new virt-launcher pods on them
+			evictionNodes := map[string]bool{}
 			for _, podName := range oldPodsToDelete {
 				pod := oldPodsMap[podName]
 				if pod == nil {
@@ -187,9 +188,10 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string, 
 				if err := c.addNodeUnschedulableAnnotation(pod.Spec.NodeName); err != nil {
 					return err
 				}
+				evictionNodes[pod.Spec.NodeName] = true
 			}
 			// get the VM pods after labeling the nodes since the list may have changed
-			virtLauncherPodsByNode, err = c.kubevirt.GetVMPodsToEvictByNode()
+			virtLauncherPodsByNode, err = c.kubevirt.GetVMPodsToEvictByNode(evictionNodes)
 			if err != nil {
 				return err
 			}

@@ -50,18 +50,18 @@ func (mr *MockKubevirtManagerMockRecorder) ClusterHasVMPods() *gomock.Call {
 }
 
 // GetVMPodsToEvictByNode mocks base method.
-func (m *MockKubevirtManager) GetVMPodsToEvictByNode() (map[string][]v1.Pod, error) {
+func (m *MockKubevirtManager) GetVMPodsToEvictByNode(arg0 map[string]bool) (map[string][]v1.Pod, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVMPodsToEvictByNode")
+	ret := m.ctrl.Call(m, "GetVMPodsToEvictByNode", arg0)
 	ret0, _ := ret[0].(map[string][]v1.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetVMPodsToEvictByNode indicates an expected call of GetVMPodsToEvictByNode.
-func (mr *MockKubevirtManagerMockRecorder) GetVMPodsToEvictByNode() *gomock.Call {
+func (mr *MockKubevirtManagerMockRecorder) GetVMPodsToEvictByNode(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVMPodsToEvictByNode", reflect.TypeOf((*MockKubevirtManager)(nil).GetVMPodsToEvictByNode))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVMPodsToEvictByNode", reflect.TypeOf((*MockKubevirtManager)(nil).GetVMPodsToEvictByNode), arg0)
 }
 
 // StartEvictingVMPods mocks base method.
