@@ -2690,7 +2690,13 @@ func TestKubevirtVMsDuringUpgrade(t *testing.T) {
 		},
 	}
 	kubevirt.EXPECT().ClusterHasVMPods().Return(true, nil)
-	kubevirt.EXPECT().GetVMPodsToEvictByNode().Return(map[string][]v1.Pod{k8sNodes[1].Name: vmPods}, nil)
+	wantNodes := map[string]bool{
+		k8sNodes[0].Name: true,
+		k8sNodes[1].Name: true,
+		k8sNodes[2].Name: true,
+	}
+	kubevirt.EXPECT().GetVMPodsToEvictByNode(wantNodes).Return(
+		map[string][]v1.Pod{k8sNodes[1].Name: vmPods}, nil)
 	kubevirt.EXPECT().StartEvictingVMPods(vmPods, gomock.Any(), gomock.Any())
 
 	result, err = controller.Reconcile(context.TODO(), request)
@@ -2745,7 +2751,7 @@ func TestKubevirtVMsDuringUpgrade(t *testing.T) {
 		},
 	}
 	kubevirt.EXPECT().ClusterHasVMPods().Return(true, nil)
-	kubevirt.EXPECT().GetVMPodsToEvictByNode().Return(map[string][]v1.Pod{
+	kubevirt.EXPECT().GetVMPodsToEvictByNode(wantNodes).Return(map[string][]v1.Pod{
 		k8sNodes[0].Name: vmPodsNode0,
 		k8sNodes[2].Name: vmPodsNode2,
 	}, nil)
