@@ -39,6 +39,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 )
 
 const (
@@ -267,6 +268,9 @@ const (
 	OpenshiftMonitoringRouteName = "thanos-querier"
 	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
 	OpenshiftMonitoringNamespace = "openshift-monitoring"
+
+	AnthosCrdNameSuffix   = "onprem.cluster.gke.io"
+	AnthosVersionLabelKey = "bundle.gke.io/component-version"
 )
 
 var (
@@ -401,7 +405,7 @@ func GetCloudProvider(cluster *corev1.StorageCluster) string {
 	if IsVsphere(cluster) {
 		return cloudops.Vsphere
 	} else if IsPure(cluster) {
-	    return cloudops.Pure
+		return cloudops.Pure
 	}
 	// TODO: implement conditions for other providers
 	return ""
@@ -1336,6 +1340,20 @@ func AppendUserVolumeMounts(
 			}
 		}
 	}
+}
+
+func IsAnthos() bool {
+	crdList, err := apiextensionsops.Instance().ListCRDs()
+	if err == nil {
+		for _, crd := range crdList.Items {
+			if strings.Contains(crd.ObjectMeta.Name, AnthosCrdNameSuffix) {
+				anthosVer := strings.Split(crd.ObjectMeta.Labels[AnthosVersionLabelKey], "-")[0]
+				logrus.Infof("Anthos version: %v", anthosVer)
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func IsSupportedOCPVersion(k8sClient client.Client, targetVersion string) (bool, error) {
