@@ -7,6 +7,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/mock/mockcore"
 	"github.com/libopenstorage/operator/pkg/mock/mockkubevirtdy"
+	"github.com/libopenstorage/operator/pkg/util"
 	kubevirt "github.com/portworx/sched-ops/k8s/kubevirt-dynamic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,7 +90,8 @@ func TestGetVMPodsToEvictByNode(t *testing.T) {
 		require.NotEmpty(t, pods)
 		require.Len(t, pods, 1)
 		require.Len(t, pods[virtLauncherPod.Spec.NodeName], 1)
-		require.Equal(t, "virt-launcher-1", pods["node1"][0].Name)
+		require.Equal(t, "virt-launcher-1", pods["node1"][0].PodToEvict.Name)
+		require.False(t, pods["node1"][0].LiveMigrationInProgress)
 	}
 
 	// Test case: completed or failed virt-launcher pod should be ignored
@@ -164,7 +166,8 @@ func TestGetVMPodsToEvictByNode(t *testing.T) {
 	require.NotEmpty(t, pods)
 	require.Len(t, pods, 1)
 	require.Len(t, pods[virtLauncherPod.Spec.NodeName], 1)
-	require.Equal(t, "virt-launcher-1", pods["node1"][0].Name)
+	require.Equal(t, "virt-launcher-1", pods["node1"][0].PodToEvict.Name)
+	require.True(t, pods["node1"][0].LiveMigrationInProgress)
 
 	// Test case: VM was migrated out already but the source virt-launcher pod has not finished yet.
 	// VMI migration in completed state and VMI is pointing to a different node.
@@ -204,9 +207,37 @@ func TestStartEvictingVMPods(t *testing.T) {
 	// Test case: no migration exists
 	virtLauncherPod, vmi := getTestVirtLauncherPodAndVMI("virt-launcher-1", "node1")
 	mockKubeVirtOps.EXPECT().ListVirtualMachineInstanceMigrations(gomock.Any(), "", gomock.Any()).Return(nil, nil)
+	mockKubeVirtOps.EXPECT().GetVirtualMachineInstance(gomock.Any(), gomock.Any(), vmi.Name).Return(vmi, nil)
 	mockKubeVirtOps.EXPECT().CreateVirtualMachineInstanceMigrationWithParams(gomock.Any(), "", vmi.Name, "", "",
 		expectedAnnotations, expectedLabels).Return(nil, nil)
-	kvmgr.StartEvictingVMPods([]v1.Pod{*virtLauncherPod}, hash, func(message string) {})
+	kvmgr.StartEvictingVMPods([]*util.VMPodEviction{
+		{
+			PodToEvict:              *virtLauncherPod,
+			LiveMigrationInProgress: false,
+		},
+	}, hash, func(message string) {})
+
+	// Test case: migration was in progress when we checked shouldLiveMigrate
+	virtLauncherPod, _ = getTestVirtLauncherPodAndVMI("virt-launcher-1", "node1")
+	kvmgr.StartEvictingVMPods([]*util.VMPodEviction{
+		{
+			PodToEvict:              *virtLauncherPod,
+			LiveMigrationInProgress: true,
+		},
+	}, hash, func(message string) {})
+
+	// Test case: VMI says that VM is running on a different node
+	virtLauncherPod, vmi = getTestVirtLauncherPodAndVMI("virt-launcher-1", "node1")
+	// vmi is running on node2 even though there is a running virt-launcher pod on node1
+	vmi.NodeName = "node2"
+	mockKubeVirtOps.EXPECT().ListVirtualMachineInstanceMigrations(gomock.Any(), "", gomock.Any()).Return(nil, nil)
+	mockKubeVirtOps.EXPECT().GetVirtualMachineInstance(gomock.Any(), gomock.Any(), vmi.Name).Return(vmi, nil)
+	kvmgr.StartEvictingVMPods([]*util.VMPodEviction{
+		{
+			PodToEvict:              *virtLauncherPod,
+			LiveMigrationInProgress: false,
+		},
+	}, hash, func(message string) {})
 
 	// Test case: migration in progress for the same VMI
 	virtLauncherPod, vmi = getTestVirtLauncherPodAndVMI("virt-launcher-1", "node1")
@@ -220,7 +251,12 @@ func TestStartEvictingVMPods(t *testing.T) {
 	mockKubeVirtOps.EXPECT().ListVirtualMachineInstanceMigrations(
 		gomock.Any(), "", gomock.Any()).Return(migrInProgress, nil)
 	// No expectation for call to CreateMigration since no new migration should be created
-	kvmgr.StartEvictingVMPods([]v1.Pod{*virtLauncherPod}, hash, func(message string) {})
+	kvmgr.StartEvictingVMPods([]*util.VMPodEviction{
+		{
+			PodToEvict:              *virtLauncherPod,
+			LiveMigrationInProgress: false,
+		},
+	}, hash, func(message string) {})
 
 	// Test case: failed migration for the same VMI with the same controller revision hash from the same sourceNode.
 	// Should not create a new migration.
@@ -239,7 +275,12 @@ func TestStartEvictingVMPods(t *testing.T) {
 	mockKubeVirtOps.EXPECT().ListVirtualMachineInstanceMigrations(gomock.Any(), "", gomock.Any()).Return(migrFailed, nil)
 	// No expectation for call to CreateMigration since no new migration should be created
 	eventMsg := ""
-	kvmgr.StartEvictingVMPods([]v1.Pod{*virtLauncherPod}, hash, func(message string) { eventMsg = message })
+	kvmgr.StartEvictingVMPods([]*util.VMPodEviction{
+		{
+			PodToEvict:              *virtLauncherPod,
+			LiveMigrationInProgress: false,
+		},
+	}, hash, func(message string) { eventMsg = message })
 	require.Contains(t, eventMsg, "Stop or migrate the VM so that the update of the storage node can proceed")
 
 	// Test case: Failed or in-progress migrations for a different VMI, different revision hash, different source node etc.
@@ -286,9 +327,15 @@ func TestStartEvictingVMPods(t *testing.T) {
 	}
 	mockKubeVirtOps.EXPECT().ListVirtualMachineInstanceMigrations(
 		gomock.Any(), "", gomock.Any()).Return(migrations, nil)
+	mockKubeVirtOps.EXPECT().GetVirtualMachineInstance(gomock.Any(), gomock.Any(), vmi.Name).Return(vmi, nil)
 	mockKubeVirtOps.EXPECT().CreateVirtualMachineInstanceMigrationWithParams(gomock.Any(), "", vmi.Name, "", "",
 		expectedAnnotations, expectedLabels).Return(nil, nil)
-	kvmgr.StartEvictingVMPods([]v1.Pod{*virtLauncherPod}, hash, func(message string) {})
+	kvmgr.StartEvictingVMPods([]*util.VMPodEviction{
+		{
+			PodToEvict:              *virtLauncherPod,
+			LiveMigrationInProgress: false,
+		},
+	}, hash, func(message string) {})
 }
 
 func getTestVirtLauncherPodAndVMI(podName, nodeName string) (*v1.Pod, *kubevirt.VirtualMachineInstance) {
