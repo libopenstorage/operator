@@ -7688,6 +7688,7 @@ func TestPrometheusInstall(t *testing.T) {
 	// Prometheus instance with alert manager enabled
 	cluster.Spec.Monitoring.Prometheus.RemoteWriteEndpoint = ""
 	cluster.Spec.Monitoring.Prometheus.AlertManager = &corev1.AlertManagerSpec{Enabled: true}
+	cluster.Status.DesiredImages.AlertManager = "quay.io/prometheus/prometheus:v1.2.3"
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -15914,7 +15915,9 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 			},
 		},
 	}
-
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -15985,7 +15988,8 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 			},
 		},
 	}
-
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -17119,6 +17123,8 @@ func TestPluginInstallAndUninstall(t *testing.T) {
 		},
 	}
 
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 

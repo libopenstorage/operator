@@ -1139,11 +1139,12 @@ func getDesiredLogUploaderImage(cluster *corev1.StorageCluster) (string, error) 
 }
 
 func getDesiredProxyImage(cluster *corev1.StorageCluster) (string, error) {
-	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.TelemetryProxy != "" {
-		if pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) {
+	if cluster.Status.DesiredImages != nil {
+		if pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) && cluster.Status.DesiredImages.TelemetryProxy != "" {
 			return util.GetImageURN(cluster, cluster.Status.DesiredImages.TelemetryProxy), nil
+		} else if cluster.Status.DesiredImages.MetricsCollectorProxy != "" {
+			return util.GetImageURN(cluster, cluster.Status.DesiredImages.MetricsCollectorProxy), nil
 		}
-		return util.GetImageURN(cluster, cluster.Status.DesiredImages.MetricsCollectorProxy), nil
 	}
 	return "", fmt.Errorf("telemetry proxy image is empty")
 }
