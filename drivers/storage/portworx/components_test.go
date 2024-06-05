@@ -15917,7 +15917,7 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 	}
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
-	
+
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 

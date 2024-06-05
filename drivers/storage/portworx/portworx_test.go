@@ -7556,7 +7556,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 
 	// Install all components
 	cluster.Status.DesiredImages = &corev1.ComponentImages{
-		CSIProvisioner: "quay.io/k8scsi/csi-provisioner:v1.2.3",
+		CSIProvisioner:             "quay.io/k8scsi/csi-provisioner:v1.2.3",
 		CSIAttacher:                "quay.io/k8scsi/csi-attacher:v1.2.3",
 		CSIDriverRegistrar:         "quay.io/k8scsi/driver-registrar:v1.2.3",
 		CSINodeDriverRegistrar:     "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
@@ -7564,9 +7564,9 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 		CSIResizer:                 "quay.io/k8scsi/csi-resizer:v1.2.3",
 		CSISnapshotController:      "quay.io/k8scsi/snapshot-controller:v1.2.3",
 		CSIHealthMonitorController: "quay.io/k8scsi/csi-health-monitor-controller:v1.2.3",
-		Prometheus:               "quay.io/prometheus/prometheus:v1.2.3",
-		PrometheusOperator:       "quay.io/coreos/prometheus-operator:v1.2.3",
-		PrometheusConfigReloader: "quay.io/coreos/prometheus-config-reloader:v1.2.3",
+		Prometheus:                 "quay.io/prometheus/prometheus:v1.2.3",
+		PrometheusOperator:         "quay.io/coreos/prometheus-operator:v1.2.3",
+		PrometheusConfigReloader:   "quay.io/coreos/prometheus-config-reloader:v1.2.3",
 		PrometheusConfigMapReload:  "quay.io/coreos/configmap-reload:v1.2.3",
 	}
 	err = driver.PreInstall(cluster)
@@ -8199,9 +8199,9 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 
 	// Install all components
 	cluster.Status.DesiredImages = &corev1.ComponentImages{
-		CSIProvisioner: "quay.io/k8scsi/csi-provisioner:v1.2.3",
-		CSISnapshotter:             "quay.io/k8scsi/csi-snapshotter:v1.2.3",
-		CSIResizer:                 "quay.io/k8scsi/csi-resizer:v1.2.3",
+		CSIProvisioner:           "quay.io/k8scsi/csi-provisioner:v1.2.3",
+		CSISnapshotter:           "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+		CSIResizer:               "quay.io/k8scsi/csi-resizer:v1.2.3",
 		Prometheus:               "quay.io/prometheus/prometheus:v1.2.3",
 		PrometheusOperator:       "quay.io/coreos/prometheus-operator:v1.2.3",
 		PrometheusConfigReloader: "quay.io/coreos/prometheus-config-reloader:v1.2.3",
