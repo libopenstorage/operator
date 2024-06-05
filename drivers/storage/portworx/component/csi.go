@@ -460,23 +460,35 @@ func (c *csi) createDeployment(
 		cluster,
 		cluster.Status.DesiredImages.CSIProvisioner,
 	)
-	if csiConfig.IncludeAttacher && cluster.Status.DesiredImages.CSIAttacher != "" {
+	if provisionerImage == "" {
+		return fmt.Errorf("csi provisioner image not found")
+	}
+	if csiConfig.IncludeAttacher {
 		attacherImage = util.GetImageURN(
 			cluster,
 			cluster.Status.DesiredImages.CSIAttacher,
 		)
+		if attacherImage == "" {
+			return fmt.Errorf("csi attacher image not found")
+		}
 	}
-	if csiConfig.IncludeSnapshotter && cluster.Status.DesiredImages.CSISnapshotter != "" {
+	if csiConfig.IncludeSnapshotter {
 		snapshotterImage = util.GetImageURN(
 			cluster,
 			cluster.Status.DesiredImages.CSISnapshotter,
 		)
+		if snapshotterImage == "" {
+			return fmt.Errorf("csi snapshotter image not found")
+		}
 	}
-	if csiConfig.IncludeResizer && cluster.Status.DesiredImages.CSIResizer != "" {
+	if csiConfig.IncludeResizer {
 		resizerImage = util.GetImageURN(
 			cluster,
 			cluster.Status.DesiredImages.CSIResizer,
 		)
+		if resizerImage == "" {
+			return fmt.Errorf("csi resizer image not found")
+		}
 	}
 
 	if cluster.Spec.CSI.InstallSnapshotController != nil &&
@@ -494,14 +506,20 @@ func (c *csi) createDeployment(
 				cluster,
 				cluster.Status.DesiredImages.CSISnapshotController,
 			)
+			if snapshotControllerImage == "" {
+				return fmt.Errorf("csi snapshot controller image not found")
+			}
 		}
 	}
 
-	if csiConfig.IncludeHealthMonitorController && cluster.Status.DesiredImages.CSIHealthMonitorController != "" {
+	if csiConfig.IncludeHealthMonitorController {
 		healthMonitorControllerImage = util.GetImageURN(
 			cluster,
 			cluster.Status.DesiredImages.CSIHealthMonitorController,
 		)
+		if cluster.Status.DesiredImages.CSIHealthMonitorController != "" {
+			return fmt.Errorf("csi health monitor controller image not found")
+		}
 	}
 
 	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.k8sClient, csiDeploymentTemplateSelectorLabels)

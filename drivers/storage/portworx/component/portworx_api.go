@@ -37,6 +37,7 @@ var (
 type portworxAPI struct {
 	isCreated bool
 	k8sClient client.Client
+	recorder  record.EventRecorder
 }
 
 func (c *portworxAPI) Name() string {
@@ -51,9 +52,10 @@ func (c *portworxAPI) Initialize(
 	k8sClient client.Client,
 	_ version.Version,
 	_ *runtime.Scheme,
-	_ record.EventRecorder,
+	recorder record.EventRecorder,
 ) {
 	c.k8sClient = k8sClient
+	c.recorder = recorder
 }
 
 func (c *portworxAPI) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
@@ -223,6 +225,9 @@ func (c *portworxAPI) createDaemonSet(
 		util.HaveTolerationsChanged(cluster, existingDaemonSet.Spec.Template.Spec.Tolerations)
 	if !c.isCreated || errors.IsNotFound(getErr) || modified {
 		daemonSet := getPortworxAPIDaemonSetSpec(cluster, ownerRef, pauseImageName)
+		if pxutil.IsCSIEnabled(cluster) && pxVersion.GreaterThanOrEqual(csiRegistrarAdditionPxVersion) && len(daemonSet.Spec.Template.Spec.Containers) < 2 {
+			c.recorder.Event(cluster, v1.EventTypeWarning, util.FailedComponentReason, "Failed to setup CSI. CSI driver registrar container image not found")
+		}
 		if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, daemonSet, ownerRef); err != nil {
 			return err
 		}

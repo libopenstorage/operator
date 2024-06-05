@@ -164,7 +164,9 @@ func (c *alertManager) createAlertManagerInstance(
 ) error {
 	replicas := int32(3)
 	imageName := util.GetImageURN(cluster, cluster.Status.DesiredImages.AlertManager)
-
+	if imageName == "" {
+		return fmt.Errorf("alertManager image not found in the cluster spec")
+	}
 	alertManagerInst := &monitoringv1.Alertmanager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            AlertManagerInstanceName,

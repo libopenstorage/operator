@@ -34,28 +34,8 @@ const (
 	defaultPrometheusConfigMapReloadImage = "quay.io/coreos/configmap-reload:v0.0.1"
 	defaultPrometheusConfigReloaderImage  = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
 	defaultAlertManagerImage              = "quay.io/prometheus/alertmanager:v0.17.0"
-	// Default new Prometheus images for k8s 1.22+
-	defaultNewPrometheusImage               = "quay.io/prometheus/prometheus:v2.35.0"
-	defaultNewPrometheusOperatorImage       = "quay.io/prometheus-operator/prometheus-operator:v0.56.3"
-	defaultNewPrometheusConfigReloaderImage = "quay.io/prometheus-operator/prometheus-config-reloader:v0.56.3"
-	defaultNewAlertManagerImage             = "quay.io/prometheus/alertmanager:v0.24.0"
 	// DefaultGrafanaImage is the default grafana image to use
-	DefaultGrafanaImage = "grafana/grafana:7.5.17"
-
-	defaultCCMJavaImage        = "purestorage/ccm-service:3.2.11"
-	defaultCollectorProxyImage = "envoyproxy/envoy:v1.21.4"
-
-	defaultCCMGoImage       = "purestorage/ccm-go:1.0.3"
-	defaultCollectorImage   = "purestorage/realtime-metrics:1.0.15"
-	defaultCCMGoProxyImage  = "purestorage/telemetry-envoy:1.1.6"
-	defaultLogUploaderImage = "purestorage/log-upload:px-1.0.12"
-
-	// default dynamic plugin images
-	DefaultDynamicPluginImage      = "portworx/portworx-dynamic-plugin:1.1.0"
-	DefaultDynamicPluginProxyImage = "nginxinc/nginx-unprivileged:1.23"
-
-	// misc images
-	defaultLighthouseImage = "portworx/px-lighthouse:2.0.7"
+	DefaultGrafanaImage                   = "grafana/grafana:7.5.17"
 
 	defaultManifestRefreshInterval = 3 * time.Hour
 )
@@ -232,27 +212,13 @@ func fillDefaults(
 	rel *Version,
 	k8sVersion *version.Version,
 ) {
-	if rel.Components.Autopilot == "" {
-		rel.Components.Autopilot = defaultAutopilotImage
-	}
-	if rel.Components.Lighthouse == "" {
-		rel.Components.Lighthouse = defaultLighthouseImage
-	}
+	// uses oci image after 3.10, before that use 2.13
 	if rel.Components.NodeWiper == "" {
 		rel.Components.NodeWiper = defaultNodeWiperImage
 	}
-	if rel.Components.DynamicPlugin == "" {
-		rel.Components.DynamicPlugin = DefaultDynamicPluginImage
-	}
-
-	if rel.Components.DynamicPluginProxy == "" {
-		rel.Components.DynamicPluginProxy = DefaultDynamicPluginProxyImage
-	}
 	fillStorkDefaults(rel, k8sVersion)
-	fillCSIDefaults(rel, k8sVersion)
-	fillPrometheusDefaults(rel, k8sVersion)
-	fillGrafanaDefaults(rel, k8sVersion)
-	fillTelemetryDefaults(rel)
+	// Grafana is always default
+	fillGrafanaDefaults(rel)
 	fillK8sDefaults(rel, k8sVersion)
 }
 
@@ -260,10 +226,6 @@ func fillStorkDefaults(
 	rel *Version,
 	k8sVersion *version.Version,
 ) {
-	if rel.Components.Stork == "" {
-		rel.Components.Stork = defaultStorkImage
-	}
-
 	if rel.Components.KubeScheduler == "" {
 		rel.Components.KubeScheduler = k8sutil.GetDefaultKubeSchedulerImage(k8sVersion)
 	}
@@ -282,99 +244,11 @@ func fillK8sDefaults(
 	}
 }
 
-func fillCSIDefaults(
-	rel *Version,
-	k8sVersion *version.Version,
-) {
-	if k8sVersion == nil || rel.Components.CSIProvisioner != "" {
-		return
-	}
-
-	logrus.Debugf("CSI images not found in manifest, using default")
-	pxVersion, _ := version.NewSemver(DefaultPortworxVersion)
-	csiGenerator := pxutil.NewCSIGenerator(*k8sVersion, *pxVersion, false, false, "", true)
-	csiImages := csiGenerator.GetCSIImages()
-
-	rel.Components.CSIProvisioner = csiImages.Provisioner
-	rel.Components.CSIAttacher = csiImages.Attacher
-	rel.Components.CSIDriverRegistrar = csiImages.Registrar
-	rel.Components.CSINodeDriverRegistrar = csiImages.NodeRegistrar
-	rel.Components.CSIResizer = csiImages.Resizer
-	rel.Components.CSISnapshotter = csiImages.Snapshotter
-	rel.Components.CSISnapshotController = csiImages.SnapshotController
-	rel.Components.CSIHealthMonitorController = csiImages.HealthMonitorController
-}
-
-func fillPrometheusDefaults(
-	rel *Version,
-	k8sVersion *version.Version,
-) {
-	if k8sVersion != nil && k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
-		if rel.Components.Prometheus == "" {
-			rel.Components.Prometheus = defaultNewPrometheusImage
-		}
-		if rel.Components.PrometheusOperator == "" {
-			rel.Components.PrometheusOperator = defaultNewPrometheusOperatorImage
-		}
-		if rel.Components.PrometheusConfigReloader == "" {
-			rel.Components.PrometheusConfigReloader = defaultNewPrometheusConfigReloaderImage
-		}
-		if rel.Components.AlertManager == "" {
-			rel.Components.AlertManager = defaultNewAlertManagerImage
-		}
-		return
-	}
-
-	if rel.Components.Prometheus == "" {
-		rel.Components.Prometheus = defaultPrometheusImage
-	}
-	if rel.Components.PrometheusOperator == "" {
-		rel.Components.PrometheusOperator = DefaultPrometheusOperatorImage
-	}
-	if rel.Components.PrometheusConfigMapReload == "" {
-		rel.Components.PrometheusConfigMapReload = defaultPrometheusConfigMapReloadImage
-	}
-	if rel.Components.PrometheusConfigReloader == "" {
-		rel.Components.PrometheusConfigReloader = defaultPrometheusConfigReloaderImage
-	}
-	if rel.Components.AlertManager == "" {
-		rel.Components.AlertManager = defaultAlertManagerImage
-	}
-}
-
 func fillGrafanaDefaults(
 	rel *Version,
-	k8sVersion *version.Version,
 ) {
 	if rel.Components.Grafana == "" {
 		rel.Components.Grafana = DefaultGrafanaImage
-	}
-}
-
-func fillTelemetryDefaults(
-	rel *Version,
-) {
-	pxVersion, err := version.NewSemver(rel.PortworxVersion)
-	if err == nil && !pxutil.IsCCMGoSupported(pxVersion) {
-		if rel.Components.Telemetry == "" {
-			rel.Components.Telemetry = defaultCCMJavaImage
-		}
-		if rel.Components.MetricsCollectorProxy == "" {
-			rel.Components.MetricsCollectorProxy = defaultCollectorProxyImage
-		}
-	} else {
-		if rel.Components.Telemetry == "" {
-			rel.Components.Telemetry = defaultCCMGoImage
-		}
-		if rel.Components.LogUploader == "" {
-			rel.Components.LogUploader = defaultLogUploaderImage
-		}
-		if rel.Components.TelemetryProxy == "" {
-			rel.Components.TelemetryProxy = defaultCCMGoProxyImage
-		}
-	}
-	if rel.Components.MetricsCollector == "" {
-		rel.Components.MetricsCollector = defaultCollectorImage
 	}
 }
 
