@@ -468,18 +468,18 @@ func TestManifestWithPartialComponents(t *testing.T) {
 	require.Equal(t, expected, rel)
 	require.Equal(t, "image/stork:3.0.0", rel.Components.Stork)
 	require.Equal(t, "image/nodewiper:3.0.0", rel.Components.NodeWiper)
-	require.Equal(t, defaultAutopilotImage, rel.Components.Autopilot)
-	require.Equal(t, defaultLighthouseImage, rel.Components.Lighthouse)
+	require.Empty(t, rel.Components.Autopilot)
+	require.Empty(t, rel.Components.Lighthouse)
 	require.Equal(t, "image/prometheus:3.0.0", rel.Components.Prometheus)
-	require.Equal(t, DefaultPrometheusOperatorImage, rel.Components.PrometheusOperator)
-	require.Equal(t, defaultPrometheusConfigMapReloadImage, rel.Components.PrometheusConfigMapReload)
-	require.Equal(t, defaultPrometheusConfigReloaderImage, rel.Components.PrometheusConfigReloader)
-	require.Equal(t, defaultAlertManagerImage, rel.Components.AlertManager)
-	require.Equal(t, defaultCCMJavaImage, rel.Components.Telemetry)
+	require.Empty(t, rel.Components.PrometheusOperator)
+	require.Empty(t, rel.Components.PrometheusConfigMapReload)
+	require.Empty(t, rel.Components.PrometheusConfigReloader)
+	require.Empty(t, rel.Components.AlertManager)
+	require.Empty(t, rel.Components.Telemetry)
 	require.Equal(t, "image/csiprovisioner:3.0.0", rel.Components.CSIProvisioner)
 	require.Empty(t, rel.Components.CSIAttacher)
 
-	// TestCase: No components at all, use all default components
+	// TestCase: No components at all, don't use default components
 	expected.PortworxVersion = "2.13.0"
 	expected.Components = Release{}
 	body, _ = yaml.Marshal(expected)
@@ -581,21 +581,11 @@ func TestManifestFillPrometheusDefaults(t *testing.T) {
 	require.NoError(t, err)
 	fillDefaults(expected, k8sVersion)
 	require.Equal(t, expected, rel)
-	require.Equal(t, defaultPrometheusImage, rel.Components.Prometheus)
-	require.Equal(t, DefaultPrometheusOperatorImage, rel.Components.PrometheusOperator)
-	require.Equal(t, defaultPrometheusConfigMapReloadImage, rel.Components.PrometheusConfigMapReload)
-	require.Equal(t, defaultPrometheusConfigReloaderImage, rel.Components.PrometheusConfigReloader)
-	require.Equal(t, defaultAlertManagerImage, rel.Components.AlertManager)
-
-	// TestCase: For k8s 1.22, default Prometheus images should be updated
-	k8sVersion, _ = version.NewSemver("1.22.0")
-	m.Init(k8sClient, nil, k8sVersion)
-	rel, _ = m.GetVersions(cluster, true)
-	require.Equal(t, "quay.io/prometheus/prometheus:v2.35.0", rel.Components.Prometheus)
-	require.Equal(t, "quay.io/prometheus-operator/prometheus-operator:v0.56.3", rel.Components.PrometheusOperator)
-	require.Equal(t, "", rel.Components.PrometheusConfigMapReload)
-	require.Equal(t, "quay.io/prometheus-operator/prometheus-config-reloader:v0.56.3", rel.Components.PrometheusConfigReloader)
-	require.Equal(t, "quay.io/prometheus/alertmanager:v0.24.0", rel.Components.AlertManager)
+	require.Empty(t, rel.Components.Prometheus)
+	require.Empty(t, rel.Components.PrometheusOperator)
+	require.Empty(t, rel.Components.PrometheusConfigMapReload)
+	require.Empty(t, rel.Components.PrometheusConfigReloader)
+	require.Empty(t, rel.Components.AlertManager)
 }
 
 func TestManifestFillGrafanaDefaults(t *testing.T) {
@@ -912,44 +902,12 @@ func TestManifestFillTelemetryDefaults(t *testing.T) {
 	m := Instance()
 	m.Init(k8sClient, nil, k8sVersion)
 	rel, _ := m.GetVersions(cluster, true)
-	require.Equal(t, defaultCCMJavaImage, rel.Components.Telemetry)
-	require.Equal(t, defaultCollectorProxyImage, rel.Components.MetricsCollectorProxy)
-	require.Equal(t, defaultCollectorImage, rel.Components.MetricsCollector)
+	require.Empty(t, rel.Components.Telemetry)
+	require.Empty(t, rel.Components.MetricsCollectorProxy)
+	require.Empty(t, rel.Components.MetricsCollector)
 	require.Empty(t, rel.Components.LogUploader)
 	require.Empty(t, rel.Components.TelemetryProxy)
 
-	// TestCase: default CCM Go images
-	expected = &Version{
-		PortworxVersion: "2.12.0",
-	}
-	cluster.Spec.Image = "px/image:" + expected.PortworxVersion
-	body, _ = yaml.Marshal(expected)
-	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	err := k8sClient.Update(context.TODO(), versionsConfigMap)
-	require.NoError(t, err)
-	rel, err = m.GetVersions(cluster, true)
-	require.NoError(t, err)
-	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
-	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)
-	require.Equal(t, defaultLogUploaderImage, rel.Components.LogUploader)
-	require.Equal(t, defaultCollectorImage, rel.Components.MetricsCollector)
-	require.Empty(t, rel.Components.MetricsCollectorProxy)
-
-	// TestCase: default non-SemVerCCM use run CCM Go images
-	expected = &Version{
-		PortworxVersion: "abc_abc",
-	}
-	cluster.Spec.Image = "px/image:" + expected.PortworxVersion
-	body, _ = yaml.Marshal(expected)
-	versionsConfigMap.Data[VersionConfigMapKey] = string(body)
-	err = k8sClient.Update(context.TODO(), versionsConfigMap)
-	require.NoError(t, err)
-	rel, _ = m.GetVersions(cluster, true)
-	require.Equal(t, defaultCCMGoImage, rel.Components.Telemetry)
-	require.Equal(t, defaultCCMGoProxyImage, rel.Components.TelemetryProxy)
-	require.Equal(t, defaultLogUploaderImage, rel.Components.LogUploader)
-	require.Equal(t, defaultCollectorImage, rel.Components.MetricsCollector)
-	require.Empty(t, rel.Components.MetricsCollectorProxy)
 }
 
 func TestMain(m *testing.M) {

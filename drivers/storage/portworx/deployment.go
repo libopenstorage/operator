@@ -328,7 +328,10 @@ func (p *portworx) GetStoragePodSpec(
 		csiRegistrar := t.csiRegistrarContainer()
 		if csiRegistrar != nil {
 			podSpec.Containers = append(podSpec.Containers, *csiRegistrar)
+		} else {
+			p.warningEvent(cluster, util.FailedComponentReason, "Failed to setup CSI. CSI driver registrar container image not found")
 		}
+
 	}
 
 	if pxutil.IsTelemetryEnabled(cluster.Spec) && !pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) {

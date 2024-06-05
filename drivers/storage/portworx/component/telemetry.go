@@ -1093,7 +1093,7 @@ func GetDesiredTelemetryImage(cluster *corev1.StorageCluster) (string, error) {
 		return util.GetImageURN(cluster, cluster.Spec.Monitoring.Telemetry.Image), nil
 	}
 
-	if cluster.Status.DesiredImages != nil {
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.Telemetry != "" {
 		return util.GetImageURN(cluster, cluster.Status.DesiredImages.Telemetry), nil
 	}
 
@@ -1105,7 +1105,7 @@ func getDesiredLogUploaderImage(cluster *corev1.StorageCluster) (string, error) 
 		return util.GetImageURN(cluster, cluster.Spec.Monitoring.Telemetry.LogUploaderImage), nil
 	}
 
-	if cluster.Status.DesiredImages != nil {
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.LogUploader != "" {
 		return util.GetImageURN(cluster, cluster.Status.DesiredImages.LogUploader), nil
 	}
 
@@ -1113,7 +1113,7 @@ func getDesiredLogUploaderImage(cluster *corev1.StorageCluster) (string, error) 
 }
 
 func getDesiredProxyImage(cluster *corev1.StorageCluster) (string, error) {
-	if cluster.Status.DesiredImages != nil {
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.TelemetryProxy != "" {
 		if pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) {
 			return util.GetImageURN(cluster, cluster.Status.DesiredImages.TelemetryProxy), nil
 		}
@@ -1123,7 +1123,7 @@ func getDesiredProxyImage(cluster *corev1.StorageCluster) (string, error) {
 }
 
 func getDesiredCollectorImage(cluster *corev1.StorageCluster) (string, error) {
-	if cluster.Status.DesiredImages != nil {
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.MetricsCollector != "" {
 		return util.GetImageURN(cluster, cluster.Status.DesiredImages.MetricsCollector), nil
 	}
 	return "", fmt.Errorf("metrics collector image is empty")
