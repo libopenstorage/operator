@@ -91,7 +91,7 @@ OUTER:
 		pod := &eviction.PodToEvict
 		if eviction.LiveMigrationInProgress {
 			// Wait until the next Reconcile() cycle to check if the live-migration is completed.
-			logrus.Infof("Skipping eviction of pod virt-launcher pod %s/%s until the next reconcile cycle",
+			logrus.Infof("Skipping eviction of virt-launcher pod %s/%s until the next reconcile cycle",
 				pod.Namespace, pod.Name)
 			continue
 		}
