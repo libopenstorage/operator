@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/libopenstorage/operator/pkg/constants"
+	"github.com/libopenstorage/operator/pkg/util"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	kubevirt "github.com/portworx/sched-ops/k8s/kubevirt-dynamic"
 )
@@ -18,11 +19,11 @@ type KubevirtManager interface {
 	// ClusterHasVMPods returns true if the cluster has any KubeVirt VM Pods (running or not)
 	ClusterHasVMPods() (bool, error)
 
-	// GetVMPodsToEvictByNode returns a map of node name to a list of virt-launcher pods that are live-migratable
-	GetVMPodsToEvictByNode(wantNodes map[string]bool) (map[string][]v1.Pod, error)
+	// GetVMPodsToEvictByNode returns a map of node name to a list of virt-launcher pods that need to be evicted
+	GetVMPodsToEvictByNode(wantNodes map[string]bool) (map[string][]*util.VMPodEviction, error)
 
 	// StartEvictingVMPods starts live-migrating the virt-launcher pods to other nodes
-	StartEvictingVMPods(virtLauncherPods []v1.Pod, controllerRevisionHash string,
+	StartEvictingVMPods(virtLauncherPods []*util.VMPodEviction, controllerRevisionHash string,
 		failedToEvictVMEventFunc func(message string))
 }
 
@@ -53,8 +54,8 @@ func (k *kubevirtManagerImpl) ClusterHasVMPods() (bool, error) {
 	return len(virtLauncherPods) > 0, nil
 }
 
-func (k *kubevirtManagerImpl) GetVMPodsToEvictByNode(wantNodes map[string]bool) (map[string][]v1.Pod, error) {
-	virtLauncherPodsByNode := map[string][]v1.Pod{}
+func (k *kubevirtManagerImpl) GetVMPodsToEvictByNode(wantNodes map[string]bool) (map[string][]*util.VMPodEviction, error) {
+	virtLauncherPodsByNode := map[string][]*util.VMPodEviction{}
 	// get a list of virt-launcher pods for each node
 	virtLauncherPods, err := k.getVirtLauncherPods()
 	if err != nil {
@@ -64,24 +65,37 @@ func (k *kubevirtManagerImpl) GetVMPodsToEvictByNode(wantNodes map[string]bool) 
 		if !wantNodes[pod.Spec.NodeName] {
 			continue
 		}
-		shouldEvict, err := k.shouldLiveMigrateVM(&pod)
+		shouldEvict, migrInProgress, err := k.shouldLiveMigrateVM(&pod)
 		if err != nil {
 			return nil, err
 		}
 		if shouldEvict {
-			virtLauncherPodsByNode[pod.Spec.NodeName] = append(virtLauncherPodsByNode[pod.Spec.NodeName], pod)
+			virtLauncherPodsByNode[pod.Spec.NodeName] = append(
+				virtLauncherPodsByNode[pod.Spec.NodeName],
+				&util.VMPodEviction{
+					PodToEvict:              pod,
+					LiveMigrationInProgress: migrInProgress,
+				},
+			)
 		}
 	}
 	return virtLauncherPodsByNode, nil
 }
 
 func (k *kubevirtManagerImpl) StartEvictingVMPods(
-	virtLauncherPods []v1.Pod, controllerRevisionHash string, failedToEvictVMEventFunc func(message string),
+	evictions []*util.VMPodEviction, controllerRevisionHash string, failedToEvictVMEventFunc func(message string),
 ) {
 	ctx := context.TODO()
 OUTER:
-	for _, pod := range virtLauncherPods {
-		vmiName := k.getVMIName(&pod)
+	for _, eviction := range evictions {
+		pod := &eviction.PodToEvict
+		if eviction.LiveMigrationInProgress {
+			// Wait until the next Reconcile() cycle to check if the live-migration is completed.
+			logrus.Infof("Skipping eviction of virt-launcher pod %s/%s until the next reconcile cycle",
+				pod.Namespace, pod.Name)
+			continue
+		}
+		vmiName := k.getVMIName(pod)
 		if vmiName == "" {
 			// vmName should not be empty. Don't pause upgrade for such badly formed pods.
 			logrus.Warnf("Failed to get VMI name for virt-launcher pod %s/%s", pod.Namespace, pod.Name)
@@ -119,6 +133,20 @@ OUTER:
 				continue OUTER
 			}
 		}
+		// Check if the VMI is still pointing to the same node as the virt-launcher pod. We already checked for this
+		// in shouldLiveMigrateVM() but we need to check again here because the VMI could have been live-migrated in
+		// the meantime. This reduces the chance of unnecessary live-migrations but does not close the hole fully.
+		vmi, err := k.kubevirtOps.GetVirtualMachineInstance(ctx, pod.Namespace, vmiName)
+		if err != nil {
+			logrus.Warnf("Failed to get VMI %s when evicting pod %s/%s: %v", vmiName, pod.Namespace, pod.Name, err)
+			continue
+		}
+		if vmi.NodeName != pod.Spec.NodeName {
+			logrus.Infof("VMI %s/%s is running on node %s, not on node %s. Eviction not needed for pod %s.",
+				pod.Namespace, vmiName, vmi.NodeName, pod.Spec.NodeName, pod.Name)
+			continue
+		}
+		// All checks passed. Start the live-migration.
 		labels := map[string]string{
 			constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
 		}
@@ -154,20 +182,20 @@ func (k *kubevirtManagerImpl) getVMIMigrations(
 	return ret, nil
 }
 
-func (k *kubevirtManagerImpl) shouldLiveMigrateVM(virtLauncherPod *v1.Pod) (bool, error) {
+func (k *kubevirtManagerImpl) shouldLiveMigrateVM(virtLauncherPod *v1.Pod) (bool, bool, error) {
 	// we only care about the pods that are not in a terminal state
 	if virtLauncherPod.Status.Phase == v1.PodSucceeded || virtLauncherPod.Status.Phase == v1.PodFailed {
-		return false, nil
+		return false, false, nil
 	}
 	vmiName := k.getVMIName(virtLauncherPod)
 	if vmiName == "" {
 		logrus.Warnf("Failed to get VMI name for virt-launcher pod %s/%s. Skipping live-migration.",
 			virtLauncherPod.Namespace, virtLauncherPod.Name)
-		return false, nil
+		return false, false, nil
 	}
 	migrations, err := k.getVMIMigrations(virtLauncherPod.Namespace, vmiName)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	for _, migration := range migrations {
 		if !migration.Completed {
@@ -177,17 +205,17 @@ func (k *kubevirtManagerImpl) shouldLiveMigrateVM(virtLauncherPod *v1.Pod) (bool
 			// Return "shouldEvict=true" and deal with it later.
 			logrus.Infof("Will check whether to evict pod %s/%s after the live-migration %s (%s) is completed.",
 				virtLauncherPod.Namespace, virtLauncherPod.Name, migration.Name, migration.Phase)
-			return true, nil
+			return true, true, nil
 		}
 	}
 	// get VMI to check if the VM is live-migratable and if it is running on the same node as the virt-launcher pod
 	vmi, err := k.kubevirtOps.GetVirtualMachineInstance(context.TODO(), virtLauncherPod.Namespace, vmiName)
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			return false, fmt.Errorf("failed to get VMI %s/%s: %w", virtLauncherPod.Namespace, vmiName, err)
+			return false, false, fmt.Errorf("failed to get VMI %s/%s: %w", virtLauncherPod.Namespace, vmiName, err)
 		}
 		logrus.Warnf("VMI %s/%s was not found; skipping live-migration: %v", virtLauncherPod.Namespace, vmiName, err)
-		return false, nil
+		return false, false, nil
 	}
 	// We already checked that there is no live migration in progress for this VMI.
 	// Ignore this pod if VMI says that the VM is running on another node. This can happen if
@@ -196,10 +224,10 @@ func (k *kubevirtManagerImpl) shouldLiveMigrateVM(virtLauncherPod *v1.Pod) (bool
 	if vmi.NodeName != virtLauncherPod.Spec.NodeName {
 		logrus.Infof("VMI %s/%s is running on node %s, not on node %s. Skipping eviction of pod %s.",
 			virtLauncherPod.Namespace, vmiName, vmi.NodeName, virtLauncherPod.Spec.NodeName, virtLauncherPod.Name)
-		return false, nil
+		return false, false, nil
 	}
 	// Ignore the VMs that are not live-migratable.
-	return vmi.LiveMigratable, nil
+	return vmi.LiveMigratable, false, nil
 }
 
 func (k *kubevirtManagerImpl) getVirtLauncherPods() ([]v1.Pod, error) {
