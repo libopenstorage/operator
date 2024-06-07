@@ -163,7 +163,7 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string, 
 	}
 
 	// check if we should live-migrate VMs before updating the storage node
-	virtLauncherPodsByNode := map[string][]v1.Pod{}
+	virtLauncherPodsByNode := map[string][]*operatorutil.VMPodEviction{}
 	if len(oldPodsToDelete) > 0 && !forceContinueUpgrade(cluster) && evictVMsDuringUpdate(cluster) {
 		vmPodsPresent, err := c.kubevirt.ClusterHasVMPods()
 		if err != nil {
