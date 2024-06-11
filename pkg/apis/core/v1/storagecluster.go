@@ -313,11 +313,11 @@ type RollingUpdateStorageCluster struct {
 	// The default behavior is non-disruptive upgrades. This setting disables the default
 	// non-disruptive upgrades and reverts to the previous behavior of upgrading nodes in
 	// parallel without worrying about disruption.
-	Disruption DisruptionSpec `json:"disruption,omitempty"`
+	Disruption Disruption `json:"disruption,omitempty"`
 }
 
-// DisruptionSpec contains disruption details
-type DisruptionSpec struct {
+// Disruption contains configuration for disruption
+type Disruption struct {
 	// Flag indicates whether updates are non-disruptive or disruptive.
 	Allow *bool `json:"allow,omitempty"`
 }
