@@ -401,6 +401,11 @@ func main() {
 		return
 	}
 
+	err = k8sretriever.listHyperConverged("openshift-cnv")
+	if err != nil {
+		k8sretriever.loggerToUse.Errorf("Error listing HyperConvergeds: %v", err)
+	}
+
 	err = k8sretriever.listVolumePlacementStrategies()
 	if err != nil {
 		k8sretriever.loggerToUse.Errorf("Error listing VolumePlacementStrategies: %v", err)
@@ -659,11 +664,6 @@ func (k8s *k8sRetriever) compressDirectoryLogs(directory string) (err error) {
 	if err != nil {
 		k8s.loggerToUse.Errorf("Failed to compress directory logs: %v", err)
 		return fmt.Errorf("error walking the path %v: %w", dir, err)
-	}
-
-	if err != nil {
-		newError := fmt.Errorf("error walking the path: %v", err)
-		return newError
 	}
 
 	return nil

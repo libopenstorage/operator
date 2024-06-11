@@ -1027,6 +1027,48 @@ func (k8s *k8sRetriever) listConfigMaps(namespace string) error {
 	return nil
 }
 
+// listHyperConverged gets hyperconverged resources from from hco.kubevirt.io/v1beta1
+func (k8s *k8sRetriever) listHyperConverged(namespace string) error {
+
+	saveFilesPath := k8s.outputDir + "/px-hyperconverged"
+	err := os.MkdirAll(saveFilesPath, 0750)
+	if err != nil && os.IsExist(err) {
+		k8s.loggerToUse.Infof("Directory already exists: %s", saveFilesPath)
+	}
+	if err != nil {
+		return err
+	}
+
+	// Get all hyperconverged resources from hco.kubevirt.io/v1beta1
+	dynamicClient, err := dynamic.NewForConfig(k8s.restConfig)
+	if err != nil {
+		return err
+
+	}
+
+	gvr := schema.GroupVersionResource{Group: "hco.kubevirt.io", Version: "v1beta1", Resource: "hyperconvergeds"}
+
+	hyperconvergeds, err := dynamicClient.Resource(gvr).Namespace(namespace).List(k8s.context, meta.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, hyperconverged := range hyperconvergeds.Items {
+		hyperconvergedYaml, err := k8s.convertToYaml(hyperconverged)
+		if err != nil {
+			k8s.loggerToUse.Errorf("Error converting hyperconverged to YAML: %s", err.Error())
+			continue
+		}
+		k8s.loggerToUse.Infof("HyperConverged: %s", hyperconverged.GetName())
+		if err := k8s.writeToFile(hyperconverged.GetName(), "hyperconverged", hyperconvergedYaml, saveFilesPath); err != nil {
+			k8s.loggerToUse.Errorf("Error writing hyperconverged YAML to file: %s", err.Error())
+		}
+	}
+
+	return nil
+
+}
+
 // getPXConfigMapsKubeSystem gets a configmap from a partial name from kube-system namespace
 func (k8s *k8sRetriever) getPXConfigMapsKubeSystem(partialName string) error {
 
