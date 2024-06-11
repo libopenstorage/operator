@@ -993,6 +993,14 @@ func (p *portworx) GetKVDBMembers(cluster *corev1.StorageCluster) (map[string]bo
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
+	// if security was previously enabled and changed to disabled now
+	// the storagenodes might not be in sync since rolling update has not completed
+	// so always pass the token while rolling update
+	ctx, err = pxutil.SetupContextWithToken(ctx, cluster, p.k8sClient, true)
+	if err != nil {
+		return nil, err
+	}
+
 	members, err := serviceClient.GetKvdbMemberInfo(ctx, &pxapi.PxKvdbMemberRequest{})
 
 	if err != nil {

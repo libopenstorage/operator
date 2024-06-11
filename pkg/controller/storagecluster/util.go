@@ -138,3 +138,24 @@ func forceContinueUpgrade(
 	}
 	return err == nil && force
 }
+
+func evictVMsDuringUpdate(cluster *corev1.StorageCluster) bool {
+	return getBoolVal(cluster.Annotations, constants.AnnotationEvictVMsDuringUpdate, true)
+}
+
+func nodeMarkedUnschedulable(node *v1.Node) bool {
+	return getBoolVal(node.Annotations, constants.AnnotationUnschedulable, false)
+}
+
+func getBoolVal(m map[string]string, key string, defaultVal bool) bool {
+	value, exists := m[key]
+	if !exists {
+		return defaultVal
+	}
+	boolval, err := strconv.ParseBool(value)
+	if err != nil {
+		logrus.Warnf("Invalid value %s for annotation %s; defaulting to %v: %v", value, key, defaultVal, err)
+		return defaultVal
+	}
+	return boolval
+}

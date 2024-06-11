@@ -3,9 +3,6 @@ package component
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"strconv"
-
 	"github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -23,7 +20,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strconv"
 )
 
 const (
@@ -44,11 +43,11 @@ const (
 	defaultPVCControllerInsecurePort = "10252"
 	defaultPVCControllerSecurePort   = "10257"
 
-	// AksPVCControllerInsecurePort is the PVC controller port and health check port, due to the default port
-	// is already used on AKS we use different port for AKS.
-	AksPVCControllerInsecurePort = "10260"
-	// AksPVCControllerSecurePort is the PVC controller secure port.
-	AksPVCControllerSecurePort = "10261"
+	// CustomPVCControllerInsecurePort is the PVC controller port and health check port, due to the default port
+	// is already used, we use different port
+	CustomPVCControllerInsecurePort = "10260"
+	// CustomPVCControllerSecurePort is the PVC controller secure port.
+	CustomPVCControllerSecurePort = "10261"
 )
 
 var (
@@ -66,6 +65,7 @@ type pvcController struct {
 	isCreated  bool
 	k8sClient  client.Client
 	k8sVersion version.Version
+	isK3s      *bool
 }
 
 func (c *pvcController) Name() string {
@@ -331,15 +331,15 @@ func (c *pvcController) createDeployment(
 		command = append(command, "--address=0.0.0.0")
 		if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
 			command = append(command, "--port="+port)
-		} else if pxutil.IsAKS(cluster) {
-			command = append(command, "--port="+AksPVCControllerInsecurePort)
+		} else if pxutil.IsAKS(cluster) || c.isK3sOrRke2Deployment() {
+			command = append(command, "--port="+CustomPVCControllerInsecurePort)
 		}
 	}
 
 	if securePort, ok := cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort]; ok && securePort != "" {
 		command = append(command, "--secure-port="+securePort)
-	} else if pxutil.IsAKS(cluster) {
-		command = append(command, "--secure-port="+AksPVCControllerSecurePort)
+	} else if pxutil.IsAKS(cluster) || c.isK3sOrRke2Deployment() {
+		command = append(command, "--secure-port="+CustomPVCControllerSecurePort)
 	}
 
 	if min, err := pxutil.GetTLSMinVersion(cluster); err != nil {
@@ -420,16 +420,16 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 	if c.k8sVersion.GreaterThanOrEqual(k8sutil.K8sVer1_22) {
 		if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerSecurePort]; ok && port != "" {
 			healthCheckPort = port
-		} else if pxutil.IsAKS(cluster) {
-			healthCheckPort = AksPVCControllerSecurePort
+		} else if pxutil.IsAKS(cluster) || c.isK3sOrRke2Deployment() {
+			healthCheckPort = CustomPVCControllerSecurePort
 		} else {
 			healthCheckPort = defaultPVCControllerSecurePort
 		}
 		healthCheckScheme = v1.URISchemeHTTPS
 	} else if port, ok := cluster.Annotations[pxutil.AnnotationPVCControllerPort]; ok && port != "" {
 		healthCheckPort = port
-	} else if pxutil.IsAKS(cluster) {
-		healthCheckPort = AksPVCControllerInsecurePort
+	} else if pxutil.IsAKS(cluster) || c.isK3sOrRke2Deployment() {
+		healthCheckPort = CustomPVCControllerInsecurePort
 	}
 
 	deployment := &appsv1.Deployment{
@@ -549,6 +549,25 @@ func (c *pvcController) getPVCControllerDeploymentSpec(
 	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	return deployment
+}
+
+func (c *pvcController) isK3sOrRke2Deployment() bool {
+
+	if c.isK3s != nil {
+		return *c.isK3s
+	}
+	_, ext, err := k8sutil.GetFullVersion()
+	if err != nil {
+		logrus.Errorf("error during fetching version : %s ", err)
+		return false
+	}
+	if len(ext) > 0 {
+		ok := pxutil.IsK3sOrRke2ClusterExt(ext)
+		c.isK3s = boolPtr(ok)
+		return *c.isK3s
+	}
+
+	return false
 }
 
 // RegisterPVCControllerComponent registers the PVC Controller component

@@ -37,8 +37,10 @@ const (
 	FailedValidationReason = "FailedValidation"
 	// FailedComponentReason is added to an event when setting up or removing a component fails.
 	FailedComponentReason = "FailedComponent"
-	// UpdatePausedReason is added to an event when operator pauses update of the storage cluster.
+	// UpdatePausedReason is added to an event when operator pauses update of the storage cluster or node.
 	UpdatePausedReason = "UpdatePaused"
+	// FailedToEvictVM indicates that the eviction of a virtual machine failed during PX update
+	FailedToEvictVM = "FailedToEvictVM"
 	// ClusterOnlineReason is added to an event when a cluster comes online
 	ClusterOnlineReason = "ClusterOnline"
 	// MigrationPendingReason is added to an event when the migration is in pending state.
@@ -81,7 +83,20 @@ const (
 	StoragePartitioningEnvKey = "ENABLE_ASG_STORAGE_PARTITIONING"
 	// DefaultStorageClusterUniqueLabelKey is the controller revision hash of storage cluster
 	DefaultStorageClusterUniqueLabelKey = apps.ControllerRevisionHashLabelKey
+	// InvalidMinAvailable is added to an event when minAvailable value for PodDisruptionBudget provided by the user is invalid
+	InvalidMinAvailable = "InvalidMinAvailable"
+	// ValidMinAvailable is added to an event when minAvailable value for PodDisruptionBudget is valid
+	ValidMinAvailable = "ValidMinAvailable"
 )
+
+// VMPodEviction has info about the virt-launcher pod that needs to be evicted before upgrading PX on a node
+type VMPodEviction struct {
+	// PodToEvict is the virt-launcher pod that needs to be evicted
+	PodToEvict v1.Pod
+	// LiveMigrationInProgress is true if in-progress live-migration exists for this VM. In this case, the eviction
+	// should be skipped until the next reconcile cycle
+	LiveMigrationInProgress bool
+}
 
 var (
 	// commonDockerRegistries is a map of commonly used Docker registries

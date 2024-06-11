@@ -3,6 +3,9 @@ package storagenode
 import (
 	"context"
 	"fmt"
+	"github.com/libopenstorage/openstorage/api"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
+	"google.golang.org/grpc"
 	"strings"
 	"time"
 
@@ -59,6 +62,8 @@ type Controller struct {
 	ctrl     controller.Controller
 	// Node to NodeInfo map
 	nodeInfoMap maps.SyncMap[string, *k8s.NodeInfo]
+	// sdkConn is the grpc connection to the Portworx service
+	sdkConn *grpc.ClientConn
 }
 
 // Init initialize the storage storagenode controller
@@ -344,7 +349,7 @@ func (c *Controller) syncStorage(
 			storageNode.Name == pod.Spec.NodeName {
 			updateNeeded := false
 			value, storageLabelPresent := podCopy.GetLabels()[constants.LabelKeyStoragePod]
-			if canNodeServeStorage(storageNode) { // node has storage
+			if c.canNodeServeStorage(storageNode, cluster) { // node has storage
 				if value != constants.LabelValueTrue {
 					if podCopy.Labels == nil {
 						podCopy.Labels = make(map[string]string)
@@ -464,7 +469,7 @@ func getDeprecatedCRDBasePath() string {
 	return deprecatedCRDBasePath
 }
 
-func canNodeServeStorage(storagenode *corev1.StorageNode) bool {
+func (c *Controller) canNodeServeStorage(storagenode *corev1.StorageNode, cluster *corev1.StorageCluster) bool {
 	if storagenode.Status.NodeAttributes == nil ||
 		storagenode.Status.NodeAttributes.Storage == nil ||
 		!*storagenode.Status.NodeAttributes.Storage {
@@ -474,10 +479,10 @@ func canNodeServeStorage(storagenode *corev1.StorageNode) bool {
 	// look for node status condition
 	for _, cond := range storagenode.Status.Conditions {
 		if cond.Type == corev1.NodeStateCondition {
-			if cond.Status == corev1.NodeOnlineStatus ||
-				cond.Status == corev1.NodeMaintenanceStatus ||
-				cond.Status == corev1.NodeDegradedStatus {
-				return true
+			if cond.Status != corev1.NodeInitStatus {
+				if ok, err := c.isStorageNode(storagenode, cluster); err == nil {
+					return ok
+				}
 			}
 		}
 	}
@@ -488,4 +493,63 @@ func isNodeRunningKVDB(storagenode *corev1.StorageNode) bool {
 	return storagenode.Status.NodeAttributes != nil &&
 		storagenode.Status.NodeAttributes.KVDB != nil &&
 		*storagenode.Status.NodeAttributes.KVDB
+}
+
+// isStorageNode return true if we should use quorum memebr flag, and the node is a quorum member
+// isStorageNode return false if we should use quorum member flag, and the node is not a quorum member
+// isStorageNode return true if we should not use quorum member flag and node pools are not empty
+func (c *Controller) isStorageNode(storageNode *corev1.StorageNode, cluster *corev1.StorageCluster) (bool, error) {
+	var shouldUseQuorumMember, isQuorumMember bool
+	var err error
+
+	c.sdkConn, err = pxutil.GetPortworxConn(c.sdkConn, c.client, cluster.Namespace)
+	defer c.closeSdkConn()
+	if err != nil {
+		logrus.Errorf("failed to get portworx connection: %v", err)
+		return false, err
+	}
+
+	nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, c.client, false)
+	if err != nil {
+		logrus.Errorf("failed to setup context with token: %v", err)
+		return false, err
+	}
+
+	nodeResp, err := nodeClient.EnumerateWithFilters(ctx, &api.SdkNodeEnumerateWithFiltersRequest{})
+	if err != nil {
+		logrus.Errorf("failed to get node list: %v", err)
+		return false, err
+	}
+
+	for _, n := range nodeResp.Nodes {
+		if n.SchedulerNodeName == storageNode.Name {
+			shouldUseQuorumMember, err = pxutil.ShouldUseQuorumFlag(n)
+			if err != nil {
+				logrus.Errorf("failed to get shouldUseQuorumFlag: %v", err)
+				return false, err
+			}
+
+			if shouldUseQuorumMember {
+				isQuorumMember = !n.NonQuorumMember
+			} else {
+				isQuorumMember = len(n.Pools) > 0 && n.Pools[0] != nil
+			}
+			logrus.Infof("shouldUseQuorumMember for node %v: %v , isQuorumMember? %v", storageNode.Name, shouldUseQuorumMember, isQuorumMember)
+		}
+	}
+
+	return isQuorumMember, nil
+}
+
+// closeSdkConn closes the sdk connection and resets it to nil
+func (c *Controller) closeSdkConn() {
+	if c.sdkConn == nil {
+		return
+	}
+
+	if err := c.sdkConn.Close(); err != nil {
+		logrus.Errorf("Failed to close sdk connection: %s", err.Error())
+	}
+	c.sdkConn = nil
 }
