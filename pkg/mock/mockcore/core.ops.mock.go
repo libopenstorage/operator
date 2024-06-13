@@ -10,11 +10,12 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/portworx/sched-ops/k8s/core"
-	v1 "k8s.io/api/certificates/v1"
-	v10 "k8s.io/api/core/v1"
-	v11 "k8s.io/api/networking/v1"
-	v12 "k8s.io/api/storage/v1"
-	v13 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/api/authentication/v1"
+	v10 "k8s.io/api/certificates/v1"
+	v11 "k8s.io/api/core/v1"
+	v12 "k8s.io/api/networking/v1"
+	v13 "k8s.io/api/storage/v1"
+	v14 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
@@ -60,10 +61,10 @@ func (mr *MockOpsMockRecorder) AddLabelOnNode(arg0, arg1, arg2 interface{}) *gom
 }
 
 // CertificateSigningRequestsUpdateApproval mocks base method.
-func (m *MockOps) CertificateSigningRequestsUpdateApproval(arg0 string, arg1 *v1.CertificateSigningRequest) (*v1.CertificateSigningRequest, error) {
+func (m *MockOps) CertificateSigningRequestsUpdateApproval(arg0 string, arg1 *v10.CertificateSigningRequest) (*v10.CertificateSigningRequest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CertificateSigningRequestsUpdateApproval", arg0, arg1)
-	ret0, _ := ret[0].(*v1.CertificateSigningRequest)
+	ret0, _ := ret[0].(*v10.CertificateSigningRequest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -89,10 +90,10 @@ func (mr *MockOpsMockRecorder) CordonNode(arg0, arg1, arg2 interface{}) *gomock.
 }
 
 // CreateCertificateSigningRequests mocks base method.
-func (m *MockOps) CreateCertificateSigningRequests(arg0 []byte, arg1 string, arg2 map[string]string, arg3 string, arg4 *time.Duration, arg5 []v1.KeyUsage) (*v1.CertificateSigningRequest, error) {
+func (m *MockOps) CreateCertificateSigningRequests(arg0 []byte, arg1 string, arg2 map[string]string, arg3 string, arg4 *time.Duration, arg5 []v10.KeyUsage) (*v10.CertificateSigningRequest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateCertificateSigningRequests", arg0, arg1, arg2, arg3, arg4, arg5)
-	ret0, _ := ret[0].(*v1.CertificateSigningRequest)
+	ret0, _ := ret[0].(*v10.CertificateSigningRequest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -104,10 +105,10 @@ func (mr *MockOpsMockRecorder) CreateCertificateSigningRequests(arg0, arg1, arg2
 }
 
 // CreateConfigMap mocks base method.
-func (m *MockOps) CreateConfigMap(arg0 *v10.ConfigMap) (*v10.ConfigMap, error) {
+func (m *MockOps) CreateConfigMap(arg0 *v11.ConfigMap) (*v11.ConfigMap, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateConfigMap", arg0)
-	ret0, _ := ret[0].(*v10.ConfigMap)
+	ret0, _ := ret[0].(*v11.ConfigMap)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -119,10 +120,10 @@ func (mr *MockOpsMockRecorder) CreateConfigMap(arg0 interface{}) *gomock.Call {
 }
 
 // CreateEndpoints mocks base method.
-func (m *MockOps) CreateEndpoints(arg0 *v10.Endpoints) (*v10.Endpoints, error) {
+func (m *MockOps) CreateEndpoints(arg0 *v11.Endpoints) (*v11.Endpoints, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateEndpoints", arg0)
-	ret0, _ := ret[0].(*v10.Endpoints)
+	ret0, _ := ret[0].(*v11.Endpoints)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -134,10 +135,10 @@ func (mr *MockOpsMockRecorder) CreateEndpoints(arg0 interface{}) *gomock.Call {
 }
 
 // CreateEvent mocks base method.
-func (m *MockOps) CreateEvent(arg0 *v10.Event) (*v10.Event, error) {
+func (m *MockOps) CreateEvent(arg0 *v11.Event) (*v11.Event, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateEvent", arg0)
-	ret0, _ := ret[0].(*v10.Event)
+	ret0, _ := ret[0].(*v11.Event)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -149,10 +150,10 @@ func (mr *MockOpsMockRecorder) CreateEvent(arg0 interface{}) *gomock.Call {
 }
 
 // CreateLimitRange mocks base method.
-func (m *MockOps) CreateLimitRange(arg0 *v10.LimitRange) (*v10.LimitRange, error) {
+func (m *MockOps) CreateLimitRange(arg0 *v11.LimitRange) (*v11.LimitRange, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateLimitRange", arg0)
-	ret0, _ := ret[0].(*v10.LimitRange)
+	ret0, _ := ret[0].(*v11.LimitRange)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -164,10 +165,10 @@ func (mr *MockOpsMockRecorder) CreateLimitRange(arg0 interface{}) *gomock.Call {
 }
 
 // CreateNamespace mocks base method.
-func (m *MockOps) CreateNamespace(arg0 *v10.Namespace) (*v10.Namespace, error) {
+func (m *MockOps) CreateNamespace(arg0 *v11.Namespace) (*v11.Namespace, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateNamespace", arg0)
-	ret0, _ := ret[0].(*v10.Namespace)
+	ret0, _ := ret[0].(*v11.Namespace)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -179,10 +180,10 @@ func (mr *MockOpsMockRecorder) CreateNamespace(arg0 interface{}) *gomock.Call {
 }
 
 // CreateNetworkPolicy mocks base method.
-func (m *MockOps) CreateNetworkPolicy(arg0 *v11.NetworkPolicy) (*v11.NetworkPolicy, error) {
+func (m *MockOps) CreateNetworkPolicy(arg0 *v12.NetworkPolicy) (*v12.NetworkPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateNetworkPolicy", arg0)
-	ret0, _ := ret[0].(*v11.NetworkPolicy)
+	ret0, _ := ret[0].(*v12.NetworkPolicy)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -194,10 +195,10 @@ func (mr *MockOpsMockRecorder) CreateNetworkPolicy(arg0 interface{}) *gomock.Cal
 }
 
 // CreateNode mocks base method.
-func (m *MockOps) CreateNode(arg0 *v10.Node) (*v10.Node, error) {
+func (m *MockOps) CreateNode(arg0 *v11.Node) (*v11.Node, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateNode", arg0)
-	ret0, _ := ret[0].(*v10.Node)
+	ret0, _ := ret[0].(*v11.Node)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -209,10 +210,10 @@ func (mr *MockOpsMockRecorder) CreateNode(arg0 interface{}) *gomock.Call {
 }
 
 // CreatePersistentVolume mocks base method.
-func (m *MockOps) CreatePersistentVolume(arg0 *v10.PersistentVolume) (*v10.PersistentVolume, error) {
+func (m *MockOps) CreatePersistentVolume(arg0 *v11.PersistentVolume) (*v11.PersistentVolume, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreatePersistentVolume", arg0)
-	ret0, _ := ret[0].(*v10.PersistentVolume)
+	ret0, _ := ret[0].(*v11.PersistentVolume)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -224,10 +225,10 @@ func (mr *MockOpsMockRecorder) CreatePersistentVolume(arg0 interface{}) *gomock.
 }
 
 // CreatePersistentVolumeClaim mocks base method.
-func (m *MockOps) CreatePersistentVolumeClaim(arg0 *v10.PersistentVolumeClaim) (*v10.PersistentVolumeClaim, error) {
+func (m *MockOps) CreatePersistentVolumeClaim(arg0 *v11.PersistentVolumeClaim) (*v11.PersistentVolumeClaim, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreatePersistentVolumeClaim", arg0)
-	ret0, _ := ret[0].(*v10.PersistentVolumeClaim)
+	ret0, _ := ret[0].(*v11.PersistentVolumeClaim)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -239,10 +240,10 @@ func (mr *MockOpsMockRecorder) CreatePersistentVolumeClaim(arg0 interface{}) *go
 }
 
 // CreatePod mocks base method.
-func (m *MockOps) CreatePod(arg0 *v10.Pod) (*v10.Pod, error) {
+func (m *MockOps) CreatePod(arg0 *v11.Pod) (*v11.Pod, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreatePod", arg0)
-	ret0, _ := ret[0].(*v10.Pod)
+	ret0, _ := ret[0].(*v11.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -254,10 +255,10 @@ func (mr *MockOpsMockRecorder) CreatePod(arg0 interface{}) *gomock.Call {
 }
 
 // CreateSecret mocks base method.
-func (m *MockOps) CreateSecret(arg0 *v10.Secret) (*v10.Secret, error) {
+func (m *MockOps) CreateSecret(arg0 *v11.Secret) (*v11.Secret, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateSecret", arg0)
-	ret0, _ := ret[0].(*v10.Secret)
+	ret0, _ := ret[0].(*v11.Secret)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -269,10 +270,10 @@ func (mr *MockOpsMockRecorder) CreateSecret(arg0 interface{}) *gomock.Call {
 }
 
 // CreateService mocks base method.
-func (m *MockOps) CreateService(arg0 *v10.Service) (*v10.Service, error) {
+func (m *MockOps) CreateService(arg0 *v11.Service) (*v11.Service, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateService", arg0)
-	ret0, _ := ret[0].(*v10.Service)
+	ret0, _ := ret[0].(*v11.Service)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -284,10 +285,10 @@ func (mr *MockOpsMockRecorder) CreateService(arg0 interface{}) *gomock.Call {
 }
 
 // CreateServiceAccount mocks base method.
-func (m *MockOps) CreateServiceAccount(arg0 *v10.ServiceAccount) (*v10.ServiceAccount, error) {
+func (m *MockOps) CreateServiceAccount(arg0 *v11.ServiceAccount) (*v11.ServiceAccount, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateServiceAccount", arg0)
-	ret0, _ := ret[0].(*v10.ServiceAccount)
+	ret0, _ := ret[0].(*v11.ServiceAccount)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -296,6 +297,21 @@ func (m *MockOps) CreateServiceAccount(arg0 *v10.ServiceAccount) (*v10.ServiceAc
 func (mr *MockOpsMockRecorder) CreateServiceAccount(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateServiceAccount", reflect.TypeOf((*MockOps)(nil).CreateServiceAccount), arg0)
+}
+
+// CreateToken mocks base method.
+func (m *MockOps) CreateToken(arg0, arg1 string, arg2 *v1.TokenRequest) (*v1.TokenRequest, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateToken", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*v1.TokenRequest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateToken indicates an expected call of CreateToken.
+func (mr *MockOpsMockRecorder) CreateToken(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateToken", reflect.TypeOf((*MockOps)(nil).CreateToken), arg0, arg1, arg2)
 }
 
 // DeleteCertificateSigningRequests mocks base method.
@@ -439,7 +455,7 @@ func (mr *MockOpsMockRecorder) DeletePod(arg0, arg1, arg2 interface{}) *gomock.C
 }
 
 // DeletePods mocks base method.
-func (m *MockOps) DeletePods(arg0 []v10.Pod, arg1 bool) error {
+func (m *MockOps) DeletePods(arg0 []v11.Pod, arg1 bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeletePods", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -509,10 +525,10 @@ func (mr *MockOpsMockRecorder) DeleteServiceAccount(arg0, arg1 interface{}) *gom
 }
 
 // DescribeService mocks base method.
-func (m *MockOps) DescribeService(arg0, arg1 string) (*v10.ServiceStatus, error) {
+func (m *MockOps) DescribeService(arg0, arg1 string) (*v11.ServiceStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DescribeService", arg0, arg1)
-	ret0, _ := ret[0].(*v10.ServiceStatus)
+	ret0, _ := ret[0].(*v11.ServiceStatus)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -524,7 +540,7 @@ func (mr *MockOpsMockRecorder) DescribeService(arg0, arg1 interface{}) *gomock.C
 }
 
 // DrainPodsFromNode mocks base method.
-func (m *MockOps) DrainPodsFromNode(arg0 string, arg1 []v10.Pod, arg2, arg3 time.Duration) error {
+func (m *MockOps) DrainPodsFromNode(arg0 string, arg1 []v11.Pod, arg2, arg3 time.Duration) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DrainPodsFromNode", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
@@ -538,10 +554,10 @@ func (mr *MockOpsMockRecorder) DrainPodsFromNode(arg0, arg1, arg2, arg3 interfac
 }
 
 // FindMyNode mocks base method.
-func (m *MockOps) FindMyNode() (*v10.Node, error) {
+func (m *MockOps) FindMyNode() (*v11.Node, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindMyNode")
-	ret0, _ := ret[0].(*v10.Node)
+	ret0, _ := ret[0].(*v11.Node)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -553,10 +569,10 @@ func (mr *MockOpsMockRecorder) FindMyNode() *gomock.Call {
 }
 
 // GetCertificateSigningRequest mocks base method.
-func (m *MockOps) GetCertificateSigningRequest(arg0 string) (*v1.CertificateSigningRequest, error) {
+func (m *MockOps) GetCertificateSigningRequest(arg0 string) (*v10.CertificateSigningRequest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCertificateSigningRequest", arg0)
-	ret0, _ := ret[0].(*v1.CertificateSigningRequest)
+	ret0, _ := ret[0].(*v10.CertificateSigningRequest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -568,10 +584,10 @@ func (mr *MockOpsMockRecorder) GetCertificateSigningRequest(arg0 interface{}) *g
 }
 
 // GetConfigMap mocks base method.
-func (m *MockOps) GetConfigMap(arg0, arg1 string) (*v10.ConfigMap, error) {
+func (m *MockOps) GetConfigMap(arg0, arg1 string) (*v11.ConfigMap, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetConfigMap", arg0, arg1)
-	ret0, _ := ret[0].(*v10.ConfigMap)
+	ret0, _ := ret[0].(*v11.ConfigMap)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -583,10 +599,10 @@ func (mr *MockOpsMockRecorder) GetConfigMap(arg0, arg1 interface{}) *gomock.Call
 }
 
 // GetEndpoints mocks base method.
-func (m *MockOps) GetEndpoints(arg0, arg1 string) (*v10.Endpoints, error) {
+func (m *MockOps) GetEndpoints(arg0, arg1 string) (*v11.Endpoints, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEndpoints", arg0, arg1)
-	ret0, _ := ret[0].(*v10.Endpoints)
+	ret0, _ := ret[0].(*v11.Endpoints)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -613,10 +629,10 @@ func (mr *MockOpsMockRecorder) GetLabelsOnNode(arg0 interface{}) *gomock.Call {
 }
 
 // GetLimitRange mocks base method.
-func (m *MockOps) GetLimitRange(arg0, arg1 string) (*v10.LimitRange, error) {
+func (m *MockOps) GetLimitRange(arg0, arg1 string) (*v11.LimitRange, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLimitRange", arg0, arg1)
-	ret0, _ := ret[0].(*v10.LimitRange)
+	ret0, _ := ret[0].(*v11.LimitRange)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -628,10 +644,10 @@ func (mr *MockOpsMockRecorder) GetLimitRange(arg0, arg1 interface{}) *gomock.Cal
 }
 
 // GetLinuxNodes mocks base method.
-func (m *MockOps) GetLinuxNodes() (*v10.NodeList, error) {
+func (m *MockOps) GetLinuxNodes() (*v11.NodeList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLinuxNodes")
-	ret0, _ := ret[0].(*v10.NodeList)
+	ret0, _ := ret[0].(*v11.NodeList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -643,10 +659,10 @@ func (mr *MockOpsMockRecorder) GetLinuxNodes() *gomock.Call {
 }
 
 // GetNamespace mocks base method.
-func (m *MockOps) GetNamespace(arg0 string) (*v10.Namespace, error) {
+func (m *MockOps) GetNamespace(arg0 string) (*v11.Namespace, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespace", arg0)
-	ret0, _ := ret[0].(*v10.Namespace)
+	ret0, _ := ret[0].(*v11.Namespace)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -658,10 +674,10 @@ func (mr *MockOpsMockRecorder) GetNamespace(arg0 interface{}) *gomock.Call {
 }
 
 // GetNetworkPolicy mocks base method.
-func (m *MockOps) GetNetworkPolicy(arg0, arg1 string) (*v11.NetworkPolicy, error) {
+func (m *MockOps) GetNetworkPolicy(arg0, arg1 string) (*v12.NetworkPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNetworkPolicy", arg0, arg1)
-	ret0, _ := ret[0].(*v11.NetworkPolicy)
+	ret0, _ := ret[0].(*v12.NetworkPolicy)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -673,10 +689,10 @@ func (mr *MockOpsMockRecorder) GetNetworkPolicy(arg0, arg1 interface{}) *gomock.
 }
 
 // GetNodeByName mocks base method.
-func (m *MockOps) GetNodeByName(arg0 string) (*v10.Node, error) {
+func (m *MockOps) GetNodeByName(arg0 string) (*v11.Node, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNodeByName", arg0)
-	ret0, _ := ret[0].(*v10.Node)
+	ret0, _ := ret[0].(*v11.Node)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -688,10 +704,10 @@ func (mr *MockOpsMockRecorder) GetNodeByName(arg0 interface{}) *gomock.Call {
 }
 
 // GetNodes mocks base method.
-func (m *MockOps) GetNodes() (*v10.NodeList, error) {
+func (m *MockOps) GetNodes() (*v11.NodeList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNodes")
-	ret0, _ := ret[0].(*v10.NodeList)
+	ret0, _ := ret[0].(*v11.NodeList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -703,10 +719,10 @@ func (mr *MockOpsMockRecorder) GetNodes() *gomock.Call {
 }
 
 // GetNodesUsingVolume mocks base method.
-func (m *MockOps) GetNodesUsingVolume(arg0 string, arg1 bool) (*v10.NodeList, error) {
+func (m *MockOps) GetNodesUsingVolume(arg0 string, arg1 bool) (*v11.NodeList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNodesUsingVolume", arg0, arg1)
-	ret0, _ := ret[0].(*v10.NodeList)
+	ret0, _ := ret[0].(*v11.NodeList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -718,10 +734,10 @@ func (mr *MockOpsMockRecorder) GetNodesUsingVolume(arg0, arg1 interface{}) *gomo
 }
 
 // GetPVCsUsingStorageClass mocks base method.
-func (m *MockOps) GetPVCsUsingStorageClass(arg0 string) ([]v10.PersistentVolumeClaim, error) {
+func (m *MockOps) GetPVCsUsingStorageClass(arg0 string) ([]v11.PersistentVolumeClaim, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPVCsUsingStorageClass", arg0)
-	ret0, _ := ret[0].([]v10.PersistentVolumeClaim)
+	ret0, _ := ret[0].([]v11.PersistentVolumeClaim)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -733,10 +749,10 @@ func (mr *MockOpsMockRecorder) GetPVCsUsingStorageClass(arg0 interface{}) *gomoc
 }
 
 // GetPersistentVolume mocks base method.
-func (m *MockOps) GetPersistentVolume(arg0 string) (*v10.PersistentVolume, error) {
+func (m *MockOps) GetPersistentVolume(arg0 string) (*v11.PersistentVolume, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPersistentVolume", arg0)
-	ret0, _ := ret[0].(*v10.PersistentVolume)
+	ret0, _ := ret[0].(*v11.PersistentVolume)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -748,10 +764,10 @@ func (mr *MockOpsMockRecorder) GetPersistentVolume(arg0 interface{}) *gomock.Cal
 }
 
 // GetPersistentVolumeClaim mocks base method.
-func (m *MockOps) GetPersistentVolumeClaim(arg0, arg1 string) (*v10.PersistentVolumeClaim, error) {
+func (m *MockOps) GetPersistentVolumeClaim(arg0, arg1 string) (*v11.PersistentVolumeClaim, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPersistentVolumeClaim", arg0, arg1)
-	ret0, _ := ret[0].(*v10.PersistentVolumeClaim)
+	ret0, _ := ret[0].(*v11.PersistentVolumeClaim)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -763,7 +779,7 @@ func (mr *MockOpsMockRecorder) GetPersistentVolumeClaim(arg0, arg1 interface{}) 
 }
 
 // GetPersistentVolumeClaimParams mocks base method.
-func (m *MockOps) GetPersistentVolumeClaimParams(arg0 *v10.PersistentVolumeClaim) (map[string]string, error) {
+func (m *MockOps) GetPersistentVolumeClaimParams(arg0 *v11.PersistentVolumeClaim) (map[string]string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPersistentVolumeClaimParams", arg0)
 	ret0, _ := ret[0].(map[string]string)
@@ -778,10 +794,10 @@ func (mr *MockOpsMockRecorder) GetPersistentVolumeClaimParams(arg0 interface{}) 
 }
 
 // GetPersistentVolumeClaimStatus mocks base method.
-func (m *MockOps) GetPersistentVolumeClaimStatus(arg0 *v10.PersistentVolumeClaim) (*v10.PersistentVolumeClaimStatus, error) {
+func (m *MockOps) GetPersistentVolumeClaimStatus(arg0 *v11.PersistentVolumeClaim) (*v11.PersistentVolumeClaimStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPersistentVolumeClaimStatus", arg0)
-	ret0, _ := ret[0].(*v10.PersistentVolumeClaimStatus)
+	ret0, _ := ret[0].(*v11.PersistentVolumeClaimStatus)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -793,10 +809,10 @@ func (mr *MockOpsMockRecorder) GetPersistentVolumeClaimStatus(arg0 interface{}) 
 }
 
 // GetPersistentVolumeClaims mocks base method.
-func (m *MockOps) GetPersistentVolumeClaims(arg0 string, arg1 map[string]string) (*v10.PersistentVolumeClaimList, error) {
+func (m *MockOps) GetPersistentVolumeClaims(arg0 string, arg1 map[string]string) (*v11.PersistentVolumeClaimList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPersistentVolumeClaims", arg0, arg1)
-	ret0, _ := ret[0].(*v10.PersistentVolumeClaimList)
+	ret0, _ := ret[0].(*v11.PersistentVolumeClaimList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -808,10 +824,10 @@ func (mr *MockOpsMockRecorder) GetPersistentVolumeClaims(arg0, arg1 interface{})
 }
 
 // GetPersistentVolumes mocks base method.
-func (m *MockOps) GetPersistentVolumes() (*v10.PersistentVolumeList, error) {
+func (m *MockOps) GetPersistentVolumes() (*v11.PersistentVolumeList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPersistentVolumes")
-	ret0, _ := ret[0].(*v10.PersistentVolumeList)
+	ret0, _ := ret[0].(*v11.PersistentVolumeList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -823,10 +839,10 @@ func (mr *MockOpsMockRecorder) GetPersistentVolumes() *gomock.Call {
 }
 
 // GetPodByName mocks base method.
-func (m *MockOps) GetPodByName(arg0, arg1 string) (*v10.Pod, error) {
+func (m *MockOps) GetPodByName(arg0, arg1 string) (*v11.Pod, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPodByName", arg0, arg1)
-	ret0, _ := ret[0].(*v10.Pod)
+	ret0, _ := ret[0].(*v11.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -838,10 +854,10 @@ func (mr *MockOpsMockRecorder) GetPodByName(arg0, arg1 interface{}) *gomock.Call
 }
 
 // GetPodByUID mocks base method.
-func (m *MockOps) GetPodByUID(arg0 types.UID, arg1 string) (*v10.Pod, error) {
+func (m *MockOps) GetPodByUID(arg0 types.UID, arg1 string) (*v11.Pod, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPodByUID", arg0, arg1)
-	ret0, _ := ret[0].(*v10.Pod)
+	ret0, _ := ret[0].(*v11.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -853,7 +869,7 @@ func (mr *MockOpsMockRecorder) GetPodByUID(arg0, arg1 interface{}) *gomock.Call 
 }
 
 // GetPodLog mocks base method.
-func (m *MockOps) GetPodLog(arg0, arg1 string, arg2 *v10.PodLogOptions) (string, error) {
+func (m *MockOps) GetPodLog(arg0, arg1 string, arg2 *v11.PodLogOptions) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPodLog", arg0, arg1, arg2)
 	ret0, _ := ret[0].(string)
@@ -868,10 +884,10 @@ func (mr *MockOpsMockRecorder) GetPodLog(arg0, arg1, arg2 interface{}) *gomock.C
 }
 
 // GetPods mocks base method.
-func (m *MockOps) GetPods(arg0 string, arg1 map[string]string) (*v10.PodList, error) {
+func (m *MockOps) GetPods(arg0 string, arg1 map[string]string) (*v11.PodList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPods", arg0, arg1)
-	ret0, _ := ret[0].(*v10.PodList)
+	ret0, _ := ret[0].(*v11.PodList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -883,10 +899,10 @@ func (mr *MockOpsMockRecorder) GetPods(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // GetPodsByNode mocks base method.
-func (m *MockOps) GetPodsByNode(arg0, arg1 string) (*v10.PodList, error) {
+func (m *MockOps) GetPodsByNode(arg0, arg1 string) (*v11.PodList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPodsByNode", arg0, arg1)
-	ret0, _ := ret[0].(*v10.PodList)
+	ret0, _ := ret[0].(*v11.PodList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -898,10 +914,10 @@ func (mr *MockOpsMockRecorder) GetPodsByNode(arg0, arg1 interface{}) *gomock.Cal
 }
 
 // GetPodsByNodeAndLabels mocks base method.
-func (m *MockOps) GetPodsByNodeAndLabels(arg0, arg1 string, arg2 map[string]string) (*v10.PodList, error) {
+func (m *MockOps) GetPodsByNodeAndLabels(arg0, arg1 string, arg2 map[string]string) (*v11.PodList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPodsByNodeAndLabels", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*v10.PodList)
+	ret0, _ := ret[0].(*v11.PodList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -913,10 +929,10 @@ func (mr *MockOpsMockRecorder) GetPodsByNodeAndLabels(arg0, arg1, arg2 interface
 }
 
 // GetPodsByOwner mocks base method.
-func (m *MockOps) GetPodsByOwner(arg0 types.UID, arg1 string) ([]v10.Pod, error) {
+func (m *MockOps) GetPodsByOwner(arg0 types.UID, arg1 string) ([]v11.Pod, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPodsByOwner", arg0, arg1)
-	ret0, _ := ret[0].([]v10.Pod)
+	ret0, _ := ret[0].([]v11.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -928,10 +944,10 @@ func (mr *MockOpsMockRecorder) GetPodsByOwner(arg0, arg1 interface{}) *gomock.Ca
 }
 
 // GetPodsUsingPV mocks base method.
-func (m *MockOps) GetPodsUsingPV(arg0 string) ([]v10.Pod, error) {
+func (m *MockOps) GetPodsUsingPV(arg0 string) ([]v11.Pod, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPodsUsingPV", arg0)
-	ret0, _ := ret[0].([]v10.Pod)
+	ret0, _ := ret[0].([]v11.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -943,10 +959,10 @@ func (mr *MockOpsMockRecorder) GetPodsUsingPV(arg0 interface{}) *gomock.Call {
 }
 
 // GetPodsUsingPVByNodeName mocks base method.
-func (m *MockOps) GetPodsUsingPVByNodeName(arg0, arg1 string) ([]v10.Pod, error) {
+func (m *MockOps) GetPodsUsingPVByNodeName(arg0, arg1 string) ([]v11.Pod, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPodsUsingPVByNodeName", arg0, arg1)
-	ret0, _ := ret[0].([]v10.Pod)
+	ret0, _ := ret[0].([]v11.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -958,10 +974,10 @@ func (mr *MockOpsMockRecorder) GetPodsUsingPVByNodeName(arg0, arg1 interface{}) 
 }
 
 // GetPodsUsingPVC mocks base method.
-func (m *MockOps) GetPodsUsingPVC(arg0, arg1 string) ([]v10.Pod, error) {
+func (m *MockOps) GetPodsUsingPVC(arg0, arg1 string) ([]v11.Pod, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPodsUsingPVC", arg0, arg1)
-	ret0, _ := ret[0].([]v10.Pod)
+	ret0, _ := ret[0].([]v11.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -973,10 +989,10 @@ func (mr *MockOpsMockRecorder) GetPodsUsingPVC(arg0, arg1 interface{}) *gomock.C
 }
 
 // GetPodsUsingPVCByNodeName mocks base method.
-func (m *MockOps) GetPodsUsingPVCByNodeName(arg0, arg1, arg2 string) ([]v10.Pod, error) {
+func (m *MockOps) GetPodsUsingPVCByNodeName(arg0, arg1, arg2 string) ([]v11.Pod, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPodsUsingPVCByNodeName", arg0, arg1, arg2)
-	ret0, _ := ret[0].([]v10.Pod)
+	ret0, _ := ret[0].([]v11.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -988,10 +1004,10 @@ func (mr *MockOpsMockRecorder) GetPodsUsingPVCByNodeName(arg0, arg1, arg2 interf
 }
 
 // GetPodsUsingVolumePlugin mocks base method.
-func (m *MockOps) GetPodsUsingVolumePlugin(arg0 string) ([]v10.Pod, error) {
+func (m *MockOps) GetPodsUsingVolumePlugin(arg0 string) ([]v11.Pod, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPodsUsingVolumePlugin", arg0)
-	ret0, _ := ret[0].([]v10.Pod)
+	ret0, _ := ret[0].([]v11.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1003,10 +1019,10 @@ func (mr *MockOpsMockRecorder) GetPodsUsingVolumePlugin(arg0 interface{}) *gomoc
 }
 
 // GetPodsUsingVolumePluginByNodeName mocks base method.
-func (m *MockOps) GetPodsUsingVolumePluginByNodeName(arg0, arg1 string) ([]v10.Pod, error) {
+func (m *MockOps) GetPodsUsingVolumePluginByNodeName(arg0, arg1 string) ([]v11.Pod, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPodsUsingVolumePluginByNodeName", arg0, arg1)
-	ret0, _ := ret[0].([]v10.Pod)
+	ret0, _ := ret[0].([]v11.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1018,10 +1034,10 @@ func (mr *MockOpsMockRecorder) GetPodsUsingVolumePluginByNodeName(arg0, arg1 int
 }
 
 // GetReadyLinuxNodes mocks base method.
-func (m *MockOps) GetReadyLinuxNodes() (*v10.NodeList, error) {
+func (m *MockOps) GetReadyLinuxNodes() (*v11.NodeList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReadyLinuxNodes")
-	ret0, _ := ret[0].(*v10.NodeList)
+	ret0, _ := ret[0].(*v11.NodeList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1033,10 +1049,10 @@ func (mr *MockOpsMockRecorder) GetReadyLinuxNodes() *gomock.Call {
 }
 
 // GetReadyWindowsNodes mocks base method.
-func (m *MockOps) GetReadyWindowsNodes() (*v10.NodeList, error) {
+func (m *MockOps) GetReadyWindowsNodes() (*v11.NodeList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReadyWindowsNodes")
-	ret0, _ := ret[0].(*v10.NodeList)
+	ret0, _ := ret[0].(*v11.NodeList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1048,10 +1064,10 @@ func (mr *MockOpsMockRecorder) GetReadyWindowsNodes() *gomock.Call {
 }
 
 // GetSecret mocks base method.
-func (m *MockOps) GetSecret(arg0, arg1 string) (*v10.Secret, error) {
+func (m *MockOps) GetSecret(arg0, arg1 string) (*v11.Secret, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSecret", arg0, arg1)
-	ret0, _ := ret[0].(*v10.Secret)
+	ret0, _ := ret[0].(*v11.Secret)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1063,10 +1079,10 @@ func (mr *MockOpsMockRecorder) GetSecret(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // GetService mocks base method.
-func (m *MockOps) GetService(arg0, arg1 string) (*v10.Service, error) {
+func (m *MockOps) GetService(arg0, arg1 string) (*v11.Service, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetService", arg0, arg1)
-	ret0, _ := ret[0].(*v10.Service)
+	ret0, _ := ret[0].(*v11.Service)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1078,10 +1094,10 @@ func (mr *MockOpsMockRecorder) GetService(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // GetServiceAccount mocks base method.
-func (m *MockOps) GetServiceAccount(arg0, arg1 string) (*v10.ServiceAccount, error) {
+func (m *MockOps) GetServiceAccount(arg0, arg1 string) (*v11.ServiceAccount, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetServiceAccount", arg0, arg1)
-	ret0, _ := ret[0].(*v10.ServiceAccount)
+	ret0, _ := ret[0].(*v11.ServiceAccount)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1108,10 +1124,10 @@ func (mr *MockOpsMockRecorder) GetServiceEndpoint(arg0, arg1 interface{}) *gomoc
 }
 
 // GetStorageClassForPVC mocks base method.
-func (m *MockOps) GetStorageClassForPVC(arg0 *v10.PersistentVolumeClaim) (*v12.StorageClass, error) {
+func (m *MockOps) GetStorageClassForPVC(arg0 *v11.PersistentVolumeClaim) (*v13.StorageClass, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStorageClassForPVC", arg0)
-	ret0, _ := ret[0].(*v12.StorageClass)
+	ret0, _ := ret[0].(*v13.StorageClass)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1123,7 +1139,7 @@ func (mr *MockOpsMockRecorder) GetStorageClassForPVC(arg0 interface{}) *gomock.C
 }
 
 // GetStorageProvisionerForPVC mocks base method.
-func (m *MockOps) GetStorageProvisionerForPVC(arg0 *v10.PersistentVolumeClaim) (string, error) {
+func (m *MockOps) GetStorageProvisionerForPVC(arg0 *v11.PersistentVolumeClaim) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStorageProvisionerForPVC", arg0)
 	ret0, _ := ret[0].(string)
@@ -1153,7 +1169,7 @@ func (mr *MockOpsMockRecorder) GetVersion() *gomock.Call {
 }
 
 // GetVolumeForPersistentVolumeClaim mocks base method.
-func (m *MockOps) GetVolumeForPersistentVolumeClaim(arg0 *v10.PersistentVolumeClaim) (string, error) {
+func (m *MockOps) GetVolumeForPersistentVolumeClaim(arg0 *v11.PersistentVolumeClaim) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVolumeForPersistentVolumeClaim", arg0)
 	ret0, _ := ret[0].(string)
@@ -1168,10 +1184,10 @@ func (mr *MockOpsMockRecorder) GetVolumeForPersistentVolumeClaim(arg0 interface{
 }
 
 // GetWindowsNodes mocks base method.
-func (m *MockOps) GetWindowsNodes() (*v10.NodeList, error) {
+func (m *MockOps) GetWindowsNodes() (*v11.NodeList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWindowsNodes")
-	ret0, _ := ret[0].(*v10.NodeList)
+	ret0, _ := ret[0].(*v11.NodeList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1183,7 +1199,7 @@ func (mr *MockOpsMockRecorder) GetWindowsNodes() *gomock.Call {
 }
 
 // IsNodeMaster mocks base method.
-func (m *MockOps) IsNodeMaster(arg0 v10.Node) bool {
+func (m *MockOps) IsNodeMaster(arg0 v11.Node) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsNodeMaster", arg0)
 	ret0, _ := ret[0].(bool)
@@ -1211,7 +1227,7 @@ func (mr *MockOpsMockRecorder) IsNodeReady(arg0 interface{}) *gomock.Call {
 }
 
 // IsPodBeingManaged mocks base method.
-func (m *MockOps) IsPodBeingManaged(arg0 v10.Pod) bool {
+func (m *MockOps) IsPodBeingManaged(arg0 v11.Pod) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsPodBeingManaged", arg0)
 	ret0, _ := ret[0].(bool)
@@ -1225,7 +1241,7 @@ func (mr *MockOpsMockRecorder) IsPodBeingManaged(arg0 interface{}) *gomock.Call 
 }
 
 // IsPodCompleted mocks base method.
-func (m *MockOps) IsPodCompleted(arg0 v10.Pod) bool {
+func (m *MockOps) IsPodCompleted(arg0 v11.Pod) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsPodCompleted", arg0)
 	ret0, _ := ret[0].(bool)
@@ -1239,7 +1255,7 @@ func (mr *MockOpsMockRecorder) IsPodCompleted(arg0 interface{}) *gomock.Call {
 }
 
 // IsPodReady mocks base method.
-func (m *MockOps) IsPodReady(arg0 v10.Pod) bool {
+func (m *MockOps) IsPodReady(arg0 v11.Pod) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsPodReady", arg0)
 	ret0, _ := ret[0].(bool)
@@ -1253,7 +1269,7 @@ func (mr *MockOpsMockRecorder) IsPodReady(arg0 interface{}) *gomock.Call {
 }
 
 // IsPodRunning mocks base method.
-func (m *MockOps) IsPodRunning(arg0 v10.Pod) bool {
+func (m *MockOps) IsPodRunning(arg0 v11.Pod) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsPodRunning", arg0)
 	ret0, _ := ret[0].(bool)
@@ -1267,10 +1283,10 @@ func (mr *MockOpsMockRecorder) IsPodRunning(arg0 interface{}) *gomock.Call {
 }
 
 // ListCertificateSigningRequests mocks base method.
-func (m *MockOps) ListCertificateSigningRequests(arg0 map[string]string) (*v1.CertificateSigningRequestList, error) {
+func (m *MockOps) ListCertificateSigningRequests(arg0 map[string]string) (*v10.CertificateSigningRequestList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListCertificateSigningRequests", arg0)
-	ret0, _ := ret[0].(*v1.CertificateSigningRequestList)
+	ret0, _ := ret[0].(*v10.CertificateSigningRequestList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1282,10 +1298,10 @@ func (mr *MockOpsMockRecorder) ListCertificateSigningRequests(arg0 interface{}) 
 }
 
 // ListConfigMap mocks base method.
-func (m *MockOps) ListConfigMap(arg0 string, arg1 v13.ListOptions) (*v10.ConfigMapList, error) {
+func (m *MockOps) ListConfigMap(arg0 string, arg1 v14.ListOptions) (*v11.ConfigMapList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListConfigMap", arg0, arg1)
-	ret0, _ := ret[0].(*v10.ConfigMapList)
+	ret0, _ := ret[0].(*v11.ConfigMapList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1297,10 +1313,10 @@ func (mr *MockOpsMockRecorder) ListConfigMap(arg0, arg1 interface{}) *gomock.Cal
 }
 
 // ListEndpoints mocks base method.
-func (m *MockOps) ListEndpoints(arg0 string, arg1 v13.ListOptions) (*v10.EndpointsList, error) {
+func (m *MockOps) ListEndpoints(arg0 string, arg1 v14.ListOptions) (*v11.EndpointsList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListEndpoints", arg0, arg1)
-	ret0, _ := ret[0].(*v10.EndpointsList)
+	ret0, _ := ret[0].(*v11.EndpointsList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1312,10 +1328,10 @@ func (mr *MockOpsMockRecorder) ListEndpoints(arg0, arg1 interface{}) *gomock.Cal
 }
 
 // ListEvents mocks base method.
-func (m *MockOps) ListEvents(arg0 string, arg1 v13.ListOptions) (*v10.EventList, error) {
+func (m *MockOps) ListEvents(arg0 string, arg1 v14.ListOptions) (*v11.EventList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListEvents", arg0, arg1)
-	ret0, _ := ret[0].(*v10.EventList)
+	ret0, _ := ret[0].(*v11.EventList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1327,10 +1343,10 @@ func (mr *MockOpsMockRecorder) ListEvents(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // ListLimitRange mocks base method.
-func (m *MockOps) ListLimitRange(arg0 string, arg1 v13.ListOptions) (*v10.LimitRangeList, error) {
+func (m *MockOps) ListLimitRange(arg0 string, arg1 v14.ListOptions) (*v11.LimitRangeList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListLimitRange", arg0, arg1)
-	ret0, _ := ret[0].(*v10.LimitRangeList)
+	ret0, _ := ret[0].(*v11.LimitRangeList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1342,10 +1358,10 @@ func (mr *MockOpsMockRecorder) ListLimitRange(arg0, arg1 interface{}) *gomock.Ca
 }
 
 // ListNamespaces mocks base method.
-func (m *MockOps) ListNamespaces(arg0 map[string]string) (*v10.NamespaceList, error) {
+func (m *MockOps) ListNamespaces(arg0 map[string]string) (*v11.NamespaceList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListNamespaces", arg0)
-	ret0, _ := ret[0].(*v10.NamespaceList)
+	ret0, _ := ret[0].(*v11.NamespaceList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1357,10 +1373,10 @@ func (mr *MockOpsMockRecorder) ListNamespaces(arg0 interface{}) *gomock.Call {
 }
 
 // ListNamespacesV2 mocks base method.
-func (m *MockOps) ListNamespacesV2(arg0 string) (*v10.NamespaceList, error) {
+func (m *MockOps) ListNamespacesV2(arg0 string) (*v11.NamespaceList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListNamespacesV2", arg0)
-	ret0, _ := ret[0].(*v10.NamespaceList)
+	ret0, _ := ret[0].(*v11.NamespaceList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1372,10 +1388,10 @@ func (mr *MockOpsMockRecorder) ListNamespacesV2(arg0 interface{}) *gomock.Call {
 }
 
 // ListNetworkPolicy mocks base method.
-func (m *MockOps) ListNetworkPolicy(arg0 string, arg1 v13.ListOptions) (*v11.NetworkPolicyList, error) {
+func (m *MockOps) ListNetworkPolicy(arg0 string, arg1 v14.ListOptions) (*v12.NetworkPolicyList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListNetworkPolicy", arg0, arg1)
-	ret0, _ := ret[0].(*v11.NetworkPolicyList)
+	ret0, _ := ret[0].(*v12.NetworkPolicyList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1387,10 +1403,10 @@ func (mr *MockOpsMockRecorder) ListNetworkPolicy(arg0, arg1 interface{}) *gomock
 }
 
 // ListPods mocks base method.
-func (m *MockOps) ListPods(arg0 map[string]string) (*v10.PodList, error) {
+func (m *MockOps) ListPods(arg0 map[string]string) (*v11.PodList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListPods", arg0)
-	ret0, _ := ret[0].(*v10.PodList)
+	ret0, _ := ret[0].(*v11.PodList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1402,10 +1418,10 @@ func (mr *MockOpsMockRecorder) ListPods(arg0 interface{}) *gomock.Call {
 }
 
 // ListSecret mocks base method.
-func (m *MockOps) ListSecret(arg0 string, arg1 v13.ListOptions) (*v10.SecretList, error) {
+func (m *MockOps) ListSecret(arg0 string, arg1 v14.ListOptions) (*v11.SecretList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListSecret", arg0, arg1)
-	ret0, _ := ret[0].(*v10.SecretList)
+	ret0, _ := ret[0].(*v11.SecretList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1417,10 +1433,10 @@ func (mr *MockOpsMockRecorder) ListSecret(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // ListServiceAccount mocks base method.
-func (m *MockOps) ListServiceAccount(arg0 string, arg1 v13.ListOptions) (*v10.ServiceAccountList, error) {
+func (m *MockOps) ListServiceAccount(arg0 string, arg1 v14.ListOptions) (*v11.ServiceAccountList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListServiceAccount", arg0, arg1)
-	ret0, _ := ret[0].(*v10.ServiceAccountList)
+	ret0, _ := ret[0].(*v11.ServiceAccountList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1432,10 +1448,10 @@ func (mr *MockOpsMockRecorder) ListServiceAccount(arg0, arg1 interface{}) *gomoc
 }
 
 // ListServices mocks base method.
-func (m *MockOps) ListServices(arg0 string, arg1 v13.ListOptions) (*v10.ServiceList, error) {
+func (m *MockOps) ListServices(arg0 string, arg1 v14.ListOptions) (*v11.ServiceList, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListServices", arg0, arg1)
-	ret0, _ := ret[0].(*v10.ServiceList)
+	ret0, _ := ret[0].(*v11.ServiceList)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1447,14 +1463,14 @@ func (mr *MockOpsMockRecorder) ListServices(arg0, arg1 interface{}) *gomock.Call
 }
 
 // PatchEndpoints mocks base method.
-func (m *MockOps) PatchEndpoints(arg0, arg1 string, arg2 types.PatchType, arg3 []byte, arg4 ...string) (*v10.Endpoints, error) {
+func (m *MockOps) PatchEndpoints(arg0, arg1 string, arg2 types.PatchType, arg3 []byte, arg4 ...string) (*v11.Endpoints, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "PatchEndpoints", varargs...)
-	ret0, _ := ret[0].(*v10.Endpoints)
+	ret0, _ := ret[0].(*v11.Endpoints)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1467,14 +1483,14 @@ func (mr *MockOpsMockRecorder) PatchEndpoints(arg0, arg1, arg2, arg3 interface{}
 }
 
 // PatchNetworkPolicy mocks base method.
-func (m *MockOps) PatchNetworkPolicy(arg0, arg1 string, arg2 types.PatchType, arg3 []byte, arg4 ...string) (*v11.NetworkPolicy, error) {
+func (m *MockOps) PatchNetworkPolicy(arg0, arg1 string, arg2 types.PatchType, arg3 []byte, arg4 ...string) (*v12.NetworkPolicy, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "PatchNetworkPolicy", varargs...)
-	ret0, _ := ret[0].(*v11.NetworkPolicy)
+	ret0, _ := ret[0].(*v12.NetworkPolicy)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1487,14 +1503,14 @@ func (mr *MockOpsMockRecorder) PatchNetworkPolicy(arg0, arg1, arg2, arg3 interfa
 }
 
 // PatchService mocks base method.
-func (m *MockOps) PatchService(arg0, arg1 string, arg2 []byte, arg3 ...string) (*v10.Service, error) {
+func (m *MockOps) PatchService(arg0, arg1 string, arg2 []byte, arg3 ...string) (*v11.Service, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "PatchService", varargs...)
-	ret0, _ := ret[0].(*v10.Service)
+	ret0, _ := ret[0].(*v11.Service)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1507,7 +1523,7 @@ func (mr *MockOpsMockRecorder) PatchService(arg0, arg1, arg2 interface{}, arg3 .
 }
 
 // RecordEvent mocks base method.
-func (m *MockOps) RecordEvent(arg0 v10.EventSource, arg1 runtime.Object, arg2, arg3, arg4 string) {
+func (m *MockOps) RecordEvent(arg0 v11.EventSource, arg1 runtime.Object, arg2, arg3, arg4 string) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RecordEvent", arg0, arg1, arg2, arg3, arg4)
 }
@@ -1519,7 +1535,7 @@ func (mr *MockOpsMockRecorder) RecordEvent(arg0, arg1, arg2, arg3, arg4 interfac
 }
 
 // RecordEventLegacy mocks base method.
-func (m *MockOps) RecordEventLegacy(arg0 v10.EventSource, arg1 runtime.Object, arg2, arg3, arg4 string) {
+func (m *MockOps) RecordEventLegacy(arg0 v11.EventSource, arg1 runtime.Object, arg2, arg3, arg4 string) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RecordEventLegacy", arg0, arg1, arg2, arg3, arg4)
 }
@@ -1606,10 +1622,10 @@ func (mr *MockOpsMockRecorder) RunCommandInPodEx(arg0 interface{}) *gomock.Call 
 }
 
 // SearchNodeByAddresses mocks base method.
-func (m *MockOps) SearchNodeByAddresses(arg0 []string) (*v10.Node, error) {
+func (m *MockOps) SearchNodeByAddresses(arg0 []string) (*v11.Node, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SearchNodeByAddresses", arg0)
-	ret0, _ := ret[0].(*v10.Node)
+	ret0, _ := ret[0].(*v11.Node)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1647,10 +1663,10 @@ func (mr *MockOpsMockRecorder) UnCordonNode(arg0, arg1, arg2 interface{}) *gomoc
 }
 
 // UpdateCertificateSigningRequests mocks base method.
-func (m *MockOps) UpdateCertificateSigningRequests(arg0 []byte, arg1 string, arg2 map[string]string, arg3 string, arg4 *time.Duration, arg5 []v1.KeyUsage) (*v1.CertificateSigningRequest, error) {
+func (m *MockOps) UpdateCertificateSigningRequests(arg0 []byte, arg1 string, arg2 map[string]string, arg3 string, arg4 *time.Duration, arg5 []v10.KeyUsage) (*v10.CertificateSigningRequest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateCertificateSigningRequests", arg0, arg1, arg2, arg3, arg4, arg5)
-	ret0, _ := ret[0].(*v1.CertificateSigningRequest)
+	ret0, _ := ret[0].(*v10.CertificateSigningRequest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1662,10 +1678,10 @@ func (mr *MockOpsMockRecorder) UpdateCertificateSigningRequests(arg0, arg1, arg2
 }
 
 // UpdateConfigMap mocks base method.
-func (m *MockOps) UpdateConfigMap(arg0 *v10.ConfigMap) (*v10.ConfigMap, error) {
+func (m *MockOps) UpdateConfigMap(arg0 *v11.ConfigMap) (*v11.ConfigMap, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateConfigMap", arg0)
-	ret0, _ := ret[0].(*v10.ConfigMap)
+	ret0, _ := ret[0].(*v11.ConfigMap)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1677,10 +1693,10 @@ func (mr *MockOpsMockRecorder) UpdateConfigMap(arg0 interface{}) *gomock.Call {
 }
 
 // UpdateEndpoints mocks base method.
-func (m *MockOps) UpdateEndpoints(arg0 *v10.Endpoints) (*v10.Endpoints, error) {
+func (m *MockOps) UpdateEndpoints(arg0 *v11.Endpoints) (*v11.Endpoints, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateEndpoints", arg0)
-	ret0, _ := ret[0].(*v10.Endpoints)
+	ret0, _ := ret[0].(*v11.Endpoints)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1692,10 +1708,10 @@ func (mr *MockOpsMockRecorder) UpdateEndpoints(arg0 interface{}) *gomock.Call {
 }
 
 // UpdateEvent mocks base method.
-func (m *MockOps) UpdateEvent(arg0 *v10.Event) (*v10.Event, error) {
+func (m *MockOps) UpdateEvent(arg0 *v11.Event) (*v11.Event, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateEvent", arg0)
-	ret0, _ := ret[0].(*v10.Event)
+	ret0, _ := ret[0].(*v11.Event)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1707,10 +1723,10 @@ func (mr *MockOpsMockRecorder) UpdateEvent(arg0 interface{}) *gomock.Call {
 }
 
 // UpdateLimitRange mocks base method.
-func (m *MockOps) UpdateLimitRange(arg0 *v10.LimitRange) (*v10.LimitRange, error) {
+func (m *MockOps) UpdateLimitRange(arg0 *v11.LimitRange) (*v11.LimitRange, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateLimitRange", arg0)
-	ret0, _ := ret[0].(*v10.LimitRange)
+	ret0, _ := ret[0].(*v11.LimitRange)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1722,10 +1738,10 @@ func (mr *MockOpsMockRecorder) UpdateLimitRange(arg0 interface{}) *gomock.Call {
 }
 
 // UpdateNamespace mocks base method.
-func (m *MockOps) UpdateNamespace(arg0 *v10.Namespace) (*v10.Namespace, error) {
+func (m *MockOps) UpdateNamespace(arg0 *v11.Namespace) (*v11.Namespace, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateNamespace", arg0)
-	ret0, _ := ret[0].(*v10.Namespace)
+	ret0, _ := ret[0].(*v11.Namespace)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1737,10 +1753,10 @@ func (mr *MockOpsMockRecorder) UpdateNamespace(arg0 interface{}) *gomock.Call {
 }
 
 // UpdateNetworkPolicy mocks base method.
-func (m *MockOps) UpdateNetworkPolicy(arg0 *v11.NetworkPolicy) (*v11.NetworkPolicy, error) {
+func (m *MockOps) UpdateNetworkPolicy(arg0 *v12.NetworkPolicy) (*v12.NetworkPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateNetworkPolicy", arg0)
-	ret0, _ := ret[0].(*v11.NetworkPolicy)
+	ret0, _ := ret[0].(*v12.NetworkPolicy)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1752,10 +1768,10 @@ func (mr *MockOpsMockRecorder) UpdateNetworkPolicy(arg0 interface{}) *gomock.Cal
 }
 
 // UpdateNode mocks base method.
-func (m *MockOps) UpdateNode(arg0 *v10.Node) (*v10.Node, error) {
+func (m *MockOps) UpdateNode(arg0 *v11.Node) (*v11.Node, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateNode", arg0)
-	ret0, _ := ret[0].(*v10.Node)
+	ret0, _ := ret[0].(*v11.Node)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1767,10 +1783,10 @@ func (mr *MockOpsMockRecorder) UpdateNode(arg0 interface{}) *gomock.Call {
 }
 
 // UpdatePersistentVolume mocks base method.
-func (m *MockOps) UpdatePersistentVolume(arg0 *v10.PersistentVolume) (*v10.PersistentVolume, error) {
+func (m *MockOps) UpdatePersistentVolume(arg0 *v11.PersistentVolume) (*v11.PersistentVolume, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdatePersistentVolume", arg0)
-	ret0, _ := ret[0].(*v10.PersistentVolume)
+	ret0, _ := ret[0].(*v11.PersistentVolume)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1782,10 +1798,10 @@ func (mr *MockOpsMockRecorder) UpdatePersistentVolume(arg0 interface{}) *gomock.
 }
 
 // UpdatePersistentVolumeClaim mocks base method.
-func (m *MockOps) UpdatePersistentVolumeClaim(arg0 *v10.PersistentVolumeClaim) (*v10.PersistentVolumeClaim, error) {
+func (m *MockOps) UpdatePersistentVolumeClaim(arg0 *v11.PersistentVolumeClaim) (*v11.PersistentVolumeClaim, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdatePersistentVolumeClaim", arg0)
-	ret0, _ := ret[0].(*v10.PersistentVolumeClaim)
+	ret0, _ := ret[0].(*v11.PersistentVolumeClaim)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1797,10 +1813,10 @@ func (mr *MockOpsMockRecorder) UpdatePersistentVolumeClaim(arg0 interface{}) *go
 }
 
 // UpdatePod mocks base method.
-func (m *MockOps) UpdatePod(arg0 *v10.Pod) (*v10.Pod, error) {
+func (m *MockOps) UpdatePod(arg0 *v11.Pod) (*v11.Pod, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdatePod", arg0)
-	ret0, _ := ret[0].(*v10.Pod)
+	ret0, _ := ret[0].(*v11.Pod)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1812,10 +1828,10 @@ func (mr *MockOpsMockRecorder) UpdatePod(arg0 interface{}) *gomock.Call {
 }
 
 // UpdateSecret mocks base method.
-func (m *MockOps) UpdateSecret(arg0 *v10.Secret) (*v10.Secret, error) {
+func (m *MockOps) UpdateSecret(arg0 *v11.Secret) (*v11.Secret, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateSecret", arg0)
-	ret0, _ := ret[0].(*v10.Secret)
+	ret0, _ := ret[0].(*v11.Secret)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1827,10 +1843,10 @@ func (mr *MockOpsMockRecorder) UpdateSecret(arg0 interface{}) *gomock.Call {
 }
 
 // UpdateSecretData mocks base method.
-func (m *MockOps) UpdateSecretData(arg0, arg1 string, arg2 map[string][]byte) (*v10.Secret, error) {
+func (m *MockOps) UpdateSecretData(arg0, arg1 string, arg2 map[string][]byte) (*v11.Secret, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateSecretData", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*v10.Secret)
+	ret0, _ := ret[0].(*v11.Secret)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1842,10 +1858,10 @@ func (mr *MockOpsMockRecorder) UpdateSecretData(arg0, arg1, arg2 interface{}) *g
 }
 
 // UpdateService mocks base method.
-func (m *MockOps) UpdateService(arg0 *v10.Service) (*v10.Service, error) {
+func (m *MockOps) UpdateService(arg0 *v11.Service) (*v11.Service, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateService", arg0)
-	ret0, _ := ret[0].(*v10.Service)
+	ret0, _ := ret[0].(*v11.Service)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1857,10 +1873,10 @@ func (mr *MockOpsMockRecorder) UpdateService(arg0 interface{}) *gomock.Call {
 }
 
 // UpdateServiceAccount mocks base method.
-func (m *MockOps) UpdateServiceAccount(arg0 *v10.ServiceAccount) (*v10.ServiceAccount, error) {
+func (m *MockOps) UpdateServiceAccount(arg0 *v11.ServiceAccount) (*v11.ServiceAccount, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateServiceAccount", arg0)
-	ret0, _ := ret[0].(*v10.ServiceAccount)
+	ret0, _ := ret[0].(*v11.ServiceAccount)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1886,7 +1902,7 @@ func (mr *MockOpsMockRecorder) ValidateDeletedService(arg0, arg1 interface{}) *g
 }
 
 // ValidatePersistentVolumeClaim mocks base method.
-func (m *MockOps) ValidatePersistentVolumeClaim(arg0 *v10.PersistentVolumeClaim, arg1, arg2 time.Duration) error {
+func (m *MockOps) ValidatePersistentVolumeClaim(arg0 *v11.PersistentVolumeClaim, arg1, arg2 time.Duration) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidatePersistentVolumeClaim", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -1900,7 +1916,7 @@ func (mr *MockOpsMockRecorder) ValidatePersistentVolumeClaim(arg0, arg1, arg2 in
 }
 
 // ValidatePersistentVolumeClaimSize mocks base method.
-func (m *MockOps) ValidatePersistentVolumeClaimSize(arg0 *v10.PersistentVolumeClaim, arg1 int64, arg2, arg3 time.Duration) error {
+func (m *MockOps) ValidatePersistentVolumeClaimSize(arg0 *v11.PersistentVolumeClaim, arg1 int64, arg2, arg3 time.Duration) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidatePersistentVolumeClaimSize", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
@@ -1914,7 +1930,7 @@ func (mr *MockOpsMockRecorder) ValidatePersistentVolumeClaimSize(arg0, arg1, arg
 }
 
 // ValidatePod mocks base method.
-func (m *MockOps) ValidatePod(arg0 *v10.Pod, arg1, arg2 time.Duration) error {
+func (m *MockOps) ValidatePod(arg0 *v11.Pod, arg1, arg2 time.Duration) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidatePod", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -1942,7 +1958,7 @@ func (mr *MockOpsMockRecorder) WaitForPodDeletion(arg0, arg1, arg2 interface{}) 
 }
 
 // WatchCertificateSigningRequests mocks base method.
-func (m *MockOps) WatchCertificateSigningRequests(arg0 *v1.CertificateSigningRequest, arg1 core.WatchFunc) error {
+func (m *MockOps) WatchCertificateSigningRequests(arg0 *v10.CertificateSigningRequest, arg1 core.WatchFunc) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WatchCertificateSigningRequests", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -1956,7 +1972,7 @@ func (mr *MockOpsMockRecorder) WatchCertificateSigningRequests(arg0, arg1 interf
 }
 
 // WatchConfigMap mocks base method.
-func (m *MockOps) WatchConfigMap(arg0 *v10.ConfigMap, arg1 core.WatchFunc) error {
+func (m *MockOps) WatchConfigMap(arg0 *v11.ConfigMap, arg1 core.WatchFunc) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WatchConfigMap", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -1970,7 +1986,7 @@ func (mr *MockOpsMockRecorder) WatchConfigMap(arg0, arg1 interface{}) *gomock.Ca
 }
 
 // WatchEvents mocks base method.
-func (m *MockOps) WatchEvents(arg0 string, arg1 core.WatchFunc, arg2 v13.ListOptions) error {
+func (m *MockOps) WatchEvents(arg0 string, arg1 core.WatchFunc, arg2 v14.ListOptions) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WatchEvents", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -1984,7 +2000,7 @@ func (mr *MockOpsMockRecorder) WatchEvents(arg0, arg1, arg2 interface{}) *gomock
 }
 
 // WatchLimitRange mocks base method.
-func (m *MockOps) WatchLimitRange(arg0 *v10.LimitRange, arg1 core.WatchFunc) error {
+func (m *MockOps) WatchLimitRange(arg0 *v11.LimitRange, arg1 core.WatchFunc) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WatchLimitRange", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -1998,7 +2014,7 @@ func (mr *MockOpsMockRecorder) WatchLimitRange(arg0, arg1 interface{}) *gomock.C
 }
 
 // WatchNode mocks base method.
-func (m *MockOps) WatchNode(arg0 *v10.Node, arg1 core.WatchFunc) error {
+func (m *MockOps) WatchNode(arg0 *v11.Node, arg1 core.WatchFunc) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WatchNode", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -2012,7 +2028,7 @@ func (mr *MockOpsMockRecorder) WatchNode(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // WatchPods mocks base method.
-func (m *MockOps) WatchPods(arg0 string, arg1 core.WatchFunc, arg2 v13.ListOptions) error {
+func (m *MockOps) WatchPods(arg0 string, arg1 core.WatchFunc, arg2 v14.ListOptions) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WatchPods", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -2026,7 +2042,7 @@ func (mr *MockOpsMockRecorder) WatchPods(arg0, arg1, arg2 interface{}) *gomock.C
 }
 
 // WatchSecret mocks base method.
-func (m *MockOps) WatchSecret(arg0 *v10.Secret, arg1 core.WatchFunc) error {
+func (m *MockOps) WatchSecret(arg0 *v11.Secret, arg1 core.WatchFunc) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WatchSecret", arg0, arg1)
 	ret0, _ := ret[0].(error)
