@@ -67,6 +67,12 @@ func (a *azureStorageManager) RecommendStoragePoolUpdate(
 	return resp, nil
 }
 
+func (a *azureStorageManager) GetMaxDriveSize(
+	request *cloudops.MaxDriveSizeRequest) (*cloudops.MaxDriveSizeResponse, error) {
+	resp, err := storagedistribution.GetMaxDriveSize(request, a.decisionMatrix)
+	return resp, err
+}
+
 func determineIOPSForPool(row *cloudops.StorageDecisionMatrixRow) uint64 {
 	return row.MinIOPS
 }

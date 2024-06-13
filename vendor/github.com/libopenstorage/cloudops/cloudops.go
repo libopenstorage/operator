@@ -118,6 +118,11 @@ type Compute interface {
 	SetInstanceGroupVersion(instanceGroupID string,
 		version string,
 		timeout time.Duration) error
+	// SetInstanceUpgradeStrategy sets desired Upgrade strategy & respective parameters for the node group
+	SetInstanceUpgradeStrategy(instanceGroupID string,
+		upgradeStrategy string,
+		timeout time.Duration,
+		surgeSetting string) error
 }
 
 // Storage interface to manage storage operations.
@@ -129,6 +134,9 @@ type Storage interface {
 	// Attach volumeID, accepts attachoOptions as opaque data
 	// Return attach path.
 	Attach(volumeID string, options map[string]string) (string, error)
+	// IsVolumeReadyToExpand pre-checks if a pool of volumes are in a state that can
+	// be modified. Should be called before sending an expand request to the cloud provider.
+	AreVolumesReadyToExpand(volumeIDs []*string) (bool, error)
 	// Expand expands the provided device from the existing size to the new size
 	// It returns the new size of the device. It is a blocking API where it will
 	// only return once the requested size is validated with the cloud provider or
@@ -147,7 +155,7 @@ type Storage interface {
 	// FreeDevices returns free block devices on the instance.
 	// blockDeviceMappings is a data structure that contains all block devices on
 	// the instance and where they are mapped to
-	FreeDevices(blockDeviceMappings []interface{}, rootDeviceName string) ([]string, error)
+	FreeDevices() ([]string, error)
 	// Inspect volumes specified by volumeID
 	Inspect(volumeIds []*string, options map[string]string) ([]interface{}, error)
 	// DeviceMappings returns map[local_attached_volume_path]->volume ID/NAME

@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coreos/etcd/pkg/transport"
-	"github.com/coreos/etcd/version"
+	"go.etcd.io/etcd/pkg/transport"
+	"go.etcd.io/etcd/version"
 	"github.com/portworx/kvdb"
 )
 
@@ -103,7 +103,6 @@ func (ec *etcdCommon) GetAuthInfoFromOptions() (transport.TLSInfo, string, strin
 	var (
 		username       string
 		password       string
-		caFile         string
 		certFile       string
 		keyFile        string
 		trustedCAFile  string
@@ -113,17 +112,15 @@ func (ec *etcdCommon) GetAuthInfoFromOptions() (transport.TLSInfo, string, strin
 	// options provided. Probably auth options
 	if ec.options != nil || len(ec.options) > 0 {
 		// Check if username provided
-		username, _ = ec.options[kvdb.UsernameKey]
+		username = ec.options[kvdb.UsernameKey]
 		// Check if password provided
-		password, _ = ec.options[kvdb.PasswordKey]
-		// Check if CA file provided
-		caFile, _ = ec.options[kvdb.CAFileKey]
+		password = ec.options[kvdb.PasswordKey]
 		// Check if certificate file provided
-		certFile, _ = ec.options[kvdb.CertFileKey]
+		certFile = ec.options[kvdb.CertFileKey]
 		// Check if certificate key is provided
-		keyFile, _ = ec.options[kvdb.CertKeyFileKey]
+		keyFile = ec.options[kvdb.CertKeyFileKey]
 		// Check if trusted ca file is provided
-		trustedCAFile, _ = ec.options[kvdb.TrustedCAFileKey]
+		trustedCAFile = ec.options[kvdb.TrustedCAFileKey]
 		// Check if client cert auth is provided
 		clientCertAuthStr, ok := ec.options[kvdb.ClientCertAuthKey]
 		if !ok {
@@ -138,12 +135,9 @@ func (ec *etcdCommon) GetAuthInfoFromOptions() (transport.TLSInfo, string, strin
 	t := transport.TLSInfo{
 		CertFile:       certFile,
 		KeyFile:        keyFile,
-		CAFile:         caFile,
 		TrustedCAFile:  trustedCAFile,
 		ClientCertAuth: clientCertAuth,
 	}
-
-	_ = t.CAFile // required since CAFile is apparently not used and it fails errcheck
 
 	return t, username, password, nil
 }
@@ -233,7 +227,7 @@ func TestStart(removeData bool) error {
 	if removeData {
 		os.RemoveAll(dataDir)
 	}
-	cmd = exec.Command("etcd", "--advertise-client-urls", "http://127.0.0.1:2379", "--data-dir", dataDir)
+	cmd = exec.Command("etcd", "--enable-v2=true", "--advertise-client-urls", "http://127.0.0.1:2379", "--data-dir", dataDir)
 	err := cmd.Start()
 	time.Sleep(5 * time.Second)
 	return err

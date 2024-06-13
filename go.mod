@@ -10,12 +10,12 @@ require (
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/uuid v1.5.0
 	github.com/hashicorp/go-version v1.6.0
-	github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1
+	github.com/libopenstorage/cloudops v0.0.0-20240613054936-4c92529e8842
 	github.com/libopenstorage/openstorage v9.4.47+incompatible
 	github.com/openshift/api v0.0.0-20230503133300-8bbcb7ca7183
 	github.com/operator-framework/api v0.17.1
 	github.com/pborman/uuid v1.2.1
-	github.com/portworx/kvdb v0.0.0-20230326003017-21a38cf82d4b
+	github.com/portworx/kvdb v0.0.0-20230405233801-87666830d3fd
 	github.com/portworx/sched-ops v1.20.4-rc1.0.20240529170916-515f6d54c338
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.63.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
@@ -51,9 +51,10 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0 // indirect
 	github.com/codeskyblue/go-sh v0.0.0-20170112005953-b097669b1569 // indirect
-	github.com/coreos/etcd v3.3.13+incompatible // indirect
 	github.com/coreos/go-oidc v2.2.1+incompatible // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
+	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
+	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/distribution v2.8.2+incompatible // indirect
@@ -110,6 +111,9 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	go.etcd.io/etcd v0.5.0-alpha.5.0.20200910180754-dd1b699fc489 // indirect
+	go.uber.org/multierr v1.10.0 // indirect
+	go.uber.org/zap v1.26.0 // indirect
 	golang.org/x/crypto v0.18.0 // indirect
 	golang.org/x/mod v0.12.0 // indirect
 	golang.org/x/net v0.20.0 // indirect
