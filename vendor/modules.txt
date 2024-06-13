@@ -43,6 +43,7 @@ github.com/aws/aws-sdk-go/private/protocol/restjson
 github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil
 github.com/aws/aws-sdk-go/service/autoscaling
 github.com/aws/aws-sdk-go/service/ec2
+github.com/aws/aws-sdk-go/service/ec2/ec2iface
 github.com/aws/aws-sdk-go/service/opsworks
 github.com/aws/aws-sdk-go/service/sso
 github.com/aws/aws-sdk-go/service/sso/ssoiface
@@ -64,27 +65,18 @@ github.com/codegangsta/inject
 # github.com/codeskyblue/go-sh v0.0.0-20170112005953-b097669b1569
 ## explicit
 github.com/codeskyblue/go-sh
-# github.com/coreos/etcd v3.3.13+incompatible
-## explicit
-github.com/coreos/etcd/auth/authpb
-github.com/coreos/etcd/client
-github.com/coreos/etcd/clientv3
-github.com/coreos/etcd/clientv3/concurrency
-github.com/coreos/etcd/etcdserver/api/v3rpc/rpctypes
-github.com/coreos/etcd/etcdserver/etcdserverpb
-github.com/coreos/etcd/mvcc/mvccpb
-github.com/coreos/etcd/pkg/pathutil
-github.com/coreos/etcd/pkg/srv
-github.com/coreos/etcd/pkg/tlsutil
-github.com/coreos/etcd/pkg/transport
-github.com/coreos/etcd/pkg/types
-github.com/coreos/etcd/version
 # github.com/coreos/go-oidc v2.2.1+incompatible
 ## explicit
 github.com/coreos/go-oidc
 # github.com/coreos/go-semver v0.3.0
 ## explicit
 github.com/coreos/go-semver/semver
+# github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
+## explicit
+github.com/coreos/go-systemd/journal
+# github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
+## explicit
+github.com/coreos/pkg/capnslog
 # github.com/cpuguy83/go-md2man/v2 v2.0.2
 ## explicit; go 1.11
 github.com/cpuguy83/go-md2man/v2/md2man
@@ -225,8 +217,8 @@ github.com/josharian/intern
 # github.com/json-iterator/go v1.1.12
 ## explicit; go 1.12
 github.com/json-iterator/go
-# github.com/libopenstorage/cloudops v0.0.0-20221107233229-3fa4664e96b1
-## explicit; go 1.13
+# github.com/libopenstorage/cloudops v0.0.0-20240613054936-4c92529e8842
+## explicit; go 1.17
 github.com/libopenstorage/cloudops
 github.com/libopenstorage/cloudops/aws
 github.com/libopenstorage/cloudops/aws/storagemanager
@@ -320,8 +312,8 @@ github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 ## explicit
 github.com/pmezard/go-difflib/difflib
-# github.com/portworx/kvdb v0.0.0-20230326003017-21a38cf82d4b
-## explicit
+# github.com/portworx/kvdb v0.0.0-20230405233801-87666830d3fd
+## explicit; go 1.17
 github.com/portworx/kvdb
 github.com/portworx/kvdb/api/bootstrap
 github.com/portworx/kvdb/api/bootstrap/k8s
@@ -400,6 +392,48 @@ github.com/stretchr/testify/require
 # github.com/urfave/cli v1.22.12
 ## explicit; go 1.11
 github.com/urfave/cli
+# go.etcd.io/etcd v0.5.0-alpha.5.0.20200910180754-dd1b699fc489
+## explicit; go 1.14
+go.etcd.io/etcd/auth/authpb
+go.etcd.io/etcd/client
+go.etcd.io/etcd/clientv3
+go.etcd.io/etcd/clientv3/balancer
+go.etcd.io/etcd/clientv3/balancer/connectivity
+go.etcd.io/etcd/clientv3/balancer/picker
+go.etcd.io/etcd/clientv3/balancer/resolver/endpoint
+go.etcd.io/etcd/clientv3/concurrency
+go.etcd.io/etcd/clientv3/credentials
+go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes
+go.etcd.io/etcd/etcdserver/etcdserverpb
+go.etcd.io/etcd/mvcc/mvccpb
+go.etcd.io/etcd/pkg/fileutil
+go.etcd.io/etcd/pkg/logutil
+go.etcd.io/etcd/pkg/pathutil
+go.etcd.io/etcd/pkg/srv
+go.etcd.io/etcd/pkg/systemd
+go.etcd.io/etcd/pkg/tlsutil
+go.etcd.io/etcd/pkg/transport
+go.etcd.io/etcd/pkg/types
+go.etcd.io/etcd/raft
+go.etcd.io/etcd/raft/confchange
+go.etcd.io/etcd/raft/quorum
+go.etcd.io/etcd/raft/raftpb
+go.etcd.io/etcd/raft/tracker
+go.etcd.io/etcd/version
+# go.uber.org/multierr v1.10.0
+## explicit; go 1.19
+go.uber.org/multierr
+# go.uber.org/zap v1.26.0
+## explicit; go 1.19
+go.uber.org/zap
+go.uber.org/zap/buffer
+go.uber.org/zap/internal
+go.uber.org/zap/internal/bufferpool
+go.uber.org/zap/internal/color
+go.uber.org/zap/internal/exit
+go.uber.org/zap/internal/pool
+go.uber.org/zap/internal/stacktrace
+go.uber.org/zap/zapcore
 # golang.org/x/crypto v0.18.0
 ## explicit; go 1.18
 golang.org/x/crypto/ed25519
@@ -501,7 +535,6 @@ google.golang.org/grpc/credentials/internal
 google.golang.org/grpc/encoding
 google.golang.org/grpc/encoding/proto
 google.golang.org/grpc/grpclog
-google.golang.org/grpc/health/grpc_health_v1
 google.golang.org/grpc/internal
 google.golang.org/grpc/internal/backoff
 google.golang.org/grpc/internal/balancerload
@@ -525,6 +558,8 @@ google.golang.org/grpc/peer
 google.golang.org/grpc/reflection
 google.golang.org/grpc/reflection/grpc_reflection_v1alpha
 google.golang.org/grpc/resolver
+google.golang.org/grpc/resolver/dns
+google.golang.org/grpc/resolver/passthrough
 google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status

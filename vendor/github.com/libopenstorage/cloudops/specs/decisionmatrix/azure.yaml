@@ -219,3 +219,25 @@ rows:
           priority: 3
           thin_provisioning: false
           drive_type: "Standard_LRS"
+        - min_iops: 3000
+          max_iops: 80000
+          instance_type: "*"
+          instance_max_drives: 8
+          instance_min_drives: 1
+          region: "*"
+          min_size: 32
+          max_size: 65536
+          priority: 2
+          thin_provisioning: false
+          drive_type: "PremiumV2_LRS"
+        - min_iops: 100
+          max_iops: 400000
+          instance_type: "*"
+          instance_max_drives: 8
+          instance_min_drives: 1
+          region: "*"
+          min_size: 32
+          max_size: 65536
+          priority: 2
+          thin_provisioning: false
+          drive_type: "UltraSSD_LRS"

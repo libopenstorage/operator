@@ -5,36 +5,50 @@
 package mock
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	cloudops "github.com/libopenstorage/cloudops"
+	reflect "reflect"
 )
 
-// MockStorageManager is a mock of StorageManager interface.
+// MockStorageManager is a mock of StorageManager interface
 type MockStorageManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockStorageManagerMockRecorder
 }
 
-// MockStorageManagerMockRecorder is the mock recorder for MockStorageManager.
+// MockStorageManagerMockRecorder is the mock recorder for MockStorageManager
 type MockStorageManagerMockRecorder struct {
 	mock *MockStorageManager
 }
 
-// NewMockStorageManager creates a new mock instance.
+// NewMockStorageManager creates a new mock instance
 func NewMockStorageManager(ctrl *gomock.Controller) *MockStorageManager {
 	mock := &MockStorageManager{ctrl: ctrl}
 	mock.recorder = &MockStorageManagerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use.
+// EXPECT returns an object that allows the caller to indicate expected use
 func (m *MockStorageManager) EXPECT() *MockStorageManagerMockRecorder {
 	return m.recorder
 }
 
-// GetStorageDistribution mocks base method.
+// GetMaxDriveSize mocks base method
+func (m *MockStorageManager) GetMaxDriveSize(arg0 *cloudops.MaxDriveSizeRequest) (*cloudops.MaxDriveSizeResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMaxDriveSize", arg0)
+	ret0, _ := ret[0].(*cloudops.MaxDriveSizeResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMaxDriveSize indicates an expected call of GetMaxDriveSize
+func (mr *MockStorageManagerMockRecorder) GetMaxDriveSize(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMaxDriveSize", reflect.TypeOf((*MockStorageManager)(nil).GetMaxDriveSize), arg0)
+}
+
+// GetStorageDistribution mocks base method
 func (m *MockStorageManager) GetStorageDistribution(arg0 *cloudops.StorageDistributionRequest) (*cloudops.StorageDistributionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStorageDistribution", arg0)
@@ -43,13 +57,13 @@ func (m *MockStorageManager) GetStorageDistribution(arg0 *cloudops.StorageDistri
 	return ret0, ret1
 }
 
-// GetStorageDistribution indicates an expected call of GetStorageDistribution.
+// GetStorageDistribution indicates an expected call of GetStorageDistribution
 func (mr *MockStorageManagerMockRecorder) GetStorageDistribution(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageDistribution", reflect.TypeOf((*MockStorageManager)(nil).GetStorageDistribution), arg0)
 }
 
-// RecommendStoragePoolUpdate mocks base method.
+// RecommendStoragePoolUpdate mocks base method
 func (m *MockStorageManager) RecommendStoragePoolUpdate(arg0 *cloudops.StoragePoolUpdateRequest) (*cloudops.StoragePoolUpdateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RecommendStoragePoolUpdate", arg0)
@@ -58,7 +72,7 @@ func (m *MockStorageManager) RecommendStoragePoolUpdate(arg0 *cloudops.StoragePo
 	return ret0, ret1
 }
 
-// RecommendStoragePoolUpdate indicates an expected call of RecommendStoragePoolUpdate.
+// RecommendStoragePoolUpdate indicates an expected call of RecommendStoragePoolUpdate
 func (mr *MockStorageManagerMockRecorder) RecommendStoragePoolUpdate(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecommendStoragePoolUpdate", reflect.TypeOf((*MockStorageManager)(nil).RecommendStoragePoolUpdate), arg0)
