@@ -35,7 +35,7 @@ const (
 	defaultPrometheusConfigReloaderImage  = "quay.io/coreos/prometheus-config-reloader:v0.34.0"
 	defaultAlertManagerImage              = "quay.io/prometheus/alertmanager:v0.17.0"
 	// DefaultGrafanaImage is the default grafana image to use
-	DefaultGrafanaImage                   = "grafana/grafana:7.5.17"
+	DefaultGrafanaImage = "grafana/grafana:7.5.17"
 
 	defaultManifestRefreshInterval = 3 * time.Hour
 )

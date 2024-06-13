@@ -506,10 +506,11 @@ func (c *csi) createDeployment(
 				cluster,
 				cluster.Status.DesiredImages.CSISnapshotController,
 			)
-			if snapshotControllerImage == "" {
-				return fmt.Errorf("csi snapshot controller image not found")
-			}
 		}
+	} else if cluster.Spec.CSI.InstallSnapshotController != nil &&
+		*cluster.Spec.CSI.InstallSnapshotController &&
+		cluster.Status.DesiredImages.CSISnapshotController == "" {
+		return fmt.Errorf("csi snapshot controller image not found")
 	}
 
 	if csiConfig.IncludeHealthMonitorController {

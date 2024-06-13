@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	routev1 "github.com/openshift/api/route/v1"
 	"math/rand"
 	"net"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	routev1 "github.com/openshift/api/route/v1"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/mock/gomock"
@@ -3380,7 +3381,8 @@ func TestAutopilotWithDesiredImage(t *testing.T) {
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	recorder := record.NewFakeRecorder(10)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
@@ -3394,10 +3396,21 @@ func TestAutopilotWithDesiredImage(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			DesiredImages: &corev1.ComponentImages{
-				Autopilot: "portworx/autopilot:status",
-			},
+			DesiredImages: &corev1.ComponentImages{},
 		},
+	}
+
+	// If desired images is empty, give failed component warning
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, "Failed to setup Autopilot. autopilot image cannot be empty"))
+
+	// If desired image is present, then use it
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		Autopilot: "portworx/autopilot:status",
 	}
 
 	err = driver.PreInstall(cluster)
@@ -5564,6 +5577,138 @@ func TestCSIInstallDisable(t *testing.T) {
 	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.CSIApplicationName, cluster.Namespace)
 	require.Error(t, err)
+}
+
+func TestCSIInstallWithEmptyImages(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.24.4",
+	}
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	recorder := record.NewFakeRecorder(10)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	installsnapshotctr := true
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "false",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:2.4.2",
+			Placement: &corev1.PlacementSpec{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "px/enabled",
+										Operator: v1.NodeSelectorOpNotIn,
+										Values:   []string{"false"},
+									},
+									{
+										Key:      "kubernetes.io/os",
+										Operator: v1.NodeSelectorOpIn,
+										Values:   []string{"linux"},
+									},
+									{
+										Key:      "node-role.kubernetes.io/master",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			CSI: &corev1.CSISpec{
+				Enabled:                   true,
+				InstallSnapshotController: &installsnapshotctr,
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
+	}
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	cluster.Status.DesiredImages = &corev1.ComponentImages{}
+
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, "Failed to setup CSI. csi provisioner image not found"))
+
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		CSIProvisioner: "quay.io/k8scsi/csi-provisioner:v1.2.3",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, "Failed to setup CSI. csi snapshotter image not found"))
+
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		CSIProvisioner: "quay.io/k8scsi/csi-provisioner:v1.2.3",
+		CSISnapshotter: "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, "Failed to setup CSI. csi resizer image not found"))
+
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		CSIProvisioner: "quay.io/k8scsi/csi-provisioner:v1.2.3",
+		CSIAttacher:    "quay.io/k8scsi/csi-attacher:v1.2.3",
+		CSISnapshotter: "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+		CSIResizer:     "quay.io/k8scsi/csi-resizer:v1.2.3",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, "Failed to setup CSI. csi snapshot controller image not found"))
+
+	deploymentList := &appsv1.DeploymentList{}
+	err = testutil.List(k8sClient, deploymentList)
+	require.NoError(t, err)
+	require.Len(t, deploymentList.Items, 0)
+
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		CSIProvisioner:        "quay.io/k8scsi/csi-provisioner:v1.2.3",
+		CSIAttacher:           "quay.io/k8scsi/csi-attacher:v1.2.3",
+		CSISnapshotter:        "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+		CSIResizer:            "quay.io/k8scsi/csi-resizer:v1.2.3",
+		CSISnapshotController: "quay.io/k8scsi/snapshot-controller:v1.2.3",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// CSI snapshot controller deployment is created
+	deploymentList = &appsv1.DeploymentList{}
+	err = testutil.List(k8sClient, deploymentList)
+	require.NoError(t, err)
+	require.Len(t, deploymentList.Items, 1)
+
 }
 
 func TestCSIInstall(t *testing.T) {
@@ -7768,6 +7913,73 @@ func TestPrometheusInstall(t *testing.T) {
 	require.Equal(t, prometheus.Spec.Storage, cluster.Spec.Monitoring.Prometheus.Storage)
 	require.Equal(t, prometheus.Spec.VolumeMounts, cluster.Spec.Monitoring.Prometheus.VolumeMounts)
 	require.Equal(t, prometheus.Spec.Volumes, cluster.Spec.Monitoring.Prometheus.Volumes)
+}
+
+func TestPrometheusInstallWithEmtpyImages(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	recorder := record.NewFakeRecorder(10)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{
+				Prometheus: &corev1.PrometheusSpec{
+					Enabled: true,
+				},
+				Telemetry: &corev1.TelemetrySpec{},
+			},
+		},
+	}
+
+	// Testcase: When Prometheus operator image is not got from the versions configmap
+	cluster.Status.DesiredImages = &corev1.ComponentImages{}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, "Failed to setup Prometheus. prometheus operator image not found"))
+
+	// Case 2: When prometheus operator image is found but prometheus config reloader image is not found
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		PrometheusOperator: "quay.io/coreos/prometheus-operator:v1.2.3",
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, "Failed to setup Prometheus. prometheus config reloader image not found"))
+	deployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, deployment, component.PrometheusOperatorDeploymentName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	require.Empty(t, deployment.Name)
+
+	// Case 3: When prometheus operator and config reloader verions are given but prometheus image is not found
+
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		PrometheusOperator:       "quay.io/coreos/prometheus-operator:v1.2.3",
+		PrometheusConfigReloader: "quay.io/coreos/prometheus-config-reloader:v1.2.3",
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, "Failed to setup Prometheus. prometheus image not found"))
+
 }
 
 func TestGrafanaInstall(t *testing.T) {
@@ -14614,6 +14826,82 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	require.Empty(t, cluster.Status.DesiredImages.MetricsCollectorProxy)
 	require.NotEmpty(t, cluster.Status.DesiredImages.TelemetryProxy)
 	require.Empty(t, cluster.Status.DesiredImages.LogUploader)
+}
+
+func TestTelemetryWithEmptyImagest(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	recorder := record.NewFakeRecorder(10)
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:3.0.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+			CSI: &corev1.CSISpec{
+				Enabled: false,
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	cluster.Status.DesiredImages = &corev1.ComponentImages{}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, "Failed to setup Portworx Telemetry. telemetry image is empty"))
+
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		Telemetry: "purestorage/ccm-go:1.2.2",
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, "Failed to setup Portworx Telemetry. telemetry proxy image is empty"))
+
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		Telemetry:      "purestorage/ccm-go:1.2.2",
+		TelemetryProxy: "purestorage/telemetry-envoy:1.1.15",
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v %v",
+			v1.EventTypeWarning, util.FailedComponentReason, "Failed to setup Portworx Telemetry. log uploader image is empty"))
+
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		Telemetry:        "purestorage/ccm-go:1.2.2",
+		TelemetryProxy:   "purestorage/telemetry-envoy:1.1.15",
+		LogUploader:      "purestorage/log-uploader:1.1.8",
+		MetricsCollector: "purestorage/realtime-metrics:1.0.23",
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Will contain 2 deployments - portworx-pvc-controller and px-telemetry-registration
+	deploymentList := &appsv1.DeploymentList{}
+	err = testutil.List(k8sClient, deploymentList)
+	require.NoError(t, err)
+	require.Len(t, deploymentList.Items, 2)
 }
 
 func TestValidateTelemetryEnabled(t *testing.T) {
