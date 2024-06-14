@@ -176,6 +176,16 @@ spec:
                           their place. Once the new pods are available, it then proceeds onto other
                           StorageCluster pods, thus ensuring that at least 70% of original number of
                           StorageCluster pods are available at all times during the update.
+                      disruption:
+                        type: object
+                        description: >-
+                          The default behavior is non-disruptive upgrades. This setting disables the default
+                          non-disruptive upgrades and reverts to the previous behavior of upgrading nodes in
+                          parallel without worrying about disruption.
+                        properties:
+                          allow:
+                            type: boolean
+                            description: Flag indicates whether updates are non-disruptive or disruptive.
               deleteStrategy:
                 type: object
                 description: Delete strategy to uninstall and wipe the storage cluster.
