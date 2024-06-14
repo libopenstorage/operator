@@ -15,7 +15,7 @@ require (
 	github.com/openshift/api v0.0.0-20230503133300-8bbcb7ca7183
 	github.com/pborman/uuid v1.2.1
 	github.com/portworx/kvdb v0.0.0-20230326003017-21a38cf82d4b
-	github.com/portworx/sched-ops v1.20.4-rc1.0.20240529170916-515f6d54c338
+	github.com/portworx/sched-ops v1.20.4-rc1.0.20240613172635-81b5b390baf4
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.63.0
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.46.0
 	github.com/sirupsen/logrus v1.9.3
@@ -131,7 +131,7 @@ replace (
 	github.com/coreos/prometheus-operator => github.com/prometheus-operator/prometheus-operator v0.46.0
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
 	github.com/libopenstorage/openstorage => github.com/libopenstorage/openstorage v1.0.1-0.20240221210452-7757fdc2b8ff
-	github.com/portworx/sched-ops => github.com/portworx/sched-ops v1.20.4-rc1.0.20240529170916-515f6d54c338
+	github.com/portworx/sched-ops => github.com/portworx/sched-ops v1.20.4-rc1.0.20240613172635-81b5b390baf4
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring => github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.46.0
 	golang.org/x/tools => golang.org/x/tools v0.1.11
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
