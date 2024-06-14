@@ -7553,7 +7553,8 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:      maps.MakeSyncMap[string, *k8s.NodeInfo](),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
+		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
