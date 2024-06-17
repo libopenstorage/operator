@@ -158,8 +158,6 @@ const (
 	AnnotationPreflightCheck = pxAnnotationPrefix + "/preflight-check"
 	// AnnotationDisableCSRAutoApprove annotation will disable CSR auto-approval
 	AnnotationDisableCSRAutoApprove = pxAnnotationPrefix + "/disable-csr-approve"
-	// AnnotationDisablePxTokenRefresh annotaiton will disable refreshing the tokens for px to communicate with k8s
-	AnnotationDisablePxTokenRefresh = pxAnnotationPrefix + "/disable-px-token-refresh"
 	// AnnotationDisableCSRAutoApprove annotation to set priority for SCCs.
 	AnnotationSCCPriority = pxAnnotationPrefix + "/scc-priority"
 	// AnnotationFACDTopology is added when FACD topology was successfully installed on a *new* cluster (it's blocked for existing clusters)
@@ -494,11 +492,6 @@ func PodSecurityPolicyEnabled(cluster *corev1.StorageCluster) bool {
 // CSRAutoApprovalEnabled returns true if CSR auto-approval is not explicitly disabled
 func CSRAutoApprovalEnabled(cluster *corev1.StorageCluster) bool {
 	disabled, err := strconv.ParseBool(cluster.Annotations[AnnotationDisableCSRAutoApprove])
-	return err != nil || !disabled
-}
-
-func PxServiceAccountTokenRefreshEnabled(cluster *corev1.StorageCluster) bool {
-	disabled, err := strconv.ParseBool(cluster.Annotations[AnnotationDisablePxTokenRefresh])
 	return err != nil || !disabled
 }
 

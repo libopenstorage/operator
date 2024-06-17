@@ -59,7 +59,7 @@ func (t *portworxServiceAccountToken) IsPausedForMigration(cluster *corev1.Stora
 }
 
 func (t *portworxServiceAccountToken) IsEnabled(cluster *corev1.StorageCluster) bool {
-	return pxutil.PxServiceAccountTokenRefreshEnabled(cluster)
+	return true
 }
 
 func (t *portworxServiceAccountToken) Reconcile(cluster *corev1.StorageCluster) error {

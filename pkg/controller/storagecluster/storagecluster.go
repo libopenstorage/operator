@@ -1440,7 +1440,7 @@ func (c *Controller) CreatePodTemplate(
 		return v1.PodTemplateSpec{}, fmt.Errorf("failed to create pod template: %v", err)
 	}
 	k8s.AddOrUpdateStoragePodTolerations(&podSpec)
-	addPxServiceAccountTokenSecret(cluster, &podSpec)
+	addPxServiceAccountTokenSecret(&podSpec)
 	podSpec.NodeName = node.Name
 	labels := c.StorageClusterSelectorLabels(cluster)
 	labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
@@ -1713,10 +1713,7 @@ func (c *Controller) forceUnregisterCSRAutoApproval(cluster *corev1.StorageClust
 	csr.RegisterAutoApproval(cluster.GetName(), false)
 }
 
-func addPxServiceAccountTokenSecret(cluster *corev1.StorageCluster, spec *v1.PodSpec) {
-	if !pxutil.PxServiceAccountTokenRefreshEnabled(cluster) {
-		return
-	}
+func addPxServiceAccountTokenSecret(spec *v1.PodSpec) {
 	volName := "px-serviceaccount-secret"
 	vol := v1.Volume{
 		Name: volName,
