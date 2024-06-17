@@ -7557,7 +7557,7 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 		podControl:        podControl,
 		recorder:          recorder,
 		kubernetesVersion: k8sVersion,
-		nodeInfoMap:        maps.MakeSyncMap[string, *k8s.NodeInfo](),
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
 
@@ -10290,7 +10290,6 @@ func TestRequiredSCCAnnotationOnPortworxPods(t *testing.T) {
 	require.Len(t, podControl.Templates, 1)
 	require.Empty(t, podControl.Templates[0].Annotations)
 }
-
 
 func TestStorageSpecValidation(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
