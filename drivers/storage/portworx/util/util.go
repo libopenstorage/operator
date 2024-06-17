@@ -335,6 +335,9 @@ var (
 
 	// ConfigMapNameRegex regex of configMap.
 	ConfigMapNameRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
+
+	// ParallelUpgradePDBVersion is the portworx version from which parallel upgrades is supported
+	ParallelUpgradePDBVersion, _ = version.NewVersion("3.1.2")
 )
 
 func getStrippedClusterName(cluster *corev1.StorageCluster) string {
@@ -1396,6 +1399,7 @@ func CountStorageNodes(
 	cluster *corev1.StorageCluster,
 	sdkConn *grpc.ClientConn,
 	k8sClient client.Client,
+	nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse,
 ) (int, error) {
 	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
 	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient, false)
@@ -1409,14 +1413,6 @@ func CountStorageNodes(
 	clusterDomains, err := clusterDomainClient.Enumerate(ctx, &api.SdkClusterDomainsEnumerateRequest{})
 	isDRSetup = err == nil && len(clusterDomains.ClusterDomainNames) > 1
 
-	nodeEnumerateResponse, err := nodeClient.EnumerateWithFilters(
-		ctx,
-		&api.SdkNodeEnumerateWithFiltersRequest{},
-	)
-	if err != nil {
-		return -1, fmt.Errorf("failed to enumerate nodes: %v", err)
-	}
-
 	// Use the quorum member flag from the node enumerate response if all the nodes are upgraded to the
 	// newer version. The Enumerate response could be coming from any node and we want to make sure that
 	// we are not talking to an old node when enumerating.
@@ -1426,23 +1422,23 @@ func CountStorageNodes(
 		if node.Status == api.Status_STATUS_DECOMMISSION {
 			continue
 		}
-		v := node.NodeLabels[NodeLabelPortworxVersion]
-		nodeVersion, err := version.NewVersion(v)
+		useQuorumFlag, err = ShouldUseQuorumFlag(node)
 		if err != nil {
-			logrus.Warnf("Failed to parse node version %s for node %s: %v", v, node.Id, err)
+			logrus.Errorf("failed to determine if quorum flag should be used: %v", err)
 			useQuorumFlag = false
 			useClusterDomain = false
 			break
 		}
-		if nodeVersion.LessThan(MinimumPxVersionQuorumFlag) {
-			logrus.Tracef("Node %s is older than %s. Not using quorum member flag", node.Id, MinimumPxVersionQuorumFlag.String())
-			useQuorumFlag = false
+
+		if !useQuorumFlag {
 			useClusterDomain = false
 			break
 		}
-		if nodeVersion.LessThan(MinimumPxVersionClusterDomain) {
-			logrus.Tracef("Node %s is older than %s. Cannot using cluster domain field", node.Id, MinimumPxVersionClusterDomain.String())
-			useClusterDomain = false
+
+		useClusterDomain, err = ShouldUseClusterDomain(node)
+		if err != nil {
+			logrus.Errorf("failed to determine if cluster domain should be used: %v", err)
+			break
 		}
 	}
 
@@ -1914,6 +1910,112 @@ func isVersionSupported(current, target string) bool {
 	return currentVersion.Core().GreaterThanOrEqual(targetVersion)
 }
 
-func IsK3sClusterExt(ext string) bool {
-	return strings.HasPrefix(ext[1:], "k3s")
+func IsK3sOrRke2ClusterExt(ext string) bool {
+	return strings.HasPrefix(ext[1:], "k3s") || strings.HasPrefix(ext[1:], "rke2")
+}
+
+// ShouldUseQuorumFlag checks if the node should use the quorum member flag to decide storage status
+func ShouldUseQuorumFlag(node *api.StorageNode) (bool, error) {
+	v := node.NodeLabels[NodeLabelPortworxVersion]
+	nodeVersion, err := version.NewVersion(v)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse node version %s for node %s: %v", v, node.Id, err)
+	}
+
+	// Check if the node is older than the minimum version that supports quorum member flag
+	if nodeVersion.LessThan(MinimumPxVersionQuorumFlag) {
+		logrus.Tracef("Node %s is older than %s. Not using quorum member flag", node.Id, MinimumPxVersionQuorumFlag.String())
+		return false, nil
+	}
+	return true, nil
+}
+
+// ShouldUseClusterDomain checks if the node should use the cluster domain field to decide storage status
+func ShouldUseClusterDomain(node *api.StorageNode) (bool, error) {
+	v := node.NodeLabels[NodeLabelPortworxVersion]
+	nodeVersion, err := version.NewVersion(v)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse node version %s for node %s: %v", v, node.Id, err)
+	}
+	// Check if the node is older than the minimum version that supports cluster domain field
+	if nodeVersion.LessThan(MinimumPxVersionClusterDomain) {
+		logrus.Tracef("Node %s is older than %s. Cannot using cluster domain field", node.Id, MinimumPxVersionClusterDomain.String())
+		return false, nil
+	}
+	return true, nil
+}
+
+// Get list of storagenodes that are a part of the current cluster that need a node PDB
+func NodesNeedingPDB(k8sClient client.Client, nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse, k8sNodeList *v1.NodeList) ([]string, error) {
+
+	// Get list of kubernetes nodes that are a part of the current cluster
+	k8sNodesStoragePodCouldRun := make(map[string]bool)
+	for _, node := range k8sNodeList.Items {
+		k8sNodesStoragePodCouldRun[node.Name] = true
+	}
+
+	// Create a list of nodes that are part of quorum to create node PDB for them
+	nodesNeedingPDB := make([]string, 0)
+	for _, node := range nodeEnumerateResponse.Nodes {
+		// Do not add node if its not part of quorum or is decomissioned
+		if node.Status == api.Status_STATUS_DECOMMISSION || node.NonQuorumMember {
+			logrus.Debugf("Node %s is not a quorum member or is decomissioned, skipping", node.Id)
+			continue
+		}
+
+		if _, ok := k8sNodesStoragePodCouldRun[node.SchedulerNodeName]; ok {
+			nodesNeedingPDB = append(nodesNeedingPDB, node.SchedulerNodeName)
+		}
+	}
+
+	return nodesNeedingPDB, nil
+}
+
+// List of nodes that have an existing pdb but are no longer in k8s cluster or not a portworx storage node
+func NodesToDeletePDB(k8sClient client.Client, nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse, k8sNodeList *v1.NodeList) ([]string, error) {
+	// nodeCounts map is used to find the elements that are uncommon between list of k8s nodes in cluster
+	// and list of portworx storage nodes. Used to find nodes where PDB needs to be deleted
+	nodeCounts := make(map[string]int)
+
+	// Increase count of each node
+	for _, node := range k8sNodeList.Items {
+		nodeCounts[node.Name]++
+	}
+
+	// Get list of storage nodes that are part of quorum and increment count of each node
+	nodesToDeletePDB := make([]string, 0)
+	for _, node := range nodeEnumerateResponse.Nodes {
+		if node.Status == api.Status_STATUS_DECOMMISSION || node.NonQuorumMember {
+			continue
+		}
+		nodeCounts[node.SchedulerNodeName]++
+	}
+
+	// Nodes with count 1 might have a node PDB but should not, so delete the PDB for such nodes
+	for node, count := range nodeCounts {
+		if count == 1 {
+			nodesToDeletePDB = append(nodesToDeletePDB, node)
+		}
+	}
+	return nodesToDeletePDB, nil
+
+}
+
+func ClusterSupportsParallelUpgrade(nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse) bool {
+
+	for _, node := range nodeEnumerateResponse.Nodes {
+		if node.Status == api.Status_STATUS_DECOMMISSION {
+			continue
+		}
+		v := node.NodeLabels[NodeLabelPortworxVersion]
+		nodeVersion, err := version.NewVersion(v)
+		if err != nil {
+			logrus.Warnf("Failed to parse node version %s for node %s: %v", v, node.Id, err)
+			return false
+		}
+		if nodeVersion.LessThan(ParallelUpgradePDBVersion) {
+			return false
+		}
+	}
+	return true
 }

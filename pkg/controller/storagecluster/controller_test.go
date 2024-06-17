@@ -2690,8 +2690,15 @@ func TestKubevirtVMsDuringUpgrade(t *testing.T) {
 		},
 	}
 	kubevirt.EXPECT().ClusterHasVMPods().Return(true, nil)
-	kubevirt.EXPECT().GetVMPodsToEvictByNode().Return(map[string][]v1.Pod{k8sNodes[1].Name: vmPods}, nil)
-	kubevirt.EXPECT().StartEvictingVMPods(vmPods, gomock.Any(), gomock.Any())
+	wantNodes := map[string]bool{
+		k8sNodes[0].Name: true,
+		k8sNodes[1].Name: true,
+		k8sNodes[2].Name: true,
+	}
+	evictions := getVMPodEvictions(t, vmPods)
+	kubevirt.EXPECT().GetVMPodsToEvictByNode(wantNodes).Return(
+		map[string][]*util.VMPodEviction{k8sNodes[1].Name: evictions}, nil)
+	kubevirt.EXPECT().StartEvictingVMPods(evictions, gomock.Any(), gomock.Any())
 
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
@@ -2744,13 +2751,16 @@ func TestKubevirtVMsDuringUpgrade(t *testing.T) {
 			},
 		},
 	}
+	evictionsNode0 := getVMPodEvictions(t, vmPodsNode0)
+	evictionsNode2 := getVMPodEvictions(t, vmPodsNode2)
+
 	kubevirt.EXPECT().ClusterHasVMPods().Return(true, nil)
-	kubevirt.EXPECT().GetVMPodsToEvictByNode().Return(map[string][]v1.Pod{
-		k8sNodes[0].Name: vmPodsNode0,
-		k8sNodes[2].Name: vmPodsNode2,
+	kubevirt.EXPECT().GetVMPodsToEvictByNode(wantNodes).Return(map[string][]*util.VMPodEviction{
+		k8sNodes[0].Name: evictionsNode0,
+		k8sNodes[2].Name: evictionsNode2,
 	}, nil)
-	kubevirt.EXPECT().StartEvictingVMPods(vmPodsNode0, gomock.Any(), gomock.Any())
-	kubevirt.EXPECT().StartEvictingVMPods(vmPodsNode2, gomock.Any(), gomock.Any())
+	kubevirt.EXPECT().StartEvictingVMPods(evictionsNode0, gomock.Any(), gomock.Any())
+	kubevirt.EXPECT().StartEvictingVMPods(evictionsNode2, gomock.Any(), gomock.Any())
 
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
@@ -10662,4 +10672,15 @@ func getNode(t *testing.T, k8sclient client.Client, nodeName string) *v1.Node {
 	err := k8sclient.Get(context.TODO(), types.NamespacedName{Name: nodeName}, node)
 	require.NoError(t, err)
 	return node
+}
+
+func getVMPodEvictions(t *testing.T, podsToEvict []v1.Pod) []*util.VMPodEviction {
+	var evictions []*util.VMPodEviction
+	for _, vmPod := range podsToEvict {
+		evictions = append(evictions, &util.VMPodEviction{
+			PodToEvict:              vmPod,
+			LiveMigrationInProgress: false,
+		})
+	}
+	return evictions
 }
