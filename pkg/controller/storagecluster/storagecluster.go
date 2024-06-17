@@ -1730,8 +1730,9 @@ func addPxServiceAccountTokenSecret(spec *v1.PodSpec) {
 		Name:      volName,
 		MountPath: "/var/run/secrets/portworx.io/portworx-service-secret",
 	}
-	for _, container := range spec.Containers {
-		container.VolumeMounts = append(container.VolumeMounts, volMount)
+	for i, container := range spec.Containers {
+		spec.Containers[i].VolumeMounts = append(container.VolumeMounts, volMount)
+
 	}
 }
 
