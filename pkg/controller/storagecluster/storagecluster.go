@@ -1440,7 +1440,7 @@ func (c *Controller) CreatePodTemplate(
 		return v1.PodTemplateSpec{}, fmt.Errorf("failed to create pod template: %v", err)
 	}
 	k8s.AddOrUpdateStoragePodTolerations(&podSpec)
-
+	addPxServiceAccountTokenSecret(cluster, &podSpec)
 	podSpec.NodeName = node.Name
 	labels := c.StorageClusterSelectorLabels(cluster)
 	labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
@@ -1711,6 +1711,31 @@ func (c *Controller) registerCSRAutoApproval(cluster *corev1.StorageCluster) {
 // forceUnregisterCSRAutoApproval forces CSR auto-approval de-registration for the given cluster
 func (c *Controller) forceUnregisterCSRAutoApproval(cluster *corev1.StorageCluster) {
 	csr.RegisterAutoApproval(cluster.GetName(), false)
+}
+
+func addPxServiceAccountTokenSecret(cluster *corev1.StorageCluster, spec *v1.PodSpec) {
+	if !pxutil.PxServiceAccountTokenRefreshEnabled(cluster) {
+		return
+	}
+	volName := "px-serviceaccount-secret"
+	vol := v1.Volume{
+		Name: volName,
+		VolumeSource: v1.VolumeSource{
+			Secret: &v1.SecretVolumeSource{
+				SecretName: pxutil.PortworxServiceAccountTokenSecretName,
+			},
+		},
+	}
+	spec.Volumes = append(spec.Volumes, vol)
+
+	// mountPath must be consistent with oci-monitor for mounting to px runc container
+	volMount := v1.VolumeMount{
+		Name:      volName,
+		MountPath: "/var/run/secrets/portworx.io/portworx-service-secret",
+	}
+	for _, container := range spec.Containers {
+		container.VolumeMounts = append(container.VolumeMounts, volMount)
+	}
 }
 
 func storagePodsEnabled(
