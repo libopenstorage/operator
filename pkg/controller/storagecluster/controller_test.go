@@ -1877,8 +1877,10 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 	require.Len(t, podControl.Templates, 2)
 	podTemplate1 := expectedPodTemplate.DeepCopy()
 	podTemplate1.Spec.NodeName = "k8s-node-1"
+	podTemplate1.Labels[constants.OperatorLabelNodeNameKey] = "k8s-node-1"
 	podTemplate2 := expectedPodTemplate.DeepCopy()
 	podTemplate2.Spec.NodeName = "k8s-node-2"
+	podTemplate2.Labels[constants.OperatorLabelNodeNameKey] = "k8s-node-2"
 	expectedPodTemplates := []v1.PodTemplateSpec{
 		*podTemplate1, *podTemplate2,
 	}
@@ -1995,8 +1997,10 @@ func TestStoragePodGetsScheduledK8s1_24(t *testing.T) {
 	require.Len(t, podControl.Templates, 2)
 	podTemplate1 := expectedPodTemplate.DeepCopy()
 	podTemplate1.Spec.NodeName = "k8s-node-1"
+	podTemplate1.Labels[constants.OperatorLabelNodeNameKey] = "k8s-node-1"
 	podTemplate2 := expectedPodTemplate.DeepCopy()
 	podTemplate2.Spec.NodeName = "k8s-node-2"
+	podTemplate2.Labels[constants.OperatorLabelNodeNameKey] = "k8s-node-2"
 	expectedPodTemplates := []v1.PodTemplateSpec{
 		*podTemplate1, *podTemplate2,
 	}
@@ -2342,10 +2346,13 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 	}
 	podTemplate1 := expectedPodTemplate.DeepCopy()
 	podTemplate1.Spec.NodeName = "k8s-node-1"
+	podTemplate1.Labels[constants.OperatorLabelNodeNameKey] = "k8s-node-1"
 	podTemplate2 := expectedPodTemplate.DeepCopy()
 	podTemplate2.Spec.NodeName = "k8s-node-2"
+	podTemplate2.Labels[constants.OperatorLabelNodeNameKey] = "k8s-node-2"
 	podTemplate3 := expectedPodTemplate.DeepCopy()
 	podTemplate3.Spec.NodeName = "k8s-node-3"
+	podTemplate3.Labels[constants.OperatorLabelNodeNameKey] = "k8s-node-3"
 	expectedPodTemplates := []v1.PodTemplateSpec{
 		*podTemplate1, *podTemplate2, *podTemplate3,
 	}
