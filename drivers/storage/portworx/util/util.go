@@ -159,6 +159,8 @@ const (
 	AnnotationServerTLSMinVersion = pxAnnotationPrefix + "/tls-min-version"
 	// AnnotationServerTLSCipherSuites sets up TLS-servers w/ requested cipher suites
 	AnnotationServerTLSCipherSuites = pxAnnotationPrefix + "/tls-cipher-suites"
+	// AnnotationsDisableNonDisruptiveUpgrade [=false] is used to disable smart and parallel kubetnetes node upgrades
+	AnnotationsDisableNonDisruptiveUpgrade = pxAnnotationPrefix + "/disable-non-disruptive-upgrade"
 
 	// EnvKeyPXImage key for the environment variable that specifies Portworx image
 	EnvKeyPXImage = "PX_IMAGE"
@@ -1528,10 +1530,12 @@ func ShouldUseClusterDomain(node *api.StorageNode) (bool, error) {
 // Get list of storagenodes that are a part of the current cluster that need a node PDB
 func NodesNeedingPDB(k8sClient client.Client, nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse, k8sNodeList *v1.NodeList) ([]string, error) {
 
-	// Get list of kubernetes nodes that are a part of the current cluster
+	// Get list of kubernetes nodes that are a part of the current cluster and are not cordoned
 	k8sNodesStoragePodCouldRun := make(map[string]bool)
 	for _, node := range k8sNodeList.Items {
-		k8sNodesStoragePodCouldRun[node.Name] = true
+		if !node.Spec.Unschedulable {
+			k8sNodesStoragePodCouldRun[node.Name] = true
+		}
 	}
 
 	// Create a list of nodes that are part of quorum to create node PDB for them
@@ -1598,4 +1602,86 @@ func ClusterSupportsParallelUpgrade(nodeEnumerateResponse *api.SdkNodeEnumerateW
 		}
 	}
 	return true
+}
+
+func readyToUpgradeNodes(k8sClient client.Client, namespace string) ([]string, []string, error) {
+	readyToUpgradeNodes := make([]string, 0)
+	canBeUpgradedNodes := make([]string, 0)
+	nodePDBs, err := k8sutil.ListPodDisruptionBudgets(k8sClient, namespace)
+	if err != nil {
+		return readyToUpgradeNodes, canBeUpgradedNodes, err
+	}
+	for _, pdb := range nodePDBs.Items {
+		fmt.Println("PDB VALUE: ", pdb.Name, pdb.Spec.MinAvailable.IntVal)
+		if strings.HasPrefix(pdb.Name, "px-") && pdb.Spec.MinAvailable.IntVal == 0 {
+			readyToUpgradeNodes = append(readyToUpgradeNodes, strings.TrimPrefix(pdb.Name, "px-"))
+
+		} else {
+			canBeUpgradedNodes = append(canBeUpgradedNodes, strings.TrimPrefix(pdb.Name, "px-"))
+
+		}
+	}
+	return readyToUpgradeNodes, canBeUpgradedNodes, nil
+}
+
+func GetNodesToUpgrade(cluster *corev1.StorageCluster,
+	nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse,
+	k8sNodeList *v1.NodeList,
+	k8sClient client.Client,
+	sdkConn *grpc.ClientConn,
+) ([]string, map[string]string, int, error) {
+
+	var cordonedNodes []string
+	cordonedk8sNodes := make(map[string]bool)
+	cordonedPxNodesMap := make(map[string]string)
+	nodesDown := 0
+	// Find if kubernetes nodes have been cordoned
+	for _, node := range k8sNodeList.Items {
+		if node.Spec.Unschedulable {
+			cordonedk8sNodes[node.Name] = true
+		}
+	}
+
+	for _, node := range nodeEnumerateResponse.Nodes {
+		if node.Status == api.Status_STATUS_DECOMMISSION || node.NonQuorumMember {
+			logrus.Debugf("Node %s is not a quorum member or is decomissioned, skipping", node.Id)
+			continue
+		}
+		if _, ok := cordonedk8sNodes[node.SchedulerNodeName]; ok {
+			cordonedNodes = append(cordonedNodes, node.Id)
+			cordonedPxNodesMap[node.Id] = node.SchedulerNodeName
+		}
+		if node.Status != api.Status_STATUS_OK {
+			nodesDown++
+		}
+	}
+
+	// Check all nodes with PDB 0 and add to another list
+	// Get list of nodes that have PDB 0 and nodes that don't
+	readyToUpgradeNodes, canBeUpgradedNodes, err := readyToUpgradeNodes(k8sClient, cluster.Namespace)
+	if err != nil {
+		return nil, nil, -1, err
+	}
+
+	if cluster.Annotations != nil && cluster.Annotations[AnnotationsDisableNonDisruptiveUpgrade] == "true" {
+		return canBeUpgradedNodes, cordonedPxNodesMap, len(readyToUpgradeNodes) + nodesDown, nil
+	}
+
+	// Make a request to SDK API FilterNonOverlappingNodes to get output of list of nodes that can be upgraded in parallel
+	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
+	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient, false)
+	if err != nil {
+		return nil, nil, -1, err
+	}
+	nodeFilterResponse, err := nodeClient.FilterNonOverlappingNodes(
+		ctx,
+		&api.SdkFilterNonOverlappingNodesRequest{
+			InputNodes: cordonedNodes,
+			DownNodes:  readyToUpgradeNodes,
+		},
+	)
+	if err != nil {
+		return nil, nil, -1, fmt.Errorf("failed to filter nodes: %v", err)
+	}
+	return nodeFilterResponse.NodeIds, cordonedPxNodesMap, len(readyToUpgradeNodes) + nodesDown, nil
 }

@@ -114,6 +114,9 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 		if err := c.deletePortworxNodePodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse, k8sNodeList); err != nil {
 			return err
 		}
+		if err := c.UpdateMinAvailableForNodePDB(cluster, ownerRef, nodeEnumerateResponse, k8sNodeList); err != nil {
+			return err
+		}
 	} else {
 		if err := c.createPortworxPodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse); err != nil {
 			return err
@@ -364,4 +367,91 @@ func RegisterDisruptionBudgetComponent() {
 
 func init() {
 	RegisterDisruptionBudgetComponent()
+}
+
+func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageCluster,
+	ownerRef *metav1.OwnerReference,
+	nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse,
+	k8sNodeList *v1.NodeList,
+) error {
+
+	// GetNodesToUpgrade returns list of nodes that can be upgraded in parallel and the map of px node to k8s node name, number of nodes with PDB 0 + down nodes
+	// In the case when non disruptive upgrade is disabled, it returns all nodes which aren't already selected for the upgrade
+	nodesToUpgrade, cordonedPxNodesMap, numPxNodesDown, err := pxutil.GetNodesToUpgrade(cluster, nodeEnumerateResponse, k8sNodeList, c.k8sClient, c.sdkConn)
+	if err != nil {
+		return err
+	}
+
+	// If user has mentioned minimum nodes that need to be running, then honor that value
+	storageNodesCount, err := pxutil.CountStorageNodes(cluster, c.sdkConn, c.k8sClient, nodeEnumerateResponse)
+	if err != nil {
+		c.closeSdkConn()
+		return err
+	}
+	userProvidedMinValue, err := pxutil.MinAvailableForStoragePDB(cluster)
+	if err != nil {
+		logrus.Warnf("Invalid value for annotation %s: %v", pxutil.AnnotationStoragePodDisruptionBudget, err)
+		userProvidedMinValue = -2
+	}
+
+	// Calculate the minimum number of nodes that should be available
+	quorumValue := int(math.Floor(float64(storageNodesCount)/2) + 1)
+	calculatedMinAvailable := quorumValue
+	if cluster.Annotations != nil && cluster.Annotations[pxutil.AnnotationsDisableNonDisruptiveUpgrade] == "true" {
+		if cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] == "" {
+			calculatedMinAvailable = storageNodesCount - 1
+		} else if (userProvidedMinValue < quorumValue || userProvidedMinValue >= storageNodesCount) && userProvidedMinValue != c.annotatedMinAvailable {
+			errmsg := fmt.Sprintf("Invalid minAvailable annotation value for storage pod disruption budget. Using default value: %d", calculatedMinAvailable)
+			c.recorder.Event(cluster, v1.EventTypeWarning, util.InvalidMinAvailable, errmsg)
+			calculatedMinAvailable = storageNodesCount - 1
+		} else if userProvidedMinValue >= quorumValue && userProvidedMinValue < storageNodesCount {
+			calculatedMinAvailable = userProvidedMinValue
+		}
+	} else {
+		if userProvidedMinValue >= storageNodesCount && userProvidedMinValue != c.annotatedMinAvailable {
+			errmsg := fmt.Sprintf("Invalid minAvailable annotation value for storage pod disruption budget. Using default value: %d", calculatedMinAvailable)
+			c.recorder.Event(cluster, v1.EventTypeWarning, util.InvalidMinAvailable, errmsg)
+		} else if userProvidedMinValue >= quorumValue {
+			calculatedMinAvailable = userProvidedMinValue
+		}
+	}
+	c.annotatedMinAvailable = userProvidedMinValue
+
+	errors := []error{}
+	downNodesCount := numPxNodesDown
+	// Update minAvailable to 0 for nodes in nodesToUpgrade
+	for _, node := range nodesToUpgrade {
+		k8snode := cordonedPxNodesMap[node]
+		PDBName := "px-" + k8snode
+		minAvailable := intstr.FromInt(0)
+		pdb := &policyv1.PodDisruptionBudget{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            PDBName,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Spec: policyv1.PodDisruptionBudgetSpec{
+				MinAvailable: &minAvailable,
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						constants.LabelKeyClusterName:      cluster.Name,
+						constants.OperatorLabelNodeNameKey: node,
+					},
+				},
+			},
+		}
+		err = k8sutil.CreateOrUpdatePodDisruptionBudget(c.k8sClient, pdb, ownerRef)
+		if err != nil {
+			logrus.Warnf("Failed to update PDB for node %s: %v", node, err)
+			errors = append(errors, err)
+		} else {
+			downNodesCount++
+		}
+		// Ensure that portworx quorum or valid minAvailable provided by user is always maintained
+		if downNodesCount == storageNodesCount-calculatedMinAvailable {
+			break
+		}
+	}
+	return utilerrors.NewAggregate(errors)
+
 }
