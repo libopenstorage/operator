@@ -7258,6 +7258,8 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
 
 	// Install all components
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -7553,6 +7555,20 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
 
 	// Install all components
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		CSIProvisioner:             "quay.io/k8scsi/csi-provisioner:v1.2.3",
+		CSIAttacher:                "quay.io/k8scsi/csi-attacher:v1.2.3",
+		CSIDriverRegistrar:         "quay.io/k8scsi/driver-registrar:v1.2.3",
+		CSINodeDriverRegistrar:     "quay.io/k8scsi/csi-node-driver-registrar:v1.2.3",
+		CSISnapshotter:             "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+		CSIResizer:                 "quay.io/k8scsi/csi-resizer:v1.2.3",
+		CSISnapshotController:      "quay.io/k8scsi/snapshot-controller:v1.2.3",
+		CSIHealthMonitorController: "quay.io/k8scsi/csi-health-monitor-controller:v1.2.3",
+		Prometheus:                 "quay.io/prometheus/prometheus:v1.2.3",
+		PrometheusOperator:         "quay.io/coreos/prometheus-operator:v1.2.3",
+		PrometheusConfigReloader:   "quay.io/coreos/prometheus-config-reloader:v1.2.3",
+		PrometheusConfigMapReload:  "quay.io/coreos/configmap-reload:v1.2.3",
+	}
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -8182,6 +8198,14 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	cluster.Spec.Security.Auth.GuestAccess = guestAccessTypePtr(corev1.GuestRoleManaged)
 
 	// Install all components
+	cluster.Status.DesiredImages = &corev1.ComponentImages{
+		CSIProvisioner:           "quay.io/k8scsi/csi-provisioner:v1.2.3",
+		CSISnapshotter:           "quay.io/k8scsi/csi-snapshotter:v1.2.3",
+		CSIResizer:               "quay.io/k8scsi/csi-resizer:v1.2.3",
+		Prometheus:               "quay.io/prometheus/prometheus:v1.2.3",
+		PrometheusOperator:       "quay.io/coreos/prometheus-operator:v1.2.3",
+		PrometheusConfigReloader: "quay.io/coreos/prometheus-config-reloader:v1.2.3",
+	}
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
@@ -10434,7 +10458,7 @@ func (m *fakeManifest) Init(_ client.Client, _ record.EventRecorder, k8sVersion 
 func (m *fakeManifest) GetVersions(
 	_ *corev1.StorageCluster,
 	force bool,
-) *manifest.Version {
+) (*manifest.Version, error) {
 	compVersion := compVersion()
 	if force {
 		compVersion = newCompVersion()
@@ -10478,7 +10502,7 @@ func (m *fakeManifest) GetVersions(
 		version.Components.PrometheusConfigReloader = "quay.io/prometheus-operator/prometheus-config-reloader:v0.50.0"
 		version.Components.AlertManager = "quay.io/prometheus/alertmanager:v0.22.2"
 	}
-	return version
+	return version, nil
 }
 
 func (m *fakeManifest) CanAccessRemoteManifest(cluster *corev1.StorageCluster) bool {

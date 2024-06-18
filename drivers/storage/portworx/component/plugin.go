@@ -5,8 +5,6 @@ import (
 	commonerrors "errors"
 	"strings"
 
-	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
-
 	version "github.com/hashicorp/go-version"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
@@ -249,10 +247,16 @@ func (p *plugin) createDeployment(filename, deploymentName string, ownerRef *met
 
 	if deployment.Name == PluginDeploymentName {
 		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPluginImage(cluster)
+		if deployment.Spec.Template.Spec.Containers[0].Image == "" {
+			return commonerrors.New("image for plugin is not set")
+		}
 		deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy = v1.PullAlways
 	}
 	if deployment.Name == NginxDeploymentName {
 		deployment.Spec.Template.Spec.Containers[0].Image = getDesiredPluginProxyImage(cluster)
+		if deployment.Spec.Template.Spec.Containers[0].Image == "" {
+			return commonerrors.New("image for plugin proxy is not set")
+		}
 	}
 
 	equal, _ := util.DeepEqualPodTemplate(&deployment.Spec.Template, &existingDeployment.Spec.Template)
@@ -368,19 +372,22 @@ func isVersionSupported(current, target string) bool {
 }
 
 func getDesiredPluginImage(cluster *corev1.StorageCluster) string {
-	imageName := manifest.DefaultDynamicPluginImage
+	var imageName string
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.DynamicPlugin != "" {
 		imageName = cluster.Status.DesiredImages.DynamicPlugin
+	} else {
+		return ""
 	}
 	imageName = util.GetImageURN(cluster, imageName)
 	return imageName
 }
 
 func getDesiredPluginProxyImage(cluster *corev1.StorageCluster) string {
-	imageName := manifest.DefaultDynamicPluginProxyImage
-
+	var imageName string
 	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.DynamicPluginProxy != "" {
 		imageName = cluster.Status.DesiredImages.DynamicPluginProxy
+	} else {
+		return ""
 	}
 	imageName = util.GetImageURN(cluster, imageName)
 	return imageName

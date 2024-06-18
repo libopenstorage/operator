@@ -368,7 +368,10 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 		// Force latest versions only if the component update strategy is Once
 		force := pxVersionChanged || (toUpdate.Spec.AutoUpdateComponents != nil &&
 			*toUpdate.Spec.AutoUpdateComponents == corev1.OnceAutoUpdate)
-		release := manifest.Instance().GetVersions(toUpdate, force)
+		release, err := manifest.Instance().GetVersions(toUpdate, force)
+		if err != nil {
+			return fmt.Errorf("StorageCluster reconciliation paused as %v", err)
+		}
 
 		if toUpdate.Spec.Version == "" && pxEnabled {
 			if toUpdate.Spec.Image == "" {

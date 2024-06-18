@@ -448,8 +448,13 @@ func (c *prometheus) createOperatorDeployment(
 		cluster,
 		cluster.Status.DesiredImages.PrometheusOperator,
 	)
-
-	deployment := getPrometheusOperatorDeploymentSpec(cluster, ownerRef, imageName)
+	if imageName == "" {
+		return fmt.Errorf("prometheus operator image not found")
+	}
+	deployment, err := getPrometheusOperatorDeploymentSpec(cluster, ownerRef, imageName)
+	if err != nil {
+		return err
+	}
 	modified := existingImageName != imageName ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
 		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
@@ -468,7 +473,7 @@ func getPrometheusOperatorDeploymentSpec(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	operatorImage string,
-) *appsv1.Deployment {
+) (*appsv1.Deployment, error) {
 	replicas := int32(1)
 	runAsNonRoot := true
 	runAsUser := int64(defaultRunAsUser)
@@ -486,6 +491,9 @@ func getPrometheusOperatorDeploymentSpec(
 		cluster,
 		cluster.Status.DesiredImages.PrometheusConfigReloader,
 	)
+	if prometheusConfigReloaderImageName == "" {
+		return nil, fmt.Errorf("prometheus config reloader image not found")
+	}
 	args := make([]string, 0)
 	args = append(args,
 		fmt.Sprintf("-namespaces=%s", cluster.Namespace),
@@ -567,7 +575,7 @@ func getPrometheusOperatorDeploymentSpec(
 	}
 	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
-	return deployment
+	return deployment, nil
 }
 
 func (c *prometheus) createPrometheusService(
@@ -606,6 +614,9 @@ func (c *prometheus) createPrometheusInstance(
 		cluster,
 		cluster.Status.DesiredImages.Prometheus,
 	)
+	if prometheusImageName == "" {
+		return fmt.Errorf("prometheus image not found")
+	}
 
 	prometheusInst := &monitoringv1.Prometheus{
 		ObjectMeta: metav1.ObjectMeta{
