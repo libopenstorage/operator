@@ -5727,6 +5727,199 @@ func TestAutopilotInstallAndUninstallOnOpenshift415(t *testing.T) {
 
 }
 
+// test Autopilot install and Uninstall on ocp cluster 4.16
+func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.16",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	stcSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:1.1.1",
+				Providers: []corev1.DataProviderSpec{
+					{
+						Name: "default",
+						Type: "prometheus",
+						Params: map[string]string{
+							"url": "http://prometheus:9090",
+						},
+					},
+					{
+						Name: "second",
+						Type: "datadog",
+						Params: map[string]string{
+							"url":  "http://datadog:9090",
+							"auth": "foobar",
+						},
+					},
+				},
+				Args: map[string]string{
+					"min_poll_interval": "4",
+					"log-level":         "info",
+				},
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+
+	cluster := stcSpec.DeepCopy()
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// on OCP 4.16+ , autopilot-prometheus service account will be used for authentication
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:     "User",
+				Name:     "example-user",
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     "view",
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), clusterRoleBinding)
+	require.NoError(t, err)
+
+	// Autopilot ConfigMap
+	expectedConfigMap := testutil.GetExpectedConfigMap(t, "autopilotConfigMap.yaml")
+	autopilotConfigMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, autopilotConfigMap, component.AutopilotConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, autopilotConfigMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, autopilotConfigMap.Namespace)
+	require.Len(t, autopilotConfigMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, autopilotConfigMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, autopilotConfigMap.Data)
+
+	// Autopilot ServiceAccount
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.AutopilotServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, component.AutopilotServiceAccountName, sa.Name)
+	require.Equal(t, cluster.Namespace, sa.Namespace)
+	require.Len(t, sa.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+
+	// Autopilot ClusterRoleBinding
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "autopilotClusterRoleBinding.yaml")
+	actualCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualCRB, component.AutopilotClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCRB.Name, actualCRB.Name)
+	require.Empty(t, actualCRB.OwnerReferences)
+	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
+	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
+
+	// Autopilot Prometheus Service Account
+	expectedSA := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, expectedSA, component.AutopilotPrometheusServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, component.AutopilotPrometheusServiceAccountName, expectedSA.Name)
+	require.Equal(t, cluster.Namespace, expectedSA.Namespace)
+	require.Len(t, expectedSA.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, expectedSA.OwnerReferences[0].Name)
+
+	// Autopilot Prometheus Cluster role binding
+	expectedPrometheusCRB := testutil.GetExpectedClusterRoleBinding(t, "autopilotClusterRoleBinding.yaml")
+	actualClusterRoleCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualClusterRoleCRB, component.AutopilotClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedPrometheusCRB.Name, actualClusterRoleCRB.Name)
+	require.Empty(t, actualCRB.OwnerReferences)
+	require.ElementsMatch(t, expectedPrometheusCRB.Subjects, actualClusterRoleCRB.Subjects)
+	require.Equal(t, expectedPrometheusCRB.RoleRef, actualClusterRoleCRB.RoleRef)
+
+	// Autopilot Secret
+	expectedSecret := testutil.GetExpectedSecret(t, "autopilot-auth-token-secret_4_16.yaml")
+	actualSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, component.AutopilotSecretName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, expectedSecret.Type, actualSecret.Type)
+	require.Equal(t, expectedSecret.Annotations, actualSecret.Annotations)
+
+	// Autopilot Deployment
+	expectedDeployment := testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_14.yaml")
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Volumes, autopilotDeployment.Spec.Template.Spec.Volumes)
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Containers[0].VolumeMounts, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	autopilotComponent, _ := component.Get(component.AutopilotComponentName)
+	err = autopilotComponent.Delete(cluster)
+	autopilotComponent.MarkDeleted()
+	require.NoError(t, err)
+
+}
+
 func TestSecurityInstall(t *testing.T) {
 	// auth enabled through security.enabled
 	cluster := &corev1.StorageCluster{

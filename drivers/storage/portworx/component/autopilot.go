@@ -54,6 +54,13 @@ const (
 	// Autopilot Secret name for prometheus-user-workload-token
 	AutopilotSecretName = "autopilot-prometheus-auth"
 	defaultAutopilotCPU = "0.1"
+	// AutopilotPrometheusServiceAccountName name of the prometheus service account for Openshift
+	AutopilotPrometheusServiceAccountName = "autopilot-prometheus"
+	// AutopilotClusterRoleBindingName name of the cluster role binding for Openshift
+	AutopilotPrometheusClusterRoleBindingName = "autopilot-promethues-binding"
+	// OpenshiftClusterRoleName name of the cluster role for Openshift, this role is already present in Openshift
+	OpenshiftClusterRoleName = "cluster-monitoring-view"
+
 )
 
 var (
@@ -115,7 +122,7 @@ var (
 					SecretName: AutopilotSecretName,
 					Items: []v1.KeyToPath{
 						{
-							Key:  "cacert",
+							Key:  "ca.crt",
 							Path: "ca-certificates.crt",
 						},
 					},
@@ -130,6 +137,7 @@ type autopilot struct {
 	k8sClient               client.Client
 	k8sVersion              version.Version
 	isUserWorkloadSupported *bool
+	isSecretCreated         bool
 }
 
 func (c *autopilot) Name() string {
@@ -173,6 +181,18 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 		return err
 	}
 	if c.isOCPUserWorkloadSupported() {
+		ok, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_16_version)
+		if err == nil && ok {
+			// on OCP 4.16 and above, create service account and cluster role binding for OCP Prometheus by default
+			// autopilot requires to access Prometheus metrics
+			if err := c.createServiceAccountForOCP(cluster.Namespace, ownerRef); err != nil {
+				return err
+			}
+			if err := c.createClusterRoleBindingForOCP(cluster.Namespace, ownerRef); err != nil {
+				return err
+			}
+		}
+
 		if err := c.createSecret(cluster.Namespace, ownerRef); err != nil {
 			// log the error and proceed for deployment creation
 			// if secret is created in next reconcilation loop successfully, deployment will be updated with volume mounts
@@ -206,6 +226,12 @@ func (c *autopilot) Delete(cluster *corev1.StorageCluster) error {
 		if err := k8sutil.DeleteSecret(c.k8sClient, AutopilotSecretName, cluster.Namespace, *ownerRef); err != nil {
 			return err
 		}
+		if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, AutopilotClusterRoleBindingName); err != nil {
+			return err
+		}
+		if err := k8sutil.DeleteServiceAccount(c.k8sClient, AutopilotPrometheusServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
+			return err
+		}
 	}
 
 	c.MarkDeleted()
@@ -215,6 +241,7 @@ func (c *autopilot) Delete(cluster *corev1.StorageCluster) error {
 func (c *autopilot) MarkDeleted() {
 	c.isCreated = false
 	c.isUserWorkloadSupported = nil
+	c.isSecretCreated = false
 }
 
 func (c *autopilot) createConfigMap(
@@ -306,26 +333,109 @@ func (c *autopilot) createConfigMap(
 	return err
 }
 
+// createServiceAccountForOCP creates service account for OCP Prometheus
+// autopilot to access Prometheus metrics
+// This is required for OCP 4.16 and above
+func (c *autopilot) createServiceAccountForOCP(namespace string, ownerRef *metav1.OwnerReference) error {
+	return k8sutil.CreateOrUpdateServiceAccount(
+		c.k8sClient,
+		&v1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            AutopilotPrometheusServiceAccountName,
+				Namespace:       namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+		},
+		ownerRef,
+	)
+}
+
+// createClusterRoleBindingForOCP creates cluster role binding for OCP Prometheus
+// autopilot to access Prometheus metrics requires cluster-monitoring-view role
+// This is required for OCP 4.16 and above
+func (c *autopilot) createClusterRoleBindingForOCP(namespace string, ownerRef *metav1.OwnerReference) error {
+	return k8sutil.CreateOrUpdateClusterRoleBinding(
+		c.k8sClient,
+		&rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: AutopilotPrometheusClusterRoleBindingName,
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "ClusterRole",
+				Name:     OpenshiftClusterRoleName,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      AutopilotPrometheusServiceAccountName,
+					Namespace: namespace,
+				},
+			},
+		},
+	)
+}
+
 func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.OwnerReference) error {
 
-	token, cert, err := c.getPrometheusTokenAndCert()
+	ocp_416, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_16_version)
 	if err != nil {
 		return err
 	}
 
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            AutopilotSecretName,
+			Namespace:       clusterNamespace,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+	}
+
+	if ocp_416 {
+		// OCP 4.16 and above, secret is created by default if autopilot is enabled
+		// if secret is already created, return
+		if c.isCreated {
+			return nil
+		}
+
+		// check if secret already exists, this is first time creation
+		// or secret is created in last reconcilation loop
+		err := k8sutil.GetSecret(c.k8sClient, secret.Name, secret.Namespace, secret)
+		if err != nil {
+			return err
+		}
+
+		// if secret already exists, return
+		// once secret is created, it should not be updated
+		// if secret is deleted, it will be created if operator is restarted
+		if secret.Data != nil {
+			c.isSecretCreated = true
+			return nil
+		}
+
+		// create secret with service account token
+		secret.Type = v1.SecretTypeServiceAccountToken
+		secret.Annotations = map[string]string{
+			"kubernetes.io/service-account.name": AutopilotPrometheusServiceAccountName,
+		}
+	} else {
+		// OCP 4.15 and below, secret is created if user workload monitoring is enabled
+		// and openshift's prometheus secret is found
+		token, cert, err := c.getPrometheusTokenAndCert()
+		if err != nil {
+			return err
+		}
+
+		// token and ca.crt are updated in every reconcilation loop
+		// to check if it was refreshed
+		secret.Data = make(map[string][]byte)
+		secret.Data["token"] = []byte(token)
+		secret.Data["ca.crt"] = []byte(cert) // change to ca.crt to match the key in the generated in secret by kubernetes
+	}
+
 	return k8sutil.CreateOrUpdateSecret(
 		c.k8sClient,
-		&v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            AutopilotSecretName,
-				Namespace:       clusterNamespace,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
-			},
-			Data: map[string][]byte{
-				"token":  []byte(token),
-				"cacert": []byte(cert),
-			},
-		},
+		secret,
 		ownerRef,
 	)
 }
