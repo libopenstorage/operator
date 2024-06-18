@@ -1992,6 +1992,31 @@ func CreateOrUpdateSecret(
 	return nil
 }
 
+// GetSecret get a secret from k8s
+func GetSecret(
+	k8sClient client.Client,
+	name string,
+	namsespace string,
+	secret *v1.Secret,
+) error {
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      name,
+			Namespace: namsespace,
+		},
+		secret,
+	)
+
+	if errors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // CreateOrAppendToSecret creates a secret if not present, else appends data to it
 func CreateOrAppendToSecret(
 	k8sClient client.Client,
