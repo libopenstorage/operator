@@ -168,6 +168,8 @@ func TestPodSpecWithCustomKubeletDir(t *testing.T) {
 	}
 
 	driver := portworx{}
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// Case 1: When portworx version is lesser than 2.13
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
