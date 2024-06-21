@@ -13771,16 +13771,16 @@ func TestUpdateNodePodDisruptionBudgetParallelEnabled(t *testing.T) {
 	require.Equal(t, 0, pdbList.Items[2].Spec.MinAvailable.IntValue())
 	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
 
-
 	// Testcase : When user provides minAvailable annotation, use that instead of portworx quorum
 	minAvailable := intstr.FromInt(1)
 	for i := 1; i < 4; i++ {
 		pdbList.Items[i].Spec.MinAvailable = &minAvailable
-		testutil.Update(k8sClient, &pdbList.Items[i])
+		err = testutil.Update(k8sClient, &pdbList.Items[i])
+		require.NoError(t, err)
 	}
 	UpgradeNodesResponse.NodeIds = []string{"pxnode1", "pxnode2"}
 	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(UpgradeNodesResponse, nil).Times(1)
-	
+
 	cluster.Annotations = map[string]string{
 		pxutil.AnnotationStoragePodDisruptionBudget: "4",
 	}
@@ -13794,9 +13794,10 @@ func TestUpdateNodePodDisruptionBudgetParallelEnabled(t *testing.T) {
 	require.Equal(t, 1, pdbList.Items[2].Spec.MinAvailable.IntValue())
 	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
 
-	// Testcase: When minAvailable is invalid, use portworx quorum 
+	// Testcase: When minAvailable is invalid, use portworx quorum
 	pdbList.Items[1].Spec.MinAvailable = &minAvailable
-	testutil.Update(k8sClient, &pdbList.Items[1])
+	err = testutil.Update(k8sClient, &pdbList.Items[1])
+	require.NoError(t, err)
 	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "5"
 	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(UpgradeNodesResponse, nil).Times(1)
 	err = driver.PreInstall(cluster)
@@ -13815,7 +13816,7 @@ func TestUpdateNodePodDisruptionBudgetParallelEnabled(t *testing.T) {
 
 }
 
-func TestUpdateNodePodDisruptionBudgetParallelDisabled (t *testing.T) {
+func TestUpdateNodePodDisruptionBudgetParallelDisabled(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -13847,7 +13848,7 @@ func TestUpdateNodePodDisruptionBudgetParallelDisabled (t *testing.T) {
 		AnyTimes()
 
 	cluster := &corev1.StorageCluster{
-		
+
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
 			Namespace: "kube-test",
@@ -13858,7 +13859,6 @@ func TestUpdateNodePodDisruptionBudgetParallelDisabled (t *testing.T) {
 		Status: corev1.StorageClusterStatus{
 			Phase: string(corev1.ClusterStateRunning),
 		},
-
 	}
 	cluster.Annotations = map[string]string{
 		pxutil.AnnotationsDisableNonDisruptiveUpgrade: "true",
@@ -13894,7 +13894,7 @@ func TestUpdateNodePodDisruptionBudgetParallelDisabled (t *testing.T) {
 	component.RegisterDisruptionBudgetComponent()
 
 	driver := portworx{}
-	recorder:= record.NewFakeRecorder(10)
+	recorder := record.NewFakeRecorder(10)
 	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
 	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
@@ -13939,9 +13939,11 @@ func TestUpdateNodePodDisruptionBudgetParallelDisabled (t *testing.T) {
 	// When minAvailable value is invalid, upgrade only 1 at a time
 	minAvailable := intstr.FromInt(1)
 	pdbList.Items[1].Spec.MinAvailable = &minAvailable
-	testutil.Update(k8sClient, &pdbList.Items[1])
+	err = testutil.Update(k8sClient, &pdbList.Items[1])
+	require.NoError(t, err)
 	pdbList.Items[2].Spec.MinAvailable = &minAvailable
-	testutil.Update(k8sClient, &pdbList.Items[2])
+	err = testutil.Update(k8sClient, &pdbList.Items[2])
+	require.NoError(t, err)
 
 	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "2"
 	err = driver.PreInstall(cluster)

@@ -408,12 +408,12 @@ func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageC
 		} else if userProvidedMinValue >= quorumValue && userProvidedMinValue < storageNodesCount {
 			calculatedMinAvailable = userProvidedMinValue
 		}
-	} else { 
+	} else {
 		// When non disruptive upgrades is enabled
 		if userProvidedMinValue >= storageNodesCount && userProvidedMinValue != c.annotatedMinAvailable {
 			errmsg := fmt.Sprintf("Invalid minAvailable annotation value for storage pod disruption budget. Using default value: %d", calculatedMinAvailable)
 			c.recorder.Event(cluster, v1.EventTypeWarning, util.InvalidMinAvailable, errmsg)
-		} else if userProvidedMinValue >= quorumValue && userProvidedMinValue < storageNodesCount{
+		} else if userProvidedMinValue >= quorumValue && userProvidedMinValue < storageNodesCount {
 			calculatedMinAvailable = userProvidedMinValue
 		}
 	}
@@ -451,7 +451,7 @@ func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageC
 			errors = append(errors, err)
 		} else {
 			downNodesCount++
-		}		
+		}
 	}
 	return utilerrors.NewAggregate(errors)
 

@@ -1634,7 +1634,7 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 	var cordonedNodes []string
 	cordonedk8sNodes := make(map[string]bool)
 	cordonedPxNodesMap := make(map[string]string)
-	canBeUpgradedNodes := make([]string,0)
+	canBeUpgradedNodes := make([]string, 0)
 	nodesDown := 0
 
 	// Find if kubernetes nodes have been cordoned
@@ -1660,7 +1660,7 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 			cordonedNodes = append(cordonedNodes, node.Id)
 			cordonedPxNodesMap[node.Id] = node.SchedulerNodeName
 		}
-		if _,ok := canBeUpgradedNodesMap[node.SchedulerNodeName]; ok {
+		if _, ok := canBeUpgradedNodesMap[node.SchedulerNodeName]; ok {
 			canBeUpgradedNodes = append(canBeUpgradedNodes, node.Id)
 		}
 		if node.Status != api.Status_STATUS_OK {
@@ -1668,7 +1668,6 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 		}
 	}
 
-	
 	if cluster.Annotations != nil && cluster.Annotations[AnnotationsDisableNonDisruptiveUpgrade] == "true" {
 		return canBeUpgradedNodes, cordonedPxNodesMap, len(readyToUpgradeNodes) + nodesDown, nil
 	}
