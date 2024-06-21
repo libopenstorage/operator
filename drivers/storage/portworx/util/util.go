@@ -1604,21 +1604,21 @@ func ClusterSupportsParallelUpgrade(nodeEnumerateResponse *api.SdkNodeEnumerateW
 	return true
 }
 
-func readyToUpgradeNodes(k8sClient client.Client, namespace string) ([]string, []string, error) {
+func readyToUpgradeNodes(k8sClient client.Client, namespace string, cordonedNodesMap map[string]bool) ([]string, map[string]bool, error) {
 	readyToUpgradeNodes := make([]string, 0)
-	canBeUpgradedNodes := make([]string, 0)
+	canBeUpgradedNodes := make(map[string]bool)
 	nodePDBs, err := k8sutil.ListPodDisruptionBudgets(k8sClient, namespace)
 	if err != nil {
 		return readyToUpgradeNodes, canBeUpgradedNodes, err
 	}
 	for _, pdb := range nodePDBs.Items {
-		fmt.Println("PDB VALUE: ", pdb.Name, pdb.Spec.MinAvailable.IntVal)
-		if strings.HasPrefix(pdb.Name, "px-") && pdb.Spec.MinAvailable.IntVal == 0 {
-			readyToUpgradeNodes = append(readyToUpgradeNodes, strings.TrimPrefix(pdb.Name, "px-"))
-
-		} else {
-			canBeUpgradedNodes = append(canBeUpgradedNodes, strings.TrimPrefix(pdb.Name, "px-"))
-
+		k8sNode := strings.TrimPrefix(pdb.Name, "px-")
+		if strings.HasPrefix(pdb.Name, "px-") && cordonedNodesMap[k8sNode] {
+			if pdb.Spec.MinAvailable.IntVal == 0 {
+				readyToUpgradeNodes = append(readyToUpgradeNodes, k8sNode)
+			} else {
+				canBeUpgradedNodes[k8sNode] = true
+			}
 		}
 	}
 	return readyToUpgradeNodes, canBeUpgradedNodes, nil
@@ -1634,12 +1634,21 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 	var cordonedNodes []string
 	cordonedk8sNodes := make(map[string]bool)
 	cordonedPxNodesMap := make(map[string]string)
+	canBeUpgradedNodes := make([]string,0)
 	nodesDown := 0
+
 	// Find if kubernetes nodes have been cordoned
 	for _, node := range k8sNodeList.Items {
 		if node.Spec.Unschedulable {
 			cordonedk8sNodes[node.Name] = true
 		}
+	}
+
+	// Check all nodes with PDB 0 and add to another list
+	// Get list of nodes that have PDB 0 and nodes that don't
+	readyToUpgradeNodes, canBeUpgradedNodesMap, err := readyToUpgradeNodes(k8sClient, cluster.Namespace, cordonedk8sNodes)
+	if err != nil {
+		return nil, nil, -1, err
 	}
 
 	for _, node := range nodeEnumerateResponse.Nodes {
@@ -1651,18 +1660,15 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 			cordonedNodes = append(cordonedNodes, node.Id)
 			cordonedPxNodesMap[node.Id] = node.SchedulerNodeName
 		}
+		if _,ok := canBeUpgradedNodesMap[node.SchedulerNodeName]; ok {
+			canBeUpgradedNodes = append(canBeUpgradedNodes, node.Id)
+		}
 		if node.Status != api.Status_STATUS_OK {
 			nodesDown++
 		}
 	}
 
-	// Check all nodes with PDB 0 and add to another list
-	// Get list of nodes that have PDB 0 and nodes that don't
-	readyToUpgradeNodes, canBeUpgradedNodes, err := readyToUpgradeNodes(k8sClient, cluster.Namespace)
-	if err != nil {
-		return nil, nil, -1, err
-	}
-
+	
 	if cluster.Annotations != nil && cluster.Annotations[AnnotationsDisableNonDisruptiveUpgrade] == "true" {
 		return canBeUpgradedNodes, cordonedPxNodesMap, len(readyToUpgradeNodes) + nodesDown, nil
 	}

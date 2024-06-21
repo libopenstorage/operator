@@ -376,7 +376,7 @@ func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageC
 ) error {
 
 	// GetNodesToUpgrade returns list of nodes that can be upgraded in parallel and the map of px node to k8s node name, number of nodes with PDB 0 + down nodes
-	// In the case when non disruptive upgrade is disabled, it returns all nodes which aren't already selected for the upgrade
+	// In the case when non disruptive upgrade is disabled, it returns all cordoned nodes which aren't already selected for the upgrade
 	nodesToUpgrade, cordonedPxNodesMap, numPxNodesDown, err := pxutil.GetNodesToUpgrade(cluster, nodeEnumerateResponse, k8sNodeList, c.k8sClient, c.sdkConn)
 	if err != nil {
 		return err
@@ -397,30 +397,35 @@ func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageC
 	// Calculate the minimum number of nodes that should be available
 	quorumValue := int(math.Floor(float64(storageNodesCount)/2) + 1)
 	calculatedMinAvailable := quorumValue
+	// When non disruptive upgrades is disabled
 	if cluster.Annotations != nil && cluster.Annotations[pxutil.AnnotationsDisableNonDisruptiveUpgrade] == "true" {
 		if cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] == "" {
 			calculatedMinAvailable = storageNodesCount - 1
 		} else if (userProvidedMinValue < quorumValue || userProvidedMinValue >= storageNodesCount) && userProvidedMinValue != c.annotatedMinAvailable {
+			calculatedMinAvailable = storageNodesCount - 1
 			errmsg := fmt.Sprintf("Invalid minAvailable annotation value for storage pod disruption budget. Using default value: %d", calculatedMinAvailable)
 			c.recorder.Event(cluster, v1.EventTypeWarning, util.InvalidMinAvailable, errmsg)
-			calculatedMinAvailable = storageNodesCount - 1
 		} else if userProvidedMinValue >= quorumValue && userProvidedMinValue < storageNodesCount {
 			calculatedMinAvailable = userProvidedMinValue
 		}
-	} else {
+	} else { 
+		// When non disruptive upgrades is enabled
 		if userProvidedMinValue >= storageNodesCount && userProvidedMinValue != c.annotatedMinAvailable {
 			errmsg := fmt.Sprintf("Invalid minAvailable annotation value for storage pod disruption budget. Using default value: %d", calculatedMinAvailable)
 			c.recorder.Event(cluster, v1.EventTypeWarning, util.InvalidMinAvailable, errmsg)
-		} else if userProvidedMinValue >= quorumValue {
+		} else if userProvidedMinValue >= quorumValue && userProvidedMinValue < storageNodesCount{
 			calculatedMinAvailable = userProvidedMinValue
 		}
 	}
 	c.annotatedMinAvailable = userProvidedMinValue
-
 	errors := []error{}
 	downNodesCount := numPxNodesDown
 	// Update minAvailable to 0 for nodes in nodesToUpgrade
 	for _, node := range nodesToUpgrade {
+		// Ensure that portworx quorum or valid minAvailable provided by user is always maintained
+		if downNodesCount >= storageNodesCount-calculatedMinAvailable {
+			break
+		}
 		k8snode := cordonedPxNodesMap[node]
 		PDBName := "px-" + k8snode
 		minAvailable := intstr.FromInt(0)
@@ -446,11 +451,7 @@ func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageC
 			errors = append(errors, err)
 		} else {
 			downNodesCount++
-		}
-		// Ensure that portworx quorum or valid minAvailable provided by user is always maintained
-		if downNodesCount == storageNodesCount-calculatedMinAvailable {
-			break
-		}
+		}		
 	}
 	return utilerrors.NewAggregate(errors)
 

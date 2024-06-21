@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	routev1 "github.com/openshift/api/route/v1"
 	"math/rand"
 	"net"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	routev1 "github.com/openshift/api/route/v1"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/mock/gomock"
@@ -12982,6 +12983,7 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedInspectCurrentResponse, nil).
 		AnyTimes()
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(&osdapi.SdkFilterNonOverlappingNodesResponse{}, nil).AnyTimes()
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -13441,6 +13443,8 @@ func TestCreateNodePodDisruptionBudget(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(&osdapi.SdkFilterNonOverlappingNodesResponse{}, nil).AnyTimes()
+
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -13551,6 +13555,8 @@ func TestDeleteNodePodDisruptionBudget(t *testing.T) {
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
 
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(&osdapi.SdkFilterNonOverlappingNodesResponse{}, nil).AnyTimes()
+
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -13630,6 +13636,327 @@ func TestDeleteNodePodDisruptionBudget(t *testing.T) {
 
 	err = testutil.Get(k8sClient, &policyv1.PodDisruptionBudget{}, "px-node3", cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
+
+}
+
+func TestUpdateNodePodDisruptionBudgetParallelEnabled(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode1", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode2", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode3", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode4", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node5", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode5", Status: osdapi.Status_STATUS_OK},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(&osdapi.SdkFilterNonOverlappingNodesResponse{}, nil).Times(1)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:3.1.2",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateRunning),
+		},
+	}
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node4"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node5"}},
+	},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	}, fakeK8sNodes)
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	recorder := record.NewFakeRecorder(10)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList := &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 6)
+
+	// Testcase : When FilterNonOverlappingNodes returns nodes count lesser than portworx quorum, update minAvailable to 0 for those nodes
+
+	// Update nodes 1,2 to be unschedulable
+	fakeK8sNodes.Items[0].Spec.Unschedulable = true
+	fakeK8sNodes.Items[1].Spec.Unschedulable = true
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[0])
+	require.NoError(t, err)
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[1])
+	require.NoError(t, err)
+
+	UpgradeNodesResponse := &osdapi.SdkFilterNonOverlappingNodesResponse{
+		NodeIds: []string{"pxnode1", "pxnode2"},
+	}
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(UpgradeNodesResponse, nil).Times(1)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 6)
+	require.Equal(t, "px-node1", pdbList.Items[1].Name)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, "px-node2", pdbList.Items[2].Name)
+	require.Equal(t, 0, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, "px-node3", pdbList.Items[3].Name)
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
+	// Testcase : When FilterNonOverlappingNodes returns nodes but quorum number of nodes are already upgrading/ ready for upgrade, don't do anything
+	fakeK8sNodes.Items[2].Spec.Unschedulable = true
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[2])
+	require.NoError(t, err)
+	UpgradeNodesResponse.NodeIds = []string{"pxnode3"}
+
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(UpgradeNodesResponse, nil).Times(1)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, 0, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
+
+	// Testcase : When user provides minAvailable annotation, use that instead of portworx quorum
+	minAvailable := intstr.FromInt(1)
+	for i := 1; i < 4; i++ {
+		pdbList.Items[i].Spec.MinAvailable = &minAvailable
+		testutil.Update(k8sClient, &pdbList.Items[i])
+	}
+	UpgradeNodesResponse.NodeIds = []string{"pxnode1", "pxnode2"}
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(UpgradeNodesResponse, nil).Times(1)
+	
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationStoragePodDisruptionBudget: "4",
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
+	// Testcase: When minAvailable is invalid, use portworx quorum 
+	pdbList.Items[1].Spec.MinAvailable = &minAvailable
+	testutil.Update(k8sClient, &pdbList.Items[1])
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "5"
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(UpgradeNodesResponse, nil).Times(1)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Invalid minAvailable annotation value for storage pod disruption budget. Using default value: %d",
+			v1.EventTypeWarning, util.InvalidMinAvailable, 3),
+	)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, 0, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
+}
+
+func TestUpdateNodePodDisruptionBudgetParallelDisabled (t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode1", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode2", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode3", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode4", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node5", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode5", Status: osdapi.Status_STATUS_OK},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	cluster := &corev1.StorageCluster{
+		
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:3.1.2",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateRunning),
+		},
+
+	}
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationsDisableNonDisruptiveUpgrade: "true",
+	}
+
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node4"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node5"}},
+	},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	}, fakeK8sNodes)
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	recorder:= record.NewFakeRecorder(10)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList := &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 6)
+
+	fakeK8sNodes.Items[0].Spec.Unschedulable = true
+	fakeK8sNodes.Items[1].Spec.Unschedulable = true
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[0])
+	require.NoError(t, err)
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[1])
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// When no minAvailable is given, upgrade only 1 by default
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Equal(t, "px-node1", pdbList.Items[1].Name)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, "px-node2", pdbList.Items[2].Name)
+	require.Equal(t, 1, pdbList.Items[2].Spec.MinAvailable.IntValue())
+
+	// When minAvailable value is valid, use that
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "3"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, 0, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
+	// When minAvailable value is invalid, upgrade only 1 at a time
+	minAvailable := intstr.FromInt(1)
+	pdbList.Items[1].Spec.MinAvailable = &minAvailable
+	testutil.Update(k8sClient, &pdbList.Items[1])
+	pdbList.Items[2].Spec.MinAvailable = &minAvailable
+	testutil.Update(k8sClient, &pdbList.Items[2])
+
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "2"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Invalid minAvailable annotation value for storage pod disruption budget. Using default value: %d",
+			v1.EventTypeWarning, util.InvalidMinAvailable, 4),
+	)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
 
 }
 
