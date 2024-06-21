@@ -1440,7 +1440,7 @@ func (c *Controller) CreatePodTemplate(
 		return v1.PodTemplateSpec{}, fmt.Errorf("failed to create pod template: %v", err)
 	}
 	k8s.AddOrUpdateStoragePodTolerations(&podSpec)
-	addPxServiceAccountTokenSecret(&podSpec)
+	addPxServiceAccountTokenSecretIfNotExist(&podSpec)
 	podSpec.NodeName = node.Name
 	labels := c.StorageClusterSelectorLabels(cluster)
 	labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
@@ -1713,26 +1713,34 @@ func (c *Controller) forceUnregisterCSRAutoApproval(cluster *corev1.StorageClust
 	csr.RegisterAutoApproval(cluster.GetName(), false)
 }
 
-func addPxServiceAccountTokenSecret(spec *v1.PodSpec) {
+func addPxServiceAccountTokenSecretIfNotExist(spec *v1.PodSpec) {
 	volName := "px-serviceaccount-secret"
-	vol := v1.Volume{
-		Name: volName,
-		VolumeSource: v1.VolumeSource{
-			Secret: &v1.SecretVolumeSource{
-				SecretName: pxutil.PortworxServiceAccountTokenSecretName,
+	exist := false
+	for _, vol := range spec.Volumes {
+		if vol.Name == volName {
+			exist = true
+		}
+	}
+	if !exist {
+		vol := v1.Volume{
+			Name: volName,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: pxutil.PortworxServiceAccountTokenSecretName,
+				},
 			},
-		},
-	}
-	spec.Volumes = append(spec.Volumes, vol)
+		}
+		spec.Volumes = append(spec.Volumes, vol)
 
-	// mountPath must be consistent with oci-monitor for mounting to px runc container
-	volMount := v1.VolumeMount{
-		Name:      volName,
-		MountPath: "/var/run/secrets/portworx.io/portworx-service-secret",
-	}
-	for i, container := range spec.Containers {
-		spec.Containers[i].VolumeMounts = append(container.VolumeMounts, volMount)
+		// mountPath must be consistent with oci-monitor for mounting to px runc container
+		volMount := v1.VolumeMount{
+			Name:      volName,
+			MountPath: "/var/run/secrets/portworx.io/portworx-service-secret",
+		}
+		for i, container := range spec.Containers {
+			spec.Containers[i].VolumeMounts = append(container.VolumeMounts, volMount)
 
+		}
 	}
 }
 
