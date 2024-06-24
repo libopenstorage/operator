@@ -1735,7 +1735,7 @@ func addPxServiceAccountTokenSecretIfNotExist(spec *v1.PodSpec) {
 		// mountPath must be consistent with oci-monitor for mounting to px runc container
 		volMount := v1.VolumeMount{
 			Name:      volName,
-			MountPath: "/var/run/secrets/portworx.io/portworx-service-secret",
+			MountPath: "/etc/pwx-secrets/px-sa-token-secret",
 		}
 		for i, container := range spec.Containers {
 			spec.Containers[i].VolumeMounts = append(container.VolumeMounts, volMount)
