@@ -336,18 +336,18 @@ func updateDataIfNginxConfigMap(cm *v1.ConfigMap, storageNs string) {
     http {
       server {
         listen 8080;
-          server_name px-plugin-proxy.` + storageNs + `.svc.cluster.local;
+          server_name px-plugin-proxy.` + storageNs + `;
         location / {
-          proxy_pass http://portworx-api.` + storageNs + `.svc.cluster.local:9021;
+          proxy_pass http://portworx-api.` + storageNs + `:9021;
         }
       }
       server {
         listen 8443 ssl;
-        server_name px-plugin-proxy.` + storageNs + `.svc.cluster.local;
+        server_name px-plugin-proxy.` + storageNs + `;
         ssl_certificate /etc/nginx/certs/tls.crt;
         ssl_certificate_key /etc/nginx/certs/tls.key;
         location / {
-          proxy_pass http://portworx-api.` + storageNs + `.svc.cluster.local:9021;
+          proxy_pass http://portworx-api.` + storageNs + `:9021;
         }
       }
     }`,
