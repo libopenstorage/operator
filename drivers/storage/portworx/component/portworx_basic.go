@@ -610,7 +610,7 @@ func (c *portworxBasic) maintainTokenSecret(cluster *corev1.StorageCluster, owne
 			return err
 		}
 		curTime := time.Now()
-		tokenRefreshTimeBytes, err := curTime.Add(time.Duration(tokenExpirationSeconds / 2)).MarshalBinary()
+		tokenRefreshTimeBytes, err := curTime.Add(time.Duration(tokenExpirationSeconds/2) * time.Second).MarshalBinary()
 		if err != nil {
 			return fmt.Errorf("error marshalling current time to bytes. %v", err)
 		}
@@ -639,11 +639,11 @@ func generateToken(cluster *corev1.StorageCluster) ([]byte, error) {
 }
 
 func isTokenRefreshRequired(secret *v1.Secret) (bool, error) {
-	expiryTime := time.Time{}
-	if err := expiryTime.UnmarshalBinary(secret.Data[TokenRefreshTimeKey]); err != nil {
-		return false, fmt.Errorf("error converting expiry time bytes to struct. %v", err)
+	expirationTime := time.Time{}
+	if err := expirationTime.UnmarshalBinary(secret.Data[TokenRefreshTimeKey]); err != nil {
+		return false, fmt.Errorf("error converting expirationTime time bytes to struct. %v", err)
 	}
-	if time.Now().After(expiryTime) {
+	if time.Now().After(expirationTime) {
 		return true, nil
 	}
 	return false, nil
