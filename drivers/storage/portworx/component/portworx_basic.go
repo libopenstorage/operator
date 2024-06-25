@@ -123,7 +123,7 @@ func (c *portworxBasic) Delete(cluster *corev1.StorageCluster) error {
 	if err := k8sutil.DeleteService(c.k8sClient, pxutil.PortworxKVDBServiceName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteSecret(c.k8sClient, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace, *ownerRef); err != nil {
+	if err := k8sutil.DeleteSecret(c.k8sClient, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace, *ownerRef); err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 
@@ -538,16 +538,6 @@ func getPortworxServiceSpec(
 }
 
 func (c *portworxBasic) createAndMaintainPxSaTokenSecret(cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) error {
-	if err := c.createTokenSecretIfNotExist(cluster, ownerRef); err != nil {
-		return err
-	}
-	if err := c.maintainTokenSecret(cluster, ownerRef); err != nil {
-		return fmt.Errorf("failed to maintain the token secret for px container. %v", err)
-	}
-	return nil
-}
-
-func (c *portworxBasic) createTokenSecretIfNotExist(cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) error {
 	secret := &v1.Secret{}
 	err := c.k8sClient.Get(context.TODO(),
 		types.NamespacedName{
@@ -555,71 +545,65 @@ func (c *portworxBasic) createTokenSecretIfNotExist(cluster *corev1.StorageClust
 			Namespace: cluster.Namespace,
 		}, secret)
 	if err != nil {
-		if errors.IsNotFound(err) || len(secret.Data) == 0 || len(secret.Data[v1.ServiceAccountTokenKey]) == 0 {
-			token, err := generateToken(cluster)
-			if err != nil {
-				return err
+		if errors.IsNotFound(err) {
+			if err = c.createTokenSecret(cluster, ownerRef); err != nil {
+				return fmt.Errorf("failed to create token secret for px container. %w", err)
 			}
-			rootCaCrt, _ := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
-			curTime := time.Now()
-			tokenRefreshTimeBytes, err := curTime.Add(time.Duration(tokenExpirationSeconds / 2)).MarshalBinary()
-			if err != nil {
-				return fmt.Errorf("error marshalling current time to bytes. %v", err)
-			}
-			secret := &v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            pxutil.PortworxServiceAccountTokenSecretName,
-					Namespace:       cluster.Namespace,
-					OwnerReferences: []metav1.OwnerReference{*ownerRef},
-				},
-				Type: v1.SecretTypeOpaque,
-				Data: map[string][]byte{
-					core.ServiceAccountTokenKey:     token,
-					core.ServiceAccountRootCAKey:    rootCaCrt,
-					core.ServiceAccountNamespaceKey: []byte(cluster.Namespace),
-					TokenRefreshTimeKey:             tokenRefreshTimeBytes,
-				},
-			}
-			if err := k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef); err != nil {
-				return err
-			}
-		} else {
-			return fmt.Errorf("error getting the token secret for px from k8s. %v", err)
 		}
-	}
-	return nil
-}
-
-func (c *portworxBasic) maintainTokenSecret(cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) error {
-	secret := &v1.Secret{}
-	err := c.k8sClient.Get(context.TODO(),
-		types.NamespacedName{
-			Name:      pxutil.PortworxServiceAccountTokenSecretName,
-			Namespace: cluster.Namespace,
-		}, secret)
-	if err != nil {
-		return fmt.Errorf("error getting the secret containing token for px container. %v", err)
+	} else {
+		return err
 	}
 	needRefresh, err := isTokenRefreshRequired(secret)
 	if err != nil {
 		return err
 	}
 	if needRefresh {
-		newToken, err := generateToken(cluster)
-		if err != nil {
-			return err
+		if err := c.refreshTokenSecret(secret, cluster, ownerRef); err != nil {
+			return fmt.Errorf("failed to refresh the token secret for px container. %w", err)
 		}
-		curTime := time.Now()
-		tokenRefreshTimeBytes, err := curTime.Add(time.Duration(tokenExpirationSeconds/2) * time.Second).MarshalBinary()
-		if err != nil {
-			return fmt.Errorf("error marshalling current time to bytes. %v", err)
-		}
-		secret.Data[core.ServiceAccountTokenKey] = newToken
-		secret.Data[TokenRefreshTimeKey] = tokenRefreshTimeBytes
-		err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
-		if err != nil {
-			return err
-		}
+	}
+	return nil
+}
+
+func (c *portworxBasic) createTokenSecret(cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) error {
+	rootCaCrt, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+	if err != nil {
+		return fmt.Errorf("error reading k8s cluster certificate located inside the pod at /var/run/secrets/kubernetes.io/serviceaccount/ca.crt. %w", err)
+	}
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pxutil.PortworxServiceAccountTokenSecretName,
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Type: v1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			core.ServiceAccountRootCAKey:    rootCaCrt,
+			core.ServiceAccountNamespaceKey: []byte(cluster.Namespace),
+		},
+	}
+	if err := k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *portworxBasic) refreshTokenSecret(secret *v1.Secret, cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) error {
+	newToken, err := generateToken(cluster)
+	if err != nil {
+		return err
+	}
+	curTime := time.Now()
+	tokenRefreshTimeBytes, err := curTime.Add(time.Duration(tokenExpirationSeconds/2) * time.Second).MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("error marshalling current time to bytes. %w", err)
+	}
+	secret.Data[core.ServiceAccountTokenKey] = newToken
+	secret.Data[TokenRefreshTimeKey] = tokenRefreshTimeBytes
+
+	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -633,15 +617,18 @@ func generateToken(cluster *corev1.StorageCluster) ([]byte, error) {
 	}
 	tokenResp, err := coreops.Instance().CreateToken(pxutil.PortworxServiceAccountName(cluster), cluster.Namespace, tokenRequest)
 	if err != nil {
-		return nil, fmt.Errorf("error creating token from k8s. %v", err)
+		return nil, fmt.Errorf("error creating token from k8s. %w", err)
 	}
 	return []byte(tokenResp.Status.Token), nil
 }
 
 func isTokenRefreshRequired(secret *v1.Secret) (bool, error) {
+	if len(secret.Data) == 0 || len(secret.Data[v1.ServiceAccountTokenKey]) == 0 {
+		return true, nil
+	}
 	expirationTime := time.Time{}
 	if err := expirationTime.UnmarshalBinary(secret.Data[TokenRefreshTimeKey]); err != nil {
-		return false, fmt.Errorf("error converting expirationTime time bytes to struct. %v", err)
+		return false, fmt.Errorf("error Unmarshalling expirationTime bytes to Time struct. %w", err)
 	}
 	if time.Now().After(expirationTime) {
 		return true, nil
