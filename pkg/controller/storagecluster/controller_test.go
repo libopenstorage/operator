@@ -3303,7 +3303,21 @@ func TestGarbageCollection(t *testing.T) {
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
+				Name:      "px-attachdriveset-lock",
+				Namespace: cluster.Namespace,
+			},
+			Data: map[string]string{},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
 				Name:      "px-attach-driveset-lock",
+				Namespace: "kube-system",
+			},
+			Data: map[string]string{},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "px-attachdriveset-lock",
 				Namespace: "kube-system",
 			},
 			Data: map[string]string{},
