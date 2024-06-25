@@ -466,7 +466,7 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			prometheusVersionChanged := p.hasPrometheusVersionChanged(toUpdate)
 			grafanaVersionChanged := p.hasGrafanaVersionChanged(toUpdate)
 			if toUpdate.Spec.Monitoring.Prometheus.Enabled &&
-				(toUpdate.Status.DesiredImages.PrometheusOperator == "" || pxVersionChanged || prometheusVersionChanged) {
+				(toUpdate.Status.DesiredImages.PrometheusOperator == "" || pxVersionChanged || prometheusVersionChanged || autoUpdateComponents(toUpdate)) {
 				toUpdate.Status.DesiredImages.Prometheus = release.Components.Prometheus
 				toUpdate.Status.DesiredImages.PrometheusOperator = release.Components.PrometheusOperator
 				toUpdate.Status.DesiredImages.PrometheusConfigMapReload = release.Components.PrometheusConfigMapReload
@@ -474,12 +474,12 @@ func (p *portworx) SetDefaultsOnStorageCluster(toUpdate *corev1.StorageCluster) 
 			}
 			if toUpdate.Spec.Monitoring.Prometheus.AlertManager != nil &&
 				toUpdate.Spec.Monitoring.Prometheus.AlertManager.Enabled &&
-				(toUpdate.Status.DesiredImages.AlertManager == "" || pxVersionChanged || prometheusVersionChanged) {
+				(toUpdate.Status.DesiredImages.AlertManager == "" || pxVersionChanged || prometheusVersionChanged || autoUpdateComponents(toUpdate)) {
 				toUpdate.Status.DesiredImages.AlertManager = release.Components.AlertManager
 			}
 			if toUpdate.Spec.Monitoring.Grafana != nil &&
 				toUpdate.Spec.Monitoring.Grafana.Enabled &&
-				(toUpdate.Status.DesiredImages.Grafana == "" || pxVersionChanged || grafanaVersionChanged) {
+				(toUpdate.Status.DesiredImages.Grafana == "" || pxVersionChanged || grafanaVersionChanged || autoUpdateComponents(toUpdate)) {
 				toUpdate.Status.DesiredImages.Grafana = release.Components.Grafana
 			}
 		}
