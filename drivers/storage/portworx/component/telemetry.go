@@ -839,6 +839,11 @@ func (t *telemetry) createDeploymentTelemetryRegistration(
 		container := &deployment.Spec.Template.Spec.Containers[i]
 		if container.Name == containerNameTelemetryRegistration {
 			container.Image = telemetryImage
+			// add APPLIANCE_ID env var
+			container.Env = append(container.Env, v1.EnvVar{
+				Name:  configParameterApplianceID,
+				Value: cluster.Status.ClusterUID,
+			})
 		} else if container.Name == containerNameTelemetryProxy {
 			container.Image = proxyImage
 		}
