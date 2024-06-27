@@ -404,7 +404,7 @@ func GetCloudProvider(cluster *corev1.StorageCluster) string {
 	if IsVsphere(cluster) {
 		return cloudops.Vsphere
 	} else if IsPure(cluster) {
-	    return cloudops.Pure
+		return cloudops.Pure
 	}
 	// TODO: implement conditions for other providers
 	return ""
