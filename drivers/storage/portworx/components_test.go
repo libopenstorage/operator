@@ -1259,8 +1259,8 @@ func TestServiceAccountTokenRefreshOnExpire(t *testing.T) {
 	err = testutil.Get(k8sClient, saTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 	require.NoError(t, err)
 	fakeExpirationTime := time.Now().Add(-time.Second)
-	fakeExpirationTimeString := fakeExpirationTime.Format(time.RFC3339)
-	saTokenSecret.StringData[component.PxSaTokenRefreshTimeKey] = fakeExpirationTimeString
+	fakeExpirationTimeBytes := []byte(fakeExpirationTime.Format(time.RFC3339))
+	saTokenSecret.Data[component.PxSaTokenRefreshTimeKey] = fakeExpirationTimeBytes
 	err = testutil.Update(k8sClient, saTokenSecret)
 	require.NoError(t, err)
 
@@ -1268,7 +1268,7 @@ func TestServiceAccountTokenRefreshOnExpire(t *testing.T) {
 	require.NoError(t, err)
 	err = testutil.Get(k8sClient, saTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 	require.NoError(t, err)
-	updatedExpirationTime, err := time.Parse(time.RFC3339, saTokenSecret.StringData[component.PxSaTokenRefreshTimeKey])
+	updatedExpirationTime, err := time.Parse(time.RFC3339, string(saTokenSecret.Data[component.PxSaTokenRefreshTimeKey]))
 	require.NoError(t, err)
 	assert.True(t, updatedExpirationTime.Sub(fakeExpirationTime) > 6*time.Hour)
 }
