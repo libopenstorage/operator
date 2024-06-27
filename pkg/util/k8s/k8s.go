@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
@@ -2026,6 +2027,27 @@ func DeleteSecret(
 	return k8sClient.Update(context.TODO(), secret)
 }
 
+// GetSecret gets secret
+func GetSecret(
+	k8sClient client.Client,
+	name string,
+	namespace string,
+	secret *v1.Secret,
+) error {
+	err := k8sClient.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      name,
+			Namespace: namespace,
+		},
+		secret,
+	)
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
 // GetCRDFromFile parses a CRD definition filename from crdBaseDir and returns the parsed object
 func GetCRDFromFile(
 	filename string,
@@ -2311,4 +2333,34 @@ func GetDefaultKubeSchedulerImage(k8sVersion *version.Version) string {
 		return prefix + "1.21.4"
 	}
 	return prefix + k8sVersion.String()
+}
+
+// DeletePodsByLabel deletes pods by label, from a given namespace
+func DeletePodsByLabel(
+	k8sClient client.Client,
+	mylabels map[string]string,
+	namespace string,
+) error {
+	podList := &v1.PodList{}
+	err := k8sClient.List(
+		context.TODO(),
+		podList,
+		&client.ListOptions{
+			Namespace:     namespace,
+			LabelSelector: labels.SelectorFromSet(mylabels),
+		},
+	)
+	if err != nil {
+		return err
+	} else if len(podList.Items) <= 0 {
+		return nil
+	}
+
+	for _, pod := range podList.Items {
+		logrus.Debugf("Deleting pod %s/%s", pod.Namespace, pod.Name)
+		if err := k8sClient.Delete(context.TODO(), &pod); err != nil {
+			return err
+		}
+	}
+	return nil
 }

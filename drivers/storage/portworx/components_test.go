@@ -15414,7 +15414,7 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 1)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
 
 	// Compatible PX & Incompatible Telemetry Images
 	cluster.Spec.Image = "portworx/image:3.2.0"
@@ -15431,7 +15431,7 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 	// Validate deployments
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 1)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
 
 	// Incompatible PX & compatible Telemetry Images
 	cluster.Spec.Image = "portworx/image:3.0.0"
@@ -15448,7 +15448,7 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 	// Validate deployments
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 1)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
 
 	// Compatible PX & Telemetry Images
 	cluster.Spec.Image = "portworx/image:3.2.0"
@@ -15466,9 +15466,13 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 	// Validate deployments
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
-	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[1].Name, "REFRESH_TOKEN")
-	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[1].Value, "")
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[0].Name, "CONFIG")
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[0].Value, "config/config_properties_px.yaml")
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[1].Name, "APPLIANCE_ID")
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[1].Value, "test-clusteruid")
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[2].Name, "REFRESH_TOKEN")
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[2].Value, "")
 
 	// Port shift on OCP
 	cluster.Annotations[pxutil.AnnotationIsOpenshift] = "true"
@@ -16462,6 +16466,96 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
 	require.NoError(t, err)
 	require.Empty(t, secret.OwnerReferences)
+}
+
+func TestTelemetrySecretRefresh(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	recorder := record.NewFakeRecorder(10)
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:3.2.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
+	}
+
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	require.NotEmpty(t, ownerRef)
+
+	err = k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            testutil.TelemetryCertName,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Data: map[string][]byte{
+				"cert": []byte(`-----BEGIN CERTIFICATE-----
+MIIFEzCCA3ugAwIBAgIDASXwMA0GCSqGSIb3DQEBCwUAMFkxCzAJBgNVBAYTAlVT
+MRkwFwYDVQQKDBBQdXJlIFN0b3JhZ2UgSW5jMQ4wDAYDVQQLDAVQdXJlMTEfMB0G
+A1UEAwwWUHVyZTEgU3Vib3JkaW5hdGUgQ0EgNDAeFw0yNDA1MTQwNjExNDBaFw0y
+NTA1MTQwNjExNDBaMIHoMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5p
+YTEWMBQGA1UEBxMNTW91bnRhaW4gVmlldzEUMBIGA1UEChMLUHVyZVN0b3JhZ2Ux
+EzARBgNVBAsTClB1cmUgSW5mcmExEDAOBgNVBAMTB3Vua25vd24xLTArBgNVBAUT
+JDMxY2RmNzc0LTk0YTktNDE4MS04MGNkLTIxNWJkZDRmZWI1MzEtMCsGA1UEQRYk
+Yzc1ZTJjYmYtMTc2NS00MDY4LTkxM2QtNzYxODNlNjhmOGNjMREwDwYDVQQEFghw
+b3J0d29yeDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAONBSa5q3wyl
+6qVWZO7KCWZASUDPkFv8y31vtKAoS1jhAe4mDtDWyDxXrBMK9ngdKMpWfrBaoZZQ
+Z7FtOGsaVzansSXZAReYiZj1OFZKZkEEhhulNxHPOV3zKJKQxNOrdGfi0i8ZhlDG
+9YbYIJDeeiJE44UaYn/K+Vs/m+x5K95dFqtXdvIuhL00dVT1DR56pcskprAJ8R+i
+ILTYKkkwn+noeajESpIzdUHdtDbWF/+kw5j+e+CUWxtsKw1xfTz7fj+6Vufemrhw
+MV/DP5fbjS1RBHBhCN3LDFmwPSPJAniDECOYRsiR5eFkIHd42wQOu/EceFMfwjzA
+mtOSQzvQdC0CAwEAAaOB0zCB0DAMBgNVHRMBAf8EAjAAMB8GA1UdIwQYMBaAFA5o
+8M8qUnCkQY/IRLW9P0hXo2+HMFsGCCsGAQUFBwEBBE8wTTBLBggrBgEFBQcwAYY/
+aHR0cDovL3N1Yi1jYS0wNC5zZWMuY2xvdWQtc3VwcG9ydC5wdXJlc3RvcmFnZS5j
+b206ODA4MC9jYS9vY3NwMA4GA1UdDwEB/wQEAwIEsDATBgNVHSUEDDAKBggrBgEF
+BQcDAjAdBgNVHQ4EFgQUvcvcmGzxsDP2oLRIl72EsV0P12IwDQYJKoZIhvcNAQEL
+BQADggGBAJRfBb4D1ojq8vj006xKpp/eLMyAxMRMuYwzrooDa+U4kdvPlk0ibA3i
+zChg117eRV19mjzTHaVPovwlzfhCqZFYyRR+c0iOFu/DUBBOamMZLx2rcZsnA9XC
+QN/9TIyDnXyup9dG6WAu1z5RW6VPifek1DUjdngj9TiyJQOchwLWD/iBG86Ap2gJ
++zt/G4Nwq5VZOp6qX7zfuW+hY9t8FVAz0X9+ohQHgN2eCxvdajgly4+TpVxybubQ
+tooUqkPNRKZ5P0IT9Do0E1z9ZlAQqGTC5abC9RNwAXf/KpIFpardKC/p5BwOZI2P
+aqDgX/Bcx/XoiRHBtDv450/GnAdgD+1yxFCjVkt3vnJybSgdbYV5f2+Owowc3aUw
+agq/IJO6rOF10LX7cDqVKfoQqbpU80v4Uk1Ls6FntKkzUj6njnpoPWdoFqxJmoDG
+zvz7BX4rQqGCD6ElMHyQM7rdq77/ywgSiRJlFf7eQsWNKTpHueulgqnqdW55pNaW
+JhBhJjN84g==
+-----END CERTIFICATE-----`),
+			},
+		},
+		&client.CreateOptions{},
+	)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0)
+
+	// male sure invalid secret got deleted
+	secret := v1.Secret{}
+	err = testutil.Get(k8sClient, &secret, testutil.TelemetryCertName, cluster.Namespace)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
 }
 
 func TestTelemetryCCMGoRestartPhonehome(t *testing.T) {
