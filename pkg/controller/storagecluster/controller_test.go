@@ -1819,6 +1819,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 		Containers: []v1.Container{{Name: "test"}},
 	}
 	k8s.AddOrUpdateStoragePodTolerations(&expectedPodSpec)
+	addPxServiceAccountTokenSecretIfNotExist(&expectedPodSpec)
 	expectedPodSpec.Affinity = &v1.Affinity{
 		NodeAffinity: getDefaultNodeAffinity(k8sVersion),
 	}
@@ -1936,6 +1937,7 @@ func TestStoragePodGetsScheduledK8s1_24(t *testing.T) {
 		Containers: []v1.Container{{Name: "test"}},
 	}
 	k8s.AddOrUpdateStoragePodTolerations(&expectedPodSpec)
+	addPxServiceAccountTokenSecretIfNotExist(&expectedPodSpec)
 	expectedPodSpec.Affinity = &v1.Affinity{
 		NodeAffinity: getDefaultNodeAffinity(k8sVersion),
 	}
@@ -2329,6 +2331,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 		Containers: []v1.Container{{Name: "test"}},
 	}
 	k8s.AddOrUpdateStoragePodTolerations(&expectedPodSpec)
+	addPxServiceAccountTokenSecretIfNotExist(&expectedPodSpec)
 	expectedPodTemplate := &v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "test-ns",
