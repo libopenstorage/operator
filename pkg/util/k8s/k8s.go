@@ -1927,7 +1927,8 @@ func CreateOrUpdateSecret(
 		return err
 	}
 
-	modified := !reflect.DeepEqual(secret.Data, existingSecret.Data)
+	modified := !reflect.DeepEqual(secret.Data, existingSecret.Data) ||
+		!reflect.DeepEqual(secret.StringData, existingSecret.StringData)
 
 	for _, o := range existingSecret.OwnerReferences {
 		if ownerRef != nil && o.UID != ownerRef.UID {

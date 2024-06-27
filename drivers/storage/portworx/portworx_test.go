@@ -8091,11 +8091,13 @@ func TestUpdateClusterStatusShouldNotDeleteStorageNodeIfPodExistsAndScheduleName
 }
 
 func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
 		GitVersion: "v1.15.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -8230,7 +8232,7 @@ func TestDeleteClusterWithoutDeleteStrategy(t *testing.T) {
 	secretList := &v1.SecretList{}
 	err = testutil.List(k8sClient, secretList)
 	require.NoError(t, err)
-	require.Len(t, secretList.Items, 4)
+	require.Len(t, secretList.Items, 5)
 
 	pspList := &policyv1beta1.PodSecurityPolicyList{}
 	err = testutil.List(k8sClient, pspList)
@@ -8392,11 +8394,13 @@ func TestDeleteClusterShouldResetSDKConnection(t *testing.T) {
 }
 
 func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
 		GitVersion: "v1.15.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -8547,7 +8551,7 @@ func TestDeleteClusterWithUninstallStrategy(t *testing.T) {
 	secretList := &v1.SecretList{}
 	err = testutil.List(k8sClient, secretList)
 	require.NoError(t, err)
-	require.Len(t, secretList.Items, 4)
+	require.Len(t, secretList.Items, 5)
 
 	pspList := &policyv1beta1.PodSecurityPolicyList{}
 	err = testutil.List(k8sClient, pspList)
@@ -9035,11 +9039,13 @@ func TestDeleteClusterWithUninstallStrategyForPKS(t *testing.T) {
 }
 
 func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &k8sversion.Info{
 		GitVersion: "v1.15.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -9184,7 +9190,7 @@ func TestDeleteClusterWithUninstallAndWipeStrategy(t *testing.T) {
 	secretList := &v1.SecretList{}
 	err = testutil.List(k8sClient, secretList)
 	require.NoError(t, err)
-	require.Len(t, secretList.Items, 4)
+	require.Len(t, secretList.Items, 5)
 
 	pspList := &policyv1beta1.PodSecurityPolicyList{}
 	err = testutil.List(k8sClient, pspList)

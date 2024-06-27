@@ -2,9 +2,15 @@ package component
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"strconv"
+	"time"
 
 	"github.com/hashicorp/go-version"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
+	authv1 "k8s.io/api/authentication/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -13,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -33,6 +40,12 @@ const (
 	PxRoleName = "portworx"
 	// PxRoleBindingName name of the Portworx role binding
 	PxRoleBindingName = "portworx"
+	// PxSaTokenRefreshTimeKey time to refresh the service account token
+	PxSaTokenRefreshTimeKey = "pxSaTokenRefreshTime"
+)
+
+var (
+	defaultPxSaTokenExpirationSeconds = int64(12 * 60 * 60)
 )
 
 type portworxBasic struct {
@@ -84,6 +97,9 @@ func (c *portworxBasic) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := c.createPortworxService(cluster, ownerRef); err != nil {
 		return NewError(ErrCritical, err)
 	}
+	if err := c.createAndMaintainPxSaTokenSecret(cluster, ownerRef); err != nil {
+		return NewError(ErrCritical, err)
+	}
 	if cluster.Spec.Kvdb != nil && cluster.Spec.Kvdb.Internal {
 		if err := c.createPortworxKVDBService(cluster, ownerRef); err != nil {
 			// This should not block portworx installation
@@ -108,6 +124,9 @@ func (c *portworxBasic) Delete(cluster *corev1.StorageCluster) error {
 		return err
 	}
 	if err := k8sutil.DeleteService(c.k8sClient, pxutil.PortworxKVDBServiceName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
+	if err := k8sutil.DeleteSecret(c.k8sClient, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 
@@ -521,6 +540,104 @@ func getPortworxServiceSpec(
 	return newService
 }
 
+func (c *portworxBasic) createAndMaintainPxSaTokenSecret(cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) error {
+	secret := &v1.Secret{}
+	err := c.k8sClient.Get(context.TODO(),
+		types.NamespacedName{
+			Name:      pxutil.PortworxServiceAccountTokenSecretName,
+			Namespace: cluster.Namespace,
+		}, secret)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			secret, err = c.createTokenSecret(cluster, ownerRef)
+			if err != nil {
+				return fmt.Errorf("failed to create token secret for px container: %w", err)
+			}
+		} else {
+			return err
+		}
+	}
+	needRefresh, err := isTokenRefreshRequired(secret)
+	if err != nil {
+		return err
+	}
+	if needRefresh {
+		if err := c.refreshTokenSecret(secret, cluster, ownerRef); err != nil {
+			return fmt.Errorf("failed to refresh the token secret for px container: %w", err)
+		}
+	}
+	return nil
+}
+
+func (c *portworxBasic) createTokenSecret(cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) (*v1.Secret, error) {
+	rootCaCrt, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("error reading k8s cluster certificate located inside the pod at /var/run/secrets/kubernetes.io/serviceaccount/ca.crt: %w", err)
+	}
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            pxutil.PortworxServiceAccountTokenSecretName,
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+		Type: v1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			core.ServiceAccountRootCAKey:    rootCaCrt,
+			core.ServiceAccountNamespaceKey: []byte(cluster.Namespace),
+		},
+	}
+	if err := k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef); err != nil {
+		return nil, err
+	}
+	return secret, nil
+}
+
+func (c *portworxBasic) refreshTokenSecret(secret *v1.Secret, cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) error {
+	expirationSeconds, err := getPxSaTokenExpirationSeconds(cluster)
+	if err != nil {
+		return err
+	}
+	secret.Data[PxSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(expirationSeconds/2) * time.Second).Format(time.RFC3339))
+	newToken, err := generatePxSaToken(cluster, expirationSeconds)
+	if err != nil {
+		return err
+	}
+	secret.Data[core.ServiceAccountTokenKey] = newToken
+	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func generatePxSaToken(cluster *corev1.StorageCluster, expirationSeconds int64) ([]byte, error) {
+	tokenRequest := &authv1.TokenRequest{
+		Spec: authv1.TokenRequestSpec{
+			Audiences:         []string{"px"},
+			ExpirationSeconds: &expirationSeconds,
+		},
+	}
+	tokenResp, err := coreops.Instance().CreateToken(pxutil.PortworxServiceAccountName(cluster), cluster.Namespace, tokenRequest)
+	if err != nil {
+		return nil, fmt.Errorf("error creating token from k8s: %w", err)
+	}
+	return []byte(tokenResp.Status.Token), nil
+}
+
+func isTokenRefreshRequired(secret *v1.Secret) (bool, error) {
+	if len(secret.Data) == 0 || len(secret.Data[v1.ServiceAccountTokenKey]) == 0 {
+		return true, nil
+	}
+	expirationTime, err := time.Parse(time.RFC3339, string(secret.Data[PxSaTokenRefreshTimeKey]))
+	if err != nil {
+		return false, fmt.Errorf("error parsing expiration time: %w", err)
+	}
+	if time.Now().UTC().After(expirationTime) {
+		return true, nil
+	}
+	return false, nil
+}
+
 func (c *portworxBasic) createPortworxKVDBService(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
@@ -594,6 +711,19 @@ func getSecretsNamespace(cluster *corev1.StorageCluster) string {
 		}
 	}
 	return cluster.Namespace
+}
+
+func getPxSaTokenExpirationSeconds(cluster *corev1.StorageCluster) (int64, error) {
+	for _, env := range cluster.Spec.Env {
+		if env.Name == pxutil.EnvKeyPortworxServiceAccountTokenExpirationMinutes {
+			expirationMinutes, err := strconv.ParseInt(env.Value, 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("failed to parse the value of env key %v to int64 %v: %w", env.Name, env.Value, err)
+			}
+			return expirationMinutes * 60, nil
+		}
+	}
+	return defaultPxSaTokenExpirationSeconds, nil
 }
 
 // RegisterPortworxBasicComponent registers the Portworx Basic component
