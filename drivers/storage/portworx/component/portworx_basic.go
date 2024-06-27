@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/hashicorp/go-version"
@@ -43,7 +44,9 @@ const (
 	PxSaTokenRefreshTimeKey = "pxSaTokenRefreshTime"
 )
 
-var pxSaTokenExpirationSeconds = int64(12 * 60 * 60)
+var (
+	defaultPxSaTokenRefreshPeriodSeconds = int64(6 * 60 * 60)
+)
 
 type portworxBasic struct {
 	k8sClient client.Client
@@ -591,13 +594,16 @@ func (c *portworxBasic) createTokenSecret(cluster *corev1.StorageCluster, ownerR
 }
 
 func (c *portworxBasic) refreshTokenSecret(secret *v1.Secret, cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) error {
-	newToken, err := generatePxSaToken(cluster)
+	refreshSeconds, err := getPxSaTokenRefreshPeriodSeconds(cluster)
+	if err != nil {
+		return err
+	}
+	secret.StringData[PxSaTokenRefreshTimeKey] = time.Now().Add(time.Duration(refreshSeconds) * time.Second).Format(time.RFC3339)
+	newToken, err := generatePxSaToken(cluster, 2*refreshSeconds)
 	if err != nil {
 		return err
 	}
 	secret.Data[core.ServiceAccountTokenKey] = newToken
-	secret.StringData[PxSaTokenRefreshTimeKey] = time.Now().Add(time.Duration(pxSaTokenExpirationSeconds/2) * time.Second).Format(time.RFC3339)
-
 	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
 	if err != nil {
 		return err
@@ -605,11 +611,11 @@ func (c *portworxBasic) refreshTokenSecret(secret *v1.Secret, cluster *corev1.St
 	return nil
 }
 
-func generatePxSaToken(cluster *corev1.StorageCluster) ([]byte, error) {
+func generatePxSaToken(cluster *corev1.StorageCluster, expirationSeconds int64) ([]byte, error) {
 	tokenRequest := &authv1.TokenRequest{
 		Spec: authv1.TokenRequestSpec{
 			Audiences:         []string{"px"},
-			ExpirationSeconds: &pxSaTokenExpirationSeconds,
+			ExpirationSeconds: &expirationSeconds,
 		},
 	}
 	tokenResp, err := coreops.Instance().CreateToken(pxutil.PortworxServiceAccountName(cluster), cluster.Namespace, tokenRequest)
@@ -706,6 +712,19 @@ func getSecretsNamespace(cluster *corev1.StorageCluster) string {
 		}
 	}
 	return cluster.Namespace
+}
+
+func getPxSaTokenRefreshPeriodSeconds(cluster *corev1.StorageCluster) (int64, error) {
+	for _, env := range cluster.Spec.Env {
+		if env.Name == pxutil.EnvKeyPortworxServiceAccountTokenRefreshIntervalHours {
+			refreshPeriodHours, err := strconv.ParseInt(env.Value, 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("failed to parse the value of env key %v to int64 %v: %w", env.Name, env.Value, err)
+			}
+			return refreshPeriodHours * 60 * 60, nil
+		}
+	}
+	return defaultPxSaTokenRefreshPeriodSeconds, nil
 }
 
 // RegisterPortworxBasicComponent registers the Portworx Basic component

@@ -181,6 +181,9 @@ const (
 	// EnvKeyPortworxServiceAccount key for the env var which tells custom Portworx
 	// service account
 	EnvKeyPortworxServiceAccount = "PX_SERVICE_ACCOUNT"
+	// EnvKeyPortworxServiceAccountTokenRefreshIntervalHours key for the env var which tells how often
+	// the token associated with the Px service account gets refreshed
+	EnvKeyPortworxServiceAccountTokenRefreshIntervalHours = "PX_SERVICE_ACCOUNT_TOKEN_REFRESH_INTERVAL_HOURS"
 	// EnvKeyPortworxServiceName key for the env var which tells the name of the
 	// portworx service to be used
 	EnvKeyPortworxServiceName = "PX_SERVICE_NAME"
