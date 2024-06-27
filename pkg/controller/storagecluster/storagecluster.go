@@ -120,7 +120,7 @@ type Controller struct {
 	kubevirt                      KubevirtManager
 	// Node to NodeInfo map
 	nodeInfoMap           maps.SyncMap[string, *k8s.NodeInfo]
-	numSecretsUpdated     map[string]bool
+	nodesUpdatedMap       map[string]bool
 	secretResourceVersion string
 }
 
@@ -132,8 +132,7 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	c.recorder = mgr.GetEventRecorderFor(ControllerName)
 	c.nodeInfoMap = maps.MakeSyncMap[string, *k8s.NodeInfo]()
 	c.kubevirt = newKubevirtManager()
-	fmt.Println("SECRET-DEBUG In init setting to nil")
-	c.numSecretsUpdated = nil
+	c.nodesUpdatedMap = nil
 	c.secretResourceVersion = ""
 
 	// Create a new controller
@@ -163,15 +162,13 @@ func (c *Controller) Init(mgr manager.Manager) error {
 		return fmt.Errorf("error setting node name index on pod cache: %v", err)
 	}
 
+	// Store resource version of vsphere secret
 	secrets, err := clientset.CoreV1().Secrets("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		fmt.Println("TRY2 in init error getting secrets", err)
+		logrus.Warnf("Failed to list secrets. %v", err)
 	} else {
-		fmt.Println("TRY2 in init secrets", len(secrets.Items))
 		for _, secret := range secrets.Items {
-			fmt.Println("TRY2 iterating secrets", secret.Name, secret.Namespace)
 			if secret.Data["VSPHERE_USER"] != nil {
-				fmt.Println("TRY2 secret found", secret.Name, secret.ResourceVersion)
 				c.secretResourceVersion = secret.ResourceVersion
 				break
 			}
@@ -183,7 +180,6 @@ func (c *Controller) Init(mgr manager.Manager) error {
 // StartWatch starts the watch on the StorageCluster
 func (c *Controller) StartWatch() error {
 
-	fmt.Println("TRY2 STARTWATCH starts")
 	err := c.ctrl.Watch(
 		&source.Kind{Type: &corev1.StorageCluster{}},
 		&handler.EnqueueRequestForObject{},
@@ -216,24 +212,6 @@ func (c *Controller) StartWatch() error {
 		return err
 	}
 
-	// err = c.ctrl.Watch(
-	// 	&source.Kind{Type: &v1.Secret{}},
-	// 	&handler.EnqueueRequestForObject{},
-	// 	&predicate.Funcs{
-	// 		UpdateFunc: func(e event.UpdateEvent) bool {
-	// 			if _, ok := e.ObjectNew.(*v1.Secret).Data["VSPHERE_USER"]; ok {
-	// 				return true // Process this update event
-	// 			}
-	// 			return false // Ignore this update event
-	// 		},
-	// 	},
-	// )
-	// if err != nil {
-	// 	return err
-	// }
-
-	// fmt.Println("TRY2 after secret watch")
-
 	return nil
 }
 
@@ -264,7 +242,6 @@ func (c *Controller) SetEventRecorder(r record.EventRecorder) {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (c *Controller) Reconcile(_ context.Context, request reconcile.Request) (reconcile.Result, error) {
-	fmt.Println("TRY2 RECONCILE starts", request.Namespace, request.Name)
 	log := logrus.WithFields(map[string]interface{}{
 		"Request.Namespace": request.Namespace,
 		"Request.Name":      request.Name,
@@ -284,22 +261,17 @@ func (c *Controller) Reconcile(_ context.Context, request reconcile.Request) (re
 		return reconcile.Result{}, err
 	}
 
-	fmt.Println("TRY2 Inside starting secret watch")
+	// If env variable for vsphere secret and secret exists, then check if the secret has changed
 	for _, env := range cluster.Spec.Env {
-		fmt.Println("TRY2 In env ", env.Name, "VALUE ", env.ValueFrom)
 		if env.Name == "VSPHERE_USER" && len(env.ValueFrom.SecretKeyRef.Name) > 0 {
-			fmt.Println("TRY2 In vsphere user env")
 			secretName := env.ValueFrom.SecretKeyRef.Name
-			fmt.Println("TRY2 checking secret name", secretName)
 			secret, err := coreops.Instance().GetSecret(secretName, cluster.Namespace)
 			if err != nil {
 				logrus.Warnf("Failed to get vsphere secret %s in namespace %s. %v", secretName, cluster.Namespace, err)
 				break
 			}
-			fmt.Println("TRY2 SECRET in reconcile", secret.Name, secret.ResourceVersion, c.secretResourceVersion)
 			if c.secretResourceVersion != secret.ResourceVersion {
-				fmt.Println("TRY2 SECRET changed")
-				c.numSecretsUpdated = make(map[string]bool)
+				c.nodesUpdatedMap = make(map[string]bool)
 				c.secretResourceVersion = secret.ResourceVersion
 			}
 			break
@@ -1168,9 +1140,8 @@ func (c *Controller) syncNodes(
 			go func(idx int) {
 				defer createWait.Done()
 				nodeName := nodesNeedingStoragePods[idx]
-				if c.numSecretsUpdated != nil {
-					fmt.Println("TRY2 nodename creating", nodeName)
-					c.numSecretsUpdated[nodeName] = true
+				if c.nodesUpdatedMap != nil {
+					c.nodesUpdatedMap[nodeName] = true
 				}
 				err := c.podControl.CreatePods(
 					context.TODO(),
