@@ -988,7 +988,10 @@ func (c *Controller) gcNeeded(obj client.Object) bool {
 	}
 
 	if obj.GetObjectKind().GroupVersionKind().Kind == "ConfigMap" {
-		if obj.GetName() == "px-attach-driveset-lock" ||
+		// px-attachdriveset-lock configmap name has changed in porx to px-attach-driveset-lock
+		// and changes are merged to PX 2.13.2 onwards and 3.0.0 onwards. Since operator has to support till n-2 px versions,
+		// operator needs to have support for clean up of both px-attachdriveset-lock as well as px-attach-driveset-lock
+		if obj.GetName() == "px-attach-driveset-lock" || obj.GetName() == "px-attachdriveset-lock" ||
 			strings.HasPrefix(obj.GetName(), "px-bringup-queue-lock") {
 			return true
 		}
