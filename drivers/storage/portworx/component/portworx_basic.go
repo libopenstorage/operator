@@ -39,11 +39,11 @@ const (
 	PxRoleName = "portworx"
 	// PxRoleBindingName name of the Portworx role binding
 	PxRoleBindingName = "portworx"
-	// TokenRefreshTimeKey time to refresh the service account token
-	TokenRefreshTimeKey = "tokenRefreshTime"
+	// PxSaTokenRefreshTimeKey time to refresh the service account token
+	PxSaTokenRefreshTimeKey = "pxSaTokenRefreshTime"
 )
 
-var tokenExpirationSeconds = int64(12 * 60 * 60)
+var pxSaTokenExpirationSeconds = int64(12 * 60 * 60)
 
 type portworxBasic struct {
 	k8sClient client.Client
@@ -123,7 +123,7 @@ func (c *portworxBasic) Delete(cluster *corev1.StorageCluster) error {
 	if err := k8sutil.DeleteService(c.k8sClient, pxutil.PortworxKVDBServiceName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteSecret(c.k8sClient, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace, *ownerRef); err != nil && !errors.IsNotFound(err) {
+	if err := k8sutil.DeleteSecret(c.k8sClient, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 
@@ -546,12 +546,13 @@ func (c *portworxBasic) createAndMaintainPxSaTokenSecret(cluster *corev1.Storage
 		}, secret)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			if err = c.createTokenSecret(cluster, ownerRef); err != nil {
-				return fmt.Errorf("failed to create token secret for px container. %w", err)
+			secret, err = c.createTokenSecret(cluster, ownerRef)
+			if err != nil {
+				return fmt.Errorf("failed to create token secret for px container: %w", err)
 			}
+		} else {
+			return err
 		}
-	} else {
-		return err
 	}
 	needRefresh, err := isTokenRefreshRequired(secret)
 	if err != nil {
@@ -559,16 +560,16 @@ func (c *portworxBasic) createAndMaintainPxSaTokenSecret(cluster *corev1.Storage
 	}
 	if needRefresh {
 		if err := c.refreshTokenSecret(secret, cluster, ownerRef); err != nil {
-			return fmt.Errorf("failed to refresh the token secret for px container. %w", err)
+			return fmt.Errorf("failed to refresh the token secret for px container: %w", err)
 		}
 	}
 	return nil
 }
 
-func (c *portworxBasic) createTokenSecret(cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) error {
+func (c *portworxBasic) createTokenSecret(cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) (*v1.Secret, error) {
 	rootCaCrt, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
-	if err != nil {
-		return fmt.Errorf("error reading k8s cluster certificate located inside the pod at /var/run/secrets/kubernetes.io/serviceaccount/ca.crt. %w", err)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("error reading k8s cluster certificate located inside the pod at /var/run/secrets/kubernetes.io/serviceaccount/ca.crt: %w", err)
 	}
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -581,25 +582,21 @@ func (c *portworxBasic) createTokenSecret(cluster *corev1.StorageCluster, ownerR
 			core.ServiceAccountRootCAKey:    rootCaCrt,
 			core.ServiceAccountNamespaceKey: []byte(cluster.Namespace),
 		},
+		StringData: map[string]string{},
 	}
 	if err := k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return secret, nil
 }
 
 func (c *portworxBasic) refreshTokenSecret(secret *v1.Secret, cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) error {
-	newToken, err := generateToken(cluster)
+	newToken, err := generatePxSaToken(cluster)
 	if err != nil {
 		return err
 	}
-	curTime := time.Now()
-	tokenRefreshTimeBytes, err := curTime.Add(time.Duration(tokenExpirationSeconds/2) * time.Second).MarshalBinary()
-	if err != nil {
-		return fmt.Errorf("error marshalling current time to bytes. %w", err)
-	}
 	secret.Data[core.ServiceAccountTokenKey] = newToken
-	secret.Data[TokenRefreshTimeKey] = tokenRefreshTimeBytes
+	secret.StringData[PxSaTokenRefreshTimeKey] = time.Now().Add(time.Duration(pxSaTokenExpirationSeconds/2) * time.Second).Format(time.RFC3339)
 
 	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
 	if err != nil {
@@ -608,16 +605,16 @@ func (c *portworxBasic) refreshTokenSecret(secret *v1.Secret, cluster *corev1.St
 	return nil
 }
 
-func generateToken(cluster *corev1.StorageCluster) ([]byte, error) {
+func generatePxSaToken(cluster *corev1.StorageCluster) ([]byte, error) {
 	tokenRequest := &authv1.TokenRequest{
 		Spec: authv1.TokenRequestSpec{
 			Audiences:         []string{"px"},
-			ExpirationSeconds: &tokenExpirationSeconds,
+			ExpirationSeconds: &pxSaTokenExpirationSeconds,
 		},
 	}
 	tokenResp, err := coreops.Instance().CreateToken(pxutil.PortworxServiceAccountName(cluster), cluster.Namespace, tokenRequest)
 	if err != nil {
-		return nil, fmt.Errorf("error creating token from k8s. %w", err)
+		return nil, fmt.Errorf("error creating token from k8s: %w", err)
 	}
 	return []byte(tokenResp.Status.Token), nil
 }
@@ -626,9 +623,9 @@ func isTokenRefreshRequired(secret *v1.Secret) (bool, error) {
 	if len(secret.Data) == 0 || len(secret.Data[v1.ServiceAccountTokenKey]) == 0 {
 		return true, nil
 	}
-	expirationTime := time.Time{}
-	if err := expirationTime.UnmarshalBinary(secret.Data[TokenRefreshTimeKey]); err != nil {
-		return false, fmt.Errorf("error Unmarshalling expirationTime bytes to Time struct. %w", err)
+	expirationTime, err := time.Parse(time.RFC3339, string(secret.StringData[PxSaTokenRefreshTimeKey]))
+	if err != nil {
+		return false, fmt.Errorf("error parsing expiration time: %w", err)
 	}
 	if time.Now().After(expirationTime) {
 		return true, nil
