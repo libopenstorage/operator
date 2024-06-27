@@ -328,13 +328,6 @@ func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 		}
 	}
 
-	pxVer312, _ := version.NewVersion("3.1.2")
-	if clusterPXver.GreaterThanOrEqual(pxVer312) { // PX version is 3.1.2 or above
-		if pxutil.IsPure(toUpdate) && isSupportedOCP { // Preflight runs on FACD and OCP 4.13+
-			return true
-		}
-	}
-
 	return false // All else disable
 }
 
