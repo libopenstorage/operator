@@ -16469,7 +16469,8 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 }
 
 func TestTelemetrySecretRefresh(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
