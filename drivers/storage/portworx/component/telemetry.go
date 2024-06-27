@@ -3,6 +3,9 @@ package component
 import (
 	"context"
 	cryptoTls "crypto/tls"
+	"crypto/x509"
+	"encoding/asn1"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -121,6 +124,13 @@ const (
 
 	arcusPingInterval = 6 * time.Second
 	arcusPingRetry    = 5
+)
+
+var (
+	// oid_pseudonym is x.500 attribute type Pseudonym
+	oid_pseudonym = asn1.ObjectIdentifier([]int{2, 5, 4, 65})
+	// errInvalidTelemetryCert returned when telemetry certificate is invalid
+	errInvalidTelemetryCert = fmt.Errorf("invalid telemetry certificate")
 )
 
 type telemetry struct {
@@ -855,6 +865,18 @@ func (t *telemetry) createDeploymentTelemetryRegistration(
 	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
 
+	// have a valid cluster UUID?  lets validate the Telemetry SSL cert
+	if cuuid := cluster.Status.ClusterUID; cuuid != "" {
+		if certBytes, err := t.getTelemetrySSLCert(deployment.Namespace); err != nil {
+			logrus.WithError(err).Errorf("failed to get telemetry SSL cert")
+		} else if err2 := t.validateTelemetrySSLCert(certBytes, cuuid); err2 == errInvalidTelemetryCert {
+			logrus.Warn("refreshing telemetry SSL cert")
+			t.refreshTelemetrySSLCert(deployment)
+		} else if err2 != nil {
+			logrus.WithError(err2).Errorf("failed to validate telemetry SSL cert")
+		}
+	}
+
 	existingDeployment := &appsv1.Deployment{}
 	if err := k8sutil.GetDeployment(t.k8sClient, deployment.Name, deployment.Namespace, existingDeployment); err != nil {
 		return err
@@ -1024,6 +1046,79 @@ func (t *telemetry) createDeploymentTelemetryCollectorV2(
 
 	t.isCollectorDeploymentCreated = true
 	return nil
+}
+
+// getTelemetrySSLCert returns the telemetry SSL cert
+func (t *telemetry) getTelemetrySSLCert(namespace string) ([]byte, error) {
+	var sec v1.Secret
+	logrus.Debugf("Inspecting secret %s/%s for SSL cert", namespace, pxutil.TelemetryCertName)
+	err := k8sutil.GetSecret(t.k8sClient, pxutil.TelemetryCertName, namespace, &sec)
+	if err != nil {
+		return nil, err
+	}
+	return sec.Data["cert"], nil
+}
+
+// validateTelemetrySSLCert validates the telemetry SSL certificate.
+// - note: cert's Psaudonym needs to match the cluster UUID
+func (t *telemetry) validateTelemetrySSLCert(certBytes []byte, cuuid string) error {
+	if len(certBytes) <= 0 || cuuid == "" {
+		return nil
+	}
+
+	block, _ := pem.Decode(certBytes)
+	if block == nil {
+		return fmt.Errorf("failed to decode SSL certificate")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return err
+	} else if cert == nil {
+		return fmt.Errorf("failed to parse SSL certificate")
+	}
+
+	// find Pseudonym in Subject names
+	pseudonym := ""
+	for _, v := range cert.Subject.Names {
+		if v.Type.Equal(oid_pseudonym) {
+			var ok bool
+			// quick sanity check!
+			if pseudonym, ok = v.Value.(string); !ok {
+				return fmt.Errorf("SSL cert Pseudonym is not a string")
+			}
+			break
+		}
+	}
+	if pseudonym == "" {
+		logrus.Errorf("SSL cert Pseudonym not found")
+		return errInvalidTelemetryCert
+	}
+
+	if pseudonym != cuuid {
+		logrus.Errorf("SSL cert Pseudonym %s does not match cluster UUID %s",
+			pseudonym, cuuid)
+		return errInvalidTelemetryCert
+	}
+	logrus.Debugf("SSL cert Pseudonym %s matches cluster UUID", pseudonym)
+	return nil
+}
+
+// refreshTelemetrySSLCert deletes the telemetry SSL cert secret and telemetry-registration PODs
+func (t *telemetry) refreshTelemetrySSLCert(dep *appsv1.Deployment) {
+	if dep == nil {
+		return
+	}
+	logrus.Warnf("refreshTelemetrySSLCert - deleting telemetry SSL cert secret %s/%s", dep.Namespace, pxutil.TelemetryCertName)
+	err := k8sutil.DeleteSecret(t.k8sClient, pxutil.TelemetryCertName, dep.Namespace, dep.OwnerReferences...)
+	if err != nil {
+		logrus.WithError(err).Warnf("failed to delete secret %s/%s", dep.Namespace, pxutil.TelemetryCertName)
+	}
+
+	logrus.Warnf("refreshTelemetrySSLCert - deleting POD labeled role=%s", DeploymentNameTelemetryRegistration)
+	err = k8sutil.DeletePodsByLabel(t.k8sClient, map[string]string{"role": DeploymentNameTelemetryRegistration}, dep.Namespace)
+	if err != nil {
+		logrus.WithError(err).Warnf("failed to delete px-telemetry-registration POD")
+	}
 }
 
 func getArcusTelemetryLocation(cluster *corev1.StorageCluster) string {
