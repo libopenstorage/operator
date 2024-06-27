@@ -624,6 +624,15 @@ func (c *Controller) groupStorageClusterPods(
 			}
 		}
 	}
+	fmt.Println("TRY2 INSIDE groupStorageClusterPods", len(newPods), len(oldPods), c.numSecretsUpdated)
+	if c.numSecretsUpdated != nil {
+		fmt.Println("TRY2 conditions are: ", len(oldPods) == 0, len(c.numSecretsUpdated) == len(newPods), len(c.numSecretsUpdated))
+	}
+	if c.numSecretsUpdated != nil && len(oldPods) == 0 && len(c.numSecretsUpdated) == len(newPods) {
+		fmt.Println("TRY2 making it nil")
+		c.numSecretsUpdated = nil
+		fmt.Println("TRY2 after making it nil", c.numSecretsUpdated)
+	}
 	return newPods, oldPods
 }
 
@@ -829,6 +838,15 @@ func (c *Controller) syncStoragePod(
 	// are compared below with corresponding history revision.
 	if updated := c.Driver.IsPodUpdated(cluster, pod); !updated {
 		return false
+	}
+
+	fmt.Println("TRY2 before checking isSecretsUpdated", c.numSecretsUpdated, node.Name, c.numSecretsUpdated != nil)
+	if c.numSecretsUpdated != nil {
+		fmt.Println("TRY2 isSecretsUpdated is true, returning false", c.numSecretsUpdated[node.Name], node.Name)
+		if _, ok := c.numSecretsUpdated[node.Name]; !ok {
+			//c.numSecretsUpdated[pod.Spec.NodeName] = true
+			return false
+		}
 	}
 
 	var oldNodeLabels map[string]string
