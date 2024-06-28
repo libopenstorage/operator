@@ -448,7 +448,7 @@ func (c *prometheus) createOperatorDeployment(
 		cluster,
 		cluster.Status.DesiredImages.PrometheusOperator,
 	)
-
+	
 	deployment := getPrometheusOperatorDeploymentSpec(cluster, ownerRef, imageName)
 	modified := existingImageName != imageName ||
 		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||

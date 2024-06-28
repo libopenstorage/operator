@@ -60,7 +60,7 @@ const (
 	// AutopilotClusterRoleBindingName name of the cluster role binding for Openshift
 	AutopilotPrometheusClusterRoleBindingName = "autopilot-promethues-binding"
 	// OpenshiftClusterRoleName name of the cluster role for Openshift, this role is already present in Openshift
-	OpenshiftClusterRoleName = "cluster-monitoring-view"
+	OpenshiftClusterViewRoleName = "cluster-monitoring-view"
 )
 
 var (
@@ -182,6 +182,11 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 	}
 	if c.isOCPUserWorkloadSupported() {
 		ok, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_16_version)
+
+		if err != nil {
+			logrus.Errorf("Error during checking OCP version %v ", err)
+		}
+
 		if err == nil && ok {
 			// on OCP 4.16 and above, create service account and cluster role binding for OCP Prometheus by default
 			// autopilot requires to access Prometheus metrics
@@ -219,19 +224,21 @@ func (c *autopilot) Delete(cluster *corev1.StorageCluster) error {
 	if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, AutopilotClusterRoleBindingName); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteDeployment(c.k8sClient, AutopilotDeploymentName, cluster.Namespace, *ownerRef); err != nil {
-		return err
-	}
+
 	if c.isOCPUserWorkloadSupported() {
 		if err := k8sutil.DeleteSecret(c.k8sClient, AutopilotSecretName, cluster.Namespace, *ownerRef); err != nil {
 			return err
 		}
-		if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, AutopilotClusterRoleBindingName); err != nil {
+		if err := k8sutil.DeleteClusterRoleBinding(c.k8sClient, AutopilotPrometheusClusterRoleBindingName); err != nil {
 			return err
 		}
 		if err := k8sutil.DeleteServiceAccount(c.k8sClient, AutopilotPrometheusServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 			return err
 		}
+	}
+
+	if err := k8sutil.DeleteDeployment(c.k8sClient, AutopilotDeploymentName, cluster.Namespace, *ownerRef); err != nil {
+		return err
 	}
 
 	c.MarkDeleted()
@@ -321,7 +328,7 @@ func (c *autopilot) createClusterRoleBindingForOCP(namespace string, ownerRef *m
 			RoleRef: rbacv1.RoleRef{
 				APIGroup: "rbac.authorization.k8s.io",
 				Kind:     "ClusterRole",
-				Name:     OpenshiftClusterRoleName,
+				Name:     OpenshiftClusterViewRoleName,
 			},
 			Subjects: []rbacv1.Subject{
 				{
@@ -336,7 +343,7 @@ func (c *autopilot) createClusterRoleBindingForOCP(namespace string, ownerRef *m
 
 func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.OwnerReference) error {
 
-	ocp_416, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_16_version)
+	ocp416Plus, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_16_version)
 	if err != nil {
 		return err
 	}
@@ -349,7 +356,7 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 		},
 	}
 
-	if ocp_416 {
+	if ocp416Plus {
 		// OCP 4.16 and above, secret is created by default if autopilot is enabled
 		// if secret is already created, return
 		if c.isCreated {
