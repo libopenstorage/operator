@@ -199,7 +199,7 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 				if err := c.createServiceAccountForOCP(cluster.Namespace, ownerRef); err != nil {
 					return err
 				}
-				if err := c.createClusterRoleBindingForOCP(cluster.Namespace, ownerRef); err != nil {
+				if err := c.createClusterRoleBindingForOCP(cluster.Namespace); err != nil {
 					return err
 				}
 			}
@@ -325,7 +325,7 @@ func (c *autopilot) createServiceAccountForOCP(namespace string, ownerRef *metav
 // createClusterRoleBindingForOCP creates cluster role binding for OCP Prometheus
 // autopilot to access Prometheus metrics requires cluster-monitoring-view role
 // This is required for OCP 4.16 and above
-func (c *autopilot) createClusterRoleBindingForOCP(namespace string, ownerRef *metav1.OwnerReference) error {
+func (c *autopilot) createClusterRoleBindingForOCP(namespace string) error {
 	return k8sutil.CreateOrUpdateClusterRoleBinding(
 		c.k8sClient,
 		&rbacv1.ClusterRoleBinding{
@@ -363,61 +363,47 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 		},
 	}
 
-	secretExist := true
-
 	if ocp416Plus {
-
 		err = k8sutil.GetSecret(c.k8sClient, AutopilotSecretName, clusterNamespace, secret)
 		if err != nil {
 			return fmt.Errorf("Error during getting secret %v ", err)
 		}
 
-		// if secret is created, check expiry of token
 		if secret.Data != nil {
-
-			if secret.Type != v1.SecretTypeServiceAccountToken {
+			// if secret exists, check secret type
+			if secret.Type == v1.SecretTypeServiceAccountToken {
+				// if secret type is service account token, check if token is expired
+				ok, err := isTokenRefreshRequired(secret)
+				if err != nil {
+					return fmt.Errorf("Error during checking token refresh %v ", err)
+				}
+				if ok {
+					// refresh the token if it is expired
+					return c.refreshTokenSecret(secret, clusterNamespace, ownerRef)
+				}
+			} else {
 				// if secret type is not service account token, delete the secret
 				// this is to handle first time creation of secret on OCP 4.16+
 				err := k8sutil.DeleteSecret(c.k8sClient, AutopilotSecretName, clusterNamespace, *ownerRef)
 				if err != nil {
 					return fmt.Errorf("Error during deleting secret %v ", err)
 				}
-				secretExist = false
 			}
-
-			if secretExist {
-				// check if token is expired
-				ok, err := isTokenRefreshRequired(secret)
-				if err != nil {
-					return fmt.Errorf("Error during checking token refresh %v ", err)
-				}
-				if ok {
-					// refresh the token
-					if err = c.refreshTokenSecret(secret, clusterNamespace, ownerRef); err != nil {
-						return fmt.Errorf("Error during refreshing token %v ", err)
-					}
-				}
-				return nil
-			}
-		} else {
-			secretExist = false
 		}
 
-		if !secretExist {
-			// if secret is not created, create the secret
-			// create secret with service account token
-			secret.Type = v1.SecretTypeServiceAccountToken
-			secret.Annotations = map[string]string{
-				"kubernetes.io/service-account.name": AutopilotPrometheusServiceAccountName,
-			}
-
-			token, err := generateAPSaToken(clusterNamespace, defaultAutoPilotSaTokenExpirationSeconds)
-			if err != nil {
-				return fmt.Errorf("Error during generating token %v ", err)
-			}
-			secret.Data = make(map[string][]byte)
-			secret.Data["token"] = token
+		// if secret is not created, create the secret
+		// create secret with service account token
+		secret.Type = v1.SecretTypeServiceAccountToken
+		secret.Annotations = map[string]string{
+			"kubernetes.io/service-account.name": AutopilotPrometheusServiceAccountName,
 		}
+
+		token, err := generateAPSaToken(clusterNamespace, defaultAutoPilotSaTokenExpirationSeconds)
+		if err != nil {
+			return fmt.Errorf("Error during generating token %v ", err)
+		}
+		secret.Data = make(map[string][]byte)
+		secret.Data["token"] = token
 
 	} else {
 		// OCP 4.15 and below, secret is created if user workload monitoring is enabled
