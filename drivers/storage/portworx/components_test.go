@@ -5,7 +5,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/libopenstorage/operator/pkg/mock/mockcore"
 	routev1 "github.com/openshift/api/route/v1"
+	authv1 "k8s.io/api/authentication/v1"
+	"k8s.io/utils/pointer"
 	"math/rand"
 	"net"
 	"os"
@@ -4852,7 +4855,11 @@ func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 			},
 		},
 	}
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish() // Ensure the mock controller is finished
+	mockCoreOps := mockcore.NewMockOps(mockCtrl)
 	coreops.SetInstance(coreops.New(versionClient))
+	coreops.SetInstance(mockCoreOps)
 
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
@@ -4956,6 +4963,17 @@ func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 
 	err = k8sClient.Create(context.TODO(), clusterRoleBinding)
 	require.NoError(t, err)
+
+	mockCoreOps.EXPECT().CreateToken(
+		"autopilot-prometheus",
+		"kube-test",
+		&authv1.TokenRequest{
+			Spec: authv1.TokenRequestSpec{
+				Audiences:         []string{"autopilot"},
+				ExpirationSeconds: pointer.Int64Ptr(43200),
+			},
+		},
+	).Return(&authv1.TokenRequest{}, nil)
 
 	// Autopilot ConfigMap
 	expectedConfigMap := testutil.GetExpectedConfigMap(t, "autopilotConfigMap.yaml")

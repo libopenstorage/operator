@@ -363,11 +363,14 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 		},
 	}
 
-	secretDeleted := false
+	secretExist := true
 
 	if ocp416Plus {
 
 		err = k8sutil.GetSecret(c.k8sClient, AutopilotSecretName, clusterNamespace, secret)
+		if err != nil {
+			return fmt.Errorf("Error during getting secret %v ", err)
+		}
 
 		// if secret is created, check expiry of token
 		if secret.Data != nil {
@@ -379,10 +382,10 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 				if err != nil {
 					return fmt.Errorf("Error during deleting secret %v ", err)
 				}
-				secretDeleted = true
+				secretExist = false
 			}
 
-			if !secretDeleted {
+			if secretExist {
 				// check if token is expired
 				ok, err := isTokenRefreshRequired(secret)
 				if err != nil {
@@ -396,20 +399,25 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 				}
 				return nil
 			}
+		} else {
+			secretExist = false
 		}
 
-		// if secret is not created, create the secret
-		// create secret with service account token
-		secret.Type = v1.SecretTypeServiceAccountToken
-		secret.Annotations = map[string]string{
-			"kubernetes.io/service-account.name": AutopilotPrometheusServiceAccountName,
+		if !secretExist {
+			// if secret is not created, create the secret
+			// create secret with service account token
+			secret.Type = v1.SecretTypeServiceAccountToken
+			secret.Annotations = map[string]string{
+				"kubernetes.io/service-account.name": AutopilotPrometheusServiceAccountName,
+			}
+
+			token, err := generateAPSaToken(clusterNamespace, defaultAutoPilotSaTokenExpirationSeconds)
+			if err != nil {
+				return fmt.Errorf("Error during generating token %v ", err)
+			}
+			secret.Data["token"] = token
 		}
 
-		token, err := generateAPSaToken(clusterNamespace, defaultAutoPilotSaTokenExpirationSeconds)
-		if err != nil {
-			return fmt.Errorf("Error during generating token %v ", err)
-		}
-		secret.Data["token"] = token
 	} else {
 		// OCP 4.15 and below, secret is created if user workload monitoring is enabled
 		// and openshift's prometheus secret is found
