@@ -352,6 +352,12 @@ func (p *portworx) GetStoragePodSpec(
 		}
 	}
 
+	// If priorityClassName has been set by the user then pass it to the portworx pods
+	if t.cluster.Spec.PriorityClassName != "" {
+		podSpec.PriorityClassName = t.cluster.Spec.PriorityClassName
+
+	}
+
 	p.pruneVolumes(&podSpec)
 
 	return podSpec, nil
