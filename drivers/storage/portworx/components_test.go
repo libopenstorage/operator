@@ -5,10 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/libopenstorage/operator/pkg/mock/mockcore"
-	routev1 "github.com/openshift/api/route/v1"
-	authv1 "k8s.io/api/authentication/v1"
-	"k8s.io/utils/pointer"
 	"math/rand"
 	"net"
 	"os"
@@ -16,6 +12,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libopenstorage/operator/pkg/mock/mockcore"
+	routev1 "github.com/openshift/api/route/v1"
+	authv1 "k8s.io/api/authentication/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/mock/gomock"
@@ -4841,6 +4842,35 @@ func TestAutopilotInstallAndUninstallOnOpenshift415(t *testing.T) {
 
 }
 
+// For some reason simpleClientset doesn't work with createToken, erroring out with serviceaccounts "" not found.
+// Thus wrap the simpleClientset with MockCoreOps.
+func setUpMockCoreOps(mockCtrl *gomock.Controller, clientset *fakek8sclient.Clientset) *mockcore.MockOps {
+	mockCoreOps := mockcore.NewMockOps(mockCtrl)
+	coreops.SetInstance(mockCoreOps)
+
+	simpleClientset := coreops.New(clientset)
+	mockCoreOps.EXPECT().
+		CreateToken(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&authv1.TokenRequest{
+			Status: authv1.TokenRequestStatus{
+				Token: "xxxx",
+			},
+		}, nil).
+		AnyTimes()
+	mockCoreOps.EXPECT().
+		GetVersion().
+		Return(clientset.Discovery().ServerVersion()).
+		AnyTimes()
+	mockCoreOps.EXPECT().
+		ResourceExists(gomock.Any()).
+		Return(simpleClientset.ResourceExists(schema.GroupVersionKind{
+			Kind:    pxutil.ClusterOperatorKind,
+			Version: pxutil.ClusterOperatorVersion,
+		})).
+		AnyTimes()
+	return mockCoreOps
+}
+
 // test Autopilot install and Uninstall on ocp cluster 4.16
 func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 
@@ -4857,9 +4887,7 @@ func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 	}
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish() // Ensure the mock controller is finished
-	mockCoreOps := mockcore.NewMockOps(mockCtrl)
-	coreops.SetInstance(coreops.New(versionClient))
-	coreops.SetInstance(mockCoreOps)
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
@@ -4963,17 +4991,6 @@ func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 
 	err = k8sClient.Create(context.TODO(), clusterRoleBinding)
 	require.NoError(t, err)
-
-	mockCoreOps.EXPECT().CreateToken(
-		"autopilot-prometheus",
-		"kube-test",
-		&authv1.TokenRequest{
-			Spec: authv1.TokenRequestSpec{
-				Audiences:         []string{"autopilot"},
-				ExpirationSeconds: pointer.Int64Ptr(43200),
-			},
-		},
-	).Return(&authv1.TokenRequest{}, nil)
 
 	// Autopilot ConfigMap
 	expectedConfigMap := testutil.GetExpectedConfigMap(t, "autopilotConfigMap.yaml")

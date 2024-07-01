@@ -415,6 +415,7 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 			if err != nil {
 				return fmt.Errorf("Error during generating token %v ", err)
 			}
+			secret.Data = make(map[string][]byte)
 			secret.Data["token"] = token
 		}
 
