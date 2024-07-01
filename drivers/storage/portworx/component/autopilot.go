@@ -3,9 +3,13 @@ package component
 import (
 	"context"
 	"fmt"
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	authv1 "k8s.io/api/authentication/v1"
+	"k8s.io/kubernetes/pkg/apis/core"
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -61,6 +65,8 @@ const (
 	AutopilotPrometheusClusterRoleBindingName = "autopilot-promethues-binding"
 	// OpenshiftClusterRoleName name of the cluster role for Openshift, this role is already present in Openshift
 	OpenshiftClusterViewRoleName = "cluster-monitoring-view"
+	// AutopilotSaTokenRefreshTimeKey time to refresh the service account token
+	AutopilotSaTokenRefreshTimeKey = "AutopilotSaTokenRefreshTime"
 )
 
 var (
@@ -130,6 +136,8 @@ var (
 			},
 		},
 	}
+
+	defaultAutoPilotSaTokenExpirationSeconds = int64(12 * 60 * 60)
 )
 
 type autopilot struct {
@@ -137,7 +145,6 @@ type autopilot struct {
 	k8sClient               client.Client
 	k8sVersion              version.Version
 	isUserWorkloadSupported *bool
-	isSecretCreated         bool
 }
 
 func (c *autopilot) Name() string {
@@ -248,7 +255,6 @@ func (c *autopilot) Delete(cluster *corev1.StorageCluster) error {
 func (c *autopilot) MarkDeleted() {
 	c.isCreated = false
 	c.isUserWorkloadSupported = nil
-	c.isSecretCreated = false
 }
 
 func (c *autopilot) createConfigMap(
@@ -356,33 +362,53 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 		},
 	}
 
+	secretDeleted := false
+
 	if ocp416Plus {
-		// OCP 4.16 and above, secret is created by default if autopilot is enabled
-		// if secret is already created, return
-		if c.isCreated {
-			return nil
-		}
 
-		// check if secret already exists, this is first time creation
-		// or secret is created in last reconcilation loop
-		err := k8sutil.GetSecret(c.k8sClient, secret.Name, secret.Namespace, secret)
-		if err != nil {
-			return err
-		}
+		err = k8sutil.GetSecret(c.k8sClient, AutopilotSecretName, clusterNamespace, secret)
 
-		// if secret already exists, return
-		// once secret is created, it should not be updated
-		// if secret is deleted, it will be created if operator is restarted
+		// if secret is created, check expiry of token
 		if secret.Data != nil {
-			c.isSecretCreated = true
-			return nil
+
+			if secret.Type != v1.SecretTypeServiceAccountToken {
+				// if secret type is not service account token, delete the secret
+				// this is to handle first time creation of secret on OCP 4.16+
+				err := k8sutil.DeleteSecret(c.k8sClient, AutopilotSecretName, clusterNamespace, *ownerRef)
+				if err != nil {
+					return fmt.Errorf("Error during deleting secret %v ", err)
+				}
+				secretDeleted = true
+			}
+
+			if !secretDeleted {
+				// check if token is expired
+				ok, err := isTokenRefreshRequired(secret)
+				if err != nil {
+					return fmt.Errorf("Error during checking token refresh %v ", err)
+				}
+				if ok {
+					// refresh the token
+					if err = c.refreshTokenSecret(secret, clusterNamespace, ownerRef); err != nil {
+						return fmt.Errorf("Error during refreshing token %v ", err)
+					}
+				}
+				return nil
+			}
 		}
 
+		// if secret is not created, create the secret
 		// create secret with service account token
 		secret.Type = v1.SecretTypeServiceAccountToken
 		secret.Annotations = map[string]string{
 			"kubernetes.io/service-account.name": AutopilotPrometheusServiceAccountName,
 		}
+
+		token, err := generateAPSaToken(clusterNamespace, defaultAutoPilotSaTokenExpirationSeconds)
+		if err != nil {
+			return fmt.Errorf("Error during generating token %v ", err)
+		}
+		secret.Data["token"] = token
 	} else {
 		// OCP 4.15 and below, secret is created if user workload monitoring is enabled
 		// and openshift's prometheus secret is found
@@ -921,6 +947,49 @@ func (c *autopilot) isOCPUserWorkloadSupported() bool {
 		c.isUserWorkloadSupported = &isSupported
 	}
 	return *c.isUserWorkloadSupported
+}
+
+func (c *autopilot) refreshTokenSecret(secret *v1.Secret, clusterNamespace string, ownerRef *metav1.OwnerReference) error {
+
+	secret.Data[AutopilotSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(defaultAutoPilotSaTokenExpirationSeconds/2) * time.Second).Format(time.RFC3339))
+	newToken, err := generateAPSaToken(clusterNamespace, defaultAutoPilotSaTokenExpirationSeconds)
+	if err != nil {
+		return err
+	}
+	secret.Data[core.ServiceAccountTokenKey] = newToken
+	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func generateAPSaToken(clusterNamespace string, expirationSeconds int64) ([]byte, error) {
+	tokenRequest := &authv1.TokenRequest{
+		Spec: authv1.TokenRequestSpec{
+			Audiences:         []string{"autopilot"},
+			ExpirationSeconds: &expirationSeconds,
+		},
+	}
+	tokenResp, err := coreops.Instance().CreateToken(AutopilotPrometheusServiceAccountName, clusterNamespace, tokenRequest)
+	if err != nil {
+		return nil, fmt.Errorf("error creating token from k8s: %w", err)
+	}
+	return []byte(tokenResp.Status.Token), nil
+}
+
+func isTokenRefreshRequired(secret *v1.Secret) (bool, error) {
+	if len(secret.Data) == 0 || len(secret.Data[v1.ServiceAccountTokenKey]) == 0 {
+		return true, nil
+	}
+	expirationTime, err := time.Parse(time.RFC3339, string(secret.Data[AutopilotSaTokenRefreshTimeKey]))
+	if err != nil {
+		return false, fmt.Errorf("error parsing expiration time: %w", err)
+	}
+	if time.Now().UTC().After(expirationTime) {
+		return true, nil
+	}
+	return false, nil
 }
 
 // RegisterAutopilotComponent registers the Autopilot component
