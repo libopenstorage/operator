@@ -66,7 +66,7 @@ const (
 	// OpenshiftClusterRoleName name of the cluster role for Openshift, this role is already present in Openshift
 	OpenshiftClusterViewRoleName = "cluster-monitoring-view"
 	// AutopilotSaTokenRefreshTimeKey time to refresh the service account token
-	AutopilotSaTokenRefreshTimeKey = "AutopilotSaTokenRefreshTime"
+	AutopilotSaTokenRefreshTimeKey = "autopilotSaTokenRefreshTime"
 )
 
 var (
@@ -137,7 +137,7 @@ var (
 		},
 	}
 
-	defaultAutoPilotSaTokenExpirationSeconds = int64(12 * 60 * 60)
+	defaultAutoPilotSaTokenExpirationSeconds = int64(30 * 24 * 60 * 60)
 )
 
 type autopilot struct {
@@ -379,12 +379,26 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 				}
 				if ok {
 					// refresh the token if it is expired
-					return c.refreshTokenSecret(secret, clusterNamespace, ownerRef)
+					logrus.Infof("refreshing token %s in namespace %s", AutopilotSecretName, clusterNamespace)
+					err := c.refreshTokenSecret(secret, clusterNamespace, ownerRef)
+					if err != nil {
+						return fmt.Errorf("Error during refreshing token %v ", err)
+					}
+
+					// delete autopilot deployment to sync with new token
+					logrus.Info("deleting autopilot pod to sync with new token")
+					err = k8sutil.DeletePodsByLabel(c.k8sClient, map[string]string{"name": "autopilot"}, clusterNamespace)
+					if err != nil {
+						return fmt.Errorf("Error during deleting deployment %v ", err)
+					}
+					logrus.Infof("token refreshed successfully")
 				}
+				return nil
 			} else {
 				// if secret type is not service account token, delete the secret
 				// this is to handle first time creation of secret on OCP 4.16+
 				err := k8sutil.DeleteSecret(c.k8sClient, AutopilotSecretName, clusterNamespace, *ownerRef)
+				logrus.Infof("Deleted secret to recreate %s in namespace %s", AutopilotSecretName, clusterNamespace)
 				if err != nil {
 					return fmt.Errorf("Error during deleting secret %v ", err)
 				}
@@ -404,7 +418,7 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 		}
 		secret.Data = make(map[string][]byte)
 		secret.Data["token"] = token
-
+		secret.Data[AutopilotSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(defaultAutoPilotSaTokenExpirationSeconds/2) * time.Second).Format(time.RFC3339))
 	} else {
 		// OCP 4.15 and below, secret is created if user workload monitoring is enabled
 		// and openshift's prometheus secret is found
@@ -947,11 +961,14 @@ func (c *autopilot) isOCPUserWorkloadSupported() bool {
 
 func (c *autopilot) refreshTokenSecret(secret *v1.Secret, clusterNamespace string, ownerRef *metav1.OwnerReference) error {
 
+	// update the token when it is half way to expiration
 	secret.Data[AutopilotSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(defaultAutoPilotSaTokenExpirationSeconds/2) * time.Second).Format(time.RFC3339))
 	newToken, err := generateAPSaToken(clusterNamespace, defaultAutoPilotSaTokenExpirationSeconds)
 	if err != nil {
 		return err
 	}
+
+	// update the secret with new token
 	secret.Data[core.ServiceAccountTokenKey] = newToken
 	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
 	if err != nil {
@@ -963,7 +980,6 @@ func (c *autopilot) refreshTokenSecret(secret *v1.Secret, clusterNamespace strin
 func generateAPSaToken(clusterNamespace string, expirationSeconds int64) ([]byte, error) {
 	tokenRequest := &authv1.TokenRequest{
 		Spec: authv1.TokenRequestSpec{
-			Audiences:         []string{"autopilot"},
 			ExpirationSeconds: &expirationSeconds,
 		},
 	}
