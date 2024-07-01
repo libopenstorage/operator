@@ -4938,7 +4938,7 @@ func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 	// on OCP 4.16+ , autopilot-prometheus service account will be used for authentication
 	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: component.OpenshiftClusterRoleName,
+			Name: component.OpenshiftClusterViewRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			{

@@ -188,29 +188,30 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 		return err
 	}
 	if c.isOCPUserWorkloadSupported() {
-		ok, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_16_version)
+		ocp416plus, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_16_version)
 
 		if err != nil {
 			logrus.Errorf("Error during checking OCP version %v ", err)
-		}
-
-		if err == nil && ok {
-			// on OCP 4.16 and above, create service account and cluster role binding for OCP Prometheus by default
-			// autopilot requires to access Prometheus metrics
-			if err := c.createServiceAccountForOCP(cluster.Namespace, ownerRef); err != nil {
-				return err
+		} else {
+			if ocp416plus {
+				// on OCP 4.16 and above, create service account and cluster role binding for OCP Prometheus by default
+				// autopilot requires to access Prometheus metrics
+				if err := c.createServiceAccountForOCP(cluster.Namespace, ownerRef); err != nil {
+					return err
+				}
+				if err := c.createClusterRoleBindingForOCP(cluster.Namespace, ownerRef); err != nil {
+					return err
+				}
 			}
-			if err := c.createClusterRoleBindingForOCP(cluster.Namespace, ownerRef); err != nil {
-				return err
-			}
-		}
 
-		if err := c.createSecret(cluster.Namespace, ownerRef); err != nil {
-			// log the error and proceed for deployment creation
-			// if secret is created in next reconcilation loop successfully, deployment will be updated with volume mounts
-			logrus.Errorf("Error during creating secret %v ", err)
+			if err := c.createSecret(cluster.Namespace, ownerRef); err != nil {
+				// log the error and proceed for deployment creation
+				// if secret is created in next reconcilation loop successfully, deployment will be updated with volume mounts
+				logrus.Errorf("Error during creating secret %v ", err)
+			}
 		}
 	}
+
 	if err := c.createDeployment(cluster, ownerRef); err != nil {
 		return err
 	}
