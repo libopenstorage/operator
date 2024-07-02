@@ -105,44 +105,32 @@ var (
 
 	openshiftDeploymentVolume = []corev1.VolumeSpec{
 		{
-			Name: "token-volume",
+			Name:      "token-volume",
+			MountPath: "/var/local/secrets",
+			ReadOnly:  true,
 			VolumeSource: v1.VolumeSource{
-				Projected: &v1.ProjectedVolumeSource{
-					Sources: []v1.VolumeProjection{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: AutopilotSecretName,
+					Items: []v1.KeyToPath{
 						{
-							Secret: &v1.SecretProjection{
-								LocalObjectReference: v1.LocalObjectReference{
-									Name: AutopilotSecretName,
-								},
-								Items: []v1.KeyToPath{
-									{
-										Key:  core.ServiceAccountTokenKey,
-										Path: core.ServiceAccountTokenKey,
-									},
-								},
-							},
+							Key:  "token",
+							Path: "token",
 						},
 					},
 				},
 			},
 		},
 		{
-			Name: "ca-cert-volume",
+			Name:      "ca-cert-volume",
+			MountPath: "/etc/ssl/px-custom/1",
+			ReadOnly:  true,
 			VolumeSource: v1.VolumeSource{
-				Projected: &v1.ProjectedVolumeSource{
-					Sources: []v1.VolumeProjection{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: AutopilotSecretName,
+					Items: []v1.KeyToPath{
 						{
-							Secret: &v1.SecretProjection{
-								LocalObjectReference: v1.LocalObjectReference{
-									Name: AutopilotSecretName,
-								},
-								Items: []v1.KeyToPath{
-									{
-										Key:  core.ServiceAccountRootCAKey,
-										Path: "ca-certificates.crt",
-									},
-								},
-							},
+							Key:  "cacert",
+							Path: "ca-certificates.crt",
 						},
 					},
 				},

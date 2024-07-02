@@ -122,12 +122,14 @@ spec:
       serviceAccountName: autopilot
       volumes:
         - name: ca-cert-volume
-          secret:
+          projected:
             defaultMode: 420
-            items:
-              - key: ca.crt
-                path: ca-certificates.crt
-            secretName: autopilot-prometheus-auth
+            sources:
+              - secret:
+                  items:
+                    - key: ca.crt
+                      path: ca-certificates.crt
+                  name: autopilot-prometheus-auth
         - name: config-volume
           configMap:
             name: autopilot-config
@@ -136,12 +138,14 @@ spec:
               - key: config.yaml
                 path: config.yaml
         - name: token-volume
-          secret:
+          projected:
             defaultMode: 420
-            items:
-              - key: token
-                path: token
-            secretName: autopilot-prometheus-auth
+            sources:
+              - secret:
+                  items:
+                    - key: token
+                      path: token
+                  name: autopilot-prometheus-auth
         - hostPath:
             path: /var/cores
             type: ""
