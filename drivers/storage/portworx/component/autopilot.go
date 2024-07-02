@@ -191,7 +191,7 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 		ocp416plus, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_16_version)
 
 		if err != nil {
-			logrus.Errorf("Error during checking OCP version %v ", err)
+			logrus.Errorf("error during checking OCP version %w ", err)
 		} else {
 			if ocp416plus {
 				// on OCP 4.16 and above, create service account and cluster role binding for OCP Prometheus by default
@@ -207,7 +207,7 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 			if err := c.createSecret(cluster.Namespace, ownerRef, ocp416plus); err != nil {
 				// log the error and proceed for deployment creation
 				// if secret is created in next reconcilation loop successfully, deployment will be updated with volume mounts
-				logrus.Errorf("Error during creating secret %v ", err)
+				logrus.Errorf("error during creating secret %w ", err)
 			}
 		}
 	}
@@ -361,7 +361,7 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 	if ocp416Plus {
 		err := k8sutil.GetSecret(c.k8sClient, AutopilotSecretName, clusterNamespace, secret)
 		if err != nil {
-			return fmt.Errorf("Error during getting secret %v ", err)
+			return fmt.Errorf("error during getting secret %w ", err)
 		}
 
 		if secret.Data != nil {
@@ -370,7 +370,7 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 				// if secret type is service account token, check if token is expired
 				refreshNeeded, err := isTokenRefreshRequired(secret)
 				if err != nil {
-					return fmt.Errorf("Error during checking token refresh %v ", err)
+					return fmt.Errorf("error during checking token refresh %w ", err)
 				}
 				if refreshNeeded {
 					// refresh the token if it is expired
@@ -409,7 +409,7 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 
 		token, err := generateAPSaToken(clusterNamespace, defaultAutoPilotSaTokenExpirationSeconds)
 		if err != nil {
-			return fmt.Errorf("Error during generating token %v ", err)
+			return fmt.Errorf("error during generating token %v ", err)
 		}
 		secret.Data = make(map[string][]byte)
 		secret.Data["token"] = token
