@@ -191,7 +191,7 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 		ocp416plus, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_16_version)
 
 		if err != nil {
-			logrus.Errorf("error during checking OCP version %w ", err)
+			logrus.Errorf("error during checking OCP version %v ", err)
 		} else {
 			if ocp416plus {
 				// on OCP 4.16 and above, create service account and cluster role binding for OCP Prometheus by default
@@ -207,7 +207,7 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 			if err := c.createSecret(cluster.Namespace, ownerRef, ocp416plus); err != nil {
 				// log the error and proceed for deployment creation
 				// if secret is created in next reconcilation loop successfully, deployment will be updated with volume mounts
-				logrus.Errorf("error during creating secret %w ", err)
+				logrus.Errorf("error during creating secret %v ", err)
 			}
 		}
 	}
