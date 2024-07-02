@@ -597,12 +597,15 @@ func (c *portworxBasic) refreshTokenSecret(secret *v1.Secret, cluster *corev1.St
 	if err != nil {
 		return err
 	}
-	secret.Data[PxSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(expirationSeconds/2) * time.Second).Format(time.RFC3339))
 	newToken, err := generatePxSaToken(cluster, expirationSeconds)
 	if err != nil {
 		return err
 	}
-	secret.Data[core.ServiceAccountTokenKey] = newToken
+	secret.Data[core.ServiceAccountTokenKey] = []byte(newToken.Status.Token)
+	// ServiceAccount token expiration time we defined might get overwritten by the maxExpirationSeconds defined by the k8s token RESTful server,
+	// so our token refresh machanism has to honor this server limit.
+	// https://github.com/kubernetes/kubernetes/blob/79fee524e65ddc7c1448d5d2554c6f91233cf98d/pkg/registry/core/serviceaccount/storage/token.go#L208
+	secret.Data[PxSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(*newToken.Spec.ExpirationSeconds/2) * time.Second).Format(time.RFC3339))
 	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
 	if err != nil {
 		return err
@@ -610,7 +613,7 @@ func (c *portworxBasic) refreshTokenSecret(secret *v1.Secret, cluster *corev1.St
 	return nil
 }
 
-func generatePxSaToken(cluster *corev1.StorageCluster, expirationSeconds int64) ([]byte, error) {
+func generatePxSaToken(cluster *corev1.StorageCluster, expirationSeconds int64) (*authv1.TokenRequest, error) {
 	tokenRequest := &authv1.TokenRequest{
 		Spec: authv1.TokenRequestSpec{
 			Audiences:         []string{"px"},
@@ -621,7 +624,7 @@ func generatePxSaToken(cluster *corev1.StorageCluster, expirationSeconds int64) 
 	if err != nil {
 		return nil, fmt.Errorf("error creating token from k8s: %w", err)
 	}
-	return []byte(tokenResp.Status.Token), nil
+	return tokenResp, nil
 }
 
 func isTokenRefreshRequired(secret *v1.Secret) (bool, error) {
