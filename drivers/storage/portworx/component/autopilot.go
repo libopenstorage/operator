@@ -105,32 +105,44 @@ var (
 
 	openshiftDeploymentVolume = []corev1.VolumeSpec{
 		{
-			Name:      "token-volume",
-			MountPath: "/var/local/secrets",
-			ReadOnly:  true,
+			Name: "token-volume",
 			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: AutopilotSecretName,
-					Items: []v1.KeyToPath{
+				Projected: &v1.ProjectedVolumeSource{
+					Sources: []v1.VolumeProjection{
 						{
-							Key:  "token",
-							Path: "token",
+							Secret: &v1.SecretProjection{
+								LocalObjectReference: v1.LocalObjectReference{
+									Name: AutopilotSecretName,
+								},
+								Items: []v1.KeyToPath{
+									{
+										Key:  core.ServiceAccountTokenKey,
+										Path: core.ServiceAccountTokenKey,
+									},
+								},
+							},
 						},
 					},
 				},
 			},
 		},
 		{
-			Name:      "ca-cert-volume",
-			MountPath: "/etc/ssl/px-custom/1",
-			ReadOnly:  true,
+			Name: "ca-cert-volume",
 			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: AutopilotSecretName,
-					Items: []v1.KeyToPath{
+				Projected: &v1.ProjectedVolumeSource{
+					Sources: []v1.VolumeProjection{
 						{
-							Key:  "ca.crt",
-							Path: "ca-certificates.crt",
+							Secret: &v1.SecretProjection{
+								LocalObjectReference: v1.LocalObjectReference{
+									Name: AutopilotSecretName,
+								},
+								Items: []v1.KeyToPath{
+									{
+										Key:  core.ServiceAccountRootCAKey,
+										Path: "ca-certificates.crt",
+									},
+								},
+							},
 						},
 					},
 				},
@@ -377,12 +389,6 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 				err := c.refreshTokenSecret(secret, clusterNamespace, ownerRef)
 				if err != nil {
 					return fmt.Errorf("failed to check token in secret %s/%s: %w", clusterNamespace, AutopilotSecretName, err)
-				}
-				// delete autopilot deployment to sync with new token
-				logrus.Info("deleting autopilot pod to sync with new token")
-				err = k8sutil.DeletePodsByLabel(c.k8sClient, map[string]string{"name": "autopilot"}, clusterNamespace)
-				if err != nil {
-					return fmt.Errorf("error during deleting autopilot pod  %w ", err)
 				}
 				logrus.Infof("token refreshed successfully for secret %s/%s", clusterNamespace, AutopilotSecretName)
 			}
