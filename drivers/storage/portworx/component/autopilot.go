@@ -6,6 +6,7 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	authv1 "k8s.io/api/authentication/v1"
 	"k8s.io/kubernetes/pkg/apis/core"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -364,7 +365,7 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 			return fmt.Errorf("error during getting secret %w ", err)
 		}
 
-		if secret.Data != nil {
+		/*if secret.Data != nil {
 			// if secret exists, check secret type
 			if secret.Type == v1.SecretTypeServiceAccountToken {
 				// if secret type is service account token, check if token is expired
@@ -405,15 +406,25 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 		secret.Type = v1.SecretTypeServiceAccountToken
 		secret.Annotations = map[string]string{
 			"kubernetes.io/service-account.name": AutopilotPrometheusServiceAccountName,
+		}*/
+
+		if secret.Data == nil {
+			token, err := generateAPSaToken(clusterNamespace, defaultAutoPilotSaTokenExpirationSeconds)
+			if err != nil {
+				return fmt.Errorf("error during generating token %v ", err)
+			}
+
+			rootCaCrt, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+			if err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("error reading k8s cluster certificate located inside the pod at /var/run/secrets/kubernetes.io/serviceaccount/ca.crt: %w", err)
+			}
+
+			secret.Data = make(map[string][]byte)
+			secret.Data["token"] = token
+			secret.Data[core.ServiceAccountRootCAKey] = rootCaCrt
+			secret.Data[AutopilotSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(defaultAutoPilotSaTokenExpirationSeconds/2) * time.Second).Format(time.RFC3339))
 		}
 
-		token, err := generateAPSaToken(clusterNamespace, defaultAutoPilotSaTokenExpirationSeconds)
-		if err != nil {
-			return fmt.Errorf("error during generating token %v ", err)
-		}
-		secret.Data = make(map[string][]byte)
-		secret.Data["token"] = token
-		secret.Data[AutopilotSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(defaultAutoPilotSaTokenExpirationSeconds/2) * time.Second).Format(time.RFC3339))
 	} else {
 		// OCP 4.15 and below, secret is created if user workload monitoring is enabled
 		// and openshift's prometheus secret is found
