@@ -378,13 +378,6 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 				if err != nil {
 					return fmt.Errorf("failed to check token in secret %s/%s: %w", clusterNamespace, AutopilotSecretName, err)
 				}
-				// delete autopilot deployment to sync with new token
-				logrus.Info("deleting autopilot pod to sync with new token")
-				err = k8sutil.DeletePodsByLabel(c.k8sClient, map[string]string{"name": "autopilot"}, clusterNamespace)
-				if err != nil {
-					return fmt.Errorf("error during deleting autopilot pod  %w ", err)
-				}
-				logrus.Infof("token refreshed successfully for secret %s/%s", clusterNamespace, AutopilotSecretName)
 			}
 		} else {
 			// if secret is not created, create the secret
