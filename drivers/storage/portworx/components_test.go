@@ -4886,7 +4886,6 @@ func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 		},
 	}
 	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish() // Ensure the mock controller is finished
 	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
@@ -5046,7 +5045,6 @@ func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 	actualSecret := &v1.Secret{}
 	err = testutil.Get(k8sClient, actualSecret, component.AutopilotSecretName, cluster.Namespace)
 	require.NoError(t, err)
-
 	require.Equal(t, expectedSecret.Type, actualSecret.Type)
 	require.Equal(t, expectedSecret.Annotations, actualSecret.Annotations)
 
@@ -5055,7 +5053,6 @@ func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
-
 	require.Equal(t, expectedDeployment.Spec.Template.Spec.Volumes, autopilotDeployment.Spec.Template.Spec.Volumes)
 	require.Equal(t, expectedDeployment.Spec.Template.Spec.Containers[0].VolumeMounts, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
 

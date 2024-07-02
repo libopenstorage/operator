@@ -204,7 +204,7 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 				}
 			}
 
-			if err := c.createSecret(cluster.Namespace, ownerRef); err != nil {
+			if err := c.createSecret(cluster.Namespace, ownerRef, ocp416plus); err != nil {
 				// log the error and proceed for deployment creation
 				// if secret is created in next reconcilation loop successfully, deployment will be updated with volume mounts
 				logrus.Errorf("Error during creating secret %v ", err)
@@ -348,12 +348,7 @@ func (c *autopilot) createClusterRoleBindingForOCP(namespace string) error {
 	)
 }
 
-func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.OwnerReference) error {
-
-	ocp416Plus, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_16_version)
-	if err != nil {
-		return err
-	}
+func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.OwnerReference, ocp416Plus bool) error {
 
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -364,7 +359,7 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 	}
 
 	if ocp416Plus {
-		err = k8sutil.GetSecret(c.k8sClient, AutopilotSecretName, clusterNamespace, secret)
+		err := k8sutil.GetSecret(c.k8sClient, AutopilotSecretName, clusterNamespace, secret)
 		if err != nil {
 			return fmt.Errorf("Error during getting secret %v ", err)
 		}
@@ -373,35 +368,35 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 			// if secret exists, check secret type
 			if secret.Type == v1.SecretTypeServiceAccountToken {
 				// if secret type is service account token, check if token is expired
-				ok, err := isTokenRefreshRequired(secret)
+				refreshNeeded, err := isTokenRefreshRequired(secret)
 				if err != nil {
 					return fmt.Errorf("Error during checking token refresh %v ", err)
 				}
-				if ok {
+				if refreshNeeded {
 					// refresh the token if it is expired
 					logrus.Infof("refreshing token %s in namespace %s", AutopilotSecretName, clusterNamespace)
 					err := c.refreshTokenSecret(secret, clusterNamespace, ownerRef)
 					if err != nil {
-						return fmt.Errorf("Error during refreshing token %v ", err)
+						return fmt.Errorf("failed to check token in secret %s/%s: %w", clusterNamespace, AutopilotSecretName, err)
 					}
 
 					// delete autopilot deployment to sync with new token
 					logrus.Info("deleting autopilot pod to sync with new token")
 					err = k8sutil.DeletePodsByLabel(c.k8sClient, map[string]string{"name": "autopilot"}, clusterNamespace)
 					if err != nil {
-						return fmt.Errorf("Error during deleting deployment %v ", err)
+						return fmt.Errorf("error during deleting autopilot pod  %w ", err)
 					}
-					logrus.Infof("token refreshed successfully")
+					logrus.Infof("token refreshed successfully for secret %s/%s", clusterNamespace, AutopilotSecretName)
 				}
 				return nil
 			} else {
 				// if secret type is not service account token, delete the secret
 				// this is to handle first time creation of secret on OCP 4.16+
 				err := k8sutil.DeleteSecret(c.k8sClient, AutopilotSecretName, clusterNamespace, *ownerRef)
-				logrus.Infof("Deleted secret to recreate %s in namespace %s", AutopilotSecretName, clusterNamespace)
 				if err != nil {
-					return fmt.Errorf("Error during deleting secret %v ", err)
+					return fmt.Errorf("error during deleting secret %w ", err)
 				}
+				logrus.Infof("deleted secret to recreate %s/%s", clusterNamespace, AutopilotSecretName)
 			}
 		}
 
