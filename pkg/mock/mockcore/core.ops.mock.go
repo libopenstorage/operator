@@ -10,6 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/portworx/sched-ops/k8s/core"
+	authv1 "k8s.io/api/authentication/v1"
 	v1 "k8s.io/api/certificates/v1"
 	v10 "k8s.io/api/core/v1"
 	v11 "k8s.io/api/networking/v1"
@@ -296,6 +297,21 @@ func (m *MockOps) CreateServiceAccount(arg0 *v10.ServiceAccount) (*v10.ServiceAc
 func (mr *MockOpsMockRecorder) CreateServiceAccount(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateServiceAccount", reflect.TypeOf((*MockOps)(nil).CreateServiceAccount), arg0)
+}
+
+// CreateToken mocks base method.
+func (m *MockOps) CreateToken(name, namespace string, tokenRequest *authv1.TokenRequest) (*authv1.TokenRequest, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateToken", name, namespace, tokenRequest)
+	ret0, _ := ret[0].(*authv1.TokenRequest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateToken indicates an expected call of CreateToken.
+func (mr *MockOpsMockRecorder) CreateToken(name, namespace, tokenRequest interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateToken", reflect.TypeOf((*MockOps)(nil).CreateToken), name, namespace, tokenRequest)
 }
 
 // DeleteCertificateSigningRequests mocks base method.

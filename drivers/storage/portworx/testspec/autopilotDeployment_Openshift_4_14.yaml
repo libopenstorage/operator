@@ -125,7 +125,7 @@ spec:
           secret:
             defaultMode: 420
             items:
-              - key: cacert
+              - key: ca.crt
                 path: ca-certificates.crt
             secretName: autopilot-prometheus-auth
         - name: config-volume
