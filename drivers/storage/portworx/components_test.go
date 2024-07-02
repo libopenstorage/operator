@@ -5031,9 +5031,9 @@ func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 	require.Equal(t, cluster.Name, expectedSA.OwnerReferences[0].Name)
 
 	// Autopilot Prometheus Cluster role binding
-	expectedPrometheusCRB := testutil.GetExpectedClusterRoleBinding(t, "autopilotClusterRoleBinding.yaml")
+	expectedPrometheusCRB := testutil.GetExpectedClusterRoleBinding(t, "autopilotPrometheusClusterRoleBinding.yaml")
 	actualClusterRoleCRB := &rbacv1.ClusterRoleBinding{}
-	err = testutil.Get(k8sClient, actualClusterRoleCRB, component.AutopilotClusterRoleBindingName, "")
+	err = testutil.Get(k8sClient, actualClusterRoleCRB, component.AutopilotPrometheusClusterRoleBindingName, "")
 	require.NoError(t, err)
 	require.Equal(t, expectedPrometheusCRB.Name, actualClusterRoleCRB.Name)
 	require.Empty(t, actualCRB.OwnerReferences)
