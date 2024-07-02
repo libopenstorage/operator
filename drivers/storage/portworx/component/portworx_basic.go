@@ -602,6 +602,9 @@ func (c *portworxBasic) refreshTokenSecret(secret *v1.Secret, cluster *corev1.St
 		return err
 	}
 	secret.Data[core.ServiceAccountTokenKey] = []byte(newToken.Status.Token)
+	// ServiceAccount token expiration time we defined might get overwritten by the maxExpirationSeconds defined by the k8s token RESTful server,
+	// so our token refresh machanism has to honor this server limit.
+	// https://github.com/kubernetes/kubernetes/blob/79fee524e65ddc7c1448d5d2554c6f91233cf98d/pkg/registry/core/serviceaccount/storage/token.go#L208
 	secret.Data[PxSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(*newToken.Spec.ExpirationSeconds/2) * time.Second).Format(time.RFC3339))
 	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
 	if err != nil {
