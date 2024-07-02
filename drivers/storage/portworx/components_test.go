@@ -4847,11 +4847,15 @@ func TestAutopilotInstallAndUninstallOnOpenshift415(t *testing.T) {
 func setUpMockCoreOps(mockCtrl *gomock.Controller, clientset *fakek8sclient.Clientset) *mockcore.MockOps {
 	mockCoreOps := mockcore.NewMockOps(mockCtrl)
 	coreops.SetInstance(mockCoreOps)
+	defaultTokenExpirationSeconds := int64(12 * 60 * 60)
 
 	simpleClientset := coreops.New(clientset)
 	mockCoreOps.EXPECT().
 		CreateToken(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&authv1.TokenRequest{
+			Spec: authv1.TokenRequestSpec{
+				ExpirationSeconds: &defaultTokenExpirationSeconds,
+			},
 			Status: authv1.TokenRequestStatus{
 				Token: "xxxx",
 			},
