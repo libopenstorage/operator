@@ -208,7 +208,7 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 			if err := c.createSecret(cluster.Namespace, ownerRef, ocp416plus); err != nil {
 				// log the error and proceed for deployment creation
 				// if secret is created in next reconcilation loop successfully, deployment will be updated with volume mounts
-				logrus.Errorf("error during creating secret %v ", err)
+				logrus.Errorf("error during creating secret : %v ", err)
 			}
 		}
 	}
@@ -369,7 +369,7 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 			// if secret exists, check if token is expired
 			refreshNeeded, err := isTokenRefreshRequired(secret)
 			if err != nil {
-				return fmt.Errorf("error during checking token refresh %w ", err)
+				return fmt.Errorf("error during checking token refresh: %w ", err)
 			}
 			if refreshNeeded {
 				// refresh the token if it is expired
