@@ -68,6 +68,8 @@ const (
 	OpenshiftClusterViewRoleName = "cluster-monitoring-view"
 	// AutopilotSaTokenRefreshTimeKey time to refresh the service account token
 	AutopilotSaTokenRefreshTimeKey = "autopilotSaTokenRefreshTime"
+	// CaCertPath path to ca.crt in the pod
+	CaCertPath = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 )
 
 var (
@@ -370,14 +372,14 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 		// or refresh the token if it is expired
 		updateRequired, err := isSecretUpdateRequired(secret)
 		if err != nil {
-			return fmt.Errorf("error during checking token refresh: %w ", err)
+			return fmt.Errorf("error during checking token refresh: %w", err)
 		}
 
 		if updateRequired {
 			logrus.Infof("refreshing token for secret %s/%s", clusterNamespace, AutopilotSecretName)
 			err := c.updateSecretTokenAndCert(secret, clusterNamespace, ownerRef)
 			if err != nil {
-				return fmt.Errorf("failed to check token in secret %s/%s: %w", clusterNamespace, AutopilotSecretName, err)
+				return fmt.Errorf("failed to update secret %s/%s: %w", clusterNamespace, AutopilotSecretName, err)
 			}
 		}
 		return nil
@@ -932,7 +934,7 @@ func (c *autopilot) updateSecretTokenAndCert(secret *v1.Secret, clusterNamespace
 	// get the root ca.crt from the secret mounted inside the pod
 	// this is required while upgrading from OCP 4.15 to 4.16
 	// since the ca.crt is changed in 4.16 and not managed by openshift
-	rootCaCrt, err := getCertForSecret()
+	rootCaCrt, err := getRootCACert()
 	if err != nil {
 		return err
 	}
@@ -949,10 +951,10 @@ func (c *autopilot) updateSecretTokenAndCert(secret *v1.Secret, clusterNamespace
 }
 
 // get the root ca.crt from the secret mounted inside the pod
-func getCertForSecret() ([]byte, error) {
-	rootCaCrt, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+func getRootCACert() ([]byte, error) {
+	rootCaCrt, err := os.ReadFile(CaCertPath)
 	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("error reading k8s cluster certificate located inside the pod at /var/run/secrets/kubernetes.io/serviceaccount/ca.crt: %w", err)
+		return nil, fmt.Errorf("error reading k8s cluster certificate located inside the pod at %s : %w", CaCertPath, err)
 	}
 	return rootCaCrt, nil
 }
@@ -970,10 +972,7 @@ func generateAPSaToken(clusterNamespace string, expirationSeconds int64) (*authv
 	return tokenResp, nil
 }
 
-// isSecretUpdateRequired returns true if secret is not present
-// isSecretUpdateRequired returns true if token expiry is not set
-// isSecretUpdateRequired returns true if token is expired
-// isSecretUpdateRequired returns false if token is not expired
+// isSecretUpdateRequired checks token expiry and returns true if token needs to be updated
 func isSecretUpdateRequired(secret *v1.Secret) (bool, error) {
 	if secret.Data == nil || len(secret.Data[AutopilotSaTokenRefreshTimeKey]) == 0 {
 		return true, nil
