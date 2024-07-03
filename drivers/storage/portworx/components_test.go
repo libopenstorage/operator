@@ -5095,7 +5095,7 @@ func setUpMockCoreOps(mockCtrl *gomock.Controller, clientset *fakek8sclient.Clie
 				ExpirationSeconds: &defaultTokenExpirationSeconds,
 			},
 			Status: authv1.TokenRequestStatus{
-				Token: "xxxx",
+				Token: "dG9rZW4tdmFsdWU=",
 			},
 		}, nil).
 		AnyTimes()
@@ -5302,6 +5302,185 @@ func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 	err = autopilotComponent.Delete(cluster)
 	autopilotComponent.MarkDeleted()
 	require.NoError(t, err)
+
+}
+
+// test OCP upgrade from 4.15 to 4.16
+func TestAutopilotUpgradeFrom415To416(t *testing.T) {
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.15",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	stcSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:1.1.1",
+				Providers: []corev1.DataProviderSpec{
+					{
+						Name: "default",
+						Type: "prometheus",
+						Params: map[string]string{
+							"url": "http://prometheus:9090",
+						},
+					},
+					{
+						Name: "second",
+						Type: "datadog",
+						Params: map[string]string{
+							"url":  "http://datadog:9090",
+							"auth": "foobar",
+						},
+					},
+				},
+				Args: map[string]string{
+					"min_poll_interval": "4",
+					"log-level":         "info",
+				},
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+
+	cluster := stcSpec.DeepCopy()
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// on OCP 4.15 , thanos-ruler-token secret is used for certificate and token
+	// this secret is created by openshift
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "thanos-ruler-token-abcd",
+			Namespace: "openshift-user-workload-monitoring",
+		},
+		Data: map[string][]byte{
+			"token":  []byte("dG9rZW4tdmFsdWU="),
+			"ca.crt": []byte("Y2VydGlmaWNhdGUtdmFsdWU="),
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), secret)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Autopilot Secret on 4.15
+	expectedSecret415 := testutil.GetExpectedSecret(t, "autopilot-auth-token-secret.yaml")
+	actualSecret415 := &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret415, component.AutopilotSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSecret415.Data, actualSecret415.Data)
+	// on OCP 4.15, token refresh time is not set
+	require.Empty(t, expectedSecret415.Data[component.AutopilotSaTokenRefreshTimeKey])
+
+	// Autopilot Deployment on 4.15
+	expectedDeployment415 := testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_14.yaml")
+	autopilotDeployment415 := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment415, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment415.Spec.Template.Spec.Volumes, autopilotDeployment415.Spec.Template.Spec.Volumes)
+	require.Equal(t, expectedDeployment415.Spec.Template.Spec.Containers[0].VolumeMounts, autopilotDeployment415.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, versionClient)
+
+	// upgrade cluster to OCP 4.16
+	operator.Status.Versions[0].Version = "4.16"
+	err = k8sClient.Update(context.Background(), operator)
+	require.NoError(t, err)
+
+	// reconcile storagecluster
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Autopilot Prometheus Service Account on OCP 4.16
+	expectedSA := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, expectedSA, component.AutopilotPrometheusServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, component.AutopilotPrometheusServiceAccountName, expectedSA.Name)
+	require.Equal(t, cluster.Namespace, expectedSA.Namespace)
+	require.Len(t, expectedSA.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, expectedSA.OwnerReferences[0].Name)
+
+	// Autopilot Prometheus Cluster role binding on OCP 4.16
+	expectedPrometheusCRB := testutil.GetExpectedClusterRoleBinding(t, "autopilotPrometheusClusterRoleBinding.yaml")
+	actualClusterRoleCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualClusterRoleCRB, component.AutopilotPrometheusClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedPrometheusCRB.Name, actualClusterRoleCRB.Name)
+	require.ElementsMatch(t, expectedPrometheusCRB.Subjects, actualClusterRoleCRB.Subjects)
+	require.Equal(t, expectedPrometheusCRB.RoleRef, actualClusterRoleCRB.RoleRef)
+
+	// Autopilot Secret on OCP 4.16
+	expectedSecret416 := testutil.GetExpectedSecret(t, "autopilot-auth-token-secret_4_16.yaml")
+	actualSecret416 := &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret416, component.AutopilotSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSecret416.Data["token"], actualSecret416.Data["token"])
+	// on OCP 4.16, token refresh time is set
+	require.NotEmpty(t, expectedSecret416.Data[component.AutopilotSaTokenRefreshTimeKey])
+
+	// Autopilot Deployment on OCP 4.16
+	expectedDeployment416 := testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_14.yaml")
+	autopilotDeployment416 := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment416, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment416.Spec.Template.Spec.Volumes, autopilotDeployment416.Spec.Template.Spec.Volumes)
+	require.Equal(t, expectedDeployment416.Spec.Template.Spec.Containers[0].VolumeMounts, autopilotDeployment416.Spec.Template.Spec.Containers[0].VolumeMounts)
 
 }
 
