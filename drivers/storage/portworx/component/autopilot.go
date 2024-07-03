@@ -68,6 +68,8 @@ const (
 	OpenshiftClusterViewRoleName = "cluster-monitoring-view"
 	// AutopilotSaTokenRefreshTimeKey time to refresh the service account token
 	AutopilotSaTokenRefreshTimeKey = "autopilotSaTokenRefreshTime"
+	// CaCertPath path to ca.crt in the pod
+	CaCertPath = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 )
 
 var (
@@ -365,38 +367,22 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 			return fmt.Errorf("error during getting secret %w ", err)
 		}
 
-		if secret.Data != nil {
-			// if secret exists, check if token is expired
-			refreshNeeded, err := isTokenRefreshRequired(secret)
-			if err != nil {
-				return fmt.Errorf("error during checking token refresh: %w ", err)
-			}
-			if refreshNeeded {
-				// refresh the token if it is expired
-				logrus.Infof("refreshing token for secret %s/%s", clusterNamespace, AutopilotSecretName)
-				err := c.refreshTokenSecret(secret, clusterNamespace, ownerRef)
-				if err != nil {
-					return fmt.Errorf("failed to check token in secret %s/%s: %w", clusterNamespace, AutopilotSecretName, err)
-				}
-			}
-		} else {
-			// if secret is not created, create the secret
-			// generate token and root ca.crt
-			token, err := generateAPSaToken(clusterNamespace, defaultAutoPilotSaTokenExpirationSeconds)
-			if err != nil {
-				return fmt.Errorf("error during generating token %v ", err)
-			}
-
-			rootCaCrt, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
-			if err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("error reading k8s cluster certificate located inside the pod at /var/run/secrets/kubernetes.io/serviceaccount/ca.crt: %w", err)
-			}
-
-			secret.Data = make(map[string][]byte)
-			secret.Data[core.ServiceAccountTokenKey] = []byte(token.Status.Token)
-			secret.Data[core.ServiceAccountRootCAKey] = rootCaCrt
-			secret.Data[AutopilotSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(*token.Spec.ExpirationSeconds/2) * time.Second).Format(time.RFC3339))
+		// check if secret requires update
+		// if update is required, create the token if not present
+		// or refresh the token if it is expired
+		updateRequired, err := isSecretUpdateRequired(secret)
+		if err != nil {
+			return fmt.Errorf("error during checking token refresh: %w", err)
 		}
+
+		if updateRequired {
+			logrus.Infof("refreshing token for secret %s/%s", clusterNamespace, AutopilotSecretName)
+			err := c.updateSecretTokenAndCert(secret, clusterNamespace, ownerRef)
+			if err != nil {
+				return fmt.Errorf("failed to update secret %s/%s: %w", clusterNamespace, AutopilotSecretName, err)
+			}
+		}
+		return nil
 	} else {
 		// OCP 4.15 and below, secret is created if user workload monitoring is enabled
 		// and openshift's prometheus secret is found
@@ -410,13 +396,12 @@ func (c *autopilot) createSecret(clusterNamespace string, ownerRef *metav1.Owner
 		secret.Data = make(map[string][]byte)
 		secret.Data[core.ServiceAccountTokenKey] = []byte(token)
 		secret.Data[core.ServiceAccountRootCAKey] = []byte(cert) // change to ca.crt to match the key in the generated in secret by kubernetes
+		return k8sutil.CreateOrUpdateSecret(
+			c.k8sClient,
+			secret,
+			ownerRef,
+		)
 	}
-
-	return k8sutil.CreateOrUpdateSecret(
-		c.k8sClient,
-		secret,
-		ownerRef,
-	)
 }
 
 func (c *autopilot) createServiceAccount(
@@ -937,22 +922,41 @@ func (c *autopilot) isOCPUserWorkloadSupported() bool {
 	return *c.isUserWorkloadSupported
 }
 
-func (c *autopilot) refreshTokenSecret(secret *v1.Secret, clusterNamespace string, ownerRef *metav1.OwnerReference) error {
+// updateSecretTokenAndCert updates the secret with new token, token refresh timestamp and ca.crt
+func (c *autopilot) updateSecretTokenAndCert(secret *v1.Secret, clusterNamespace string, ownerRef *metav1.OwnerReference) error {
 
-	// update the token when it is half way to expiration
+	// update the token when it is half the way to expiration
 	newToken, err := generateAPSaToken(clusterNamespace, defaultAutoPilotSaTokenExpirationSeconds)
 	if err != nil {
 		return err
 	}
 
-	// update the secret with new token
-	secret.Data[core.ServiceAccountTokenKey] = []byte(newToken.Status.Token)
-	secret.Data[AutopilotSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(*newToken.Spec.ExpirationSeconds/2) * time.Second).Format(time.RFC3339))
-	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
+	// get the root ca.crt from the secret mounted inside the pod
+	// this is required while upgrading from OCP 4.15 to 4.16
+	// since the ca.crt is changed in 4.16 and not managed by openshift
+	rootCaCrt, err := getRootCACert()
 	if err != nil {
 		return err
 	}
-	return nil
+
+	// update the secret with new token and secret
+	if secret.Data == nil {
+		secret.Data = make(map[string][]byte)
+	}
+	secret.Data[core.ServiceAccountTokenKey] = []byte(newToken.Status.Token)
+	secret.Data[core.ServiceAccountRootCAKey] = rootCaCrt
+	// set the token refresh time to half the way of token expiration
+	secret.Data[AutopilotSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(*newToken.Spec.ExpirationSeconds/2) * time.Second).Format(time.RFC3339))
+	return k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
+}
+
+// get the root ca.crt from the secret mounted inside the pod
+func getRootCACert() ([]byte, error) {
+	rootCaCrt, err := os.ReadFile(CaCertPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("error reading k8s cluster certificate located inside the pod at %s : %w", CaCertPath, err)
+	}
+	return rootCaCrt, nil
 }
 
 func generateAPSaToken(clusterNamespace string, expirationSeconds int64) (*authv1.TokenRequest, error) {
@@ -968,8 +972,9 @@ func generateAPSaToken(clusterNamespace string, expirationSeconds int64) (*authv
 	return tokenResp, nil
 }
 
-func isTokenRefreshRequired(secret *v1.Secret) (bool, error) {
-	if len(secret.Data) == 0 || len(secret.Data[v1.ServiceAccountTokenKey]) == 0 {
+// isSecretUpdateRequired checks token expiry and returns true if token needs to be updated
+func isSecretUpdateRequired(secret *v1.Secret) (bool, error) {
+	if secret.Data == nil || len(secret.Data[AutopilotSaTokenRefreshTimeKey]) == 0 {
 		return true, nil
 	}
 	expirationTime, err := time.Parse(time.RFC3339, string(secret.Data[AutopilotSaTokenRefreshTimeKey]))
