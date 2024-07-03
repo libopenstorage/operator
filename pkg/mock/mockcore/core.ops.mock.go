@@ -10,7 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	core "github.com/portworx/sched-ops/k8s/core"
-	v1 "k8s.io/api/authentication/v1"
+	authv1 "k8s.io/api/authentication/v1"
 	v10 "k8s.io/api/certificates/v1"
 	v11 "k8s.io/api/core/v1"
 	v12 "k8s.io/api/networking/v1"
@@ -300,10 +300,10 @@ func (mr *MockOpsMockRecorder) CreateServiceAccount(arg0 interface{}) *gomock.Ca
 }
 
 // CreateToken mocks base method.
-func (m *MockOps) CreateToken(arg0, arg1 string, arg2 *v1.TokenRequest) (*v1.TokenRequest, error) {
+func (m *MockOps) CreateToken(arg0, arg1 string, arg2 *authv1.TokenRequest) (*authv1.TokenRequest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateToken", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*v1.TokenRequest)
+	ret0, _ := ret[0].(*authv1.TokenRequest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

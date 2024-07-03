@@ -269,6 +269,7 @@ const (
 	OpenshiftAPIServer                  = "openshift-apiserver"
 	OpenshiftPrometheusSupportedVersion = "4.12"
 	Openshift_4_15_Version              = "4.15"
+	Openshift_4_16_version              = "4.16"
 	// OpenshiftMonitoringRouteName name of OCP user-workload route
 	OpenshiftMonitoringRouteName = "thanos-querier"
 	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
@@ -1532,4 +1533,18 @@ func ShouldUseClusterDomain(node *api.StorageNode) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func IsTokenRefreshRequired(secret *v1.Secret, tokenRefreshTimeKey string) (bool, error) {
+	if len(secret.Data) == 0 || len(secret.Data[v1.ServiceAccountTokenKey]) == 0 {
+		return true, nil
+	}
+	expirationTime, err := time.Parse(time.RFC3339, string(secret.Data[tokenRefreshTimeKey]))
+	if err != nil {
+		return false, fmt.Errorf("error parsing expiration time: %w", err)
+	}
+	if time.Now().UTC().After(expirationTime) {
+		return true, nil
+	}
+	return false, nil
 }
