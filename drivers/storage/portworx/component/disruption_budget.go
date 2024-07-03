@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/hashicorp/go-version"
 	"github.com/libopenstorage/openstorage/api"
@@ -101,6 +102,13 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 		return fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
+	// Get the list of poddisruptionbudgets
+	pdbList := &policyv1.PodDisruptionBudgetList{}
+	err = c.k8sClient.List(context.TODO(), pdbList, client.InNamespace(cluster.Namespace))
+	if err != nil {
+		logrus.Warnf("failed to list poddisruptionbudgets: %v", err)
+	}
+
 	if pxutil.ClusterSupportsParallelUpgrade(nodeEnumerateResponse) {
 		// Get the list of k8s nodes that are part of the current cluster
 		k8sNodeList := &v1.NodeList{}
@@ -108,6 +116,10 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 		if err != nil {
 			return err
 		}
+		if err := c.deleteClusterPodDisruptionBudget(cluster, pdbList, ownerRef); err != nil {
+			logrus.Warnf("failed to delete cluster poddisruptionbudget if exists: %v", err)
+		}
+
 		if err := c.createPortworxNodePodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse, k8sNodeList); err != nil {
 			return err
 		}
@@ -118,6 +130,9 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 			return err
 		}
 	} else {
+		if err := c.deleteAllNodePodDisruptionBudgets(cluster, pdbList, ownerRef); err != nil {
+			logrus.Warnf("failed to delete node poddisruptionbudgets if exists: %v", err)
+		}
 		if err := c.createPortworxPodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse); err != nil {
 			return err
 		}
@@ -455,4 +470,32 @@ func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageC
 	}
 	return utilerrors.NewAggregate(errors)
 
+}
+
+func (c *disruptionBudget) deleteClusterPodDisruptionBudget(cluster *corev1.StorageCluster, pdbList *policyv1.PodDisruptionBudgetList, ownerRef *metav1.OwnerReference) error {
+	for _, pdb := range pdbList.Items {
+		if pdb.Name == "px-storage" {
+			err := k8sutil.DeletePodDisruptionBudget(c.k8sClient, pdb.Name, cluster.Namespace, *ownerRef)
+			if err != nil {
+				logrus.Warnf("Failed to delete cluster PDB %s: %v", pdb.Name, err)
+				return err
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+func (c *disruptionBudget) deleteAllNodePodDisruptionBudgets(cluster *corev1.StorageCluster, pdbList *policyv1.PodDisruptionBudgetList, ownerRef *metav1.OwnerReference) error {
+	errors := []error{}
+	for _, pdb := range pdbList.Items {
+		if strings.HasPrefix(pdb.Name, "px") && pdb.Name != "px-storage" && pdb.Name != "px-kvdb" {
+			err := k8sutil.DeletePodDisruptionBudget(c.k8sClient, pdb.Name, cluster.Namespace, *ownerRef)
+			if err != nil {
+				logrus.Warnf("Failed to delete node PDB %s: %v", pdb.Name, err)
+				errors = append(errors, err)
+			}
+		}
+	}
+	return utilerrors.NewAggregate(errors)
 }
