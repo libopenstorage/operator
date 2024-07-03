@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/go-version"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -27,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/kubernetes/pkg/apis/core"
 )
 
 const (
@@ -138,6 +140,29 @@ var testStorageClusterBasicCases = []types.TestCase{
 			},
 		}),
 		TestFunc: BasicInstallWithNodeAffinity,
+	},
+	{
+		TestName:        "BasicInstallWithPxSaTokenRefresh",
+		TestrailCaseIDs: []string{},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-stc",
+				Annotations: map[string]string{
+					"portworx.io/host-pid": "true",
+				},
+			},
+			Spec: corev1.StorageClusterSpec{
+				CommonConfig: corev1.CommonConfig{
+					Env: []v1.EnvVar{
+						{
+							Name:  pxutil.EnvKeyPortworxServiceAccountTokenExpirationMinutes,
+							Value: "3",
+						},
+					},
+				},
+			},
+		}),
+		TestFunc: BasicInstallWithPxSaTokenRefresh,
 	},
 	{
 		TestName:        "BasicTelemetryRegression",
@@ -437,6 +462,37 @@ func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
 
 		// Remove Node Affinity label from the node
 		ci_utils.RemoveLabelFromNode(t, nodeNameWithLabel, labelKeySkipPX)
+	}
+}
+
+// 1. Deploy PX and verify the token for px stored in the k8s secret correctly mounted inside px runc container.
+// 2. The cluster spec set the token expiration time to be 3 min. So the token is supposed to refresh after 1.5min.
+// 3. Wait for 1.5min. Verify the token is refreshed and corrected mounted inside px run container with retry.
+func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+		require.NoError(t, err)
+		expectedToken := pxSaSecret.Data[core.ServiceAccountTokenKey]
+		cmd := "runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/token"
+		actualToken, stderr, err := ci_utils.RunPxCmd(cmd)
+		require.Empty(t, stderr)
+		require.Nil(t, err)
+		require.Equal(t, actualToken, expectedToken)
+
+		time.Sleep(time.Duration(90) * time.Second)
+
+		pxSaSecret, err = coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+		require.NoError(t, err)
+		expectedToken = pxSaSecret.Data[core.ServiceAccountTokenKey]
+		actualToken, stderr, err = ci_utils.RunPxCmd(cmd)
+		require.Empty(t, stderr)
+		require.Nil(t, err)
+		require.Equal(t, actualToken, expectedToken)
 	}
 }
 
