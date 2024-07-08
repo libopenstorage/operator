@@ -148,7 +148,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test-stc",
 				Annotations: map[string]string{
-					"portworx.io/host-pid": "true",
+					"portworx.io/host-pid": "true", // for running commands inside px runc container from oci-mon container
 				},
 			},
 			Spec: corev1.StorageClusterSpec{
@@ -488,11 +488,12 @@ func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 
 		pxSaSecret, err = coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 		require.NoError(t, err)
-		expectedToken = pxSaSecret.Data[core.ServiceAccountTokenKey]
-		actualToken, stderr, err = ci_utils.RunPxCmd(cmd)
+		refreshedExpectedToken := pxSaSecret.Data[core.ServiceAccountTokenKey]
+		refreshedActualToken, stderr, err := ci_utils.RunPxCmd(cmd)
 		require.Empty(t, stderr)
 		require.Nil(t, err)
-		require.Equal(t, actualToken, expectedToken)
+		require.Equal(t, refreshedActualToken, refreshedExpectedToken)
+		require.NotEqual(t, actualToken, refreshedActualToken)
 	}
 }
 
