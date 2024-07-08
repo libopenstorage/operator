@@ -143,7 +143,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 	},
 	{
 		TestName:        "BasicInstallWithPxSaTokenRefresh",
-		TestrailCaseIDs: []string{},
+		TestrailCaseIDs: []string{"C299624"},
 		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test-stc",
