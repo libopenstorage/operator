@@ -410,7 +410,19 @@ func (u *preFlightPortworx) processPassedChecks(recorder record.EventRecorder) {
 		if pxutil.IsVsphere(u.cluster) {
 			cmetaData = DefCmetaVsphere
 		} else if pxutil.IsPure(u.cluster) {
-			cmetaData = DefCmetaFACD
+			var podNameOption string
+		specsItr:
+			for _, spec := range *u.cluster.Spec.CloudStorage.DeviceSpecs {
+				options := strings.Split(spec, ",")
+				for _, option := range options {
+					keyValPair := strings.Split(option, "=")
+					if len(keyValPair) == 2 && keyValPair[0] == "pod" {
+						podNameOption = option
+						break specsItr
+					}
+				}
+			}
+			cmetaData = fmt.Sprintf("%s,%s", DefCmetaFACD, podNameOption)
 		}
 		u.cluster.Spec.CloudStorage.SystemMdDeviceSpec = &cmetaData
 	}
