@@ -765,13 +765,13 @@ func reconstructSpecURL(cluster *corev1.StorageCluster) string {
 
 func validateTelemetrySecret(cluster *corev1.StorageCluster, timeout, interval time.Duration, force bool) error {
 	t := func() (interface{}, bool, error) {
-		secret, err := coreops.Instance().GetSecret("pure-telemetry-certs", cluster.Namespace)
+		secret, err := coreops.Instance().GetSecret(TelemetryCertName, cluster.Namespace)
 		if err != nil {
 			if errors.IsNotFound(err) && !force {
 				// Skip secret existence validation
 				return nil, false, nil
 			}
-			return nil, true, fmt.Errorf("failed to get secret pure-telemetry-certs: %v", err)
+			return nil, true, fmt.Errorf("failed to get secret %s: %v", TelemetryCertName, err)
 		}
 		logrus.Debugf("Found secret %s", secret.Name)
 
@@ -1490,13 +1490,13 @@ func ValidateUninstallStorageCluster(
 
 	// Verify telemetry secret is deleted on UninstallAndWipe when telemetry is enabled
 	if cluster.Spec.DeleteStrategy != nil && cluster.Spec.DeleteStrategy.Type == corev1.UninstallAndWipeStorageClusterStrategyType {
-		secret, err := coreops.Instance().GetSecret("pure-telemetry-certs", cluster.Namespace)
+		secret, err := coreops.Instance().GetSecret(TelemetryCertName, cluster.Namespace)
 		if err != nil && !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to get secret pure-telemetry-certs: %v", err)
+			return fmt.Errorf("failed to get secret %s: %v", TelemetryCertName, err)
 		} else if err == nil {
 			// Secret found, only do the validation when telemetry is enabled, since if it's disabled, there's a chance secret owner is not set yet
 			if cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Telemetry != nil && cluster.Spec.Monitoring.Telemetry.Enabled {
-				return fmt.Errorf("telemetry secret pure-telemetry-certs was found when shouldn't have been")
+				return fmt.Errorf("telemetry secret %s was found when shouldn't have been", TelemetryCertName)
 			}
 			// Delete stale telemetry secret
 			if err := coreops.Instance().DeleteSecret(secret.Name, cluster.Namespace); err != nil {
