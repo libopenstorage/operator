@@ -484,6 +484,7 @@ func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 		require.Empty(t, stderr)
 		require.Nil(t, err)
 		require.Equal(t, actualToken, expectedToken)
+		logrus.Infof("First token created and verified: %s", actualToken)
 
 		time.Sleep(time.Duration(90) * time.Second)
 
@@ -495,6 +496,7 @@ func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, refreshedActualToken, refreshedExpectedToken)
 		require.NotEqual(t, actualToken, refreshedActualToken)
+		logrus.Infof("Second token created and verified: %s", refreshedActualToken)
 
 		err = coreops.Instance().DeleteSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 		require.NoError(t, err)
@@ -508,7 +510,8 @@ func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 		require.Empty(t, stderr)
 		require.Nil(t, err)
 		require.Equal(t, secondRefreshedActualToken, secondRefreshedExpectedToken)
-		require.NotEqual(t, secondRefreshedActualToken, refreshedActualToken)
+		require.NotEqual(t, secondRefreshedActualToken, secondRefreshedActualToken)
+		logrus.Infof("Third token created and verified: %s", secondRefreshedActualToken)
 	}
 }
 
