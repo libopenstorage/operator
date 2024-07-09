@@ -771,9 +771,9 @@ func validateTelemetrySecret(cluster *corev1.StorageCluster, timeout, interval t
 				// Skip secret existence validation
 				return nil, false, nil
 			}
-			return nil, true, fmt.Errorf("failed to get secret %s: %v", TelemetryCertName, err)
+			return nil, true, fmt.Errorf("failed to get secret [%s], Err: %v", TelemetryCertName, err)
 		}
-		logrus.Debugf("Found secret %s", secret.Name)
+		logrus.Debugf("Found secret [%s]", secret.Name)
 
 		// Validate secret owner reference if telemetry enabled
 		if cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Telemetry != nil && cluster.Spec.Monitoring.Telemetry.Enabled {
@@ -782,11 +782,11 @@ func validateTelemetrySecret(cluster *corev1.StorageCluster, timeout, interval t
 				// Validate secret should have owner reference
 				for _, reference := range secret.OwnerReferences {
 					if reference.UID == ownerRef.UID {
-						logrus.Debugf("Found ownerReference for StorageCluster %s in secret %s", ownerRef.Name, secret.Name)
+						logrus.Debugf("Found ownerReference for StorageCluster [%s] in secret [%s]", ownerRef.Name, secret.Name)
 						return nil, false, nil
 					}
 				}
-				return nil, true, fmt.Errorf("waiting for ownerReference to be set to StorageCluster %s in secret %s", cluster.Name, secret.Name)
+				return nil, true, fmt.Errorf("waiting for ownerReference to be set to StorageCluster [%s] in secret [%s]", cluster.Name, secret.Name)
 			}
 			// Validate secret owner should not have owner reference
 			// Do not validate reference for PX Operators below 1.10, as this was introduced in 1.10+, see PWX-26326 for more info
@@ -797,7 +797,7 @@ func validateTelemetrySecret(cluster *corev1.StorageCluster, timeout, interval t
 			if opVersion.GreaterThanOrEqual(opVer1_10) {
 				for _, reference := range secret.OwnerReferences {
 					if reference.UID == ownerRef.UID {
-						return nil, true, fmt.Errorf("secret %s should not have ownerReference to StorageCluster %s", secret.Name, cluster.Name)
+						return nil, true, fmt.Errorf("secret [%s] should not have ownerReference to StorageCluster [%s]", secret.Name, cluster.Name)
 					}
 				}
 			}
@@ -4734,6 +4734,11 @@ func ValidateTelemetryV2Enabled(pxImageList map[string]string, cluster *corev1.S
 		if err := ValidateTelemetryContainerOrchestrator(pxImageList, cluster, timeout, interval); err != nil {
 			return err
 		}
+	}
+
+	// Validate pure-telemetry-certs secret owner reference
+	if err := validateTelemetrySecret(cluster, defaultTelemetrySecretValidationTimeout, defaultTelemetrySecretValidationInterval, false); err != nil {
+		return fmt.Errorf("failed to validate [%s] secret, Err: %v", TelemetryCertName, err)
 	}
 
 	logrus.Infof("All Telemetry components were successfully enabled/installed")
