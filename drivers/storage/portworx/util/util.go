@@ -1604,24 +1604,24 @@ func ClusterSupportsParallelUpgrade(nodeEnumerateResponse *api.SdkNodeEnumerateW
 	return true
 }
 
-func readyToUpgradeNodes(k8sClient client.Client, namespace string, cordonedNodesMap map[string]bool) ([]string, map[string]bool, error) {
-	readyToUpgradeNodes := make([]string, 0)
+func getNodesToUpgrade(k8sClient client.Client, namespace string, cordonedNodesMap map[string]bool) ([]string, map[string]bool, error) {
+	nodesUpgrading := make([]string, 0)
 	canBeUpgradedNodes := make(map[string]bool)
 	nodePDBs, err := k8sutil.ListPodDisruptionBudgets(k8sClient, namespace)
 	if err != nil {
-		return readyToUpgradeNodes, canBeUpgradedNodes, err
+		return nodesUpgrading, canBeUpgradedNodes, err
 	}
 	for _, pdb := range nodePDBs.Items {
 		k8sNode := strings.TrimPrefix(pdb.Name, "px-")
 		if strings.HasPrefix(pdb.Name, "px-") && cordonedNodesMap[k8sNode] {
 			if pdb.Spec.MinAvailable.IntVal == 0 {
-				readyToUpgradeNodes = append(readyToUpgradeNodes, k8sNode)
+				nodesUpgrading = append(nodesUpgrading, k8sNode)
 			} else {
 				canBeUpgradedNodes[k8sNode] = true
 			}
 		}
 	}
-	return readyToUpgradeNodes, canBeUpgradedNodes, nil
+	return nodesUpgrading, canBeUpgradedNodes, nil
 }
 
 func GetNodesToUpgrade(cluster *corev1.StorageCluster,
@@ -1646,7 +1646,7 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 
 	// Check all nodes with PDB 0 and add to another list
 	// Get list of nodes that have PDB 0 and nodes that don't
-	readyToUpgradeNodes, canBeUpgradedNodesMap, err := readyToUpgradeNodes(k8sClient, cluster.Namespace, cordonedk8sNodes)
+	nodesUpgrading, canBeUpgradedNodesMap, err := getNodesToUpgrade(k8sClient, cluster.Namespace, cordonedk8sNodes)
 	if err != nil {
 		return nil, nil, -1, err
 	}
@@ -1669,7 +1669,7 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 	}
 
 	if cluster.Annotations != nil && cluster.Annotations[AnnotationsDisableNonDisruptiveUpgrade] == "true" {
-		return canBeUpgradedNodes, cordonedPxNodesMap, len(readyToUpgradeNodes) + nodesDown, nil
+		return canBeUpgradedNodes, cordonedPxNodesMap, len(nodesUpgrading) + nodesDown, nil
 	}
 
 	// Make a request to SDK API FilterNonOverlappingNodes to get output of list of nodes that can be upgraded in parallel
@@ -1682,11 +1682,11 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 		ctx,
 		&api.SdkFilterNonOverlappingNodesRequest{
 			InputNodes: cordonedNodes,
-			DownNodes:  readyToUpgradeNodes,
+			DownNodes:  nodesUpgrading,
 		},
 	)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("failed to filter nodes: %v", err)
 	}
-	return nodeFilterResponse.NodeIds, cordonedPxNodesMap, len(readyToUpgradeNodes) + nodesDown, nil
+	return nodeFilterResponse.NodeIds, cordonedPxNodesMap, len(nodesUpgrading) + nodesDown, nil
 }
