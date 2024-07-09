@@ -465,9 +465,10 @@ func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
 	}
 }
 
-// 1. Deploy PX and verify the token for px stored in the k8s secret correctly mounted inside px runc container.
+// 1. Deploy PX and verify the secret containing the token for px stored in the k8s secret correctly mounted inside px runc container.
 // 2. The cluster spec set the token expiration time to be 3 min. So the token is supposed to refresh after 1.5min.
-// 3. Wait for 1.5min. Verify the token is refreshed and corrected mounted inside px run container with retry.
+// 3. Wait for 1.5min. Verify the token is refreshed and correctly mounted inside px runc container.
+// 4. Delete the secret. Wait for 90sec. Verify the token is refreshed and correctly mounted inside px runc container.
 func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		testSpec := tc.TestSpec(t)
@@ -494,6 +495,20 @@ func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, refreshedActualToken, refreshedExpectedToken)
 		require.NotEqual(t, actualToken, refreshedActualToken)
+
+		err = coreops.Instance().DeleteSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+		require.NoError(t, err)
+
+		time.Sleep(time.Duration(90) * time.Second)
+
+		pxSaSecret, err = coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+		require.NoError(t, err)
+		secondRefreshedExpectedToken := pxSaSecret.Data[core.ServiceAccountTokenKey]
+		secondRefreshedActualToken, stderr, err := ci_utils.RunPxCmd(cmd)
+		require.Empty(t, stderr)
+		require.Nil(t, err)
+		require.Equal(t, secondRefreshedActualToken, secondRefreshedExpectedToken)
+		require.NotEqual(t, secondRefreshedActualToken, refreshedActualToken)
 	}
 }
 
