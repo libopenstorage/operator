@@ -37,7 +37,7 @@ var testStorageClusterPDBCases = []types.TestCase{
 				return true
 			}
 			k8sVersion, _ := version.NewVersion(kbVer)
-			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_5_0) || k8sVersion.LessThan(minSupportedK8sVersionForPdb)
+			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_5_0) || k8sVersion.LessThan(minSupportedK8sVersionForPdb) || ci_utils.PxOperatorVersion.GreaterThanOrEqual(ci_utils.PxOperatorVer24_2_0)
 		},
 		TestFunc: StoragelessNodePDB,
 	},
@@ -54,7 +54,7 @@ var testStorageClusterPDBCases = []types.TestCase{
 				return true
 			}
 			k8sVersion, _ := version.NewVersion(kbVer)
-			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer23_10_2) || k8sVersion.LessThan(minSupportedK8sVersionForPdb)
+			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer23_10_2) || k8sVersion.LessThan(minSupportedK8sVersionForPdb) || ci_utils.PxOperatorVersion.GreaterThanOrEqual(ci_utils.PxOperatorVer24_2_0)
 		},
 		TestFunc: OverridePDBUsingValidAnnotation,
 	},
@@ -72,7 +72,7 @@ var testStorageClusterPDBCases = []types.TestCase{
 				return true
 			}
 			k8sVersion, _ := version.NewVersion(kbVer)
-			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer24_1_0) || k8sVersion.LessThan(minSupportedK8sVersionForPdb)
+			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer24_1_0) || k8sVersion.LessThan(minSupportedK8sVersionForPdb) || ci_utils.PxOperatorVersion.GreaterThanOrEqual(ci_utils.PxOperatorVer24_2_0)
 		},
 		TestFunc: OverridePDBUsingInvalidAnnotation,
 	},

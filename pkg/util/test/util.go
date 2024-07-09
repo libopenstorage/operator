@@ -217,6 +217,7 @@ var (
 	opVer23_10_2, _ = version.NewVersion("23.10.2-")
 	OpVer23_10_3, _ = version.NewVersion("23.10.3-")
 	opVer24_1_0, _  = version.NewVersion("24.1.0-")
+	opVer24_2_0, _  = version.NewVersion("24.2.0-")
 
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
 	minimumCcmGoVersionCO, _          = version.NewVersion("1.2.3")
@@ -227,9 +228,10 @@ var (
 	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
 	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
 
-	pxVer2_13, _ = version.NewVersion("2.13")
-	pxVer3_0, _  = version.NewVersion("3.0")
-	pxVer3_1, _  = version.NewVersion("3.1")
+	pxVer2_13, _  = version.NewVersion("2.13")
+	pxVer3_0, _   = version.NewVersion("3.0")
+	pxVer3_1, _   = version.NewVersion("3.1")
+	pxVer3_1_2, _ = version.NewVersion("3.1.2")
 
 	// minimumPxVersionCCMJAVA minimum PX version to install ccm-java
 	minimumPxVersionCCMJAVA, _ = version.NewVersion("2.8")
@@ -5337,7 +5339,7 @@ func ValidateTelemetryV1Enabled(pxImageList map[string]string, cluster *corev1.S
 
 // ValidatePodDisruptionBudget validates the value of minavailable and number of disruptions for px-storage poddisruptionbudget
 func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
-	logrus.Info("Validate px-storage poddisruptionbudget minAvailable and allowed disruptions")
+	logrus.Info("Validate portworx storage poddisruptionbudget")
 
 	kbVer, err := GetK8SVersion()
 	if err != nil {
@@ -5348,10 +5350,47 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 	if err != nil {
 		return err
 	}
+	pxVersion := GetPortworxVersion(cluster)
 
 	// PodDisruptionBudget is supported for k8s version greater than or equal to 1.21 and operator version greater than or equal to 1.5.0
 	// Changing opVersion to 23.10.0 for PTX-23350 | TODO: add better logic with PTX-23407
-	if k8sVersion.GreaterThanOrEqual(minSupportedK8sVersionForPdb) && opVersion.GreaterThanOrEqual(opVer23_10) {
+
+	// Smart and parallel upgrades is supported from px version 3.1.2 and operator version 24.2.0
+	if k8sVersion.GreaterThanOrEqual(minSupportedK8sVersionForPdb) && opVersion.GreaterThanOrEqual(opVer24_2_0) && pxVersion.GreaterThanOrEqual(pxVer3_1_2) {
+		t := func() (interface{}, bool, error) {
+			nodes, err := operatorops.Instance().ListStorageNodes(cluster.Namespace)
+			if err != nil {
+				return nil, true, fmt.Errorf("failed to get storage nodes, Err: %v", err)
+			}
+			availablenodes := 0
+			for _, node := range nodes.Items {
+				if *node.Status.NodeAttributes.Storage && node.Status.Phase == "Online" {
+					availablenodes++
+				} else {
+					logrus.Infof("Node [%s] in state [%s] is not Online, PDB might be incorrect", node.Name, node.Status.Phase)
+				}
+			}
+			pdbs, err := policyops.Instance().ListPodDisruptionBudget(cluster.Namespace)
+			if err != nil {
+				return nil, true, fmt.Errorf("failed to list all poddisruptionbudgets, Err: %v", err)
+			}
+			actualNodePDBcount := 0
+			for _, pdb := range pdbs.Items {
+				if strings.HasPrefix(pdb.Name, "px-") && pdb.Name != "px-kvdb" {
+					actualNodePDBcount++
+				}
+			}
+			if actualNodePDBcount == availablenodes {
+				return nil, false, nil
+			}
+			return nil, true, fmt.Errorf("incorrect node PDB count. Expected node PDB count [%d], Actual node PDB count [%d]", availablenodes, actualNodePDBcount)
+
+		}
+		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+			return err
+		}
+		return nil
+	} else if k8sVersion.GreaterThanOrEqual(minSupportedK8sVersionForPdb) && opVersion.GreaterThanOrEqual(opVer23_10) {
 		// This is only for non async DR setup
 		t := func() (interface{}, bool, error) {
 
@@ -5947,4 +5986,73 @@ func RestoreEtcHosts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bb.Len(), n, "short write")
 	fd.Close()
+}
+
+func ValidateNodePDB(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	t := func() (interface{}, bool, error) {
+		nodes, err := coreops.Instance().GetNodes()
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get storage nodes, Err: %v", err)
+		}
+		pxNodesMap := make(map[string]bool)
+
+		pdbs, err := policyops.Instance().ListPodDisruptionBudget(cluster.Namespace)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get px-storage poddisruptionbudget, Err: %v", err)
+		}
+
+		for _, pdb := range pdbs.Items {
+			if strings.HasPrefix(pdb.Name, "px-") && pdb.Name != "px-kvdb" {
+				pxNodesMap[pdb.Name] = true
+				if pdb.Spec.MinAvailable.IntValue() != 1 {
+					return nil, true, fmt.Errorf("incorrect PDB minAvailable value for node %s. Expected PDB [%d], Actual PDB [%d]", strings.TrimPrefix(pdb.Name, "px-"), 1, pdb.Spec.MinAvailable.IntValue())
+				}
+			}
+		}
+
+		for _, node := range nodes.Items {
+			if coreops.Instance().IsNodeMaster(node) {
+				continue
+			}
+			if _, ok := pxNodesMap["px-"+node.Name]; !ok {
+				return nil, true, fmt.Errorf("PDB for node %s is missing", node.Name)
+			}
+		}
+		return nil, false, nil
+	}
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ValidateNodesSelectedForUpgrade(cluster *corev1.StorageCluster, quorumValue int, timeout, interval time.Duration) error {
+	t := func() (interface{}, bool, error) {
+		if quorumValue == -1 {
+			nodes, err := operatorops.Instance().ListStorageNodes(cluster.Namespace)
+			if err != nil {
+				return nil, true, fmt.Errorf("failed to get storage nodes, Err: %v", err)
+			}
+			quorumValue = (len(nodes.Items) / 2) + 1
+		}
+
+		pdbs, err := policyops.Instance().ListPodDisruptionBudget(cluster.Namespace)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get px-storage poddisruptionbudget, Err: %v", err)
+		}
+		nodesReadyForUpgrade := 0
+		for _, pdb := range pdbs.Items {
+			if strings.HasPrefix(pdb.Name, "px-") && pdb.Spec.MinAvailable.IntValue() == 0 {
+				nodesReadyForUpgrade++
+			}
+		}
+		if nodesReadyForUpgrade < quorumValue {
+			return nil, false, nil
+		}
+		return nil, true, fmt.Errorf("nodes selected for upgrade are more than quorum value")
+	}
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+	return nil
 }

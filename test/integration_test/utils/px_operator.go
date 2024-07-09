@@ -42,6 +42,8 @@ var (
 	PxOperatorVer23_10_3, _ = version.NewVersion("23.10.3-")
 	// PxOperatorVer24_1_0 portworx-operator 24.1.0 version to correct invalid PDB minAvailable
 	PxOperatorVer24_1_0, _ = version.NewVersion("24.1.0-")
+	// PxOperatorVer24_2_0 portworx-operator 24.2.0 version is minimum version smart and parallel upgrades is supported
+	PxOperatorVer24_2_0, _ = version.NewVersion("24.2.0-")
 )
 
 // TODO: Install portworx-operator in test automation
