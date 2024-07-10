@@ -466,52 +466,46 @@ func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
 }
 
 // 1. Deploy PX and verify the secret containing the token for px stored in the k8s secret correctly mounted inside px runc container.
-// 2. The cluster spec set the token expiration time to be 3 min. So the token is supposed to refresh after 1.5min.
-// 3. Wait for 1.5min. Verify the token is refreshed and correctly mounted inside px runc container.
-// 4. Delete the secret. Wait for 90sec. Verify the token is refreshed and correctly mounted inside px runc container.
+// 2. The cluster spec set the token expiration time to be 10 min, which is the minimum allowed token expiration time. The token should get refreshed after 5min.
+// 3. Wait for 5min. Verify the token is refreshed and correctly mounted inside px runc container.
+// 4. Delete the secret. Wait for 2min. Verify the token is refreshed and correctly mounted inside px runc container.
 func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
-		pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
-		require.NoError(t, err)
-		expectedToken := pxSaSecret.Data[core.ServiceAccountTokenKey]
 		cmd := "runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/token"
-		actualToken, stderr, err := ci_utils.RunPxCmd(cmd)
-		require.Empty(t, stderr)
-		require.Nil(t, err)
-		require.Equal(t, actualToken, expectedToken)
-		logrus.Infof("First token created and verified: %s", actualToken)
+		verifyTokenFunc := func() string {
+			pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+			require.NoError(t, err)
+			expectedToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
+			actualToken, stderr, err := ci_utils.RunPxCmd(cmd)
+			require.Empty(t, stderr)
+			require.NoError(t, err)
+			require.Eventually(t, func() bool {
+				return expectedToken == actualToken
+			}, 10*time.Minute, 15*time.Second, "the token inside px runc container is different from the token in the k8s secret")
+			logrus.Infof("token is created and verified: %s", actualToken)
+			return actualToken
+		}
 
-		time.Sleep(time.Duration(90) * time.Second)
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 
-		pxSaSecret, err = coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+		logrus.Infof("Verifying px container token...")
+		token := verifyTokenFunc()
+
+		time.Sleep(time.Duration(5) * time.Minute)
+		logrus.Infof("Verifying auto-refreshed px runc container token...")
+		refreshedToken := verifyTokenFunc()
+		require.NotEqual(t, token, refreshedToken, "the token did not get refreshed")
+
+		logrus.Infof("Verifying px runc container token gets recreated after manual deletion...")
+		err := coreops.Instance().DeleteSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 		require.NoError(t, err)
-		refreshedExpectedToken := pxSaSecret.Data[core.ServiceAccountTokenKey]
-		refreshedActualToken, stderr, err := ci_utils.RunPxCmd(cmd)
-		require.Empty(t, stderr)
-		require.Nil(t, err)
-		require.Equal(t, refreshedActualToken, refreshedExpectedToken)
-		require.NotEqual(t, actualToken, refreshedActualToken)
-		logrus.Infof("Second token created and verified: %s", refreshedActualToken)
-
-		err = coreops.Instance().DeleteSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
-		require.NoError(t, err)
-
-		time.Sleep(time.Duration(90) * time.Second)
-
-		pxSaSecret, err = coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
-		require.NoError(t, err)
-		secondRefreshedExpectedToken := pxSaSecret.Data[core.ServiceAccountTokenKey]
-		secondRefreshedActualToken, stderr, err := ci_utils.RunPxCmd(cmd)
-		require.Empty(t, stderr)
-		require.Nil(t, err)
-		require.Equal(t, secondRefreshedActualToken, secondRefreshedExpectedToken)
-		require.NotEqual(t, secondRefreshedActualToken, secondRefreshedActualToken)
-		logrus.Infof("Third token created and verified: %s", secondRefreshedActualToken)
+		time.Sleep(time.Duration(2) * time.Minute)
+		recreatedToken := verifyTokenFunc()
+		require.NotEqual(t, refreshedToken, recreatedToken, "the token did not get refreshed")
 	}
 }
 
