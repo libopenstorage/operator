@@ -156,7 +156,7 @@ var testStorageClusterBasicCases = []types.TestCase{
 					Env: []v1.EnvVar{
 						{
 							Name:  pxutil.EnvKeyPortworxServiceAccountTokenExpirationMinutes,
-							Value: "3",
+							Value: "10",
 						},
 					},
 				},
