@@ -616,7 +616,6 @@ func (c *portworxBasic) refreshTokenSecret(secret *v1.Secret, cluster *corev1.St
 func generatePxSaToken(cluster *corev1.StorageCluster, expirationSeconds int64) (*authv1.TokenRequest, error) {
 	tokenRequest := &authv1.TokenRequest{
 		Spec: authv1.TokenRequestSpec{
-			Audiences:         []string{"px"},
 			ExpirationSeconds: &expirationSeconds,
 		},
 	}
