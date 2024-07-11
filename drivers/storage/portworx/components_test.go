@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"math/rand"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -1248,12 +1250,6 @@ func TestServiceAccountTokenRefreshOnExpire(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1.StorageClusterSpec{
-			Stork: &corev1.StorkSpec{
-				Enabled: true,
-			},
-			Image: "portworx/image:2.10.1",
-		},
 	}
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -1275,6 +1271,49 @@ func TestServiceAccountTokenRefreshOnExpire(t *testing.T) {
 	updatedExpirationTime, err := time.Parse(time.RFC3339, string(saTokenSecret.Data[component.PxSaTokenRefreshTimeKey]))
 	require.NoError(t, err)
 	assert.True(t, updatedExpirationTime.Sub(fakeExpirationTime) > 6*time.Hour)
+}
+
+func TestUpdateServiceAccountTokenSecretCaCrt(t *testing.T) {
+	caCrtDir := "/var/run/secrets/kubernetes.io/serviceaccount"
+	caCrtPath := "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+	err := os.MkdirAll(caCrtDir, fs.ModePerm)
+	require.NoError(t, err)
+	file, err := os.Create(caCrtPath)
+	require.NoError(t, err)
+	file.Close()
+
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	saTokenSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, saTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	oldCaCrt := saTokenSecret.Data[v1.ServiceAccountRootCAKey]
+
+	err = os.WriteFile(caCrtPath, []byte("test"), 0644)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, saTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	newCaCrt := saTokenSecret.Data[v1.ServiceAccountRootCAKey]
+	require.NotEqual(t, oldCaCrt, newCaCrt)
+	require.Equal(t, string(newCaCrt), "test")
 }
 
 func TestDefaultStorageClassesWithStork(t *testing.T) {
