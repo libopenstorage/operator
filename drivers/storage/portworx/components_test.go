@@ -5053,7 +5053,7 @@ func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 	require.Equal(t, expectedSecret.Annotations, actualSecret.Annotations)
 
 	// Autopilot Deployment
-	expectedDeployment := testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_14.yaml")
+	expectedDeployment := testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_16.yaml")
 	autopilotDeployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)
@@ -5237,7 +5237,7 @@ func TestAutopilotUpgradeFrom415To416(t *testing.T) {
 	require.NotEmpty(t, expectedSecret416.Data[component.AutopilotSaTokenRefreshTimeKey])
 
 	// Autopilot Deployment on OCP 4.16
-	expectedDeployment416 := testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_14.yaml")
+	expectedDeployment416 := testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_16.yaml")
 	autopilotDeployment416 := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, autopilotDeployment416, component.AutopilotDeploymentName, cluster.Namespace)
 	require.NoError(t, err)

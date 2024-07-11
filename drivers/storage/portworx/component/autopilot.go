@@ -6,7 +6,6 @@ import (
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	authv1 "k8s.io/api/authentication/v1"
 	"k8s.io/kubernetes/pkg/apis/core"
-	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -68,8 +67,6 @@ const (
 	OpenshiftClusterViewRoleName = "cluster-monitoring-view"
 	// AutopilotSaTokenRefreshTimeKey time to refresh the service account token
 	AutopilotSaTokenRefreshTimeKey = "autopilotSaTokenRefreshTime"
-	// CaCertPath path to ca.crt in the pod
-	CaCertPath = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 )
 
 var (
@@ -190,8 +187,12 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := c.createClusterRoleBinding(cluster.Namespace); err != nil {
 		return err
 	}
+
+	ocp416plus := false
+	var err error
+
 	if c.isOCPUserWorkloadSupported() {
-		ocp416plus, err := pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_16_version)
+		ocp416plus, err = pxutil.IsSupportedOCPVersion(c.k8sClient, pxutil.Openshift_4_16_version)
 
 		if err != nil {
 			logrus.Errorf("error during checking OCP version: %v ", err)
@@ -215,7 +216,7 @@ func (c *autopilot) Reconcile(cluster *corev1.StorageCluster) error {
 		}
 	}
 
-	if err := c.createDeployment(cluster, ownerRef); err != nil {
+	if err := c.createDeployment(cluster, ownerRef, ocp416plus); err != nil {
 		return err
 	}
 	return nil
@@ -533,6 +534,7 @@ func (c *autopilot) setDefaultAutopilotSecret(cluster *corev1.StorageCluster, en
 func (c *autopilot) createDeployment(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
+	ocp416plus bool,
 ) error {
 	imageName := c.getDesiredAutopilotImage(cluster)
 	if imageName == "" {
@@ -607,7 +609,7 @@ func (c *autopilot) createDeployment(
 	}
 	sort.Sort(k8sutil.EnvByName(envVars))
 
-	volumes, volumeMounts := c.getDesiredVolumesAndMounts(cluster)
+	volumes, volumeMounts := c.getDesiredVolumesAndMounts(cluster, ocp416plus)
 
 	var existingImage string
 	var existingCommand []string
@@ -805,13 +807,19 @@ func (c *autopilot) getDesiredAutopilotImage(cluster *corev1.StorageCluster) str
 
 func (c *autopilot) getDesiredVolumesAndMounts(
 	cluster *corev1.StorageCluster,
+	ocp416plus bool,
 ) ([]v1.Volume, []v1.VolumeMount) {
 	volumeSpecs := make([]corev1.VolumeSpec, 0)
 
 	if c.isOCPUserWorkloadSupported() && c.isAutopilotSecretCreated(cluster.Namespace) {
 		for _, v := range openshiftDeploymentVolume {
-			vCopy := v.DeepCopy()
-			volumeSpecs = append(volumeSpecs, *vCopy)
+			// skip adding ca-cert-volume if OCP 4.16 and above
+			// autopilot pod will use kuberntes crt /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+			// to access prometheus metrics
+			if v.Name != "ca-cert-volume" || !ocp416plus {
+				vCopy := v.DeepCopy()
+				volumeSpecs = append(volumeSpecs, *vCopy)
+			}
 		}
 	}
 
@@ -931,32 +939,14 @@ func (c *autopilot) updateSecretTokenAndCert(secret *v1.Secret, clusterNamespace
 		return err
 	}
 
-	// get the root ca.crt from the secret mounted inside the pod
-	// this is required while upgrading from OCP 4.15 to 4.16
-	// since the ca.crt is changed in 4.16 and not managed by openshift
-	rootCaCrt, err := getRootCACert()
-	if err != nil {
-		return err
-	}
-
 	// update the secret with new token and secret
 	if secret.Data == nil {
 		secret.Data = make(map[string][]byte)
 	}
 	secret.Data[core.ServiceAccountTokenKey] = []byte(newToken.Status.Token)
-	secret.Data[core.ServiceAccountRootCAKey] = rootCaCrt
 	// set the token refresh time to half the way of token expiration
 	secret.Data[AutopilotSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(*newToken.Spec.ExpirationSeconds/2) * time.Second).Format(time.RFC3339))
 	return k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
-}
-
-// get the root ca.crt from the secret mounted inside the pod
-func getRootCACert() ([]byte, error) {
-	rootCaCrt, err := os.ReadFile(CaCertPath)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("error reading k8s cluster certificate located inside the pod at %s : %w", CaCertPath, err)
-	}
-	return rootCaCrt, nil
 }
 
 func generateAPSaToken(clusterNamespace string, expirationSeconds int64) (*authv1.TokenRequest, error) {
