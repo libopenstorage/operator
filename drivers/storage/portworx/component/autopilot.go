@@ -814,12 +814,13 @@ func (c *autopilot) getDesiredVolumesAndMounts(
 	if c.isOCPUserWorkloadSupported() && c.isAutopilotSecretCreated(cluster.Namespace) {
 		for _, v := range openshiftDeploymentVolume {
 			// skip adding ca-cert-volume if OCP 4.16 and above
-			// autopilot pod will use kuberntes crt /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+			// autopilot pod will use kubernetes crt /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
 			// to access prometheus metrics
-			if v.Name != "ca-cert-volume" || !ocp416plus {
-				vCopy := v.DeepCopy()
-				volumeSpecs = append(volumeSpecs, *vCopy)
+			if v.Name == "ca-cert-volume" && ocp416plus {
+				continue
 			}
+			vCopy := v.DeepCopy()
+			volumeSpecs = append(volumeSpecs, *vCopy)
 		}
 	}
 
