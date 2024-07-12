@@ -1,7 +1,11 @@
 package component
 
 import (
+	"context"
 	cryptoTls "crypto/tls"
+	"crypto/x509"
+	"encoding/asn1"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -127,6 +131,10 @@ const (
 
 var (
 	certStoreTypeRegx = regexp.MustCompile(`certStoreType: .*`)
+	// oid_pseudonym is x.500 attribute type Pseudonym
+	oid_pseudonym = asn1.ObjectIdentifier([]int{2, 5, 4, 65})
+	// errInvalidTelemetryCert returned when telemetry certificate is invalid
+	errInvalidTelemetryCert = fmt.Errorf("invalid telemetry certificate")
 )
 
 type telemetry struct {
@@ -817,6 +825,11 @@ func (t *telemetry) createDeploymentTelemetryRegistration(
 		container := &deployment.Spec.Template.Spec.Containers[i]
 		if container.Name == containerNameTelemetryRegistration {
 			container.Image = telemetryImage
+			// add APPLIANCE_ID env var
+			container.Env = append(container.Env, v1.EnvVar{
+				Name:  configParameterApplianceID,
+				Value: cluster.Status.ClusterUID,
+			})
 		} else if container.Name == containerNameTelemetryProxy {
 			container.Image = proxyImage
 		}
@@ -827,6 +840,17 @@ func (t *telemetry) createDeploymentTelemetryRegistration(
 	deployment.Spec.Template.Spec.ServiceAccountName = ServiceAccountNameTelemetry
 	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 	pxutil.ApplyStorageClusterSettingsToPodSpec(cluster, &deployment.Spec.Template.Spec)
+
+	// have a valid cluster UUID?  lets validate the Telemetry SSL cert
+	if cuuid := cluster.Status.ClusterUID; cuuid != "" {
+		sec, err := t.validateTelemetrySSLCert(deployment.Namespace, cuuid)
+		if err == errInvalidTelemetryCert {
+			logrus.Warn("refreshing telemetry SSL cert")
+			t.refreshTelemetrySSLCert(sec)
+		} else if err != nil {
+			logrus.WithError(err).Errorf("failed to validate telemetry SSL cert")
+		}
+	}
 
 	existingDeployment := &appsv1.Deployment{}
 	if err := k8sutil.GetDeployment(t.k8sClient, deployment.Name, deployment.Namespace, existingDeployment); err != nil {
@@ -999,6 +1023,86 @@ func (t *telemetry) createDeploymentTelemetryCollectorV2(
 	return nil
 }
 
+// validateTelemetrySSLCert validates the telemetry SSL certificate.
+// - note: cert's Psaudonym needs to match the cluster UUID
+func (t *telemetry) validateTelemetrySSLCert(namespace, cuuid string) (*v1.Secret, error) {
+	if namespace == "" || cuuid == "" {
+		return nil, fmt.Errorf("invalid namespace or cluster UUID")
+	}
+
+	var sec v1.Secret
+	logrus.Debugf("Inspecting secret %s/%s for SSL cert", namespace, pxutil.TelemetryCertName)
+	err := k8sutil.GetSecret(t.k8sClient, pxutil.TelemetryCertName, namespace, &sec)
+	if err != nil {
+		return nil, err
+	}
+
+	certBytes := sec.Data["cert"]
+	if len(certBytes) <= 0 {
+		logrus.Warnf("SSL cert not found in secret %s/%s", namespace, pxutil.TelemetryCertName)
+		return &sec, nil
+	}
+
+	block, _ := pem.Decode(certBytes)
+	if block == nil {
+		return &sec, fmt.Errorf("failed to decode SSL certificate")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return &sec, err
+	} else if cert == nil {
+		return &sec, fmt.Errorf("failed to parse SSL certificate")
+	}
+
+	// find Pseudonym in Subject names
+	pseudonym := ""
+	for _, v := range cert.Subject.Names {
+		if v.Type.Equal(oid_pseudonym) {
+			var ok bool
+			// quick sanity check!
+			if pseudonym, ok = v.Value.(string); !ok {
+				return &sec, fmt.Errorf("SSL cert Pseudonym is not a string")
+			}
+			break
+		}
+	}
+	if pseudonym == "" {
+		logrus.Errorf("SSL cert Pseudonym not found")
+		return &sec, errInvalidTelemetryCert
+	}
+
+	if pseudonym != cuuid {
+		logrus.Errorf("SSL cert Pseudonym %s does not match cluster UUID %s",
+			pseudonym, cuuid)
+		return &sec, errInvalidTelemetryCert
+	}
+	logrus.Tracef("SSL cert Pseudonym %s matches cluster UUID", pseudonym)
+	return &sec, nil
+}
+
+// refreshTelemetrySSLCert deletes the telemetry SSL cert secret and telemetry-registration PODs
+func (t *telemetry) refreshTelemetrySSLCert(sec *v1.Secret) {
+	if sec == nil {
+		return
+	} else if sec.Name != pxutil.TelemetryCertName {
+		logrus.Errorf("invalid secret name %s/%s  (expected %s)", sec.Namespace, sec.Name, pxutil.TelemetryCertName)
+		return
+	}
+
+	logrus.Warnf("refreshTelemetrySSLCert - deleting telemetry SSL cert secret %s/%s", sec.Namespace, sec.Name)
+	err := t.k8sClient.Delete(context.TODO(), sec)
+	if err != nil {
+		logrus.WithError(err).Errorf("failed to delete secret %s/%s", sec.Namespace, sec.Name)
+		return
+	}
+
+	logrus.Warnf("refreshTelemetrySSLCert - deleting POD labeled role=%s", DeploymentNameTelemetryRegistration)
+	err = k8sutil.DeletePodsByLabel(t.k8sClient, map[string]string{"role": DeploymentNameTelemetryRegistration}, sec.Namespace)
+	if err != nil {
+		logrus.WithError(err).Warnf("failed to delete px-telemetry-registration POD")
+	}
+}
+
 func getArcusTelemetryLocation(cluster *corev1.StorageCluster) string {
 	if cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation] != "" {
 		location := strings.ToLower(strings.TrimSpace(cluster.Annotations[pxutil.AnnotationTelemetryArcusLocation]))
@@ -1093,7 +1197,7 @@ func GetDesiredTelemetryImage(cluster *corev1.StorageCluster) (string, error) {
 		return util.GetImageURN(cluster, cluster.Spec.Monitoring.Telemetry.Image), nil
 	}
 
-	if cluster.Status.DesiredImages != nil {
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.Telemetry != "" {
 		return util.GetImageURN(cluster, cluster.Status.DesiredImages.Telemetry), nil
 	}
 
@@ -1105,7 +1209,7 @@ func getDesiredLogUploaderImage(cluster *corev1.StorageCluster) (string, error) 
 		return util.GetImageURN(cluster, cluster.Spec.Monitoring.Telemetry.LogUploaderImage), nil
 	}
 
-	if cluster.Status.DesiredImages != nil {
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.LogUploader != "" {
 		return util.GetImageURN(cluster, cluster.Status.DesiredImages.LogUploader), nil
 	}
 
@@ -1114,16 +1218,17 @@ func getDesiredLogUploaderImage(cluster *corev1.StorageCluster) (string, error) 
 
 func getDesiredProxyImage(cluster *corev1.StorageCluster) (string, error) {
 	if cluster.Status.DesiredImages != nil {
-		if pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) {
+		if pxutil.IsCCMGoSupported(pxutil.GetPortworxVersion(cluster)) && cluster.Status.DesiredImages.TelemetryProxy != "" {
 			return util.GetImageURN(cluster, cluster.Status.DesiredImages.TelemetryProxy), nil
+		} else if cluster.Status.DesiredImages.MetricsCollectorProxy != "" {
+			return util.GetImageURN(cluster, cluster.Status.DesiredImages.MetricsCollectorProxy), nil
 		}
-		return util.GetImageURN(cluster, cluster.Status.DesiredImages.MetricsCollectorProxy), nil
 	}
 	return "", fmt.Errorf("telemetry proxy image is empty")
 }
 
 func getDesiredCollectorImage(cluster *corev1.StorageCluster) (string, error) {
-	if cluster.Status.DesiredImages != nil {
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.MetricsCollector != "" {
 		return util.GetImageURN(cluster, cluster.Status.DesiredImages.MetricsCollector), nil
 	}
 	return "", fmt.Errorf("metrics collector image is empty")

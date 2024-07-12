@@ -26,6 +26,8 @@ import (
 )
 
 func TestSetupContextWithToken(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
 	var defaultSecret = []v1.Secret{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -119,6 +121,7 @@ func TestSetupContextWithToken(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
+			setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 			k8sClient := testutil.FakeK8sClient()
 
 			// create all initial k8s resources
@@ -142,7 +145,6 @@ func TestSetupContextWithToken(t *testing.T) {
 					},
 				},
 			}
-			coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 			reregisterComponents()
 			driver := portworx{}
 			err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
@@ -220,6 +222,12 @@ func TestSetupContextWithToken(t *testing.T) {
 func TestUpdateStorageNodePhase(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
+	clientset := fakek8sclient.NewSimpleClientset()
+	mockCoreOps := setUpMockCoreOps(mockCtrl, clientset)
+	mockCoreOps.EXPECT().
+		SearchNodeByAddresses(gomock.Any()).
+		Return(coreops.New(clientset).SearchNodeByAddresses([]string{})).
+		AnyTimes()
 
 	// Create the mock servers that can be used to mock SDK calls
 	mockClusterServer := mock.NewMockOpenStorageClusterServer(mockCtrl)
