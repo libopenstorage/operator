@@ -1274,11 +1274,12 @@ func TestServiceAccountTokenRefreshOnExpire(t *testing.T) {
 }
 
 func TestUpdateServiceAccountTokenSecretCaCrt(t *testing.T) {
-	caCrtDir := "/var/run/secrets/kubernetes.io/serviceaccount"
-	caCrtPath := "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-	err := os.MkdirAll(caCrtDir, fs.ModePerm)
+	// Set root CA certificate path to a safe place
+	component.RootCaCrtPath = "/tmp/ca.crt"
+	rootCaCrtDir := "/tmp"
+	err := os.MkdirAll(rootCaCrtDir, fs.ModePerm)
 	require.NoError(t, err)
-	file, err := os.Create(caCrtPath)
+	file, err := os.Create(component.RootCaCrtPath)
 	require.NoError(t, err)
 	file.Close()
 
@@ -1304,7 +1305,7 @@ func TestUpdateServiceAccountTokenSecretCaCrt(t *testing.T) {
 	require.NoError(t, err)
 	oldCaCrt := saTokenSecret.Data[v1.ServiceAccountRootCAKey]
 
-	err = os.WriteFile(caCrtPath, []byte("test"), 0644)
+	err = os.WriteFile(component.RootCaCrtPath, []byte("test"), 0644)
 	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)

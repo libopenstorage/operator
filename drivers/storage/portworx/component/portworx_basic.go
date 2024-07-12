@@ -46,6 +46,8 @@ const (
 
 var (
 	defaultPxSaTokenExpirationSeconds = int64(12 * 60 * 60)
+	// Accessible for testing purpose
+	RootCaCrtPath = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 )
 
 type portworxBasic struct {
@@ -561,16 +563,11 @@ func (c *portworxBasic) createAndMaintainPxSaTokenSecret(cluster *corev1.Storage
 	if err != nil {
 		return err
 	}
-	needRefreshToken, err := isTokenRefreshRequired(secret)
+	tokenRefreshed, err := refreshTokenIfNeeded(secret, cluster)
 	if err != nil {
 		return err
 	}
-	if needRefreshToken {
-		if err := c.refreshToken(secret, cluster); err != nil {
-			return fmt.Errorf("failed to refresh the token secret for px container: %w", err)
-		}
-	}
-	if caCrtUpdated || needRefreshToken {
+	if caCrtUpdated || tokenRefreshed {
 		if err := k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef); err != nil {
 			return err
 		}
@@ -597,12 +594,26 @@ func (c *portworxBasic) createTokenSecret(cluster *corev1.StorageCluster, ownerR
 }
 
 func updateCaCrtIfNeeded(secret *v1.Secret) (bool, error) {
-	rootCaCrt, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+	rootCaCrt, err := os.ReadFile(RootCaCrtPath)
 	if err != nil && !os.IsNotExist(err) {
-		return false, fmt.Errorf("error reading k8s cluster certificate located inside the pod at /var/run/secrets/kubernetes.io/serviceaccount/ca.crt: %w", err)
+		return false, fmt.Errorf("error reading k8s cluster certificate located inside the pod at %s: %w", RootCaCrtPath, err)
 	}
-	if len(secret.Data) == 0 || len(secret.Data[v1.ServiceAccountRootCAKey]) == 0 || !bytes.Equal(secret.Data[v1.ServiceAccountRootCAKey], rootCaCrt) {
+	if len(secret.Data) == 0 || !bytes.Equal(secret.Data[v1.ServiceAccountRootCAKey], rootCaCrt) {
 		secret.Data[v1.ServiceAccountRootCAKey] = rootCaCrt
+		return true, nil
+	}
+	return false, nil
+}
+
+func refreshTokenIfNeeded(secret *v1.Secret, cluster *corev1.StorageCluster) (bool, error) {
+	needRefreshToken, err := isTokenRefreshRequired(secret)
+	if err != nil {
+		return false, err
+	}
+	if needRefreshToken {
+		if err := refreshToken(secret, cluster); err != nil {
+			return false, fmt.Errorf("failed to refresh the token secret for px container: %w", err)
+		}
 		return true, nil
 	}
 	return false, nil
@@ -622,7 +633,7 @@ func isTokenRefreshRequired(secret *v1.Secret) (bool, error) {
 	return false, nil
 }
 
-func (c *portworxBasic) refreshToken(secret *v1.Secret, cluster *corev1.StorageCluster) error {
+func refreshToken(secret *v1.Secret, cluster *corev1.StorageCluster) error {
 	expirationSeconds, err := getPxSaTokenExpirationSeconds(cluster)
 	if err != nil {
 		return err
