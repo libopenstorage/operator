@@ -60,6 +60,8 @@ import (
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
 
+const fakeRootCertPath = "/tmp/ca.crt"
+
 // For some reason simpleClientset doesn't work with createToken, erroring out with serviceaccounts "" not found.
 // Thus wrap the simpleClientset with MockCoreOps.
 func setUpMockCoreOps(mockCtrl *gomock.Controller, clientset *fakek8sclient.Clientset) *mockcore.MockOps {
@@ -91,6 +93,19 @@ func setUpMockCoreOps(mockCtrl *gomock.Controller, clientset *fakek8sclient.Clie
 		})).
 		AnyTimes()
 	return mockCoreOps
+}
+
+// Set root CA certificate path to a safe place
+func setUpFakeRootCert(t *testing.T) {
+	component.SetRootCertPath(fakeRootCertPath)
+	rootCaCrtDir := "/tmp"
+	err := os.MkdirAll(rootCaCrtDir, fs.ModePerm)
+	require.NoError(t, err)
+	file, err := os.Create(fakeRootCertPath)
+	require.NoError(t, err)
+	file.Close()
+	err = os.WriteFile(fakeRootCertPath, []byte("test"), 0644)
+	require.NoError(t, err)
 }
 
 func TestOrderOfComponents(t *testing.T) {
@@ -243,6 +258,7 @@ func TestBasicComponentsInstallWithPreTLSPx(t *testing.T) {
 func TestBasicComponentsInstall(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
+	setUpFakeRootCert(t)
 	logrus.SetLevel(logrus.TraceLevel)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -1274,21 +1290,13 @@ func TestServiceAccountTokenRefreshOnExpire(t *testing.T) {
 }
 
 func TestUpdateServiceAccountTokenSecretCaCrt(t *testing.T) {
-	// Set root CA certificate path to a safe place
-	component.RootCaCrtPath = "/tmp/ca.crt"
-	rootCaCrtDir := "/tmp"
-	err := os.MkdirAll(rootCaCrtDir, fs.ModePerm)
-	require.NoError(t, err)
-	file, err := os.Create(component.RootCaCrtPath)
-	require.NoError(t, err)
-	file.Close()
-
 	mockCtrl := gomock.NewController(t)
 	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
+	setUpFakeRootCert(t)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
 
 	cluster := &corev1.StorageCluster{
@@ -1305,7 +1313,7 @@ func TestUpdateServiceAccountTokenSecretCaCrt(t *testing.T) {
 	require.NoError(t, err)
 	oldCaCrt := saTokenSecret.Data[v1.ServiceAccountRootCAKey]
 
-	err = os.WriteFile(component.RootCaCrtPath, []byte("test"), 0644)
+	err = os.WriteFile(fakeRootCertPath, []byte("newtest"), 0644)
 	require.NoError(t, err)
 
 	err = driver.PreInstall(cluster)
@@ -1314,7 +1322,7 @@ func TestUpdateServiceAccountTokenSecretCaCrt(t *testing.T) {
 	require.NoError(t, err)
 	newCaCrt := saTokenSecret.Data[v1.ServiceAccountRootCAKey]
 	require.NotEqual(t, oldCaCrt, newCaCrt)
-	require.Equal(t, string(newCaCrt), "test")
+	require.Equal(t, string(newCaCrt), "newtest")
 }
 
 func TestDefaultStorageClassesWithStork(t *testing.T) {

@@ -46,8 +46,7 @@ const (
 
 var (
 	defaultPxSaTokenExpirationSeconds = int64(12 * 60 * 60)
-	// Accessible for testing purpose
-	RootCaCrtPath = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+	rootCaCrtPath                     = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 )
 
 type portworxBasic struct {
@@ -594,9 +593,9 @@ func (c *portworxBasic) createTokenSecret(cluster *corev1.StorageCluster, ownerR
 }
 
 func updateCaCrtIfNeeded(secret *v1.Secret) (bool, error) {
-	rootCaCrt, err := os.ReadFile(RootCaCrtPath)
+	rootCaCrt, err := os.ReadFile(rootCaCrtPath)
 	if err != nil && !os.IsNotExist(err) {
-		return false, fmt.Errorf("error reading k8s cluster certificate located inside the pod at %s: %w", RootCaCrtPath, err)
+		return false, fmt.Errorf("error reading k8s cluster certificate located inside the pod at %s: %w", rootCaCrtPath, err)
 	}
 	if len(secret.Data) == 0 || !bytes.Equal(secret.Data[v1.ServiceAccountRootCAKey], rootCaCrt) {
 		secret.Data[v1.ServiceAccountRootCAKey] = rootCaCrt
@@ -749,6 +748,11 @@ func getPxSaTokenExpirationSeconds(cluster *corev1.StorageCluster) (int64, error
 		}
 	}
 	return defaultPxSaTokenExpirationSeconds, nil
+}
+
+// Set the path of k8s cluster root certificate for the purpose of testing
+func SetRootCertPath(path string) {
+	rootCaCrtPath = path
 }
 
 // RegisterPortworxBasicComponent registers the Portworx Basic component
