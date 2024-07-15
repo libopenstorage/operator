@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/fs"
 	"math/rand"
 	"net"
 	"os"
@@ -64,6 +65,7 @@ import (
 
 const (
 	etcHostsFile       = "/etc/hosts"
+	fakeRootCertPath   = "/tmp/ca.crt"
 	tempEtcHostsMarker = "### px-operator unit-test"
 )
 
@@ -98,6 +100,19 @@ func setUpMockCoreOps(mockCtrl *gomock.Controller, clientset *fakek8sclient.Clie
 		})).
 		AnyTimes()
 	return mockCoreOps
+}
+
+// Set root CA certificate path to a safe place
+func setUpFakeRootCert(t *testing.T) {
+	component.SetRootCertPath(fakeRootCertPath)
+	rootCaCrtDir := "/tmp"
+	err := os.MkdirAll(rootCaCrtDir, fs.ModePerm)
+	require.NoError(t, err)
+	file, err := os.Create(fakeRootCertPath)
+	require.NoError(t, err)
+	file.Close()
+	err = os.WriteFile(fakeRootCertPath, []byte("test"), 0644)
+	require.NoError(t, err)
 }
 
 func TestOrderOfComponents(t *testing.T) {
@@ -153,6 +168,7 @@ func TestOrderOfComponents(t *testing.T) {
 func TestBasicComponentsInstall(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
+	setUpFakeRootCert(t)
 	logrus.SetLevel(logrus.TraceLevel)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -1076,12 +1092,6 @@ func TestServiceAccountTokenRefreshOnExpire(t *testing.T) {
 			Name:      "px-cluster",
 			Namespace: "kube-test",
 		},
-		Spec: corev1.StorageClusterSpec{
-			Stork: &corev1.StorkSpec{
-				Enabled: true,
-			},
-			Image: "portworx/image:2.10.1",
-		},
 	}
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -1103,6 +1113,42 @@ func TestServiceAccountTokenRefreshOnExpire(t *testing.T) {
 	updatedExpirationTime, err := time.Parse(time.RFC3339, string(saTokenSecret.Data[component.PxSaTokenRefreshTimeKey]))
 	require.NoError(t, err)
 	assert.True(t, updatedExpirationTime.Sub(fakeExpirationTime) > 6*time.Hour)
+}
+
+func TestUpdateServiceAccountTokenSecretCaCrt(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
+	setUpFakeRootCert(t)
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	saTokenSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, saTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	oldCaCrt := saTokenSecret.Data[v1.ServiceAccountRootCAKey]
+
+	err = os.WriteFile(fakeRootCertPath, []byte("newtest"), 0644)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, saTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	newCaCrt := saTokenSecret.Data[v1.ServiceAccountRootCAKey]
+	require.NotEqual(t, oldCaCrt, newCaCrt)
+	require.Equal(t, string(newCaCrt), "newtest")
 }
 
 func TestDefaultStorageClassesWithStork(t *testing.T) {
