@@ -555,9 +555,19 @@ type DataProviderSpec struct {
 
 // GitOpsSpec contains the details for GitOps provider like github or bitbucket
 type GitOpsSpec struct {
-	Name   string                 `json:"name,omitempty"`
-	Type   string                 `json:"type,omitempty"`
-	Params map[string]interface{} `json:"params,omitempty"`
+	Name   string           `json:"name,omitempty"`
+	Type   string           `json:"type,omitempty"`
+	Params GitOpsSpecParams `json:"params,omitempty"`
+}
+
+type GitOpsSpecParams struct {
+	DefaultReviewers []string `json:"defaultReviewers,omitempty"`
+	User             string   `json:"user,omitempty"`
+	Repo             string   `json:"repo,omitempty"`
+	Folder           string   `json:"folder,omitempty"`
+	BaseUrl          string   `json:"baseUrl,omitempty"`
+	ProjectKey       string   `json:"projectKey,omitempty"`
+	Branch           string   `json:"branch,omitempty"`
 }
 
 // MonitoringSpec contains monitoring configuration for the storage cluster.
