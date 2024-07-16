@@ -3291,7 +3291,7 @@ func TestPodWithTelemetryUpgrade(t *testing.T) {
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
@@ -3351,7 +3351,7 @@ func TestPodWithTelemetryCCMVolume(t *testing.T) {
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
 	require.NoError(t, err)
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 

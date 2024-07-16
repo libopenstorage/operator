@@ -1769,7 +1769,7 @@ func TestSetDefaultsOnStorageCluster(t *testing.T) {
 		},
 	}
 
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
@@ -1948,7 +1948,7 @@ func TestSetDefaultsOnStorageClusterOnEKS(t *testing.T) {
 			Namespace: "kube-test",
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 
 	// TestCase: default cloud provider
 	err = preflight.InitPreflightChecker(k8sClient)
@@ -2051,7 +2051,7 @@ func TestStorageClusterPlacementDefaults(t *testing.T) {
 			Namespace: "kube-test",
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 
 	// TestCase: placement spec below k8s 1.24
 	expectedPlacement := &corev1.PlacementSpec{
@@ -3023,7 +3023,7 @@ func TestStorageClusterDefaultsForCSI(t *testing.T) {
 			Image: "px/image:2.9.0.1",
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 
 	// Simulate DesiredImages.CSISnapshotController being empty for old operator version w/o this image
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -3354,7 +3354,7 @@ func TestStorageClusterDefaultsForAlertManager(t *testing.T) {
 			Image: "px/image:2.8.0",
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 
 	// Don't enable alert manager if monitoring spec is nil
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -3454,7 +3454,7 @@ func TestStorageClusterDefaultsForGrafana(t *testing.T) {
 			Image: "px/image:2.8.0",
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 
 	// Don't enable grafana by default
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -4253,7 +4253,7 @@ func TestSetDefaultsOnStorageClusterForOpenshift(t *testing.T) {
 			},
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 
 	expectedPlacement := &corev1.PlacementSpec{
 		NodeAffinity: &v1.NodeAffinity{
@@ -10876,7 +10876,7 @@ func TestStorageClusterDefaultsForTelemetry(t *testing.T) {
 			},
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 
 	// Disable telemetry for px version < 2.8.0
 	err = driver.SetDefaultsOnStorageCluster(cluster)

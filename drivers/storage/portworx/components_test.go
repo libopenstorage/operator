@@ -1,10 +1,18 @@
 package portworx
 
 import (
+	"bytes"
 	"context"
+	crand "crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io/fs"
+	"math/big"
 	"math/rand"
 	"os"
 	"strconv"
@@ -305,7 +313,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 			},
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
@@ -763,7 +771,7 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 			Image: "portworx/oci-monitor:2.18.0",
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
@@ -10756,7 +10764,7 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 			ClusterUID: "test-uid",
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	err = k8sClient.Create(context.TODO(), cluster)
@@ -12591,7 +12599,7 @@ func TestCSIRegistrarContainerShift(t *testing.T) {
 			},
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
@@ -12663,7 +12671,7 @@ func TestDisableCSI_GTPxVersion2_13(t *testing.T) {
 			},
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, nil)
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 
@@ -14881,7 +14889,7 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 	require.Equal(t, expectedConfigMap.Data, telemetryConfigMap.Data)
 
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, dummyTelemetryCert(t, 90))
 
 	// without location
 	delete(cluster.Annotations, "portworx.io/arcus-location")
@@ -15108,7 +15116,7 @@ func TestTelemetryCCMProxy(t *testing.T) {
 			ClusterUID: "test-clusteruid",
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, dummyTelemetryCert(t, 90))
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
@@ -15194,7 +15202,7 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	}
 
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, dummyTelemetryCert(t, 90))
 
 	// Validate default ccm listening port
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -15570,7 +15578,7 @@ func TestTelemetryWithEmptyImagest(t *testing.T) {
 			ClusterUID: "test-clusteruid",
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, dummyTelemetryCert(t, 90))
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	cluster.Status.DesiredImages = &corev1.ComponentImages{}
@@ -15883,7 +15891,7 @@ func TestSetTelemetryDefaultWithCertCreated(t *testing.T) {
 			Image: "portworx/oci-monitor:2.12.0",
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, dummyTelemetryCert(t, 90))
 
 	// Parameters:
 	// HTTP proxy provided: yes/no
@@ -15966,7 +15974,7 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 		},
 	}
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, dummyTelemetryCert(t, 90))
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
@@ -16157,7 +16165,7 @@ func TestTelemetryCCMGoHTTPProxy(t *testing.T) {
 			ClusterUID: "test-clusteruid",
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, dummyTelemetryCert(t, 90))
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
@@ -16320,7 +16328,7 @@ func TestTelemetryCCMGoHTTPSProxy(t *testing.T) {
 			ClusterUID: "test-clusteruid",
 		},
 	}
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, dummyTelemetryCert(t, 90))
 
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
@@ -16479,7 +16487,7 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	}
 
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, dummyTelemetryCert(t, 90))
 
 	// TestCase: Don't set secret owner reference when delete strategy is not set
 	err = driver.SetDefaultsOnStorageCluster(cluster)
@@ -16641,7 +16649,7 @@ func TestTelemetryCCMGoRestartPhonehome(t *testing.T) {
 	}
 
 	// This cert is created by ccm container outside of operator, let's simulate it.
-	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	createTelemetrySecret(t, k8sClient, cluster.Namespace, dummyTelemetryCert(t, 90))
 
 	// Create phonehome configmap to update
 	expectedConfigMap := testutil.GetExpectedConfigMap(t, "ccmGoPhonehomeConfigMap.yaml")
@@ -17679,18 +17687,58 @@ func expectedVolumesAndMounts(volumeSpecs []corev1.VolumeSpec) ([]v1.Volume, []v
 
 // createTelemetrySecret creates a telemetry secret, so when calling SetDefaultsOnStorageCluster
 // in tests that are unrelated to telemetry it doesn't need to ping Arcus registration endpoint
-func createTelemetrySecret(t *testing.T, k8sClient client.Client, namespace string) {
-	err := k8sClient.Create(
-		context.TODO(),
-		&v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      testutil.TelemetryCertName,
-				Namespace: namespace,
+func createTelemetrySecret(t *testing.T, k8sClient client.Client, namespace string, certData []byte) {
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testutil.TelemetryCertName,
+			Namespace: namespace,
+		},
+	}
+	if certData != nil {
+		secret.Data = map[string][]byte{
+			"cert": certData,
+		}
+	}
+	err := k8sClient.Create(context.TODO(), secret, &client.CreateOptions{})
+	require.NoError(t, err)
+}
+
+func dummyTelemetryCert(t *testing.T, expiryDays int) []byte {
+	ca := &x509.Certificate{
+		SerialNumber: big.NewInt(2019),
+		Subject: pkix.Name{
+			Organization:  []string{"Portworx, INC."},
+			Country:       []string{"US"},
+			Province:      []string{""},
+			Locality:      []string{"San Francisco"},
+			StreetAddress: []string{"Portworx"},
+			PostalCode:    []string{"94016"},
+			ExtraNames: []pkix.AttributeTypeAndValue{
+				{Type: asn1.ObjectIdentifier([]int{2, 5, 4, 65}), Value: "test-clusteruid"},
 			},
 		},
-		&client.CreateOptions{},
-	)
+		NotBefore:             time.Now().AddDate(0, -1, 0),
+		NotAfter:              time.Now().AddDate(0, expiryDays, 0),
+		IsCA:                  true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+	}
+	caPrivKey, err := rsa.GenerateKey(crand.Reader, 4096)
 	require.NoError(t, err)
+	certBytes, err := x509.CreateCertificate(crand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
+	require.NoError(t, err)
+
+	certPEMBlock := &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certBytes,
+	}
+
+	// Encode the PEM block to a buffer
+	var pemBuf bytes.Buffer
+	err = pem.Encode(&pemBuf, certPEMBlock)
+	require.NoError(t, err)
+	return pemBuf.Bytes()
 }
 
 // test if install can be enabled on non-openshift servers for Plugin
