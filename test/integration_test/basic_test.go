@@ -467,27 +467,34 @@ func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
 
 // 1. Deploy PX and verify the secret containing the token for px stored in the k8s secret correctly mounted inside px runc container.
 // 2. The cluster spec set the token expiration time to be 10 min, which is the minimum allowed token expiration time. The token should get refreshed after 5min.
-// 3. Wait for 5min. Verify the token is refreshed and correctly mounted inside px runc container.
-// 4. Delete the secret. Wait for 2min. Verify the token is refreshed and correctly mounted inside px runc container.
+// 3. Wait for 5min. Verify the token is refreshed, correctly mounted inside px runc container, and able to talk to k8s api server.
+// 4. Delete the secret. Wait for 2min. Verify the token is refreshed, correctly mounted inside px runc container, and able to talk to k8s api server.
 func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 	return func(t *testing.T) {
 		testSpec := tc.TestSpec(t)
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		cmd := "runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/token"
 		verifyTokenFunc := func() string {
 			pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 			require.NoError(t, err)
 			expectedToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
-			actualToken, stderr, err := ci_utils.RunPxCmd(cmd)
-			require.Empty(t, stderr)
-			require.NoError(t, err)
 			require.Eventually(t, func() bool {
+				actualToken, stderr, err := ci_utils.RunPxCmd("runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/token")
+				require.Empty(t, stderr)
+				require.NoError(t, err)
 				return expectedToken == actualToken
 			}, 10*time.Minute, 15*time.Second, "the token inside px runc container is different from the token in the k8s secret")
-			logrus.Infof("token is created and verified: %s", actualToken)
-			return actualToken
+
+			stdout, stderr, err := ci_utils.RunPxCmd(fmt.Sprintf("runc exec portworx "+
+				"curl -s https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/api/v1/namespaces/$(runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)/secrets "+
+				"--header 'Authorization: Bearer %s' --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt | grep px-sa-token-secret", expectedToken))
+			errMsg := "px not able to communicate with k8s api server with the mounted service account token"
+			require.NotEmpty(t, stdout, errMsg)
+			require.Empty(t, stderr, errMsg)
+			require.NoError(t, err, errMsg)
+			logrus.Infof("token is created and verified: %s", expectedToken)
+			return expectedToken
 		}
 
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
