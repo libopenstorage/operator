@@ -1608,8 +1608,8 @@ func ClusterSupportsParallelUpgrade(nodeEnumerateResponse *api.SdkNodeEnumerateW
 	return true
 }
 
-func getNodesToUpgrade(k8sClient client.Client, namespace string, cordonedNodesMap map[string]bool) ([]string, map[string]bool, error) {
-	nodesUpgrading := make([]string, 0)
+func getNodeUpgradeMaps(k8sClient client.Client, namespace string, cordonedNodesMap map[string]bool) (map[string]bool, map[string]bool, error) {
+	nodesUpgrading := make(map[string]bool, 0)
 	canBeUpgradedNodes := make(map[string]bool)
 	nodePDBs, err := k8sutil.ListPodDisruptionBudgets(k8sClient, namespace)
 	if err != nil {
@@ -1619,7 +1619,7 @@ func getNodesToUpgrade(k8sClient client.Client, namespace string, cordonedNodesM
 		k8sNode := strings.TrimPrefix(pdb.Name, "px-")
 		if strings.HasPrefix(pdb.Name, "px-") && cordonedNodesMap[k8sNode] {
 			if pdb.Spec.MinAvailable.IntVal == 0 {
-				nodesUpgrading = append(nodesUpgrading, k8sNode)
+				nodesUpgrading[k8sNode] = true
 			} else {
 				canBeUpgradedNodes[k8sNode] = true
 			}
@@ -1639,6 +1639,7 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 	cordonedk8sNodes := make(map[string]bool)
 	cordonedPxNodesMap := make(map[string]string)
 	canBeUpgradedNodes := make([]string, 0)
+	nodesUpgrading := make([]string, 0)
 	nodesDown := 0
 
 	// Find if kubernetes nodes have been cordoned
@@ -1650,7 +1651,7 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 
 	// Check all nodes with PDB 0 and add to another list
 	// Get list of nodes that have PDB 0 and nodes that don't
-	nodesUpgrading, canBeUpgradedNodesMap, err := getNodesToUpgrade(k8sClient, cluster.Namespace, cordonedk8sNodes)
+	nodesUpgradingMap, canBeUpgradedNodesMap, err := getNodeUpgradeMaps(k8sClient, cluster.Namespace, cordonedk8sNodes)
 	if err != nil {
 		return nil, nil, -1, err
 	}
@@ -1660,11 +1661,14 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 			logrus.Debugf("Node %s is not a quorum member or is decomissioned, skipping", node.Id)
 			continue
 		}
+		// Node is either cordoned and can be upgraded or is already selected for upgrade
 		if _, ok := cordonedk8sNodes[node.SchedulerNodeName]; ok {
 			cordonedNodes = append(cordonedNodes, node.Id)
 			cordonedPxNodesMap[node.Id] = node.SchedulerNodeName
 		}
-		if _, ok := canBeUpgradedNodesMap[node.SchedulerNodeName]; ok {
+		if _, ok := nodesUpgradingMap[node.SchedulerNodeName]; ok {
+			nodesUpgrading = append(nodesUpgrading, node.Id)
+		} else if _, ok := canBeUpgradedNodesMap[node.SchedulerNodeName]; ok {
 			canBeUpgradedNodes = append(canBeUpgradedNodes, node.Id)
 		}
 		if node.Status != api.Status_STATUS_OK {
