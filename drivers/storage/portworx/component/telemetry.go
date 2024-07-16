@@ -1054,12 +1054,12 @@ func (t *telemetry) validateTelemetrySSLCert(namespace, cuuid string) (*v1.Secre
 		return &sec, fmt.Errorf("failed to parse SSL certificate")
 	}
 
-	err = t.checkTelemetrySSLCertPseudonym(cert, cuuid)
+	err = t.validateTelemetrySSLCertPseudonym(cert, cuuid)
 	if err != nil {
 		return &sec, err
 	}
 
-	err = t.checkTelemetrySSLCertExpiry(cert)
+	err = t.validateTelemetrySSLCertExpiry(cert)
 	if err != nil {
 		return &sec, err
 	}
@@ -1067,7 +1067,7 @@ func (t *telemetry) validateTelemetrySSLCert(namespace, cuuid string) (*v1.Secre
 	return &sec, nil
 }
 
-func (t *telemetry) checkTelemetrySSLCertPseudonym(cert *x509.Certificate, cuuid string) error {
+func (t *telemetry) validateTelemetrySSLCertPseudonym(cert *x509.Certificate, cuuid string) error {
 	// find Pseudonym in Subject names
 	pseudonym := ""
 	for _, v := range cert.Subject.Names {
@@ -1094,18 +1094,14 @@ func (t *telemetry) checkTelemetrySSLCertPseudonym(cert *x509.Certificate, cuuid
 	return nil
 }
 
-func (t *telemetry) checkTelemetrySSLCertExpiry(cert *x509.Certificate) error {
-	currDate := time.Now()
-	warningDate := time.Now().AddDate(0, 0, 60)     // start emitting warnings if we are within 60 days of certificate expiry
-	errorBufferDays := time.Now().AddDate(0, 0, 30) // start emitting errors if we are within 30 days of certificate expiry
-	if currDate.After(cert.NotAfter) {
-		logrus.Errorf("SSL cert has already expired. NotAfter:%s", cert.NotAfter)
+func (t *telemetry) validateTelemetrySSLCertExpiry(cert *x509.Certificate) error {
+	recycleDate := time.Now().Add(time.Hour * 12) // delete the cert and re-register if we are within a small grace period of certificate expiry
+	warningDate := time.Now().AddDate(0, 0, 60)   // start emitting warnings if we are within 60 days of certificate expiry
+	if recycleDate.After(cert.NotAfter) {
+		logrus.Errorf("SSL cert is set to expire on %s, which is soon enough to refresh telemetry", cert.NotAfter.String())
 		return errInvalidTelemetryCert
-	} else if errorBufferDays.After(cert.NotAfter) {
-		logrus.Errorf("SSL cert is set to expire on %s", cert.NotAfter.String())
-		return nil
 	} else if warningDate.After(cert.NotAfter) {
-		logrus.Warnf("SSL cert is set to expire on %s", cert.NotAfter)
+		logrus.Warnf("SSL cert is set to expire on %s", cert.NotAfter.String())
 		return nil
 	}
 	return nil
