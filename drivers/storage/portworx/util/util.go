@@ -1592,9 +1592,13 @@ func ClusterSupportsParallelUpgrade(nodeEnumerateResponse *api.SdkNodeEnumerateW
 			continue
 		}
 		v := node.NodeLabels[NodeLabelPortworxVersion]
+		if v == "" {
+			logrus.Infof("Node %s does not have a version label", node.Id)
+			continue
+		}
 		nodeVersion, err := version.NewVersion(v)
 		if err != nil {
-			logrus.Warnf("Failed to parse node version %s for node %s: %v", v, node.Id, err)
+			logrus.Warnf("Failed to parse node version [ %s ] for node %s: %v", v, node.Id, err)
 			return false
 		}
 		if nodeVersion.LessThan(ParallelUpgradePDBVersion) {
