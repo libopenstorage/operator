@@ -1054,6 +1054,20 @@ func (t *telemetry) validateTelemetrySSLCert(namespace, cuuid string) (*v1.Secre
 		return &sec, fmt.Errorf("failed to parse SSL certificate")
 	}
 
+	err = t.checkTelemetrySSLCertPseudonym(cert, cuuid)
+	if err != nil {
+		return &sec, err
+	}
+
+	err = t.checkTelemetrySSLCertExpiry(cert)
+	if err != nil {
+		return &sec, err
+	}
+
+	return &sec, nil
+}
+
+func (t *telemetry) checkTelemetrySSLCertPseudonym(cert *x509.Certificate, cuuid string) error {
 	// find Pseudonym in Subject names
 	pseudonym := ""
 	for _, v := range cert.Subject.Names {
@@ -1061,23 +1075,39 @@ func (t *telemetry) validateTelemetrySSLCert(namespace, cuuid string) (*v1.Secre
 			var ok bool
 			// quick sanity check!
 			if pseudonym, ok = v.Value.(string); !ok {
-				return &sec, fmt.Errorf("SSL cert Pseudonym is not a string")
+				return fmt.Errorf("SSL cert Pseudonym is not a string")
 			}
 			break
 		}
 	}
 	if pseudonym == "" {
 		logrus.Errorf("SSL cert Pseudonym not found")
-		return &sec, errInvalidTelemetryCert
+		return errInvalidTelemetryCert
 	}
 
 	if pseudonym != cuuid {
 		logrus.Errorf("SSL cert Pseudonym %s does not match cluster UUID %s",
 			pseudonym, cuuid)
-		return &sec, errInvalidTelemetryCert
+		return errInvalidTelemetryCert
 	}
 	logrus.Tracef("SSL cert Pseudonym %s matches cluster UUID", pseudonym)
-	return &sec, nil
+	return nil
+}
+
+func (t *telemetry) checkTelemetrySSLCertExpiry(cert *x509.Certificate) error {
+	warningDate := time.Now().AddDate(0, 0, 60)     // start emitting warnings if we are within 60 days of certificate expiry
+	errorBufferDays := time.Now().AddDate(0, 0, 30) // start emitting errors if we are within 30 days of certificate expiry
+	if cert.NotAfter.Before(time.Now()) {
+		logrus.Errorf("SSL cert has already expired. NotAfter:%s", cert.NotAfter)
+		return errInvalidTelemetryCert
+	} else if cert.NotAfter.Before(errorBufferDays) {
+		logrus.Errorf("SSL cert is set to expire on %s", cert.NotAfter.String())
+		return nil
+	} else if cert.NotAfter.Before(warningDate) {
+		logrus.Warnf("SSL cert is set to expire on %s", cert.NotAfter)
+		return nil
+	}
+	return nil
 }
 
 // refreshTelemetrySSLCert deletes the telemetry SSL cert secret and telemetry-registration PODs
