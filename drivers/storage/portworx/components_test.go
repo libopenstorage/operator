@@ -3568,14 +3568,14 @@ func TestAutopilotInstall(t *testing.T) {
 				GitOps: &corev1.GitOpsSpec{
 					Name: "test",
 					Type: "bitbucket-scm",
-					Params: corev1.GitOpsSpecParams{
-						DefaultReviewers: []string{"user1", "user2"},
-						User:             "oksana",
-						Repo:             "autopilot-bb",
-						Folder:           "workloads",
-						BaseUrl:          "http://10.13.108.10:7990",
-						ProjectKey:       "PXAUT",
-						Branch:           "master",
+					Params: map[string]string{
+						"defaultReviewers": "user1,user2",
+						"user":             "oksana",
+						"repo":             "autopilot-bb",
+						"folder":           "workloads",
+						"baseUrl":          "http://10.13.108.10:7990",
+						"projectKey":       "PXAUT",
+						"branch":           "master",
 					},
 				},
 				Args: map[string]string{
@@ -5059,14 +5059,14 @@ func TestAutopilotInstallAndUninstallOnOpenshift414(t *testing.T) {
 				GitOps: &corev1.GitOpsSpec{
 					Name: "test",
 					Type: "bitbucket-scm",
-					Params: corev1.GitOpsSpecParams{
-						DefaultReviewers: []string{"user1", "user2"},
-						User:             "oksana",
-						Repo:             "autopilot-bb",
-						Folder:           "workloads",
-						BaseUrl:          "http://10.13.108.10:7990",
-						ProjectKey:       "PXAUT",
-						Branch:           "master",
+					Params: map[string]string{
+						"defaultReviewers": "user1,user2",
+						"user":             "oksana",
+						"repo":             "autopilot-bb",
+						"folder":           "workloads",
+						"baseUrl":          "http://10.13.108.10:7990",
+						"projectKey":       "PXAUT",
+						"branch":           "master",
 					},
 				},
 				Args: map[string]string{
@@ -5236,14 +5236,14 @@ func TestAutopilotWithOCPSecretNotFound(t *testing.T) {
 				GitOps: &corev1.GitOpsSpec{
 					Name: "test",
 					Type: "bitbucket-scm",
-					Params: corev1.GitOpsSpecParams{
-						DefaultReviewers: []string{"user1", "user2"},
-						User:             "oksana",
-						Repo:             "autopilot-bb",
-						Folder:           "workloads",
-						BaseUrl:          "http://10.13.108.10:7990",
-						ProjectKey:       "PXAUT",
-						Branch:           "master",
+					Params: map[string]string{
+						"defaultReviewers": "user1,user2",
+						"user":             "oksana",
+						"repo":             "autopilot-bb",
+						"folder":           "workloads",
+						"baseUrl":          "http://10.13.108.10:7990",
+						"projectKey":       "PXAUT",
+						"branch":           "master",
 					},
 				},
 				Args: map[string]string{
@@ -5364,14 +5364,14 @@ func TestDisableEnableAutopilotOCP414(t *testing.T) {
 				GitOps: &corev1.GitOpsSpec{
 					Name: "test",
 					Type: "bitbucket-scm",
-					Params: corev1.GitOpsSpecParams{
-						DefaultReviewers: []string{"user1", "user2"},
-						User:             "oksana",
-						Repo:             "autopilot-bb",
-						Folder:           "workloads",
-						BaseUrl:          "http://10.13.108.10:7990",
-						ProjectKey:       "PXAUT",
-						Branch:           "master",
+					Params: map[string]string{
+						"defaultReviewers": "user1,user2",
+						"user":             "oksana",
+						"repo":             "autopilot-bb",
+						"folder":           "workloads",
+						"baseUrl":          "http://10.13.108.10:7990",
+						"projectKey":       "PXAUT",
+						"branch":           "master",
 					},
 				},
 				Args: map[string]string{
@@ -5548,14 +5548,14 @@ func TestAutopilotProviderURLOnOCP414(t *testing.T) {
 				GitOps: &corev1.GitOpsSpec{
 					Name: "test",
 					Type: "bitbucket-scm",
-					Params: corev1.GitOpsSpecParams{
-						DefaultReviewers: []string{"user1", "user2"},
-						User:             "oksana",
-						Repo:             "autopilot-bb",
-						Folder:           "workloads",
-						BaseUrl:          "http://10.13.108.10:7990",
-						ProjectKey:       "PXAUT",
-						Branch:           "master",
+					Params: map[string]string{
+						"defaultReviewers": "user1,user2",
+						"user":             "oksana",
+						"repo":             "autopilot-bb",
+						"folder":           "workloads",
+						"baseUrl":          "http://10.13.108.10:7990",
+						"projectKey":       "PXAUT",
+						"branch":           "master",
 					},
 				},
 				Args: map[string]string{
@@ -5670,14 +5670,14 @@ func TestAutopilotInstallAndUninstallOnOpenshift415(t *testing.T) {
 				GitOps: &corev1.GitOpsSpec{
 					Name: "test",
 					Type: "bitbucket-scm",
-					Params: corev1.GitOpsSpecParams{
-						DefaultReviewers: []string{"user1", "user2"},
-						User:             "oksana",
-						Repo:             "autopilot-bb",
-						Folder:           "workloads",
-						BaseUrl:          "http://10.13.108.10:7990",
-						ProjectKey:       "PXAUT",
-						Branch:           "master",
+					Params: map[string]string{
+						"defaultReviewers": "user1,user2",
+						"user":             "oksana",
+						"repo":             "autopilot-bb",
+						"folder":           "workloads",
+						"baseUrl":          "http://10.13.108.10:7990",
+						"projectKey":       "PXAUT",
+						"branch":           "master",
 					},
 				},
 				Args: map[string]string{
