@@ -488,11 +488,12 @@ func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 
 			stdout, stderr, err := ci_utils.RunPxCmd(fmt.Sprintf("runc exec portworx "+
 				"curl -s https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/api/v1/namespaces/$(runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)/secrets "+
-				"--header 'Authorization: Bearer %s' --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt | grep px-sa-token-secret", expectedToken))
+				"--header 'Authorization: Bearer %s' --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt | grep %s", expectedToken, pxutil.PortworxServiceAccountTokenSecretName))
 			errMsg := "px not able to communicate with k8s api server with the mounted service account token"
-			require.NotEmpty(t, stdout, errMsg)
-			require.Empty(t, stderr, errMsg)
-			require.NoError(t, err, errMsg)
+			require.True(t, strings.Contains(stdout, pxutil.PortworxServiceAccountTokenSecretName),
+				fmt.Sprintf("the secret list returned from k8s api server does not contain %s. output: %s", pxutil.PortworxServiceAccountTokenSecretName, stdout))
+			require.Empty(t, stderr, fmt.Sprintf("%s: %s", errMsg, stderr))
+			require.NoError(t, err, fmt.Sprintf("%s: %s", errMsg, err.Error()))
 			logrus.Infof("token is created and verified: %s", expectedToken)
 			return expectedToken
 		}
