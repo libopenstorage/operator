@@ -1095,10 +1095,9 @@ func (t *telemetry) validateTelemetrySSLCertPseudonym(cert *x509.Certificate, cu
 }
 
 func (t *telemetry) validateTelemetrySSLCertExpiry(cert *x509.Certificate) error {
-	recycleDate := time.Now().Add(time.Hour * 12) // delete the cert and re-register if we are within a small grace period of certificate expiry
-	warningDate := time.Now().AddDate(0, 0, 60)   // start emitting warnings if we are within 60 days of certificate expiry
-	if recycleDate.After(cert.NotAfter) {
-		logrus.Errorf("SSL cert is set to expire on %s, which is soon enough to refresh telemetry", cert.NotAfter.String())
+	warningDate := time.Now().AddDate(0, 0, 30) // start emitting warnings if we are within 30 days of certificate expiry
+	if time.Now().After(cert.NotAfter) {
+		logrus.Errorf("SSL cert expired on %s", cert.NotAfter.String())
 		return errInvalidTelemetryCert
 	} else if warningDate.After(cert.NotAfter) {
 		logrus.Warnf("SSL cert is set to expire on %s", cert.NotAfter.String())
