@@ -143,6 +143,12 @@ func CreateNodePDBWithStoragelessNode(tc *types.TestCase) func(*testing.T) {
 		*cluster.Spec.CloudStorage.MaxStorageNodesPerZone = uint32(3)
 		logrus.Info("Validating PDB with storageless nodes using maxstoragenodesperzone value: ", *cluster.Spec.CloudStorage.MaxStorageNodesPerZone)
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+		pxVersion := testutil.GetPortworxVersion(cluster)
+		if pxVersion.GreaterThanOrEqual(pxVer3_1_2) {
+			logrus.Infof("Validating Node PDB names and default minAvailable")
+			err := testutil.ValidateNodePDB(cluster, ci_utils.DefaultValidateUpgradeTimeout, ci_utils.DefaultValidateUpgradeRetryInterval)
+			require.NoError(t, err)
+		}
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 
 	}
@@ -252,8 +258,8 @@ func NodesSelectedForUpgradeWithReplicas(tc *types.TestCase) func(*testing.T) {
 			require.Contains(t, stdout.String(), "Volume successfully created")
 			require.NoError(t, err)
 
-			// Cordon the nodes with volume replica and one extra node
-			for i := 0; i < 3; i++ {
+			// Cordon the nodes with volume replica
+			for i := 0; i < 2; i++ {
 				currNode, err := coreops.Instance().GetNodeByName(pods.Items[i].Spec.NodeName)
 				require.NoError(t, err)
 				currNode.Spec.Unschedulable = true
@@ -265,18 +271,15 @@ func NodesSelectedForUpgradeWithReplicas(tc *types.TestCase) func(*testing.T) {
 			time.Sleep(30 * time.Second)
 
 			// Validate the nodes selected for upgrade
-			logrus.Infof("Validating number of nodes ready for upgrade with volume replicas")
+			logrus.Infof("Validating only 1 node with volume replica is ready for upgrade")
 			pdbs, err := policyops.Instance().ListPodDisruptionBudget(cluster.Namespace)
 			require.NoError(t, err)
 			isVolumeReplicaSelected := false
 			for _, pdb := range pdbs.Items {
-				if strings.HasSuffix(pdb.Name, pods.Items[2].Spec.NodeName) {
-					require.Equal(t, 0, pdb.Spec.MinAvailable.IntValue())
-				} else if (strings.HasSuffix(pdb.Name, pods.Items[0].Spec.NodeName) || strings.HasSuffix(pdb.Name, pods.Items[1].Spec.NodeName)) && pdb.Spec.MinAvailable.IntValue() == 0 {
+				if (strings.HasSuffix(pdb.Name, pods.Items[0].Spec.NodeName) || strings.HasSuffix(pdb.Name, pods.Items[1].Spec.NodeName)) && pdb.Spec.MinAvailable.IntValue() == 0 {
 					require.False(t, isVolumeReplicaSelected)
 					isVolumeReplicaSelected = true
 				}
-
 			}
 
 			// Uncordon nodes

@@ -5362,28 +5362,30 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 			if err != nil {
 				return nil, true, fmt.Errorf("failed to get storage nodes, Err: %v", err)
 			}
-			availablenodes := 0
+			availableNodes := 0
 			for _, node := range nodes.Items {
-				if *node.Status.NodeAttributes.Storage && node.Status.Phase == "Online" {
-					availablenodes++
-				} else {
-					logrus.Infof("Node [%s] in state [%s] is not Online, PDB might be incorrect", node.Name, node.Status.Phase)
+				if *node.Status.NodeAttributes.Storage {
+					if node.Status.Phase == "Online" {
+						availableNodes++
+					} else {
+						logrus.Infof("Node %s is in state [%s], PDB might be incorrect", node.Name, node.Status.Phase)
+					}
 				}
 			}
 			pdbs, err := policyops.Instance().ListPodDisruptionBudget(cluster.Namespace)
 			if err != nil {
 				return nil, true, fmt.Errorf("failed to list all poddisruptionbudgets, Err: %v", err)
 			}
-			actualNodePDBcount := 0
+			actualNodePDBCount := 0
 			for _, pdb := range pdbs.Items {
 				if strings.HasPrefix(pdb.Name, "px-") && pdb.Name != "px-kvdb" {
-					actualNodePDBcount++
+					actualNodePDBCount++
 				}
 			}
-			if actualNodePDBcount == availablenodes {
+			if actualNodePDBCount == availableNodes {
 				return nil, false, nil
 			}
-			return nil, true, fmt.Errorf("incorrect node PDB count. Expected node PDB count [%d], Actual node PDB count [%d]", availablenodes, actualNodePDBcount)
+			return nil, true, fmt.Errorf("incorrect node PDB count. Expected node PDB count [%d], Actual node PDB count [%d]", availableNodes, actualNodePDBCount)
 
 		}
 		if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
@@ -5400,16 +5402,16 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 			}
 
 			nodeslen := 0
-			availablenodes := 0
+			availableNodes := 0
 			for _, node := range nodes.Items {
 				if *node.Status.NodeAttributes.Storage {
 					nodeslen++
 					if node.Status.Phase == "Online" {
-						availablenodes++
+						availableNodes++
 					}
 				}
 			}
-			nodesUnavailable := nodeslen - availablenodes
+			nodesUnavailable := nodeslen - availableNodes
 			// Skip PDB validation for px-storage if number of storage nodes is lesser than or equal to 2
 			if nodeslen <= 2 {
 				logrus.Infof("Storage PDB does not exist for storage nodes lesser than or equal to 2, skipping PDB validattion")
@@ -5992,9 +5994,9 @@ func ValidateNodePDB(cluster *corev1.StorageCluster, timeout, interval time.Dura
 	t := func() (interface{}, bool, error) {
 		nodes, err := coreops.Instance().GetNodes()
 		if err != nil {
-			return nil, true, fmt.Errorf("failed to get storage nodes, Err: %v", err)
+			return nil, true, fmt.Errorf("failed to get k8s nodes, Err: %v", err)
 		}
-		pxNodesMap := make(map[string]bool)
+		nodesPDBMap := make(map[string]bool)
 
 		pdbs, err := policyops.Instance().ListPodDisruptionBudget(cluster.Namespace)
 		if err != nil {
@@ -6003,10 +6005,21 @@ func ValidateNodePDB(cluster *corev1.StorageCluster, timeout, interval time.Dura
 
 		for _, pdb := range pdbs.Items {
 			if strings.HasPrefix(pdb.Name, "px-") && pdb.Name != "px-kvdb" {
-				pxNodesMap[pdb.Name] = true
+				nodesPDBMap[pdb.Name] = true
 				if pdb.Spec.MinAvailable.IntValue() != 1 {
 					return nil, true, fmt.Errorf("incorrect PDB minAvailable value for node %s. Expected PDB [%d], Actual PDB [%d]", strings.TrimPrefix(pdb.Name, "px-"), 1, pdb.Spec.MinAvailable.IntValue())
 				}
+			}
+		}
+		// create map of storage nodes as well
+		storagenodes, err := operatorops.Instance().ListStorageNodes(cluster.Namespace)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get storage nodes, Err: %v", err)
+		}
+		storageNodesMap := make(map[string]bool)
+		for _, node := range storagenodes.Items {
+			if *node.Status.NodeAttributes.Storage {
+				storageNodesMap[node.Name] = true
 			}
 		}
 
@@ -6014,8 +6027,11 @@ func ValidateNodePDB(cluster *corev1.StorageCluster, timeout, interval time.Dura
 			if coreops.Instance().IsNodeMaster(node) {
 				continue
 			}
-			if _, ok := pxNodesMap["px-"+node.Name]; !ok {
-				return nil, true, fmt.Errorf("PDB for node %s is missing", node.Name)
+			if _, ok := nodesPDBMap["px-"+node.Name]; !ok {
+				// return error only if the k8s node has a storage node in it
+				if _, ok := storageNodesMap[node.Name]; ok {
+					return nil, true, fmt.Errorf("PDB for node %s is missing", node.Name)
+				}
 			}
 		}
 		return nil, false, nil
@@ -6026,14 +6042,21 @@ func ValidateNodePDB(cluster *corev1.StorageCluster, timeout, interval time.Dura
 	return nil
 }
 
-func ValidateNodesSelectedForUpgrade(cluster *corev1.StorageCluster, quorumValue int, timeout, interval time.Duration) error {
+func ValidateNodesSelectedForUpgrade(cluster *corev1.StorageCluster, minAvailable int, timeout, interval time.Duration) error {
 	t := func() (interface{}, bool, error) {
-		if quorumValue == -1 {
-			nodes, err := operatorops.Instance().ListStorageNodes(cluster.Namespace)
-			if err != nil {
-				return nil, true, fmt.Errorf("failed to get storage nodes, Err: %v", err)
+		nodes, err := operatorops.Instance().ListStorageNodes(cluster.Namespace)
+		if err != nil {
+			return nil, true, fmt.Errorf("failed to get storage nodes, Err: %v", err)
+		}
+		totalStorageNodes := 0
+		for _, node := range nodes.Items {
+			if *node.Status.NodeAttributes.Storage {
+				totalStorageNodes++
 			}
-			quorumValue = (len(nodes.Items) / 2) + 1
+		}
+		if minAvailable == -1 {
+			// Setting minAvailable to quorum value
+			minAvailable = (totalStorageNodes / 2) + 1
 		}
 
 		pdbs, err := policyops.Instance().ListPodDisruptionBudget(cluster.Namespace)
@@ -6046,10 +6069,10 @@ func ValidateNodesSelectedForUpgrade(cluster *corev1.StorageCluster, quorumValue
 				nodesReadyForUpgrade++
 			}
 		}
-		if nodesReadyForUpgrade < quorumValue {
+		if nodesReadyForUpgrade <= (totalStorageNodes - minAvailable) {
 			return nil, false, nil
 		}
-		return nil, true, fmt.Errorf("nodes selected for upgrade are more than quorum value")
+		return nil, true, fmt.Errorf("nodes available for upgrade [%d] are more than expected [%d]", nodesReadyForUpgrade, totalStorageNodes-minAvailable)
 	}
 	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
 		return err
