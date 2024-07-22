@@ -118,7 +118,7 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 		if err := c.deletePortworxNodePodDisruptionBudget(cluster, ownerRef, nodeEnumerateResponse, k8sNodeList); err != nil {
 			return err
 		}
-		if err := c.UpdateMinAvailableForNodePDB(cluster, ownerRef, nodeEnumerateResponse, k8sNodeList); err != nil {
+		if err := c.updateMinAvailableForNodePDB(cluster, ownerRef, nodeEnumerateResponse, k8sNodeList); err != nil {
 			return err
 		}
 	} else {
@@ -126,7 +126,7 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 			return err
 		}
 		if err := c.deleteAllNodePodDisruptionBudgets(cluster, ownerRef); err != nil {
-			logrus.Warnf("failed to delete node poddisruptionbudgets if exists: %v", err)
+			logrus.Warnf("failed to delete node poddisruptionbudgets if exist: %v", err)
 		}
 	}
 
@@ -238,10 +238,10 @@ func (c *disruptionBudget) createPortworxNodePodDisruptionBudget(
 	errors := []error{}
 	for _, node := range nodesNeedingPDB {
 		minAvailable := intstr.FromInt(1)
-		PDBName := "px-" + node
+		pdbName := "px-" + node
 		pdb := &policyv1.PodDisruptionBudget{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PDBName,
+				Name:            pdbName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -279,9 +279,9 @@ func (c *disruptionBudget) deletePortworxNodePodDisruptionBudget(
 	errors := []error{}
 
 	for _, node := range nodesToDeletePDB {
-		PDBName := "px-" + node
+		pdbName := "px-" + node
 		err = k8sutil.DeletePodDisruptionBudget(
-			c.k8sClient, PDBName,
+			c.k8sClient, pdbName,
 			cluster.Namespace, *ownerRef,
 		)
 		if err != nil {
@@ -376,7 +376,7 @@ func init() {
 	RegisterDisruptionBudgetComponent()
 }
 
-func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageCluster,
+func (c *disruptionBudget) updateMinAvailableForNodePDB(cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 	nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse,
 	k8sNodeList *v1.NodeList,
@@ -387,6 +387,10 @@ func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageC
 	nodesToUpgrade, cordonedPxNodesMap, numPxNodesDown, err := pxutil.GetNodesToUpgrade(cluster, nodeEnumerateResponse, k8sNodeList, c.k8sClient, c.sdkConn)
 	if err != nil {
 		return err
+	}
+	// Return if there are no nodes to upgrade
+	if len(nodesToUpgrade) == 0 {
+		return nil
 	}
 
 	// If user has mentioned minimum nodes that need to be running, then honor that value
@@ -408,10 +412,13 @@ func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageC
 	if cluster.Annotations != nil && cluster.Annotations[pxutil.AnnotationsDisableNonDisruptiveUpgrade] == "true" {
 		if cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] == "" {
 			calculatedMinAvailable = storageNodesCount - 1
-		} else if (userProvidedMinValue < quorumValue || userProvidedMinValue >= storageNodesCount) && userProvidedMinValue != c.annotatedMinAvailable {
+		} else if userProvidedMinValue < quorumValue || userProvidedMinValue >= storageNodesCount {
 			calculatedMinAvailable = storageNodesCount - 1
-			errmsg := fmt.Sprintf("Invalid minAvailable annotation value for storage pod disruption budget. Using default value: %d", calculatedMinAvailable)
-			c.recorder.Event(cluster, v1.EventTypeWarning, util.InvalidMinAvailable, errmsg)
+			// Log an error only if this is the first time we encounter an invalid value
+			if userProvidedMinValue != c.annotatedMinAvailable {
+				errmsg := fmt.Sprintf("Invalid minAvailable annotation value for storage pod disruption budget. Using default value: %d", calculatedMinAvailable)
+				c.recorder.Event(cluster, v1.EventTypeWarning, util.InvalidMinAvailable, errmsg)
+			}
 		} else if userProvidedMinValue >= quorumValue && userProvidedMinValue < storageNodesCount {
 			calculatedMinAvailable = userProvidedMinValue
 		}
@@ -425,20 +432,21 @@ func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageC
 		}
 	}
 	c.annotatedMinAvailable = userProvidedMinValue
-	errors := []error{}
 	downNodesCount := numPxNodesDown
 	// Update minAvailable to 0 for nodes in nodesToUpgrade
 	for _, node := range nodesToUpgrade {
 		// Ensure that portworx quorum or valid minAvailable provided by user is always maintained
-		if downNodesCount >= storageNodesCount-calculatedMinAvailable {
+		maxUnavailable := storageNodesCount - calculatedMinAvailable
+		if downNodesCount >= maxUnavailable {
+			logrus.Debugf("Number of down PX nodes: %d, is equal to or exceeds allowed maximum: %d. Total storage nodes: %d", downNodesCount, maxUnavailable, storageNodesCount)
 			break
 		}
-		k8snode := cordonedPxNodesMap[node]
-		PDBName := "px-" + k8snode
+		k8sNode := cordonedPxNodesMap[node]
+		pdbName := "px-" + k8sNode
 		minAvailable := intstr.FromInt(0)
 		pdb := &policyv1.PodDisruptionBudget{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            PDBName,
+				Name:            pdbName,
 				Namespace:       cluster.Namespace,
 				OwnerReferences: []metav1.OwnerReference{*ownerRef},
 			},
@@ -447,7 +455,7 @@ func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageC
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						constants.LabelKeyClusterName:      cluster.Name,
-						constants.OperatorLabelNodeNameKey: node,
+						constants.OperatorLabelNodeNameKey: k8sNode,
 					},
 				},
 			},
@@ -455,20 +463,19 @@ func (c *disruptionBudget) UpdateMinAvailableForNodePDB(cluster *corev1.StorageC
 		err = k8sutil.CreateOrUpdatePodDisruptionBudget(c.k8sClient, pdb, ownerRef)
 		if err != nil {
 			logrus.Warnf("Failed to update PDB for node %s: %v", node, err)
-			errors = append(errors, err)
 		} else {
 			downNodesCount++
 		}
 	}
-	return utilerrors.NewAggregate(errors)
+	return nil
 
 }
 
 func (c *disruptionBudget) deleteClusterPodDisruptionBudget(cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) error {
 
-	err := k8sutil.DeletePodDisruptionBudget(c.k8sClient, "px-storage", cluster.Namespace, *ownerRef)
+	err := k8sutil.DeletePodDisruptionBudget(c.k8sClient, StoragePodDisruptionBudgetName, cluster.Namespace, *ownerRef)
 	if err != nil {
-		logrus.Warnf("Failed to delete cluster PDB %s: %v", "px-storage", err)
+		logrus.Warnf("Failed to delete cluster PDB %s: %v", StoragePodDisruptionBudgetName, err)
 		return err
 	}
 
@@ -484,7 +491,7 @@ func (c *disruptionBudget) deleteAllNodePodDisruptionBudgets(cluster *corev1.Sto
 		logrus.Warnf("failed to list poddisruptionbudgets: %v", err)
 	}
 	for _, pdb := range pdbList.Items {
-		if strings.HasPrefix(pdb.Name, "px") && pdb.Name != "px-storage" && pdb.Name != "px-kvdb" {
+		if strings.HasPrefix(pdb.Name, "px") && pdb.Name != StoragePodDisruptionBudgetName && pdb.Name != "px-kvdb" {
 			err := k8sutil.DeletePodDisruptionBudget(c.k8sClient, pdb.Name, cluster.Namespace, *ownerRef)
 			if err != nil {
 				logrus.Warnf("Failed to delete node PDB %s: %v", pdb.Name, err)

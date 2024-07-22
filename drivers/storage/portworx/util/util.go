@@ -1533,6 +1533,8 @@ func NodesNeedingPDB(k8sClient client.Client, nodeEnumerateResponse *api.SdkNode
 	// Get list of kubernetes nodes that are a part of the current cluster and are not cordoned
 	k8sNodesStoragePodCouldRun := make(map[string]bool)
 	for _, node := range k8sNodeList.Items {
+		// Do not create/update PDB for cordoned nodes. Such nodes will have PDB already created previously.
+		// This can also be used when an upgrade is stuck or to upgrade 1 node. User can cordon node and delete the PDB on that node to upgrade it
 		if !node.Spec.Unschedulable {
 			k8sNodesStoragePodCouldRun[node.Name] = true
 		}
@@ -1593,7 +1595,7 @@ func ClusterSupportsParallelUpgrade(nodeEnumerateResponse *api.SdkNodeEnumerateW
 		}
 		v := node.NodeLabels[NodeLabelPortworxVersion]
 		if v == "" {
-			logrus.Infof("Node %s does not have a version label", node.Id)
+			logrus.Infof("Node [ %s ] does not have a version label", node.Id)
 			continue
 		}
 		nodeVersion, err := version.NewVersion(v)
@@ -1608,7 +1610,7 @@ func ClusterSupportsParallelUpgrade(nodeEnumerateResponse *api.SdkNodeEnumerateW
 	return true
 }
 
-func getNodeUpgradeMaps(k8sClient client.Client, namespace string, cordonedNodesMap map[string]bool) (map[string]bool, map[string]bool, error) {
+func getNodeUpgradeMaps(k8sClient client.Client, namespace string, cordonedPxNodesMap map[string]bool) (map[string]bool, map[string]bool, error) {
 	nodesUpgrading := make(map[string]bool, 0)
 	canBeUpgradedNodes := make(map[string]bool)
 	nodePDBs, err := k8sutil.ListPodDisruptionBudgets(k8sClient, namespace)
@@ -1617,12 +1619,13 @@ func getNodeUpgradeMaps(k8sClient client.Client, namespace string, cordonedNodes
 	}
 	for _, pdb := range nodePDBs.Items {
 		k8sNode := strings.TrimPrefix(pdb.Name, "px-")
-		if strings.HasPrefix(pdb.Name, "px-") && cordonedNodesMap[k8sNode] {
-			if pdb.Spec.MinAvailable.IntVal == 0 {
-				nodesUpgrading[k8sNode] = true
-			} else {
-				canBeUpgradedNodes[k8sNode] = true
-			}
+		if strings.HasPrefix(pdb.Name, "px-") && cordonedPxNodesMap[k8sNode] && pdb.Spec.MinAvailable.IntVal > 0 {
+			canBeUpgradedNodes[k8sNode] = true
+		}
+	}
+	for node := range cordonedPxNodesMap {
+		if _, ok := canBeUpgradedNodes[node]; !ok {
+			nodesUpgrading[node] = true
 		}
 	}
 	return nodesUpgrading, canBeUpgradedNodes, nil
@@ -1635,8 +1638,8 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 	sdkConn *grpc.ClientConn,
 ) ([]string, map[string]string, int, error) {
 
-	var cordonedNodes []string
-	cordonedk8sNodes := make(map[string]bool)
+	cordonedPxNodes := make([]string, 0)
+	cordonedK8sNodes := make(map[string]bool)
 	cordonedPxNodesMap := make(map[string]string)
 	canBeUpgradedNodes := make([]string, 0)
 	nodesUpgrading := make([]string, 0)
@@ -1645,13 +1648,13 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 	// Find if kubernetes nodes have been cordoned
 	for _, node := range k8sNodeList.Items {
 		if node.Spec.Unschedulable {
-			cordonedk8sNodes[node.Name] = true
+			cordonedK8sNodes[node.Name] = true
 		}
 	}
 
 	// Check all nodes with PDB 0 and add to another list
-	// Get list of nodes that have PDB 0 and nodes that don't
-	nodesUpgradingMap, canBeUpgradedNodesMap, err := getNodeUpgradeMaps(k8sClient, cluster.Namespace, cordonedk8sNodes)
+	// Get list of nodes that have PDB minAvailable 1 and nodes that have PDB minAvailable 0 or no PDB exists
+	nodesUpgradingMap, canBeUpgradedNodesMap, err := getNodeUpgradeMaps(k8sClient, cluster.Namespace, cordonedK8sNodes)
 	if err != nil {
 		return nil, nil, -1, err
 	}
@@ -1661,9 +1664,9 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 			logrus.Debugf("Node %s is not a quorum member or is decomissioned, skipping", node.Id)
 			continue
 		}
-		// Node is either cordoned and can be upgraded or is already selected for upgrade
-		if _, ok := cordonedk8sNodes[node.SchedulerNodeName]; ok {
-			cordonedNodes = append(cordonedNodes, node.Id)
+		// Node is cordoned and can be either upgraded or is already selected for an upgrade
+		if _, ok := cordonedK8sNodes[node.SchedulerNodeName]; ok {
+			cordonedPxNodes = append(cordonedPxNodes, node.Id)
 			cordonedPxNodesMap[node.Id] = node.SchedulerNodeName
 		}
 		if _, ok := nodesUpgradingMap[node.SchedulerNodeName]; ok {
@@ -1671,13 +1674,13 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 		} else if _, ok := canBeUpgradedNodesMap[node.SchedulerNodeName]; ok {
 			canBeUpgradedNodes = append(canBeUpgradedNodes, node.Id)
 		}
-		if node.Status != api.Status_STATUS_OK {
+		if _, upgrading := nodesUpgradingMap[node.SchedulerNodeName]; upgrading || nodeStatusDown(node.Status) {
 			nodesDown++
 		}
 	}
 
 	if cluster.Annotations != nil && cluster.Annotations[AnnotationsDisableNonDisruptiveUpgrade] == "true" {
-		return canBeUpgradedNodes, cordonedPxNodesMap, len(nodesUpgrading) + nodesDown, nil
+		return canBeUpgradedNodes, cordonedPxNodesMap, nodesDown, nil
 	}
 
 	// Make a request to SDK API FilterNonOverlappingNodes to get output of list of nodes that can be upgraded in parallel
@@ -1689,12 +1692,32 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 	nodeFilterResponse, err := nodeClient.FilterNonOverlappingNodes(
 		ctx,
 		&api.SdkFilterNonOverlappingNodesRequest{
-			InputNodes: cordonedNodes,
+			InputNodes: cordonedPxNodes,
 			DownNodes:  nodesUpgrading,
 		},
 	)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("failed to filter nodes: %v", err)
 	}
-	return nodeFilterResponse.NodeIds, cordonedPxNodesMap, len(nodesUpgrading) + nodesDown, nil
+	return nodeFilterResponse.NodeIds, cordonedPxNodesMap, nodesDown, nil
+}
+
+func nodeStatusDown(status api.Status) bool {
+	switch status {
+	case api.Status_STATUS_OK:
+		fallthrough
+	case api.Status_STATUS_MAINTENANCE:
+		fallthrough
+	case api.Status_STATUS_STORAGE_DOWN:
+		fallthrough
+	case api.Status_STATUS_STORAGE_DEGRADED:
+		fallthrough
+	case api.Status_STATUS_NEEDS_REBOOT:
+		fallthrough
+	case api.Status_STATUS_STORAGE_REBALANCE:
+		fallthrough
+	case api.Status_STATUS_STORAGE_DRIVE_REPLACE:
+		return false
+	}
+	return true
 }
