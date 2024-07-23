@@ -217,6 +217,7 @@ var (
 	opVer23_10_2, _ = version.NewVersion("23.10.2-")
 	OpVer23_10_3, _ = version.NewVersion("23.10.3-")
 	opVer24_1_0, _  = version.NewVersion("24.1.0-")
+	opVer24_2_0, _  = version.NewVersion("24.2.0-")
 
 	minOpVersionForKubeSchedConfig, _ = version.NewVersion("1.10.2-")
 	minimumCcmGoVersionCO, _          = version.NewVersion("1.2.3")
@@ -227,9 +228,10 @@ var (
 	// OCP Dynamic Plugin is only supported in starting with OCP 4.12+ which is k8s v1.25.0+
 	minK8sVersionForDynamicPlugin, _ = version.NewVersion("1.25.0")
 
-	pxVer2_13, _ = version.NewVersion("2.13")
-	pxVer3_0, _  = version.NewVersion("3.0")
-	pxVer3_1, _  = version.NewVersion("3.1")
+	pxVer2_13, _  = version.NewVersion("2.13")
+	pxVer3_0, _   = version.NewVersion("3.0")
+	pxVer3_1, _   = version.NewVersion("3.1")
+	pxVer3_1_2, _ = version.NewVersion("3.1.2")
 
 	// minimumPxVersionCCMJAVA minimum PX version to install ccm-java
 	minimumPxVersionCCMJAVA, _ = version.NewVersion("2.8")
@@ -5348,10 +5350,11 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 	if err != nil {
 		return err
 	}
+	pxVersion := GetPortworxVersion(cluster)
 
 	// PodDisruptionBudget is supported for k8s version greater than or equal to 1.21 and operator version greater than or equal to 1.5.0
 	// Changing opVersion to 23.10.0 for PTX-23350 | TODO: add better logic with PTX-23407
-	if k8sVersion.GreaterThanOrEqual(minSupportedK8sVersionForPdb) && opVersion.GreaterThanOrEqual(opVer23_10) {
+	if k8sVersion.GreaterThanOrEqual(minSupportedK8sVersionForPdb) && opVersion.GreaterThanOrEqual(opVer23_10) && opVersion.LessThan(opVer24_2_0) && pxVersion.LessThan(pxVer3_1_2) {
 		// This is only for non async DR setup
 		t := func() (interface{}, bool, error) {
 
