@@ -5,6 +5,7 @@ package integrationtest
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,8 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/kubernetes/pkg/apis/core"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -134,6 +137,29 @@ var testStorageClusterBasicCases = []types.TestCase{
 		ShouldSkip: func(tc *types.TestCase) bool {
 			return ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer1_7)
 		},
+	},
+	{
+		TestName:        "BasicInstallWithPxSaTokenRefresh",
+		TestrailCaseIDs: []string{"C299624"},
+		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-stc",
+				Annotations: map[string]string{
+					"portworx.io/host-pid": "true", // for running commands inside px runc container from oci-mon container
+				},
+			},
+			Spec: corev1.StorageClusterSpec{
+				CommonConfig: corev1.CommonConfig{
+					Env: []v1.EnvVar{
+						{
+							Name:  pxutil.EnvKeyPortworxServiceAccountTokenExpirationMinutes,
+							Value: "10",
+						},
+					},
+				},
+			},
+		}),
+		TestFunc: BasicInstallWithPxSaTokenRefresh,
 	},
 	{
 		TestName:        "BasicCsiRegression",
@@ -289,6 +315,58 @@ func BasicUpgrade(tc *types.TestCase) func(*testing.T) {
 
 		// Delete and validate the deletion
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
+	}
+}
+
+// 1. Deploy PX and verify the secret containing the token for px stored in the k8s secret correctly mounted inside px runc container.
+// 2. The cluster spec set the token expiration time to be 10 min, which is the minimum allowed token expiration time. The token should get refreshed after 5min.
+// 3. Wait for 5min. Verify the token is refreshed, correctly mounted inside px runc container, and able to talk to k8s api server.
+// 4. Delete the secret. Wait for 2min. Verify the token is refreshed, correctly mounted inside px runc container, and able to talk to k8s api server.
+func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
+	return func(t *testing.T) {
+		testSpec := tc.TestSpec(t)
+		cluster, ok := testSpec.(*corev1.StorageCluster)
+		require.True(t, ok)
+
+		verifyTokenFunc := func() string {
+			pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+			require.NoError(t, err)
+			expectedToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
+			require.Eventually(t, func() bool {
+				actualToken, stderr, err := ci_utils.RunPxCmd("runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/token")
+				require.Empty(t, stderr)
+				require.NoError(t, err)
+				return expectedToken == actualToken
+			}, 10*time.Minute, 15*time.Second, "the token inside px runc container is different from the token in the k8s secret")
+
+			stdout, stderr, err := ci_utils.RunPxCmd(fmt.Sprintf("runc exec portworx "+
+				"curl -s https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/api/v1/namespaces/$(runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)/secrets "+
+				"--header 'Authorization: Bearer %s' --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt | grep %s", expectedToken, pxutil.PortworxServiceAccountTokenSecretName))
+			errMsg := "px not able to communicate with k8s api server with the mounted service account token"
+			require.True(t, strings.Contains(stdout, pxutil.PortworxServiceAccountTokenSecretName),
+				fmt.Sprintf("the secret list returned from k8s api server does not contain %s. output: %s", pxutil.PortworxServiceAccountTokenSecretName, stdout))
+			require.Empty(t, stderr, fmt.Sprintf("%s: %s", errMsg, stderr))
+			require.NoError(t, err, fmt.Sprintf("%s: %s", errMsg, err.Error()))
+			logrus.Infof("token is created and verified: %s", expectedToken)
+			return expectedToken
+		}
+
+		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
+
+		logrus.Infof("Verifying px container token...")
+		token := verifyTokenFunc()
+
+		time.Sleep(time.Duration(5) * time.Minute)
+		logrus.Infof("Verifying auto-refreshed px runc container token...")
+		refreshedToken := verifyTokenFunc()
+		require.NotEqual(t, token, refreshedToken, "the token did not get refreshed")
+
+		logrus.Infof("Verifying px runc container token gets recreated after manual deletion...")
+		err := coreops.Instance().DeleteSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+		require.NoError(t, err)
+		time.Sleep(time.Duration(2) * time.Minute)
+		recreatedToken := verifyTokenFunc()
+		require.NotEqual(t, refreshedToken, recreatedToken, "the token did not get refreshed")
 	}
 }
 
