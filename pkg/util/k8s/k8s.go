@@ -1785,6 +1785,25 @@ func DeletePodDisruptionBudget(
 	return k8sClient.Update(context.TODO(), pdb)
 }
 
+// ListPodDisruptionBudgets returns a list of PodDisruptionBudgets for the given namespace
+func ListPodDisruptionBudgets(
+	k8sClient client.Client,
+	namespace string,
+) (*policyv1.PodDisruptionBudgetList, error) {
+	pdbList := &policyv1.PodDisruptionBudgetList{}
+	err := k8sClient.List(
+		context.TODO(),
+		pdbList,
+		&client.ListOptions{
+			Namespace: namespace,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return pdbList, nil
+}
+
 // CreateOrUpdateConsolePlugin creates a ConsolePlougin instance of ConsolePlugin CRD if not present, else updates it
 func CreateOrUpdateConsolePlugin(
 	k8sClient client.Client,

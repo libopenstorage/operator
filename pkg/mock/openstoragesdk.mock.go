@@ -194,6 +194,21 @@ func (mr *MockOpenStorageNodeServerMockRecorder) EnumerateWithFilters(arg0, arg1
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnumerateWithFilters", reflect.TypeOf((*MockOpenStorageNodeServer)(nil).EnumerateWithFilters), arg0, arg1)
 }
 
+// FilterNonOverlappingNodes mocks base method.
+func (m *MockOpenStorageNodeServer) FilterNonOverlappingNodes(arg0 context.Context, arg1 *api.SdkFilterNonOverlappingNodesRequest) (*api.SdkFilterNonOverlappingNodesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FilterNonOverlappingNodes", arg0, arg1)
+	ret0, _ := ret[0].(*api.SdkFilterNonOverlappingNodesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FilterNonOverlappingNodes indicates an expected call of FilterNonOverlappingNodes.
+func (mr *MockOpenStorageNodeServerMockRecorder) FilterNonOverlappingNodes(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterNonOverlappingNodes", reflect.TypeOf((*MockOpenStorageNodeServer)(nil).FilterNonOverlappingNodes), arg0, arg1)
+}
+
 // Inspect mocks base method.
 func (m *MockOpenStorageNodeServer) Inspect(arg0 context.Context, arg1 *api.SdkNodeInspectRequest) (*api.SdkNodeInspectResponse, error) {
 	m.ctrl.T.Helper()
@@ -222,21 +237,6 @@ func (m *MockOpenStorageNodeServer) InspectCurrent(arg0 context.Context, arg1 *a
 func (mr *MockOpenStorageNodeServerMockRecorder) InspectCurrent(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectCurrent", reflect.TypeOf((*MockOpenStorageNodeServer)(nil).InspectCurrent), arg0, arg1)
-}
-
-// RelaxedReclaimPurge mocks base method.
-func (m *MockOpenStorageNodeServer) RelaxedReclaimPurge(arg0 context.Context, arg1 *api.SdkNodeRelaxedReclaimPurgeRequest) (*api.SdkNodeRelaxedReclaimPurgeResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RelaxedReclaimPurge", arg0, arg1)
-	ret0, _ := ret[0].(*api.SdkNodeRelaxedReclaimPurgeResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RelaxedReclaimPurge indicates an expected call of RelaxedReclaimPurge.
-func (mr *MockOpenStorageNodeServerMockRecorder) RelaxedReclaimPurge(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RelaxedReclaimPurge", reflect.TypeOf((*MockOpenStorageNodeServer)(nil).RelaxedReclaimPurge), arg0, arg1)
 }
 
 // UncordonAttachments mocks base method.
@@ -425,6 +425,26 @@ func (mr *MockOpenStorageNodeClientMockRecorder) EnumerateWithFilters(arg0, arg1
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnumerateWithFilters", reflect.TypeOf((*MockOpenStorageNodeClient)(nil).EnumerateWithFilters), varargs...)
 }
 
+// FilterNonOverlappingNodes mocks base method.
+func (m *MockOpenStorageNodeClient) FilterNonOverlappingNodes(arg0 context.Context, arg1 *api.SdkFilterNonOverlappingNodesRequest, arg2 ...grpc.CallOption) (*api.SdkFilterNonOverlappingNodesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "FilterNonOverlappingNodes", varargs...)
+	ret0, _ := ret[0].(*api.SdkFilterNonOverlappingNodesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FilterNonOverlappingNodes indicates an expected call of FilterNonOverlappingNodes.
+func (mr *MockOpenStorageNodeClientMockRecorder) FilterNonOverlappingNodes(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterNonOverlappingNodes", reflect.TypeOf((*MockOpenStorageNodeClient)(nil).FilterNonOverlappingNodes), varargs...)
+}
+
 // Inspect mocks base method.
 func (m *MockOpenStorageNodeClient) Inspect(arg0 context.Context, arg1 *api.SdkNodeInspectRequest, arg2 ...grpc.CallOption) (*api.SdkNodeInspectResponse, error) {
 	m.ctrl.T.Helper()
@@ -463,26 +483,6 @@ func (mr *MockOpenStorageNodeClientMockRecorder) InspectCurrent(arg0, arg1 inter
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InspectCurrent", reflect.TypeOf((*MockOpenStorageNodeClient)(nil).InspectCurrent), varargs...)
-}
-
-// RelaxedReclaimPurge mocks base method.
-func (m *MockOpenStorageNodeClient) RelaxedReclaimPurge(arg0 context.Context, arg1 *api.SdkNodeRelaxedReclaimPurgeRequest, arg2 ...grpc.CallOption) (*api.SdkNodeRelaxedReclaimPurgeResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1}
-	for _, a := range arg2 {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "RelaxedReclaimPurge", varargs...)
-	ret0, _ := ret[0].(*api.SdkNodeRelaxedReclaimPurgeResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RelaxedReclaimPurge indicates an expected call of RelaxedReclaimPurge.
-func (mr *MockOpenStorageNodeClientMockRecorder) RelaxedReclaimPurge(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1}, arg2...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RelaxedReclaimPurge", reflect.TypeOf((*MockOpenStorageNodeClient)(nil).RelaxedReclaimPurge), varargs...)
 }
 
 // UncordonAttachments mocks base method.
