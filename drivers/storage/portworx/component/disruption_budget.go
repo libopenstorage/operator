@@ -438,7 +438,7 @@ func (c *disruptionBudget) updateMinAvailableForNodePDB(cluster *corev1.StorageC
 		// Ensure that portworx quorum or valid minAvailable provided by user is always maintained
 		maxUnavailable := storageNodesCount - calculatedMinAvailable
 		if downNodesCount >= maxUnavailable {
-			logrus.Debugf("Number of down PX nodes: %d, is equal to or exceeds allowed maximum: %d. Total storage nodes: %d", downNodesCount, maxUnavailable, storageNodesCount)
+			logrus.Infof("Number of down PX nodes: %d, is equal to or exceeds allowed maximum: %d. Total storage nodes: %d", downNodesCount, maxUnavailable, storageNodesCount)
 			break
 		}
 		k8sNode := cordonedPxNodesMap[node]
