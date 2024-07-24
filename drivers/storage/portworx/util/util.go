@@ -890,6 +890,8 @@ func GenerateToken(
 	token, err := auth.Token(claims, signature, &auth.Options{
 		Expiration: time.Now().
 			Add(duration).Unix(),
+		// set IAT to 10 minutes in the past to avoid clock skew issues
+		IATSubtract: 10 * time.Minute,
 	})
 	if err != nil {
 		return "", err
