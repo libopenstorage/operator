@@ -3,8 +3,11 @@ package util
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	version "github.com/hashicorp/go-version"
+	"github.com/libopenstorage/openstorage/pkg/auth"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -743,4 +746,55 @@ func TestIsVersionSupported(t *testing.T) {
 
 	supported = isVersionSupported("4.16.0", "4.15.0")
 	require.True(t, supported)
+}
+
+func TestGenerateToken(t *testing.T) {
+	// setup
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testcluster",
+			Namespace: "ns",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+			},
+		},
+	}
+
+	inputClaims := &auth.Claims{
+		Issuer:  "testissuer",
+		Subject: "test-subject",
+		Name:    "test-name",
+		Email:   "test-email",
+		Roles:   nil,
+		Groups:  []string{"*"},
+	}
+
+	secretKey := "dummy-secret"
+	currentTime := time.Now()
+
+	tokenStr, err := GenerateToken(cluster, secretKey, inputClaims, 24*time.Hour)
+	require.NoError(t, err)
+
+	// define the Keyfunc
+	keyFunc := func(token *jwt.Token) (interface{}, error) {
+		return []byte(secretKey), nil
+	}
+
+	// parse the jwt token to get the issued time
+	token, err := jwt.Parse(tokenStr, keyFunc)
+	require.NoError(t, err)
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	require.True(t, ok)
+	// get issued time from token
+	iat, ok := claims["iat"].(float64)
+	require.True(t, ok)
+	iatTime := time.Unix(int64(iat), 0)
+
+	// check time difference between issued time and current time
+	// get time difference in minutes truncating milliseconds
+	timeDifferenceInMinutes := currentTime.Sub(iatTime).Truncate(time.Minute).Minutes()
+	require.Equal(t, float64(10), timeDifferenceInMinutes)
 }
