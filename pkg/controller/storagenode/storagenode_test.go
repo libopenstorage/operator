@@ -5,6 +5,7 @@ import (
 	osdapi "github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"reflect"
+	clusterBeta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"strconv"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ import (
 	fakek8sclient "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
+
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -1151,7 +1152,7 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 		},
 	}
 
-	machine := &cluster_v1alpha1.Machine{
+	machine := &clusterBeta1.Machine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "machine",
 			Namespace: "default",
