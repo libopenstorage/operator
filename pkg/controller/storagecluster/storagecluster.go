@@ -35,6 +35,7 @@ import (
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -116,6 +117,7 @@ type Controller struct {
 	isStorkSchedDeploymentCreated bool
 	ctrl                          controller.Controller
 	kubevirt                      KubevirtManager
+	sdkConn                       *grpc.ClientConn
 	// Node to NodeInfo map
 	nodeInfoMap maps.SyncMap[string, *k8s.NodeInfo]
 }
@@ -234,14 +236,16 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 	err := c.client.Get(context.TODO(), request.NamespacedName, cluster)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			fmt.Println("HERE1")
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected.
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
+		fmt.Println("HERE2")
 		return reconcile.Result{}, err
 	}
-
+	fmt.Println("HERE3")
 	if err := c.validate(cluster); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, err.Error())
 		if updateErr := util.UpdateLiveStorageClusterLifecycle(c.client, cluster, corev1.ClusterStateDegraded); updateErr != nil {
@@ -806,6 +810,7 @@ func (c *Controller) syncStorageCluster(
 
 	// TODO: Don't process a storage cluster until all its previous creations and
 	// deletions have been processed.
+	fmt.Println("BEFORE MANAGE")
 	err = c.manage(cluster, hash, nodeList)
 	if err != nil {
 		return fmt.Errorf("manage failed: %s", err)

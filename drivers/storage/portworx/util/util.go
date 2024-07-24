@@ -1587,9 +1587,9 @@ func NodesToDeletePDB(k8sClient client.Client, nodeEnumerateResponse *api.SdkNod
 
 }
 
-func ClusterSupportsParallelUpgrade(nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse) bool {
+func ClusterSupportsParallelUpgrade(nodes []*api.StorageNode) bool {
 
-	for _, node := range nodeEnumerateResponse.Nodes {
+	for _, node := range nodes {
 		if node.Status == api.Status_STATUS_DECOMMISSION {
 			continue
 		}

@@ -117,6 +117,11 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string, 
 			nodesMarkedUnschedulable[node.Name] = true
 		}
 	}
+	// Non disruptive upgrade of nodes only if update strategy is rolling and if disruption is not false
+	if cluster.Spec.UpdateStrategy.RollingUpdate == nil || cluster.Spec.UpdateStrategy.RollingUpdate.Disruption.Allow == nil || !*cluster.Spec.UpdateStrategy.RollingUpdate.Disruption.Allow {
+		oldAvailablePods = c.parallelUpgradeNodesList(cluster, oldAvailablePods)
+	}
+
 	logrus.Debugf("Marking old pods for deletion")
 	// sort the pods such that the pods on the nodes that we marked unschedulable are deleted first
 	// Otherwise, we will end up marking too many nodes as unschedulable (or ping-ponging VMs between the nodes).
@@ -329,6 +334,70 @@ func (c *Controller) getKVDBNodeAvailability(cluster *corev1.StorageCluster) (in
 	}
 
 	return unavailableKvdbNodes, kvdbStorageNodeList, nil
+
+}
+
+func (c *Controller) parallelUpgradeNodesList(cluster *corev1.StorageCluster, pods []*v1.Pod) []*v1.Pod {
+	if len(pods) == 0 {
+		return pods
+	}
+
+	if storagePodsEnabled(cluster) {
+		storageNodeList, err := c.Driver.GetStorageNodes(cluster)
+		if err != nil {
+			logrus.Warnf("Cannot upgrade nodes in parallel, failed to get storage nodes: %v", err)
+			return pods
+		}
+		if !util.ClusterSupportsParallelUpgrade(storageNodeList) {
+			logrus.Infof("Skipping parallel upgrade as not all nodes are running minimum required version : 3.1.2")
+			return pods
+		}
+		nodeNameToIdMap := make(map[string]string)
+		nodesToUpgrade := make([]string, 0)
+		nodeIdToPodMap := make(map[string]*v1.Pod)
+		for _, storageNode := range storageNodeList {
+			nodeNameToIdMap[storageNode.SchedulerNodeName] = storageNode.Id
+		}
+
+		for _, pod := range pods {
+			if nodeId, ok := nodeNameToIdMap[pod.Spec.NodeName]; ok {
+				nodesToUpgrade = append(nodesToUpgrade, nodeId)
+				nodeIdToPodMap[nodeId] = pod
+			}
+
+		}
+
+		c.sdkConn, err = util.GetPortworxConn(c.sdkConn, c.client, cluster.Namespace)
+		if err != nil {
+			logrus.Warnf("Cannot upgrade nodes in parallel, failed to get Portworx connection: %v", err)
+			return pods
+		}
+		nodeClient := storageapi.NewOpenStorageNodeClient(c.sdkConn)
+		ctx, err := util.SetupContextWithToken(context.Background(), cluster, c.client, false)
+		if err != nil {
+			logrus.Warnf("Cannot upgrade nodes in parallel, failed to setup context with token: %v", err)
+			return pods
+		}
+		nodeFilterResponse, err := nodeClient.FilterNonOverlappingNodes(
+			ctx,
+			&storageapi.SdkFilterNonOverlappingNodesRequest{
+				InputNodes: nodesToUpgrade,
+			},
+		)
+		if err != nil {
+			logrus.Warnf("Cannot upgrade nodes in parallel, failed to get non overlapping nodes: %v", err)
+			return pods
+		}
+		podsToUpgrade := make([]*v1.Pod, 0)
+		for _, nodeId := range nodeFilterResponse.NodeIds {
+			if pod, ok := nodeIdToPodMap[nodeId]; ok {
+				podsToUpgrade = append(podsToUpgrade, pod)
+			}
+		}
+		return podsToUpgrade
+	}
+
+	return pods
 
 }
 

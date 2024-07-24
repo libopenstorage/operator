@@ -102,7 +102,7 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 		return fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
 
-	if pxutil.ClusterSupportsParallelUpgrade(nodeEnumerateResponse) {
+	if pxutil.ClusterSupportsParallelUpgrade(nodeEnumerateResponse.Nodes) {
 		// Get the list of k8s nodes that are part of the current cluster
 		k8sNodeList := &v1.NodeList{}
 		err = c.k8sClient.List(context.TODO(), k8sNodeList)

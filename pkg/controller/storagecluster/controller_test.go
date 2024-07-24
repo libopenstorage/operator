@@ -4475,7 +4475,7 @@ func TestUpdateStorageClusterWithKVDBDown(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).Times(6)
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).Times(8)
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -10174,6 +10174,171 @@ func TestRequiredSCCAnnotationOnPortworxPods(t *testing.T) {
 	require.Empty(t, result)
 	require.Len(t, podControl.Templates, 1)
 	require.Empty(t, podControl.Templates[0].Annotations)
+}
+
+func TestNonDisruptiveRollingUpdate(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	mockClusterDomainServer := mock.NewMockOpenStorageClusterDomainsServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node:           mockNodeServer,
+		ClusterDomains: mockClusterDomainServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+	upgradeNodesResponse := &storageapi.SdkFilterNonOverlappingNodesResponse{
+		NodeIds: []string{"node1", "node3", "node4"},
+	}
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(upgradeNodesResponse, nil).Times(1)
+
+	driverName := "mock-driver"
+	cluster := createStorageCluster()
+	maxUnavailable := intstr.FromInt(2)
+	cluster.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable = &maxUnavailable
+	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
+	driver := testutil.MockDriver(mockCtrl)
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node4"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node5"}},
+	},
+	}
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	}, cluster, fakeK8sNodes)
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+
+	podControl := &k8scontroller.FakePodControl{}
+	recorder := record.NewFakeRecorder(10)
+	controller := Controller{
+		client:            k8sClient,
+		Driver:            driver,
+		podControl:        podControl,
+		recorder:          recorder,
+		kubernetesVersion: k8sVersion,
+		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
+		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
+	}
+	storageLabels := map[string]string{
+		constants.LabelKeyClusterName: cluster.Name,
+		constants.LabelKeyDriverName:  driverName,
+	}
+
+	var storageNodes []*storageapi.StorageNode
+	storageNodes = append(storageNodes, createStorageNode("node1", true))
+	storageNodes = append(storageNodes, createStorageNode("node2", true))
+	storageNodes = append(storageNodes, createStorageNode("node3", true))
+	storageNodes = append(storageNodes, createStorageNode("node4", true))
+	storageNodes = append(storageNodes, createStorageNode("node5", true))
+
+	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return(driverName).AnyTimes()
+	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).AnyTimes()
+	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
+	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(nil, nil).AnyTimes()
+	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
+	require.NoError(t, err)
+	storageLabels[util.DefaultStorageClusterUniqueLabelKey] = rev1Hash
+	for i := 0; i < 5; i++ {
+		k8sname := "node" + strconv.Itoa(i+1)
+		storagePod := createStoragePod(cluster, fmt.Sprintf("storage-pod-%d", i+1), k8sname, storageLabels)
+		storagePod.Status.Conditions = []v1.PodCondition{
+			{
+				Type:   v1.PodReady,
+				Status: v1.ConditionTrue,
+			},
+		}
+		err = k8sClient.Create(context.TODO(), storagePod)
+		require.NoError(t, err)
+	}
+
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      cluster.Name,
+			Namespace: cluster.Namespace,
+		},
+	}
+	result, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Image = "new/image"
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.NotEmpty(t, podControl.DeletePodName)
+	require.Len(t, podControl.DeletePodName, 2)
+	require.ElementsMatch(t, []string{"storage-pod-1", "storage-pod-3"}, podControl.DeletePodName)
+
+	// When the FilterNonOverlappingNodes API response only contains 1 node
+	podControl.DeletePodName = nil
+	upgradeNodesResponse.NodeIds = []string{"node4"}
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(upgradeNodesResponse, nil).Times(1)
+
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Image = "new/image2"
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.NotEmpty(t, podControl.DeletePodName)
+	require.Len(t, podControl.DeletePodName, 1)
+	require.ElementsMatch(t, []string{"storage-pod-4"}, podControl.DeletePodName)
+
+	// When the API returns an error, update 2 random px nodes
+	podControl.DeletePodName = nil
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("test error")).Times(1)
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
+	cluster.Spec.Image = "new/image3"
+	err = k8sClient.Update(context.TODO(), cluster)
+	require.NoError(t, err)
+
+	result, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+	require.Empty(t, result)
+
+	require.NotEmpty(t, podControl.DeletePodName)
+	require.Len(t, podControl.DeletePodName, 2)
+
 }
 
 func replaceOldPod(
