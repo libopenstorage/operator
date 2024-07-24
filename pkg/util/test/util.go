@@ -5354,7 +5354,6 @@ func ValidatePodDisruptionBudget(cluster *corev1.StorageCluster, timeout, interv
 
 	// PodDisruptionBudget is supported for k8s version greater than or equal to 1.21 and operator version greater than or equal to 1.5.0
 	// Changing opVersion to 23.10.0 for PTX-23350 | TODO: add better logic with PTX-23407
-
 	// Smart and parallel upgrades is supported from px version 3.1.2 and operator version 24.2.0
 	if k8sVersion.GreaterThanOrEqual(minSupportedK8sVersionForPdb) && opVersion.GreaterThanOrEqual(opVer24_2_0) && pxVersion.GreaterThanOrEqual(pxVer3_1_2) {
 		t := func() (interface{}, bool, error) {

@@ -1,6 +1,7 @@
 package component
 
 import (
+	"context"
 	cryptoTls "crypto/tls"
 	"crypto/x509"
 	"encoding/asn1"
@@ -842,13 +843,12 @@ func (t *telemetry) createDeploymentTelemetryRegistration(
 
 	// have a valid cluster UUID?  lets validate the Telemetry SSL cert
 	if cuuid := cluster.Status.ClusterUID; cuuid != "" {
-		if certBytes, err := t.getTelemetrySSLCert(deployment.Namespace); err != nil {
-			logrus.WithError(err).Errorf("failed to get telemetry SSL cert")
-		} else if err2 := t.validateTelemetrySSLCert(certBytes, cuuid); err2 == errInvalidTelemetryCert {
+		sec, err := t.validateTelemetrySSLCert(deployment.Namespace, cuuid)
+		if err == errInvalidTelemetryCert {
 			logrus.Warn("refreshing telemetry SSL cert")
-			t.refreshTelemetrySSLCert(deployment)
-		} else if err2 != nil {
-			logrus.WithError(err2).Errorf("failed to validate telemetry SSL cert")
+			t.refreshTelemetrySSLCert(sec)
+		} else if err != nil {
+			logrus.WithError(err).Errorf("failed to validate telemetry SSL cert")
 		}
 	}
 
@@ -1023,33 +1023,35 @@ func (t *telemetry) createDeploymentTelemetryCollectorV2(
 	return nil
 }
 
-// getTelemetrySSLCert returns the telemetry SSL cert
-func (t *telemetry) getTelemetrySSLCert(namespace string) ([]byte, error) {
+// validateTelemetrySSLCert validates the telemetry SSL certificate.
+// - note: cert's Psaudonym needs to match the cluster UUID
+func (t *telemetry) validateTelemetrySSLCert(namespace, cuuid string) (*v1.Secret, error) {
+	if namespace == "" || cuuid == "" {
+		return nil, fmt.Errorf("invalid namespace or cluster UUID")
+	}
+
 	var sec v1.Secret
 	logrus.Debugf("Inspecting secret %s/%s for SSL cert", namespace, pxutil.TelemetryCertName)
 	err := k8sutil.GetSecret(t.k8sClient, pxutil.TelemetryCertName, namespace, &sec)
 	if err != nil {
 		return nil, err
 	}
-	return sec.Data["cert"], nil
-}
 
-// validateTelemetrySSLCert validates the telemetry SSL certificate.
-// - note: cert's Psaudonym needs to match the cluster UUID
-func (t *telemetry) validateTelemetrySSLCert(certBytes []byte, cuuid string) error {
-	if len(certBytes) <= 0 || cuuid == "" {
-		return nil
+	certBytes := sec.Data["cert"]
+	if len(certBytes) <= 0 {
+		logrus.Warnf("SSL cert not found in secret %s/%s", namespace, pxutil.TelemetryCertName)
+		return &sec, nil
 	}
 
 	block, _ := pem.Decode(certBytes)
 	if block == nil {
-		return fmt.Errorf("failed to decode SSL certificate")
+		return &sec, fmt.Errorf("failed to decode SSL certificate")
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return err
+		return &sec, err
 	} else if cert == nil {
-		return fmt.Errorf("failed to parse SSL certificate")
+		return &sec, fmt.Errorf("failed to parse SSL certificate")
 	}
 
 	// find Pseudonym in Subject names
@@ -1059,38 +1061,43 @@ func (t *telemetry) validateTelemetrySSLCert(certBytes []byte, cuuid string) err
 			var ok bool
 			// quick sanity check!
 			if pseudonym, ok = v.Value.(string); !ok {
-				return fmt.Errorf("SSL cert Pseudonym is not a string")
+				return &sec, fmt.Errorf("SSL cert Pseudonym is not a string")
 			}
 			break
 		}
 	}
 	if pseudonym == "" {
 		logrus.Errorf("SSL cert Pseudonym not found")
-		return errInvalidTelemetryCert
+		return &sec, errInvalidTelemetryCert
 	}
 
 	if pseudonym != cuuid {
 		logrus.Errorf("SSL cert Pseudonym %s does not match cluster UUID %s",
 			pseudonym, cuuid)
-		return errInvalidTelemetryCert
+		return &sec, errInvalidTelemetryCert
 	}
-	logrus.Debugf("SSL cert Pseudonym %s matches cluster UUID", pseudonym)
-	return nil
+	logrus.Tracef("SSL cert Pseudonym %s matches cluster UUID", pseudonym)
+	return &sec, nil
 }
 
 // refreshTelemetrySSLCert deletes the telemetry SSL cert secret and telemetry-registration PODs
-func (t *telemetry) refreshTelemetrySSLCert(dep *appsv1.Deployment) {
-	if dep == nil {
+func (t *telemetry) refreshTelemetrySSLCert(sec *v1.Secret) {
+	if sec == nil {
+		return
+	} else if sec.Name != pxutil.TelemetryCertName {
+		logrus.Errorf("invalid secret name %s/%s  (expected %s)", sec.Namespace, sec.Name, pxutil.TelemetryCertName)
 		return
 	}
-	logrus.Warnf("refreshTelemetrySSLCert - deleting telemetry SSL cert secret %s/%s", dep.Namespace, pxutil.TelemetryCertName)
-	err := k8sutil.DeleteSecret(t.k8sClient, pxutil.TelemetryCertName, dep.Namespace, dep.OwnerReferences...)
+
+	logrus.Warnf("refreshTelemetrySSLCert - deleting telemetry SSL cert secret %s/%s", sec.Namespace, sec.Name)
+	err := t.k8sClient.Delete(context.TODO(), sec)
 	if err != nil {
-		logrus.WithError(err).Warnf("failed to delete secret %s/%s", dep.Namespace, pxutil.TelemetryCertName)
+		logrus.WithError(err).Errorf("failed to delete secret %s/%s", sec.Namespace, sec.Name)
+		return
 	}
 
 	logrus.Warnf("refreshTelemetrySSLCert - deleting POD labeled role=%s", DeploymentNameTelemetryRegistration)
-	err = k8sutil.DeletePodsByLabel(t.k8sClient, map[string]string{"role": DeploymentNameTelemetryRegistration}, dep.Namespace)
+	err = k8sutil.DeletePodsByLabel(t.k8sClient, map[string]string{"role": DeploymentNameTelemetryRegistration}, sec.Namespace)
 	if err != nil {
 		logrus.WithError(err).Warnf("failed to delete px-telemetry-registration POD")
 	}

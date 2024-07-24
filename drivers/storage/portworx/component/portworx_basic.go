@@ -1,6 +1,7 @@
 package component
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -19,7 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
@@ -46,6 +46,7 @@ const (
 
 var (
 	defaultPxSaTokenExpirationSeconds = int64(12 * 60 * 60)
+	rootCaCrtPath                     = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 )
 
 type portworxBasic struct {
@@ -557,23 +558,23 @@ func (c *portworxBasic) createAndMaintainPxSaTokenSecret(cluster *corev1.Storage
 			return err
 		}
 	}
-	needRefresh, err := isTokenRefreshRequired(secret)
+	caCrtUpdated, err := updateCaCrtIfNeeded(secret)
 	if err != nil {
 		return err
 	}
-	if needRefresh {
-		if err := c.refreshTokenSecret(secret, cluster, ownerRef); err != nil {
-			return fmt.Errorf("failed to refresh the token secret for px container: %w", err)
+	tokenRefreshed, err := refreshTokenIfNeeded(secret, cluster)
+	if err != nil {
+		return err
+	}
+	if caCrtUpdated || tokenRefreshed {
+		if err := k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
 func (c *portworxBasic) createTokenSecret(cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) (*v1.Secret, error) {
-	rootCaCrt, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("error reading k8s cluster certificate located inside the pod at /var/run/secrets/kubernetes.io/serviceaccount/ca.crt: %w", err)
-	}
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            pxutil.PortworxServiceAccountTokenSecretName,
@@ -582,8 +583,7 @@ func (c *portworxBasic) createTokenSecret(cluster *corev1.StorageCluster, ownerR
 		},
 		Type: v1.SecretTypeOpaque,
 		Data: map[string][]byte{
-			core.ServiceAccountRootCAKey:    rootCaCrt,
-			core.ServiceAccountNamespaceKey: []byte(cluster.Namespace),
+			v1.ServiceAccountNamespaceKey: []byte(cluster.Namespace),
 		},
 	}
 	if err := k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef); err != nil {
@@ -592,36 +592,30 @@ func (c *portworxBasic) createTokenSecret(cluster *corev1.StorageCluster, ownerR
 	return secret, nil
 }
 
-func (c *portworxBasic) refreshTokenSecret(secret *v1.Secret, cluster *corev1.StorageCluster, ownerRef *metav1.OwnerReference) error {
-	expirationSeconds, err := getPxSaTokenExpirationSeconds(cluster)
-	if err != nil {
-		return err
+func updateCaCrtIfNeeded(secret *v1.Secret) (bool, error) {
+	rootCaCrt, err := os.ReadFile(rootCaCrtPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("error reading k8s cluster certificate located inside the pod at %s: %w", rootCaCrtPath, err)
 	}
-	secret.Data[PxSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(expirationSeconds/2) * time.Second).Format(time.RFC3339))
-	newToken, err := generatePxSaToken(cluster, expirationSeconds)
-	if err != nil {
-		return err
+	if len(secret.Data) == 0 || !bytes.Equal(secret.Data[v1.ServiceAccountRootCAKey], rootCaCrt) {
+		secret.Data[v1.ServiceAccountRootCAKey] = rootCaCrt
+		return true, nil
 	}
-	secret.Data[core.ServiceAccountTokenKey] = newToken
-	err = k8sutil.CreateOrUpdateSecret(c.k8sClient, secret, ownerRef)
-	if err != nil {
-		return err
-	}
-	return nil
+	return false, nil
 }
 
-func generatePxSaToken(cluster *corev1.StorageCluster, expirationSeconds int64) ([]byte, error) {
-	tokenRequest := &authv1.TokenRequest{
-		Spec: authv1.TokenRequestSpec{
-			Audiences:         []string{"px"},
-			ExpirationSeconds: &expirationSeconds,
-		},
-	}
-	tokenResp, err := coreops.Instance().CreateToken(pxutil.PortworxServiceAccountName(cluster), cluster.Namespace, tokenRequest)
+func refreshTokenIfNeeded(secret *v1.Secret, cluster *corev1.StorageCluster) (bool, error) {
+	needRefreshToken, err := isTokenRefreshRequired(secret)
 	if err != nil {
-		return nil, fmt.Errorf("error creating token from k8s: %w", err)
+		return false, err
 	}
-	return []byte(tokenResp.Status.Token), nil
+	if needRefreshToken {
+		if err := refreshToken(secret, cluster); err != nil {
+			return false, fmt.Errorf("failed to refresh the token secret for px container: %w", err)
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func isTokenRefreshRequired(secret *v1.Secret) (bool, error) {
@@ -636,6 +630,36 @@ func isTokenRefreshRequired(secret *v1.Secret) (bool, error) {
 		return true, nil
 	}
 	return false, nil
+}
+
+func refreshToken(secret *v1.Secret, cluster *corev1.StorageCluster) error {
+	expirationSeconds, err := getPxSaTokenExpirationSeconds(cluster)
+	if err != nil {
+		return err
+	}
+	newToken, err := generatePxSaToken(cluster, expirationSeconds)
+	if err != nil {
+		return err
+	}
+	secret.Data[v1.ServiceAccountTokenKey] = []byte(newToken.Status.Token)
+	// ServiceAccount token expiration time we defined might get overwritten by the maxExpirationSeconds defined by the k8s token RESTful server,
+	// so our token refresh machanism has to honor this server limit.
+	// https://github.com/kubernetes/kubernetes/blob/79fee524e65ddc7c1448d5d2554c6f91233cf98d/pkg/registry/core/serviceaccount/storage/token.go#L208
+	secret.Data[PxSaTokenRefreshTimeKey] = []byte(time.Now().UTC().Add(time.Duration(*newToken.Spec.ExpirationSeconds/2) * time.Second).Format(time.RFC3339))
+	return nil
+}
+
+func generatePxSaToken(cluster *corev1.StorageCluster, expirationSeconds int64) (*authv1.TokenRequest, error) {
+	tokenRequest := &authv1.TokenRequest{
+		Spec: authv1.TokenRequestSpec{
+			ExpirationSeconds: &expirationSeconds,
+		},
+	}
+	tokenResp, err := coreops.Instance().CreateToken(pxutil.PortworxServiceAccountName(cluster), cluster.Namespace, tokenRequest)
+	if err != nil {
+		return nil, fmt.Errorf("error creating token from k8s: %w", err)
+	}
+	return tokenResp, nil
 }
 
 func (c *portworxBasic) createPortworxKVDBService(
@@ -724,6 +748,11 @@ func getPxSaTokenExpirationSeconds(cluster *corev1.StorageCluster) (int64, error
 		}
 	}
 	return defaultPxSaTokenExpirationSeconds, nil
+}
+
+// Set the path of k8s cluster root certificate for the purpose of testing
+func SetRootCertPath(path string) {
+	rootCaCrtPath = path
 }
 
 // RegisterPortworxBasicComponent registers the Portworx Basic component
