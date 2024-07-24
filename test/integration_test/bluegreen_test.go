@@ -6,7 +6,7 @@ package integrationtest
 import (
 	"bytes"
 	"fmt"
-	"io"
+
 	"os"
 	"sort"
 	"strconv"
@@ -131,13 +131,13 @@ var bgTestCases = []types.TestCase{
 
 				logrus.Infof("Attempt license expand on Trial via node %s", pl.Items[0].Spec.NodeName)
 				var stdout, stderr bytes.Buffer
-				err = runInPortworxPod(&pl.Items[0],
+				err = ci_utils.RunInPortworxPod(&pl.Items[0],
 					nil, &stdout, &stderr,
 					"/bin/sh", "-c", "/opt/pwx/bin/pxctl license trial; exec /opt/pwx/bin/pxctl license expand --start")
 				require.Contains(t, stdout.String(), " not supported for Trial licenses")
 
 				logrus.Infof("Installing license via node %s", pl.Items[0].Spec.NodeName)
-				err = runInPortworxPod(&pl.Items[0],
+				err = ci_utils.RunInPortworxPod(&pl.Items[0],
 					bytes.NewReader([]byte(crippledTestLicense)), &stdout, &stderr,
 					"/bin/sh", "-c", "base64 -d | /opt/pwx/bin/pxctl license add /dev/stdin")
 				require.Equal(t, "", stderr.String())
@@ -146,7 +146,7 @@ var bgTestCases = []types.TestCase{
 
 				logrus.Infof("Renstalling license via node %s", pl.Items[2].Spec.NodeName)
 				stdout.Reset()
-				err = runInPortworxPod(&pl.Items[2],
+				err = ci_utils.RunInPortworxPod(&pl.Items[2],
 					bytes.NewReader([]byte(crippledTestLicense)), &stdout, &stderr,
 					"/bin/sh", "-c", "base64 -d | /opt/pwx/bin/pxctl license add /dev/stdin")
 				require.Equal(t, "", stderr.String())
@@ -157,7 +157,7 @@ var bgTestCases = []types.TestCase{
 				for _, p := range pl.Items {
 					stdout.Reset()
 					stderr.Reset()
-					err = runInPortworxPod(&p, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "license", "list")
+					err = ci_utils.RunInPortworxPod(&p, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "license", "list")
 					require.Equal(t, "", stderr.String(),
 						"unexpected STDERR on node %s", p.Spec.NodeName)
 					require.Contains(t, stdout.String(), "PX-Enterprise Torpedo_TEST_license",
@@ -262,7 +262,7 @@ var bgTestCases = []types.TestCase{
 
 				logrus.Infof("Extending license via node %s", pl.Items[0].Spec.NodeName)
 				var stdout, stderr bytes.Buffer
-				err = runInPortworxPod(&pl.Items[0], nil, &stdout, &stderr,
+				err = ci_utils.RunInPortworxPod(&pl.Items[0], nil, &stdout, &stderr,
 					"/opt/pwx/bin/pxctl", "license", "expand", "--start")
 				require.NoError(t, err)
 				require.Contains(t, stdout.String(), "Successfully initiated license extension")
@@ -271,7 +271,7 @@ var bgTestCases = []types.TestCase{
 				for _, p := range pl.Items {
 					stdout.Reset()
 					stderr.Reset()
-					err = runInPortworxPod(&p, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "status")
+					err = ci_utils.RunInPortworxPod(&p, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "status")
 					assert.Empty(t, stderr.String())
 					assert.Contains(t, stdout.String(), "NOTICE: License extension expires in ",
 						"unexpected STDOUT @%s", p.Spec.NodeName)
@@ -304,19 +304,19 @@ var bgTestCases = []types.TestCase{
 				tmpVolName := "testVol" + tmpSuffix
 
 				logrus.Infof("Attempt volume creation on %s", lastPOD.Spec.NodeName)
-				err = runInPortworxPod(&lastPOD, nil, &stdout, &stderr,
+				err = ci_utils.RunInPortworxPod(&lastPOD, nil, &stdout, &stderr,
 					"/opt/pwx/bin/pxctl", "volume", "create", "--repl", "1", "--size", "3", tmpVolName)
 				require.Contains(t, stdout.String(), "Volume successfully created")
 				require.NoError(t, err)
 
 				logrus.Infof("Attempt volume snapshot on %s", lastPOD.Spec.NodeName)
-				err = runInPortworxPod(&lastPOD, nil, &stdout, &stderr,
+				err = ci_utils.RunInPortworxPod(&lastPOD, nil, &stdout, &stderr,
 					"/opt/pwx/bin/pxctl", "volume", "snapshot", "create", "--name", "snap"+tmpSuffix, tmpVolName)
 				require.Contains(t, stdout.String(), "Volume snap successful")
 				require.NoError(t, err)
 
 				logrus.Infof("Cleaning up volume / snapshot on %s", lastPOD.Spec.NodeName)
-				err = runInPortworxPod(&lastPOD, nil, &stdout, &stderr,
+				err = ci_utils.RunInPortworxPod(&lastPOD, nil, &stdout, &stderr,
 					"/bin/sh", "-c", "/opt/pwx/bin/pxctl v delete --force snap"+tmpSuffix+
 						"; /opt/pwx/bin/pxctl v delete --force "+tmpVolName)
 				require.Contains(t, stdout.String(), "Volume snap"+tmpSuffix+" successfully deleted")
@@ -401,7 +401,7 @@ var bgTestCases = []types.TestCase{
 				for _, p := range pl.Items {
 					stdout.Reset()
 					stderr.Reset()
-					err = runInPortworxPod(&p, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "status")
+					err = ci_utils.RunInPortworxPod(&p, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "status")
 					assert.Empty(t, stderr.String())
 					assert.Contains(t, stdout.String(), "NOTICE: License extension expires in ",
 						"unexpected STDOUT @%s", p.Spec.NodeName)
@@ -424,7 +424,7 @@ var bgTestCases = []types.TestCase{
 
 				logrus.Infof("Attempt license reinstall")
 				var stdout, stderr bytes.Buffer
-				err = runInPortworxPod(&pl.Items[0], bytes.NewReader([]byte(crippledTestLicense)), &stdout, &stderr,
+				err = ci_utils.RunInPortworxPod(&pl.Items[0], bytes.NewReader([]byte(crippledTestLicense)), &stdout, &stderr,
 					"/bin/sh", "-c", "base64 -d | /opt/pwx/bin/pxctl license add /dev/stdin")
 				require.Equal(t, "", stderr.String())
 				require.Contains(t, strings.ToLower(stdout.String()),
@@ -446,7 +446,7 @@ var bgTestCases = []types.TestCase{
 
 				logrus.Infof("End license extension while cluster over-allocated")
 				var stdout, stderr bytes.Buffer
-				err = runInPortworxPod(&pl.Items[0], nil, &stdout, &stderr,
+				err = ci_utils.RunInPortworxPod(&pl.Items[0], nil, &stdout, &stderr,
 					"/opt/pwx/bin/pxctl", "license", "expand", "--end")
 				assert.Equal(t, "", stderr.String())
 				assert.Contains(t, stdout.String(), "Successfully turned off license extension")
@@ -456,7 +456,7 @@ var bgTestCases = []types.TestCase{
 				for _, p := range pl.Items {
 					stdout.Reset()
 					stderr.Reset()
-					err = runInPortworxPod(&p, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "license", "ls")
+					err = ci_utils.RunInPortworxPod(&p, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "license", "ls")
 					assert.Equal(t, "", stderr.String(),
 						"did no expect errors @%s", p.Spec.NodeName)
 					assert.Contains(t, stdout.String(), "ERROR: too many nodes in the cluster",
@@ -585,7 +585,7 @@ var bgTestCases = []types.TestCase{
 
 				// get NodeID for the wiped node
 				var stdout, stderr bytes.Buffer
-				err = runInPortworxPod(&pl.Items[0], nil, &stdout, &stderr,
+				err = ci_utils.RunInPortworxPod(&pl.Items[0], nil, &stdout, &stderr,
 					"/bin/sh", "-c", "/opt/pwx/bin/pxctl status | grep "+lastNode+" | head -1 | awk '{print $2}'")
 				lastNodeID := strings.Trim(stdout.String(), "\r\n\t ")
 				require.NoError(t, err)
@@ -595,7 +595,7 @@ var bgTestCases = []types.TestCase{
 				_, err = task.DoRetryWithTimeout(
 					func() (interface{}, bool, error) {
 						var stdout, stderr bytes.Buffer
-						runInPortworxPod(&pl.Items[0], nil, &stdout, &stderr,
+						ci_utils.RunInPortworxPod(&pl.Items[0], nil, &stdout, &stderr,
 							"/opt/pwx/bin/pxctl", "cluster", "delete", lastNodeID)
 						if strings.Contains(stdout.String(), " successfully deleted.") {
 							logrus.Debugf("Node %s successfully decomissioned", lastNode)
@@ -613,7 +613,7 @@ var bgTestCases = []types.TestCase{
 				logrus.Infof("Checking PX status on all nodes")
 				for _, p := range pl.Items[:len(pl.Items)-1] {
 					var stdout, stderr bytes.Buffer
-					err = runInPortworxPod(&p, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "status")
+					err = ci_utils.RunInPortworxPod(&p, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "status")
 					require.NoError(t, err, "unexpected error @%s", p.Spec.NodeName)
 					require.Contains(t, stdout.String(), "License: PX-Enterprise Torpedo_TEST_license (expires in ",
 						"unexpected content @%s", p.Spec.NodeName)
@@ -624,27 +624,13 @@ var bgTestCases = []types.TestCase{
 	},
 }
 
-func runInPortworxPod(pod *v1.Pod, in io.Reader, out, err io.Writer, command ...string) error {
-	if pod == nil || len(command) <= 0 {
-		return os.ErrInvalid
-	}
-
-	if logrus.IsLevelEnabled(logrus.DebugLevel) {
-		logrus.Debugf("run on %s via %s: `%s`", pod.Spec.NodeName, pod.Name, strings.Join(command, " "))
-	}
-
-	return coreops.Instance().RunCommandInPodEx(&coreops.RunCommandInPodExRequest{
-		command, pod.Name, "portworx", pod.Namespace, false, in, out, err,
-	})
-}
-
 func wipeNodeRunningPod(pod *v1.Pod) error {
 	if pod == nil {
 		return os.ErrInvalid
 	}
 	logrus.Debugf("Wiping PX on node %s using POD %s", pod.Spec.NodeName, pod.Name)
 	var stdout, stderr bytes.Buffer
-	err := runInPortworxPod(pod, nil, &stdout, &stderr,
+	err := ci_utils.RunInPortworxPod(pod, nil, &stdout, &stderr,
 		"nsenter", "--mount=/host_proc/1/ns/mnt", "--", "/bin/sh", "-c", "pxctl sv nw --all")
 	if err != nil {
 		return fmt.Errorf("node-wipe failed: %s  (%s)", err,
@@ -677,7 +663,7 @@ func taskWaitPxctlStatus(t *testing.T, nodeName, podName, expectedOutput string)
 
 		// run `pxctl status` -- compare output
 		var stdout, stderr bytes.Buffer
-		runInPortworxPod(monitoredPod, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "status")
+		ci_utils.RunInPortworxPod(monitoredPod, nil, &stdout, &stderr, "/opt/pwx/bin/pxctl", "status")
 		s := strings.Trim(stdout.String(), "\r\n ")
 		if strings.Contains(s, expectedOutput) {
 			logrus.Infof("'pxctl status' @%s got expected %q", nodeName, expectedOutput)

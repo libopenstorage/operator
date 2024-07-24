@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -193,4 +194,25 @@ func getPxStoreV2NodeCount(t *testing.T, px_status string) int {
 	require.Greater(t, len(out), 1, "Could not find \"Global Storage Pool\" string the pxctl status output")
 	return strings.Count(strings.ToLower(out[0]), "px-storev2")
 
+}
+
+func RunInPortworxPod(pod *v1.Pod, in io.Reader, out, err io.Writer, command ...string) error {
+	if pod == nil || len(command) <= 0 {
+		return os.ErrInvalid
+	}
+
+	if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		logrus.Debugf("run on %s via %s: `%s`", pod.Spec.NodeName, pod.Name, strings.Join(command, " "))
+	}
+
+	return coreops.Instance().RunCommandInPodEx(&coreops.RunCommandInPodExRequest{
+		Command:       command,
+		PODName:       pod.Name,
+		ContainerName: "portworx",
+		Namespace:     pod.Namespace,
+		UseTTY:        false,
+		Stdin:         in,
+		Stdout:        out,
+		Stderr:        err,
+	})
 }
