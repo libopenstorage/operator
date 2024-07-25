@@ -68,6 +68,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	affinityhelper "k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
+	"k8s.io/kubernetes/pkg/apis/core"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -232,6 +233,7 @@ var (
 	pxVer3_0, _   = version.NewVersion("3.0")
 	pxVer3_1, _   = version.NewVersion("3.1")
 	pxVer3_1_2, _ = version.NewVersion("3.1.2")
+	pxVer3_2, _   = version.NewVersion("3.2")
 
 	// minimumPxVersionCCMJAVA minimum PX version to install ccm-java
 	minimumPxVersionCCMJAVA, _ = version.NewVersion("2.8")
@@ -1031,6 +1033,11 @@ func ValidateStorageCluster(
 		return err
 	}
 
+	// Validate Portworx ServiceAccount Token
+	if err = validatePortworxTokenRefresh(liveCluster, timeout, interval); err != nil {
+		return err
+	}
+
 	// Validate dmthin
 	if err = validateDmthinOnPxNodes(liveCluster); err != nil {
 		return err
@@ -1791,6 +1798,59 @@ func validatePortworxAPIService(cluster *corev1.StorageCluster, timeout, interva
 		return err
 	}
 
+	return nil
+}
+
+func validatePortworxTokenRefresh(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	pxVersion := GetPortworxVersion(cluster)
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return err
+	}
+	if pxVersion.LessThan(pxVer3_2) || opVersion.LessThan(opVer24_2_0) {
+		logrus.Infof("pxVersion: %v, opVersion: %v. Skip verification because px token refresh is not supported with these versions.", pxVersion, opVersion)
+		return nil
+	}
+	pxSaTokenSecretName := "px-sa-token-secret"
+	logrus.Infof("Verifying px runc container token...")
+	// Get one Portworx pod to run commands inside the px runc container on the same node
+	pxPods, err := coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx"})
+	if err != nil {
+		return fmt.Errorf("failed to get PX pods, Err: %w", err)
+	}
+	pxPod := pxPods.Items[0]
+	t := func() (interface{}, bool, error) {
+		pxSaSecret, err := coreops.Instance().GetSecret(pxSaTokenSecretName, cluster.Namespace)
+		if err != nil {
+			return nil, true, err
+		}
+		expectedToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
+		if !coreops.Instance().IsPodReady(pxPod) {
+			return nil, true, fmt.Errorf("[%s] PX pod is not in Ready state to run command inside", pxPod.Name)
+		}
+		actualToken, err := runCmdInsidePxPod(&pxPod, "runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/token", cluster.Namespace, false)
+		if err != nil {
+			return nil, true, err
+		}
+		if expectedToken != actualToken {
+			return nil, true, fmt.Errorf("the token inside px runc container is different from the token in the k8s secret")
+		}
+		return actualToken, false, nil
+	}
+	token, err := task.DoRetryWithTimeout(t, timeout, interval)
+	if err != nil {
+		return err
+	}
+	secretList, err := runCmdInsidePxPod(&pxPod, fmt.Sprintf("runc exec portworx "+
+		"curl -s https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/api/v1/namespaces/$(runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)/secrets "+
+		"--header 'Authorization: Bearer %s' --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt", token), cluster.Namespace, false)
+	if err != nil {
+		return fmt.Errorf("failed to verify px ServiceAccount token: %w", err)
+	}
+	if !strings.Contains(secretList, pxSaTokenSecretName) {
+		return fmt.Errorf("the secret list returned from k8s api server does not contain %s. Output: %s", pxSaTokenSecretName, secretList)
+	}
+	logrus.Infof("token is created and verified: %s", token)
 	return nil
 }
 
