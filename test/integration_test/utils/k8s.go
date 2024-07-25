@@ -392,3 +392,62 @@ func validateSpec(in interface{}) (runtime.Object, error) {
 	}
 	return nil, fmt.Errorf("unsupported object: %v", reflect.TypeOf(in))
 }
+
+func GetNonMasterK8sNodeCount() (int, error) {
+	nodes, err := coreops.Instance().GetNodes()
+	if err != nil {
+		return -1, err
+	}
+	nodesCount := 0
+	for _, node := range nodes.Items {
+		if coreops.Instance().IsNodeMaster(node) {
+			continue
+		}
+		nodesCount++
+	}
+	return nodesCount, nil
+}
+
+func CordonNodes() error {
+	nodes, err := coreops.Instance().GetNodes()
+	if err != nil {
+		logrus.Errorf("failed to get storage nodes, Err: %v", err)
+	}
+	for _, node := range nodes.Items {
+		if coreops.Instance().IsNodeMaster(node) {
+			continue
+		}
+		currNode, err := coreops.Instance().GetNodeByName(node.Name)
+		if err != nil {
+			return fmt.Errorf("failed to get node %s, Err: %v", node.Name, err)
+		}
+		currNode.Spec.Unschedulable = true
+		_, err = coreops.Instance().UpdateNode(currNode)
+		if err != nil {
+			return fmt.Errorf("failed to cordon node %s, Err: %v", node.Name, err)
+		}
+	}
+	return nil
+}
+
+func UncordonNodes() error {
+	nodes, err := coreops.Instance().GetNodes()
+	if err != nil {
+		logrus.Errorf("failed to get storage nodes, Err: %v", err)
+	}
+	for _, node := range nodes.Items {
+		if coreops.Instance().IsNodeMaster(node) {
+			continue
+		}
+		currNode, err := coreops.Instance().GetNodeByName(node.Name)
+		if err != nil {
+			return fmt.Errorf("failed to get node %s, Err: %v", node.Name, err)
+		}
+		currNode.Spec.Unschedulable = false
+		_, err = coreops.Instance().UpdateNode(currNode)
+		if err != nil {
+			return fmt.Errorf("failed to uncordon node %s, Err: %v", node.Name, err)
+		}
+	}
+	return nil
+}

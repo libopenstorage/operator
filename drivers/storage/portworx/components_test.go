@@ -17662,6 +17662,8 @@ func validateTokenLifetime(t *testing.T, cluster *corev1.StorageCluster, jwtClai
 	iatTime := time.Unix(int64(iatFloat64), 0)
 	expTime := time.Unix(int64(expFloat64), 0)
 	tokenLifetime := expTime.Sub(iatTime)
+	// subtract 10 minutes from tokenLifetime to adjust for the iat time creation for ntp sync
+	tokenLifetime = tokenLifetime - 10*time.Minute
 	duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
 	require.NoError(t, err)
 	require.Equal(t, tokenLifetime, duration)
