@@ -315,19 +315,6 @@ func (p *portworx) preflightShouldRun(toUpdate *corev1.StorageCluster) bool {
 		return true
 	}
 
-	isSupportedOCP, err := pxutil.IsSupportedOCPVersion(p.k8sClient, pxutil.OpenshiftPxSupportedVersion)
-	if err != nil {
-		logrus.Errorf("Error checking for OpenShift version %s", err.Error())
-		return false
-	}
-
-	pxVer31, _ := version.NewVersion("3.1")
-	if clusterPXver.GreaterThanOrEqual(pxVer31) { // PX version is 3.1.0 or above
-		if pxutil.IsVsphere(toUpdate) && isSupportedOCP { // Preflight runs on Vsphere and OCP 4.13+
-			return true
-		}
-	}
-
 	return false // All else disable
 }
 
