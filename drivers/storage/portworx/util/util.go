@@ -270,7 +270,6 @@ const (
 	OpenshiftPrometheusSupportedVersion = "4.12"
 	Openshift_4_15_Version              = "4.15"
 	Openshift_4_16_version              = "4.16"
-	OpenshiftPxSupportedVersion         = "4.13"
 	// OpenshiftMonitoringRouteName name of OCP user-workload route
 	OpenshiftMonitoringRouteName = "thanos-querier"
 	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
