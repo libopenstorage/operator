@@ -199,6 +199,8 @@ const (
 
 	etcHostsFile       = "/etc/hosts"
 	tempEtcHostsMarker = "### px-operator unit-test"
+
+	pxSaTokenSecretName = "px-sa-token-secret"
 )
 
 // TestSpecPath is the path for all test specs. Due to currently functional test and
@@ -1497,6 +1499,11 @@ func ValidateUninstallStorageCluster(
 		return err
 	}
 
+	// Validate deletion of Px ServiceAccount Token Secret
+	if err := validatePortworxSaTokenSecretDeleted(cluster, timeout, interval); err != nil {
+		return err
+	}
+
 	// Verify telemetry secret is deleted on UninstallAndWipe when telemetry is enabled
 	if cluster.Spec.DeleteStrategy != nil && cluster.Spec.DeleteStrategy.Type == corev1.UninstallAndWipeStorageClusterStrategyType {
 		secret, err := coreops.Instance().GetSecret(TelemetryCertName, cluster.Namespace)
@@ -1549,6 +1556,33 @@ func validatePortworxConfigMapsDeleted(cluster *corev1.StorageCluster, timeout, 
 	}
 
 	logrus.Debug("Portworx ConfigMaps have been deleted successfully")
+	return nil
+}
+
+func validatePortworxSaTokenSecretDeleted(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	pxVersion := GetPortworxVersion(cluster)
+	opVersion, err := GetPxOperatorVersion()
+	if err != nil {
+		return err
+	}
+	if pxVersion.LessThan(pxVer3_2) || opVersion.LessThan(opVer24_2_0) {
+		logrus.Infof("pxVersion: %v, opVersion: %v. Skip verification because px token refresh is not supported with these versions.", pxVersion, opVersion)
+		return nil
+	}
+	t := func() (interface{}, bool, error) {
+		secret, err := coreops.Instance().GetSecret(pxSaTokenSecretName, cluster.Namespace)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil, false, nil
+			}
+			return nil, true, err
+		}
+		return nil, true, fmt.Errorf("px ServiceAccount Token Secret exists: %v", secret)
+	}
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+	logrus.Debug("Portworx ServiceAccount Token Secret has been deleted successfully")
 	return nil
 }
 
@@ -1811,7 +1845,6 @@ func validatePortworxTokenRefresh(cluster *corev1.StorageCluster, timeout, inter
 		logrus.Infof("pxVersion: %v, opVersion: %v. Skip verification because px token refresh is not supported with these versions.", pxVersion, opVersion)
 		return nil
 	}
-	pxSaTokenSecretName := "px-sa-token-secret"
 	logrus.Infof("Verifying px runc container token...")
 	// Get one Portworx pod to run commands inside the px runc container on the same node
 	pxPods, err := coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx"})

@@ -496,6 +496,9 @@ func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 		require.NoError(t, err)
 		recreatedToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
 		require.NotEqual(t, refreshedToken, recreatedToken, "the token did not get refreshed")
+
+		// Delete and validate the deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 	}
 }
 
