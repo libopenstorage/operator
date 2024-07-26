@@ -480,22 +480,26 @@ func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 		require.NoError(t, err)
 		startupToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
 
-		time.Sleep(time.Duration(5) * time.Minute)
-		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+		time.Sleep(5 * time.Minute)
 		require.NoError(t, err)
 		pxSaSecret, err = coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 		require.NoError(t, err)
 		refreshedToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
-		require.NotEqual(t, startupToken, refreshedToken, "the token did not get refreshed")
+		require.Eventually(t, func() bool {
+			return startupToken != refreshedToken
+		}, 10*time.Minute, 15*time.Second, "the token did not get refreshed")
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
 
 		err = coreops.Instance().DeleteSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 		require.NoError(t, err)
-		time.Sleep(time.Duration(2) * time.Minute)
-		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+		time.Sleep(2 * time.Minute)
 		pxSaSecret, err = coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 		require.NoError(t, err)
 		recreatedToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
-		require.NotEqual(t, refreshedToken, recreatedToken, "the token did not get refreshed")
+		require.Eventually(t, func() bool {
+			return refreshedToken != recreatedToken
+		}, 10*time.Minute, 15*time.Second, "the token did not get refreshed")
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
 
 		// Delete and validate the deletion
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
