@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hashicorp/go-version"
 	consolev1 "github.com/openshift/api/console/v1"
 	routev1 "github.com/openshift/api/route/v1"
 
@@ -55,6 +56,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	affinityhelper "k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
+	"k8s.io/kubernetes/pkg/apis/core"
 	cluster_v1alpha1 "sigs.k8s.io/cluster-api/pkg/apis/deprecated/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -68,7 +70,8 @@ import (
 const (
 	// PxReleaseManifestURLEnvVarName is a release manifest URL Env variable name
 	PxReleaseManifestURLEnvVarName = "PX_RELEASE_MANIFEST_URL"
-
+	// AnnotationPXVersion annotation indicating the portworx semantic version
+	AnnotationPXVersion = pxAnnotationPrefix + "/px-version"
 	// PxRegistryUserEnvVarName is a Docker username Env variable name
 	PxRegistryUserEnvVarName = "REGISTRY_USER"
 	// PxRegistryPasswordEnvVarName is a Docker password Env variable name
@@ -81,13 +84,22 @@ const (
 	// PxMasterVersion is a tag for Portworx master version
 	PxMasterVersion = "3.0.0.0"
 
+	pxAnnotationPrefix = "portworx.io"
+
 	etcHostsFile       = "/etc/hosts"
 	tempEtcHostsMarker = "### px-operator unit-test"
+
+	pxSaTokenSecretName = "px-sa-token-secret"
+
+	defaultRunCmdInPxPodTimeout  = 25 * time.Second
+	defaultRunCmdInPxPodInterval = 5 * time.Second
 )
 
 // TestSpecPath is the path for all test specs. Due to currently functional test and
 // unit test use different path, this needs to be set accordingly.
 var TestSpecPath = "testspec"
+
+var pxVer3_2, _ = version.NewVersion("3.2")
 
 // MockDriver creates a mock storage driver
 func MockDriver(mockCtrl *gomock.Controller) *mock.MockDriver {
@@ -484,6 +496,11 @@ func ValidateStorageCluster(
 		return err
 	}
 
+	// Validate Portworx ServiceAccount Token
+	if err = validatePortworxTokenRefresh(liveCluster, timeout, interval); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -711,6 +728,35 @@ func ValidateUninstallStorageCluster(
 	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
 		return err
 	}
+
+	// Validate deletion of Px ServiceAccount Token Secret
+	if err := validatePortworxSaTokenSecretDeleted(cluster, timeout, interval); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validatePortworxSaTokenSecretDeleted(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	pxVersion := GetPortworxVersion(cluster)
+
+	if pxVersion.LessThan(pxVer3_2) {
+		logrus.Infof("pxVersion: %v, opVersion: 24.2.0. Skip verification because px token refresh is not supported with these versions.", pxVersion)
+		return nil
+	}
+	t := func() (interface{}, bool, error) {
+		secret, err := coreops.Instance().GetSecret(pxSaTokenSecretName, cluster.Namespace)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil, false, nil
+			}
+			return nil, true, err
+		}
+		return nil, true, fmt.Errorf("px ServiceAccount Token Secret exists: %v", secret)
+	}
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return err
+	}
+	logrus.Debug("Portworx ServiceAccount Token Secret has been deleted successfully")
 	return nil
 }
 
@@ -871,7 +917,55 @@ func validatePortworxAPIService(cluster *corev1.StorageCluster, timeout, interva
 	return nil
 }
 
-// GetExpectedPxNodeNameList will get the list of node names that should be included
+func validatePortworxTokenRefresh(cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
+	pxVersion := GetPortworxVersion(cluster)
+	if pxVersion.LessThan(pxVer3_2) {
+		logrus.Infof("pxVersion: %v, opVersion: 24.2.0. Skip verification because px token refresh is not supported with these versions.", pxVersion)
+		return nil
+	}
+	logrus.Infof("Verifying px runc container token...")
+	// Get one Portworx pod to run commands inside the px runc container on the same node
+	pxPods, err := coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx"})
+	if err != nil {
+		return fmt.Errorf("failed to get PX pods, Err: %w", err)
+	}
+	pxPod := pxPods.Items[0]
+	t := func() (interface{}, bool, error) {
+		pxSaSecret, err := coreops.Instance().GetSecret(pxSaTokenSecretName, cluster.Namespace)
+		if err != nil {
+			return nil, true, err
+		}
+		expectedToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
+		if !coreops.Instance().IsPodReady(pxPod) {
+			return nil, true, fmt.Errorf("[%s] PX pod is not in Ready state to run command inside", pxPod.Name)
+		}
+		actualToken, err := runCmdInsidePxPod(&pxPod, "runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/token", cluster.Namespace, false)
+		if err != nil {
+			return nil, true, err
+		}
+		if expectedToken != actualToken {
+			return nil, true, fmt.Errorf("the token inside px runc container is different from the token in the k8s secret")
+		}
+		return actualToken, false, nil
+	}
+	token, err := task.DoRetryWithTimeout(t, timeout, interval)
+	if err != nil {
+		return err
+	}
+	secretList, err := runCmdInsidePxPod(&pxPod, fmt.Sprintf("runc exec portworx "+
+		"curl -s https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/api/v1/namespaces/$(runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)/secrets "+
+		"--header 'Authorization: Bearer %s' --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt", token), cluster.Namespace, false)
+	if err != nil {
+		return fmt.Errorf("failed to verify px ServiceAccount token: %w", err)
+	}
+	if !strings.Contains(secretList, pxSaTokenSecretName) {
+		return fmt.Errorf("the secret list returned from k8s api server does not contain %s. Output: %s", pxSaTokenSecretName, secretList)
+	}
+	logrus.Infof("token is created and verified: %s", token)
+	return nil
+}
+
+// GetExpectedPxNodeList will get the list of nodes that should be included
 // in the given Portworx cluster, by seeing if each non-master node matches the given
 // node selectors and affinities.
 func GetExpectedPxNodeNameList(cluster *corev1.StorageCluster) ([]string, error) {
@@ -2096,6 +2190,83 @@ func validatePodTopologySpreadConstraints(deployment *appsv1.Deployment, timeout
 		return err
 	}
 	return nil
+}
+
+func runCmdInsidePxPod(pxPod *v1.Pod, cmd string, namespace string, ignoreErr bool) (string, error) {
+	t := func() (interface{}, bool, error) {
+		// Execute command in PX pod
+		cmds := []string{"nsenter", "--mount=/host_proc/1/ns/mnt", "/bin/bash", "-c", cmd}
+		logrus.Debugf("[%s] Running command inside pod %s", pxPod.Name, cmds)
+		output, err := coreops.Instance().RunCommandInPod(cmds, pxPod.Name, "portworx", pxPod.Namespace)
+		if !ignoreErr && err != nil {
+			return "", true, fmt.Errorf("[%s] failed to run command inside pod, command: %v, err: %v", pxPod.Name, cmds, err)
+		}
+		return output, false, err
+	}
+
+	output, err := task.DoRetryWithTimeout(t, defaultRunCmdInPxPodTimeout, defaultRunCmdInPxPodInterval)
+	if err != nil {
+		return "", err
+	}
+
+	return output.(string), nil
+}
+
+// GetPortworxVersion returns the Portworx version based on the image provided.
+// We first look at spec.Image, if not valid image tag found, we check the PX_IMAGE
+// env variable. If that is not present or invalid semvar, then we fallback to an
+// annotation portworx.io/px-version; then we try to extract the version from PX_RELEASE_MANIFEST_URL
+// env variable, else we return master version
+func GetPortworxVersion(cluster *corev1.StorageCluster) *version.Version {
+	var (
+		err       error
+		pxVersion *version.Version
+	)
+
+	pxImage := cluster.Spec.Image
+	var manifestURL string
+	for _, env := range cluster.Spec.Env {
+		if env.Name == PxImageEnvVarName {
+			pxImage = env.Value
+		} else if env.Name == PxReleaseManifestURLEnvVarName {
+			manifestURL = env.Value
+		}
+	}
+
+	pxVersionStr := strings.Split(pxImage, ":")[len(strings.Split(pxImage, ":"))-1]
+	pxVersion, err = version.NewSemver(pxVersionStr)
+	if err != nil {
+		logrus.WithError(err).Warnf("Invalid PX version %s extracted from image name", pxVersionStr)
+		if pxVersionStr, exists := cluster.Annotations[AnnotationPXVersion]; exists {
+			logrus.Infof("Checking version in annotations %s", AnnotationPXVersion)
+			pxVersion, err = version.NewSemver(pxVersionStr)
+			if err != nil {
+				logrus.WithError(err).Warnf("Invalid PX version %s extracted from annotation", pxVersionStr)
+			}
+		} else {
+			logrus.Infof("Checking version in %s", PxReleaseManifestURLEnvVarName)
+			pxVersionStr = getPortworxVersionFromManifestURL(manifestURL)
+			pxVersion, err = version.NewSemver(pxVersionStr)
+			if err != nil {
+				logrus.WithError(err).Warnf("Invalid PX version %s extracted from %s", pxVersionStr, PxReleaseManifestURLEnvVarName)
+			}
+		}
+	}
+
+	if pxVersion == nil {
+		logrus.Warnf("Failed to determine PX version, assuming its latest and setting it to master: %s", PxMasterVersion)
+		pxVersion, _ = version.NewVersion(PxMasterVersion)
+	}
+	return pxVersion
+}
+
+func getPortworxVersionFromManifestURL(url string) string {
+	regex := regexp.MustCompile(`.*portworx\.com\/(.*)\/version`)
+	version := regex.FindStringSubmatch(url)
+	if len(version) >= 2 {
+		return version[1]
+	}
+	return ""
 }
 
 func isPVCControllerEnabled(cluster *corev1.StorageCluster) bool {
