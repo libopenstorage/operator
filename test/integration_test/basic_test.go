@@ -475,30 +475,31 @@ func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
+		verifyTokenRefreshed := func(oldToken string) string {
+			pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+			require.NoError(t, err)
+			newToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
+			require.Eventually(t, func() bool {
+				return oldToken != newToken
+			}, 10*time.Minute, 15*time.Second, "the token did not get refreshed")
+			return newToken
+		}
+
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 		pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 		require.NoError(t, err)
 		startupToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
 
 		time.Sleep(5 * time.Minute)
-		require.NoError(t, err)
-		pxSaSecret, err = coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
-		require.NoError(t, err)
-		refreshedToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
-		require.Eventually(t, func() bool {
-			return startupToken != refreshedToken
-		}, 10*time.Minute, 15*time.Second, "the token did not get refreshed")
+
+		refreshedToken := verifyTokenRefreshed(startupToken)
 		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
 
 		err = coreops.Instance().DeleteSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 		require.NoError(t, err)
 		time.Sleep(2 * time.Minute)
-		pxSaSecret, err = coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
-		require.NoError(t, err)
-		recreatedToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
-		require.Eventually(t, func() bool {
-			return refreshedToken != recreatedToken
-		}, 10*time.Minute, 15*time.Second, "the token did not get refreshed")
+
+		verifyTokenRefreshed(refreshedToken)
 		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
 
 		// Delete and validate the deletion
