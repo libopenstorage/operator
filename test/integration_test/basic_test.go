@@ -475,45 +475,35 @@ func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		verifyTokenFunc := func() string {
+		verifyTokenRefreshed := func(oldToken string) string {
 			pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 			require.NoError(t, err)
-			expectedToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
+			newToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
 			require.Eventually(t, func() bool {
-				actualToken, stderr, err := ci_utils.RunPxCmd("runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/token")
-				require.Empty(t, stderr)
-				require.NoError(t, err)
-				return expectedToken == actualToken
-			}, 10*time.Minute, 15*time.Second, "the token inside px runc container is different from the token in the k8s secret")
-
-			stdout, stderr, err := ci_utils.RunPxCmd(fmt.Sprintf("runc exec portworx "+
-				"curl -s https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/api/v1/namespaces/$(runc exec portworx cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)/secrets "+
-				"--header 'Authorization: Bearer %s' --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt | grep %s", expectedToken, pxutil.PortworxServiceAccountTokenSecretName))
-			errMsg := "px not able to communicate with k8s api server with the mounted service account token"
-			require.True(t, strings.Contains(stdout, pxutil.PortworxServiceAccountTokenSecretName),
-				fmt.Sprintf("the secret list returned from k8s api server does not contain %s. output: %s", pxutil.PortworxServiceAccountTokenSecretName, stdout))
-			require.Empty(t, stderr, fmt.Sprintf("%s: %s", errMsg, stderr))
-			require.NoError(t, err, fmt.Sprintf("%s: %s", errMsg, err.Error()))
-			logrus.Infof("token is created and verified: %s", expectedToken)
-			return expectedToken
+				return oldToken != newToken
+			}, 10*time.Minute, 15*time.Second, "the token did not get refreshed")
+			return newToken
 		}
 
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
-
-		logrus.Infof("Verifying px container token...")
-		token := verifyTokenFunc()
-
-		time.Sleep(time.Duration(5) * time.Minute)
-		logrus.Infof("Verifying auto-refreshed px runc container token...")
-		refreshedToken := verifyTokenFunc()
-		require.NotEqual(t, token, refreshedToken, "the token did not get refreshed")
-
-		logrus.Infof("Verifying px runc container token gets recreated after manual deletion...")
-		err := coreops.Instance().DeleteSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+		pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 		require.NoError(t, err)
-		time.Sleep(time.Duration(2) * time.Minute)
-		recreatedToken := verifyTokenFunc()
-		require.NotEqual(t, refreshedToken, recreatedToken, "the token did not get refreshed")
+		startupToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
+
+		time.Sleep(5 * time.Minute)
+
+		refreshedToken := verifyTokenRefreshed(startupToken)
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+
+		err = coreops.Instance().DeleteSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+		require.NoError(t, err)
+		time.Sleep(2 * time.Minute)
+
+		verifyTokenRefreshed(refreshedToken)
+		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+
+		// Delete and validate the deletion
+		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 	}
 }
 
