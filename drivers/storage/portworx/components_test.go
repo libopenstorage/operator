@@ -7160,11 +7160,12 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 }
 
 func TestCSIChangeKubernetesVersions(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.12.0",
+		GitVersion: "v1.13.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
