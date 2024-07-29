@@ -101,6 +101,10 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 	if err != nil {
 		return fmt.Errorf("failed to enumerate nodes: %v", err)
 	}
+	if len(nodeEnumerateResponse.Nodes) == 0 {
+		logrus.Warnf("Cannot create/update storage PodDisruptionBudget as there are no storage nodes")
+		return nil
+	}
 
 	if pxutil.ClusterSupportsParallelUpgrade(nodeEnumerateResponse.Nodes) {
 		// Get the list of k8s nodes that are part of the current cluster

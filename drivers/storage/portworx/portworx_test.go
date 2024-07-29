@@ -10380,6 +10380,76 @@ func TestGetKVDBMembersWithSecurityEnabled(t *testing.T) {
 
 }
 
+func TestGetNodesSelectedForUpgrade(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: "kube-test",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	})
+	driver := portworx{
+		k8sClient: k8sClient,
+		recorder:  record.NewFakeRecorder(10),
+	}
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateInit),
+		},
+	}
+
+	nodes := []string{}
+	val, err := driver.GetNodesSelectedForUpgrade(cluster, nodes, nodes)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to get Portworx connection: error connecting to GRPC server")
+	require.Empty(t, val)
+
+	sdkError := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, sdkError)
+	defer mockSdk.Stop()
+
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+
+	// When the API returns an error
+	expectedError := fmt.Errorf("test error")
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(nil, expectedError).Times(1)
+	_, err = driver.GetNodesSelectedForUpgrade(cluster, nodes, nodes)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), fmt.Sprintf("failed to get non overlapping nodes: rpc error: code = Unknown desc = %s", expectedError))
+
+	// When API returns list of nodes to be upgraded
+	expectedNodeEnumerateResp := &api.SdkFilterNonOverlappingNodesResponse{
+		NodeIds: []string{"node1", "node2"},
+	}
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(expectedNodeEnumerateResp, nil).Times(1)
+	val, err = driver.GetNodesSelectedForUpgrade(cluster, nodes, nodes)
+	require.NoError(t, err)
+	require.Equal(t, val, []string{"node1", "node2"})
+
+}
+
 func createK8sNode(nodeName string, allowedPods int) *v1.Node {
 	return &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{

@@ -63,10 +63,21 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string, 
 			cluster.Name, err)
 	}
 	_, oldPods := c.groupStorageClusterPods(cluster, nodeToStoragePods, hash)
-	maxUnavailable, numUnavailable, availablePods, err := c.getPodAvailability(cluster, nodeToStoragePods)
+
+	var storageNodeList []*storageapi.StorageNode
+	if storagePodsEnabled(cluster) {
+		storageNodeList, err = c.Driver.GetStorageNodes(cluster)
+		if err != nil {
+			return fmt.Errorf("couldn't get list of storage nodes during rolling "+
+				"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
+		}
+	}
+
+	maxUnavailable, unavailableNodes, availablePods, err := c.getPodAvailability(cluster, nodeToStoragePods, storageNodeList)
 	if err != nil {
 		return fmt.Errorf("couldn't get unavailable numbers: %v", err)
 	}
+	numUnavailable := len(unavailableNodes)
 	oldPodsMap := map[string]*v1.Pod{}
 	for _, pod := range oldPods {
 		oldPodsMap[pod.Name] = pod
@@ -117,9 +128,12 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string, 
 			nodesMarkedUnschedulable[node.Name] = true
 		}
 	}
-	// Non disruptive upgrade of nodes only if update strategy is rolling and if disruption is not false
-	if cluster.Spec.UpdateStrategy.RollingUpdate == nil || cluster.Spec.UpdateStrategy.RollingUpdate.Disruption.Allow == nil || !*cluster.Spec.UpdateStrategy.RollingUpdate.Disruption.Allow {
-		oldAvailablePods = c.parallelUpgradeNodesList(cluster, oldAvailablePods)
+	// Non disruptive upgrade of nodes only if update strategy is rolling and if allow disruption is false
+	if cluster.Spec.UpdateStrategy.RollingUpdate == nil || cluster.Spec.UpdateStrategy.RollingUpdate.Disruption == nil || !*cluster.Spec.UpdateStrategy.RollingUpdate.Disruption.Allow {
+		oldAvailablePods, err = c.parallelUpgradeNodesList(cluster, oldAvailablePods, unavailableNodes, storageNodeList)
+		if err != nil {
+			return err
+		}
 	}
 
 	logrus.Debugf("Marking old pods for deletion")
@@ -337,20 +351,15 @@ func (c *Controller) getKVDBNodeAvailability(cluster *corev1.StorageCluster) (in
 
 }
 
-func (c *Controller) parallelUpgradeNodesList(cluster *corev1.StorageCluster, pods []*v1.Pod) []*v1.Pod {
+func (c *Controller) parallelUpgradeNodesList(cluster *corev1.StorageCluster, pods []*v1.Pod, unavailableNodes []string, storageNodeList []*storageapi.StorageNode) ([]*v1.Pod, error) {
 	if len(pods) == 0 {
-		return pods
+		return pods, nil
 	}
 
 	if storagePodsEnabled(cluster) {
-		storageNodeList, err := c.Driver.GetStorageNodes(cluster)
-		if err != nil {
-			logrus.Warnf("Cannot upgrade nodes in parallel, failed to get storage nodes: %v", err)
-			return pods
-		}
 		if !util.ClusterSupportsParallelUpgrade(storageNodeList) {
 			logrus.Infof("Skipping parallel upgrade as not all nodes are running minimum required version : 3.1.2")
-			return pods
+			return pods, nil
 		}
 		nodeNameToIdMap := make(map[string]string)
 		nodesToUpgrade := make([]string, 0)
@@ -367,37 +376,21 @@ func (c *Controller) parallelUpgradeNodesList(cluster *corev1.StorageCluster, po
 
 		}
 
-		c.sdkConn, err = util.GetPortworxConn(c.sdkConn, c.client, cluster.Namespace)
+		nodesSelectedForUpgrade, err := c.Driver.GetNodesSelectedForUpgrade(cluster, nodesToUpgrade, unavailableNodes)
 		if err != nil {
-			logrus.Warnf("Cannot upgrade nodes in parallel, failed to get Portworx connection: %v", err)
-			return pods
+			return nil, fmt.Errorf("cannot upgrade nodes in parallel: %v", err)
 		}
-		nodeClient := storageapi.NewOpenStorageNodeClient(c.sdkConn)
-		ctx, err := util.SetupContextWithToken(context.Background(), cluster, c.client, false)
-		if err != nil {
-			logrus.Warnf("Cannot upgrade nodes in parallel, failed to setup context with token: %v", err)
-			return pods
-		}
-		nodeFilterResponse, err := nodeClient.FilterNonOverlappingNodes(
-			ctx,
-			&storageapi.SdkFilterNonOverlappingNodesRequest{
-				InputNodes: nodesToUpgrade,
-			},
-		)
-		if err != nil {
-			logrus.Warnf("Cannot upgrade nodes in parallel, failed to get non overlapping nodes: %v", err)
-			return pods
-		}
+
 		podsToUpgrade := make([]*v1.Pod, 0)
-		for _, nodeId := range nodeFilterResponse.NodeIds {
+		for _, nodeId := range nodesSelectedForUpgrade {
 			if pod, ok := nodeIdToPodMap[nodeId]; ok {
 				podsToUpgrade = append(podsToUpgrade, pod)
 			}
 		}
-		return podsToUpgrade
+		return podsToUpgrade, nil
 	}
 
-	return pods
+	return pods, nil
 
 }
 
@@ -706,13 +699,15 @@ func (c *Controller) groupStorageClusterPods(
 func (c *Controller) getPodAvailability(
 	cluster *corev1.StorageCluster,
 	nodeToStoragePods map[string][]*v1.Pod,
-) (int, int, map[string]*v1.Pod, error) {
+	storageNodeList []*storageapi.StorageNode,
+) (int, []string, map[string]*v1.Pod, error) {
 	logrus.Debugf("Getting unavailable numbers")
 	availablePods := map[string]*v1.Pod{}
 	nodeList := &v1.NodeList{}
+	unavailableNodes := []string{}
 	err := c.client.List(context.TODO(), nodeList, &client.ListOptions{})
 	if err != nil {
-		return -1, -1, nil, fmt.Errorf("couldn't get list of nodes during rolling "+
+		return -1, unavailableNodes, nil, fmt.Errorf("couldn't get list of nodes during rolling "+
 			"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
 	}
 
@@ -720,11 +715,6 @@ func (c *Controller) getPodAvailability(
 	var nonK8sStorageNodes []*storageapi.StorageNode
 
 	if storagePodsEnabled(cluster) {
-		storageNodeList, err := c.Driver.GetStorageNodes(cluster)
-		if err != nil {
-			return -1, -1, nil, fmt.Errorf("couldn't get list of storage nodes during rolling "+
-				"update of storage cluster %s/%s: %v", cluster.Namespace, cluster.Name, err)
-		}
 		for _, storageNode := range storageNodeList {
 			if len(storageNode.SchedulerNodeName) == 0 {
 				nonK8sStorageNodes = append(nonK8sStorageNodes, storageNode)
@@ -733,7 +723,6 @@ func (c *Controller) getPodAvailability(
 			}
 		}
 	}
-
 	var numUnavailable, desiredNumberScheduled int
 	for _, node := range nodeList.Items {
 		// If the node has a storage node and it is not healthy.
@@ -744,6 +733,7 @@ func (c *Controller) getPodAvailability(
 				logrus.WithField("StorageNode", fmt.Sprintf("%s/%s", cluster.Namespace, node.Name)).
 					Info("Storage node is not healthy")
 				numUnavailable++
+				unavailableNodes = append(unavailableNodes, storageNode.Id)
 				continue
 			}
 		}
@@ -755,7 +745,7 @@ func (c *Controller) getPodAvailability(
 			"storageNodeExists": storageNodeExists,
 		}).WithError(err).Debug("check node should run storage pod")
 		if err != nil {
-			return -1, -1, nil, err
+			return -1, unavailableNodes, nil, err
 		}
 
 		if !wantToRun {
@@ -766,6 +756,9 @@ func (c *Controller) getPodAvailability(
 		storagePods, exists := nodeToStoragePods[node.Name]
 		if !exists {
 			numUnavailable++
+			if storageNodeExists {
+				unavailableNodes = append(unavailableNodes, storageNode.Id)
+			}
 			continue
 		}
 		available := false
@@ -785,6 +778,9 @@ func (c *Controller) getPodAvailability(
 			}
 		}
 		if !available {
+			if storageNodeExists {
+				unavailableNodes = append(unavailableNodes, storageNode.Id)
+			}
 			numUnavailable++
 		}
 	}
@@ -798,6 +794,7 @@ func (c *Controller) getPodAvailability(
 		if storageNode.Status != storageapi.Status_STATUS_OK {
 			logrus.WithField("StorageNode", storageNode).Info("Storage node is not healthy")
 			numUnavailable++
+			unavailableNodes = append(unavailableNodes, storageNode.Id)
 		}
 	}
 
@@ -807,11 +804,11 @@ func (c *Controller) getPodAvailability(
 		true,
 	)
 	if err != nil {
-		return -1, -1, nil, fmt.Errorf("invalid value for MaxUnavailable: %v", err)
+		return -1, unavailableNodes, nil, fmt.Errorf("invalid value for MaxUnavailable: %v", err)
 	}
 	logrus.Debugf("StorageCluster %s/%s, maxUnavailable: %d, numUnavailable: %d",
 		cluster.Namespace, cluster.Name, maxUnavailable, numUnavailable)
-	return maxUnavailable, numUnavailable, availablePods, nil
+	return maxUnavailable, unavailableNodes, availablePods, nil
 }
 
 func (c *Controller) cleanupHistory(

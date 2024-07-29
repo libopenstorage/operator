@@ -2584,6 +2584,7 @@ func TestExtraStoragePodsGetRemoved(t *testing.T) {
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetNodesSelectedForUpgrade(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
 	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
@@ -4349,13 +4350,24 @@ func TestRollingUpdateWithMinReadySeconds(t *testing.T) {
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
 
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
+
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -4465,9 +4477,9 @@ func TestUpdateStorageClusterWithKVDBDown(t *testing.T) {
 	}
 
 	var storageNodes []*storageapi.StorageNode
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-0", true))
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-1", true))
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", true))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-0", true, "3.0.0"))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-1", true, "3.0.0"))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", true, "3.0.0"))
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -4475,10 +4487,11 @@ func TestUpdateStorageClusterWithKVDBDown(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).Times(8)
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).Times(6)
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	driver.EXPECT().GetNodesSelectedForUpgrade(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
 	var kvdbMap = map[string]bool{
 		"k8s-node-0": true,
@@ -4549,7 +4562,7 @@ func TestUpdateStorageClusterWithKVDBDown(t *testing.T) {
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.Empty(t, result)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), fmt.Sprintf("couldn't get unavailable numbers: couldn't get list of storage nodes during rolling update of storage cluster %s/%s: %s", cluster.Namespace, cluster.Name, getStorageNodeserr))
+	require.Contains(t, err.Error(), fmt.Sprintf("couldn't get list of storage nodes during rolling update of storage cluster %s/%s: %s", cluster.Namespace, cluster.Name, getStorageNodeserr))
 
 	// When GetKvdbMembers returns an error
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
@@ -4590,14 +4603,23 @@ func TestUpdateStorageClusterWithRollingUpdateStrategy(t *testing.T) {
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -4754,10 +4776,10 @@ func TestUpdateStorageClusterBasedOnStorageNodeStatuses(t *testing.T) {
 	}
 
 	var storageNodes []*storageapi.StorageNode
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-0", true))
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-1", true))
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", true))
-	storageNodes = append(storageNodes, createStorageNode("not-k8s-node", false))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-0", true, "3.0.0"))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-1", true, "3.0.0"))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", true, "3.0.0"))
+	storageNodes = append(storageNodes, createStorageNode("not-k8s-node", false, "3.0.0"))
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -4972,14 +4994,23 @@ func TestUpdateStorageClusterWithOpenshiftUpgrade(t *testing.T) {
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -5111,14 +5142,47 @@ func TestUpdateStorageClusterShouldNotExceedMaxUnavailable(t *testing.T) {
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node-1",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+		{
+			Id:                "node2",
+			SchedulerNodeName: "k8s-node-2",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+		{
+			Id:                "node3",
+			SchedulerNodeName: "k8s-node-3",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+		{
+			Id:                "node4",
+			SchedulerNodeName: "k8s-node-4",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -5323,14 +5387,47 @@ func TestUpdateStorageClusterWithPercentageMaxUnavailable(t *testing.T) {
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
 	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node-1",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+		{
+			Id:                "node2",
+			SchedulerNodeName: "k8s-node-2",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+		{
+			Id:                "node3",
+			SchedulerNodeName: "k8s-node-3",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+		{
+			Id:                "node4",
+			SchedulerNodeName: "k8s-node-4",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -5556,14 +5653,23 @@ func TestUpdateStorageClusterWhenDriverReportsPodNotUpdated(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(false).AnyTimes()
@@ -5626,14 +5732,23 @@ func TestUpdateStorageClusterShouldRestartPodIfItDoesNotHaveAnyHash(t *testing.T
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -5690,14 +5805,23 @@ func TestUpdateStorageClusterImagePullSecret(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -5801,14 +5925,23 @@ func TestUpdateStorageClusterCustomImageRegistry(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -5910,14 +6043,23 @@ func TestUpdateStorageClusterKvdbSpec(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -6032,14 +6174,23 @@ func TestUpdateStorageClusterResourceRequirements(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -6150,14 +6301,23 @@ func TestUpdateStorageClusterCloudStorageSpec(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -6653,6 +6813,16 @@ func TestUpdateStorageClusterNetworkSpec(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -6660,7 +6830,7 @@ func TestUpdateStorageClusterNetworkSpec(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -6748,14 +6918,23 @@ func TestUpdateStorageClusterEnvVariables(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -6845,6 +7024,16 @@ func TestUpdateStorageClusterRuntimeOptions(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -6852,7 +7041,7 @@ func TestUpdateStorageClusterRuntimeOptions(t *testing.T) {
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -6939,14 +7128,23 @@ func TestUpdateStorageClusterVolumes(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -7204,14 +7402,23 @@ func TestUpdateStorageClusterSecretsProvider(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -7297,14 +7504,23 @@ func TestUpdateStorageClusterStartPort(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -7393,14 +7609,23 @@ func TestUpdateStorageClusterCSISpec(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -7570,13 +7795,22 @@ func TestUpdateStorageClusterNodeSpec(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
@@ -8039,14 +8273,23 @@ func TestUpdateStorageClusterK8sNodeChanges(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -8306,14 +8549,23 @@ func TestUpdateStorageClusterShouldRestartPodIfItsHistoryHasInvalidSpec(t *testi
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -8391,14 +8643,23 @@ func TestUpdateStorageClusterSecurity(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	storageNodeList := []*storageapi.StorageNode{
+		{
+			Id:                "node1",
+			SchedulerNodeName: "k8s-node",
+			NodeLabels: map[string]string{
+				"PX Version": "3.0.0",
+			},
+			Status: storageapi.Status_STATUS_OK,
+		},
+	}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -9672,14 +9933,23 @@ func TestDoesTelemetryMatch(t *testing.T) {
 			nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 			kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 		}
-
+		storageNodeList := []*storageapi.StorageNode{
+			{
+				Id:                "node1",
+				SchedulerNodeName: "k8s-node",
+				NodeLabels: map[string]string{
+					"PX Version": "3.0.0",
+				},
+				Status: storageapi.Status_STATUS_OK,
+			},
+		}
 		driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 		driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 		driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 		driver.EXPECT().String().Return(driverName).AnyTimes()
 		driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
 		driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
-		driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+		driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodeList, nil).AnyTimes()
 		driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 		driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 		driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -10194,11 +10464,6 @@ func TestNonDisruptiveRollingUpdate(t *testing.T) {
 
 	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
 	defer testutil.RestoreEtcHosts(t)
-	upgradeNodesResponse := &storageapi.SdkFilterNonOverlappingNodesResponse{
-		NodeIds: []string{"node1", "node3", "node4"},
-	}
-	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(upgradeNodesResponse, nil).Times(1)
-
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
 	maxUnavailable := intstr.FromInt(2)
@@ -10247,12 +10512,12 @@ func TestNonDisruptiveRollingUpdate(t *testing.T) {
 	}
 
 	var storageNodes []*storageapi.StorageNode
-	storageNodes = append(storageNodes, createStorageNode("node1", true))
-	storageNodes = append(storageNodes, createStorageNode("node2", true))
-	storageNodes = append(storageNodes, createStorageNode("node3", true))
-	storageNodes = append(storageNodes, createStorageNode("node4", true))
-	storageNodes = append(storageNodes, createStorageNode("node5", true))
-
+	storageNodes = append(storageNodes, createStorageNode("node1", true, "3.1.2"))
+	storageNodes = append(storageNodes, createStorageNode("node2", true, "3.1.2"))
+	storageNodes = append(storageNodes, createStorageNode("node3", true, "3.1.2"))
+	storageNodes = append(storageNodes, createStorageNode("node4", true, "3.1.2"))
+	storageNodes = append(storageNodes, createStorageNode("node5", true, "3.1.2"))
+	nodeResponse := []string{"node1", "node3", "node4"}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -10264,6 +10529,7 @@ func TestNonDisruptiveRollingUpdate(t *testing.T) {
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetNodesSelectedForUpgrade(gomock.Any(), gomock.Any(), gomock.Any()).Return(nodeResponse, nil).Times(1)
 	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
 	require.NoError(t, err)
 	storageLabels[util.DefaultStorageClusterUniqueLabelKey] = rev1Hash
@@ -10306,8 +10572,8 @@ func TestNonDisruptiveRollingUpdate(t *testing.T) {
 
 	// When the FilterNonOverlappingNodes API response only contains 1 node
 	podControl.DeletePodName = nil
-	upgradeNodesResponse.NodeIds = []string{"node4"}
-	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(upgradeNodesResponse, nil).Times(1)
+	nodeResponse = []string{"node4"}
+	driver.EXPECT().GetNodesSelectedForUpgrade(gomock.Any(), gomock.Any(), gomock.Any()).Return(nodeResponse, nil).Times(1)
 
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
@@ -10323,9 +10589,9 @@ func TestNonDisruptiveRollingUpdate(t *testing.T) {
 	require.Len(t, podControl.DeletePodName, 1)
 	require.ElementsMatch(t, []string{"storage-pod-4"}, podControl.DeletePodName)
 
-	// When the API returns an error, update 2 random px nodes
+	// When the API returns an error, return error and stop rolling upgrade
 	podControl.DeletePodName = nil
-	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("test error")).Times(1)
+	driver.EXPECT().GetNodesSelectedForUpgrade(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("test error")).Times(1)
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 	cluster.Spec.Image = "new/image3"
@@ -10333,11 +10599,9 @@ func TestNonDisruptiveRollingUpdate(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err = controller.Reconcile(context.TODO(), request)
-	require.NoError(t, err)
+	require.Error(t, err)
 	require.Empty(t, result)
-
-	require.NotEmpty(t, podControl.DeletePodName)
-	require.Len(t, podControl.DeletePodName, 2)
+	require.Contains(t, err.Error(), "cannot upgrade nodes in parallel: test error")
 
 }
 
@@ -10491,7 +10755,7 @@ func createStoragePod(
 	}
 }
 
-func createStorageNode(nodeName string, healthy bool) *storageapi.StorageNode {
+func createStorageNode(nodeName string, healthy bool, version string) *storageapi.StorageNode {
 	status := storageapi.Status_STATUS_OK
 	if !healthy {
 		status = storageapi.Status_STATUS_ERROR
@@ -10500,6 +10764,9 @@ func createStorageNode(nodeName string, healthy bool) *storageapi.StorageNode {
 		Status:            status,
 		SchedulerNodeName: nodeName,
 		Id:                nodeName,
+		NodeLabels: map[string]string{
+			"PX Version": version,
+		},
 	}
 }
 
