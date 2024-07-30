@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/fs"
 	"math/rand"
 	"net"
 	"os"
@@ -27,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 	appsv1 "k8s.io/api/apps/v1"
+	authv1 "k8s.io/api/authentication/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -39,6 +41,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
@@ -54,6 +57,7 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/mock"
+	"github.com/libopenstorage/operator/pkg/mock/mockcore"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -61,8 +65,55 @@ import (
 
 const (
 	etcHostsFile       = "/etc/hosts"
+	fakeRootCertPath   = "/tmp/ca.crt"
 	tempEtcHostsMarker = "### px-operator unit-test"
 )
+
+// For some reason simpleClientset doesn't work with createToken, erroring out with serviceaccounts "" not found.
+// Thus wrap the simpleClientset with MockCoreOps.
+func setUpMockCoreOps(mockCtrl *gomock.Controller, clientset *fakek8sclient.Clientset) *mockcore.MockOps {
+	mockCoreOps := mockcore.NewMockOps(mockCtrl)
+	coreops.SetInstance(mockCoreOps)
+
+	simpleClientset := coreops.New(clientset)
+	defaultTokenExpirationSeconds := int64(12 * 60 * 60)
+	mockCoreOps.EXPECT().
+		CreateToken(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&authv1.TokenRequest{
+			Spec: authv1.TokenRequestSpec{
+				ExpirationSeconds: &defaultTokenExpirationSeconds,
+			},
+			Status: authv1.TokenRequestStatus{
+				Token: "xxxx",
+			},
+		}, nil).
+		AnyTimes()
+	mockCoreOps.EXPECT().
+		GetVersion().
+		Return(clientset.Discovery().ServerVersion()).
+		AnyTimes()
+	mockCoreOps.EXPECT().
+		ResourceExists(gomock.Any()).
+		Return(simpleClientset.ResourceExists(schema.GroupVersionKind{
+			Kind:    pxutil.ClusterOperatorKind,
+			Version: pxutil.ClusterOperatorVersion,
+		})).
+		AnyTimes()
+	return mockCoreOps
+}
+
+// Set root CA certificate path to a safe place
+func setUpFakeRootCert(t *testing.T) {
+	component.SetRootCertPath(fakeRootCertPath)
+	rootCaCrtDir := "/tmp"
+	err := os.MkdirAll(rootCaCrtDir, fs.ModePerm)
+	require.NoError(t, err)
+	file, err := os.Create(fakeRootCertPath)
+	require.NoError(t, err)
+	file.Close()
+	err = os.WriteFile(fakeRootCertPath, []byte("test"), 0644)
+	require.NoError(t, err)
+}
 
 func TestOrderOfComponents(t *testing.T) {
 	reregisterComponents()
@@ -106,7 +157,6 @@ func TestOrderOfComponents(t *testing.T) {
 		},
 		componentNames[3:],
 	)
-
 	require.Equal(t, int32(0), components[0].Priority())
 	require.Equal(t, int32(0), components[1].Priority())
 	require.Equal(t, int32(0), components[2].Priority())
@@ -116,7 +166,10 @@ func TestOrderOfComponents(t *testing.T) {
 }
 
 func TestBasicComponentsInstall(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
+	setUpFakeRootCert(t)
+	logrus.SetLevel(logrus.TraceLevel)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -225,6 +278,19 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, expectedPXService.Labels, pxService.Labels)
 	require.Equal(t, expectedPXService.Spec, pxService.Spec)
 
+	// Portworx Service Account Token Secret
+	expectedPXSaTokenSecret := testutil.GetExpectedSecret(t, "portworxServiceAccountTokenSecret.yaml")
+	saTokenSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, saTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedPXSaTokenSecret.Name, saTokenSecret.Name)
+	require.Equal(t, expectedPXSaTokenSecret.Namespace, saTokenSecret.Namespace)
+	require.Len(t, saTokenSecret.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, saTokenSecret.OwnerReferences[0].Name)
+	require.Equal(t, len(expectedPXSaTokenSecret.Data), len(saTokenSecret.Data))
+	require.Equal(t, []byte(cluster.Namespace), saTokenSecret.Data["namespace"])
+	require.Equal(t, []byte("xxxx"), saTokenSecret.Data["token"])
+
 	// Portworx KVDB Service
 	expectedPXKVDBService := testutil.GetExpectedService(t, "portworxKVDBService.yaml")
 	pxKVDBService := &v1.Service{}
@@ -262,7 +328,6 @@ func TestBasicComponentsInstall(t *testing.T) {
 
 	// When Portworx version is greater than 2.13, daemonset contains csi driver registrar as well
 	cluster.Spec.Image = "portworx/oci-monitor:2.18.0"
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	k8sClient = testutil.FakeK8sClient()
 	driver = portworx{}
@@ -325,7 +390,8 @@ func TestBasicComponentsInstall(t *testing.T) {
 }
 
 func TestBasicInstallWithPortworxDisabled(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -377,6 +443,12 @@ func TestBasicInstallWithPortworxDisabled(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, serviceList.Items)
 
+	// Portworx secret containing service account token should not be created
+	secretList := &v1.SecretList{}
+	err = testutil.List(k8sClient, secretList)
+	require.NoError(t, err)
+	require.Empty(t, secretList.Items)
+
 	// Portworx API DaemonSet should not be created
 	dsList := &appsv1.DaemonSetList{}
 	err = testutil.List(k8sClient, dsList)
@@ -385,7 +457,8 @@ func TestBasicInstallWithPortworxDisabled(t *testing.T) {
 }
 
 func TestBasicInstallWithInternalKVDBDisabled(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -417,7 +490,8 @@ func TestBasicInstallWithInternalKVDBDisabled(t *testing.T) {
 }
 
 func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -473,6 +547,18 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 	require.ElementsMatch(t, expectedRB.Subjects, actualRB.Subjects)
 	require.Equal(t, expectedRB.RoleRef, actualRB.RoleRef)
 
+	// Portworx Secrets Secret containing service account token
+	expectedSecret := testutil.GetExpectedSecret(t, "portworxServiceAccountTokenSecret.yaml")
+	actualSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSecret.Name, actualSecret.Name)
+	require.Equal(t, expectedSecret.Namespace, actualSecret.Namespace)
+	require.Len(t, actualSecret.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualSecret.OwnerReferences[0].Name)
+	require.Equal(t, len(expectedSecret.Data), len(actualSecret.Data))
+	require.Equal(t, []byte(cluster.Namespace), actualSecret.Data["namespace"])
+
 	// Disable storage should result in deleting objects even from secrets namespace
 	cluster.Annotations = map[string]string{
 		constants.AnnotationDisableStorage: "true",
@@ -493,7 +579,8 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 }
 
 func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -582,7 +669,8 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 }
 
 func TestPortworxProxyIsNotDeployedWhenClusterInKubeSystem(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -622,7 +710,8 @@ func TestPortworxProxyIsNotDeployedWhenClusterInKubeSystem(t *testing.T) {
 }
 
 func TestPortworxProxyIsNotDeployedWhenUsingDefaultPort(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -657,7 +746,8 @@ func TestPortworxProxyIsNotDeployedWhenUsingDefaultPort(t *testing.T) {
 }
 
 func TestPortworxProxyIsNotDeployedWhenDisabledExplicitly(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -744,7 +834,8 @@ func TestPortworxProxyIsNotDeployedWhenDisabledExplicitly(t *testing.T) {
 }
 
 func TestPortworxWithCustomServiceAccount(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -816,6 +907,11 @@ func TestPortworxWithCustomServiceAccount(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "new-custom-px-sa", rb.Subjects[0].Name)
 
+	// Portworx secret containing service account token exists
+	secret := &v1.Secret{}
+	err = testutil.Get(k8sClient, secret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+
 	// Portworx API DaemonSet with custom ServiceAccount
 	ds = &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
@@ -848,7 +944,8 @@ func TestPortworxWithCustomServiceAccount(t *testing.T) {
 }
 
 func TestDisablePortworx(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -913,6 +1010,10 @@ func TestDisablePortworx(t *testing.T) {
 	err = testutil.Get(k8sClient, pxProxySvc, pxutil.PortworxServiceName, api.NamespaceSystem)
 	require.NoError(t, err)
 
+	pxSaTokenSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, pxSaTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+
 	pxProxyDS := &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, pxProxyDS, component.PxProxyDaemonSetName, api.NamespaceSystem)
 	require.NoError(t, err)
@@ -952,6 +1053,10 @@ func TestDisablePortworx(t *testing.T) {
 	err = testutil.Get(k8sClient, pxAPISvc, component.PxAPIServiceName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
 
+	pxSaTokenSecret = &v1.Secret{}
+	err = testutil.Get(k8sClient, pxSaTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
 	pxAPIDS = &appsv1.DaemonSet{}
 	err = testutil.Get(k8sClient, pxAPIDS, component.PxAPIDaemonSetName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
@@ -973,12 +1078,86 @@ func TestDisablePortworx(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
+func TestServiceAccountTokenRefreshOnExpire(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// reset the expiration time back in time in the secret so the token will be refresh
+	saTokenSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, saTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	fakeExpirationTime := time.Now().Add(-time.Second)
+	fakeExpirationTimeBytes := []byte(fakeExpirationTime.Format(time.RFC3339))
+	saTokenSecret.Data[component.PxSaTokenRefreshTimeKey] = fakeExpirationTimeBytes
+	err = testutil.Update(k8sClient, saTokenSecret)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, saTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	updatedExpirationTime, err := time.Parse(time.RFC3339, string(saTokenSecret.Data[component.PxSaTokenRefreshTimeKey]))
+	require.NoError(t, err)
+	assert.True(t, updatedExpirationTime.Sub(fakeExpirationTime) > 6*time.Hour)
+}
+
+func TestUpdateServiceAccountTokenSecretCaCrt(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
+	setUpFakeRootCert(t)
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	saTokenSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, saTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	oldCaCrt := saTokenSecret.Data[v1.ServiceAccountRootCAKey]
+
+	err = os.WriteFile(fakeRootCertPath, []byte("newtest"), 0644)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	err = testutil.Get(k8sClient, saTokenSecret, pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	newCaCrt := saTokenSecret.Data[v1.ServiceAccountRootCAKey]
+	require.NotEqual(t, oldCaCrt, newCaCrt)
+	require.Equal(t, string(newCaCrt), "newtest")
+}
+
 func TestDefaultStorageClassesWithStork(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.22.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1168,7 +1347,8 @@ func TestDefaultStorageClassesWithStork(t *testing.T) {
 }
 
 func TestDefaultStorageClassesWithoutStork(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1228,7 +1408,8 @@ func TestDefaultStorageClassesWithoutStork(t *testing.T) {
 }
 
 func TestDefaultStorageClassesWithPortworxDisabled(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1266,7 +1447,8 @@ func TestDefaultStorageClassesWithPortworxDisabled(t *testing.T) {
 }
 
 func TestDefaultStorageClassesWhenDisabled(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1315,7 +1497,8 @@ func TestDefaultStorageClassesWhenDisabled(t *testing.T) {
 }
 
 func TestPortworxServiceTypeWithOverride(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1419,7 +1602,8 @@ func TestPortworxServiceTypeWithOverride(t *testing.T) {
 }
 
 func TestPVCControllerInstall(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1443,7 +1627,8 @@ func TestPVCControllerInstall(t *testing.T) {
 	verifyPVCControllerDeployment(t, cluster, k8sClient, "pvcControllerDeployment.yaml")
 }
 func TestPVCControllerInstallWithNonPriviliged(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1469,11 +1654,12 @@ func TestPVCControllerInstallWithNonPriviliged(t *testing.T) {
 }
 
 func TestPVCControllerInstallWithK8s1_24(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.24.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -1506,11 +1692,12 @@ func TestPVCControllerInstallWithK8s1_24(t *testing.T) {
 }
 
 func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.22.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -1568,7 +1755,8 @@ func TestPVCControllerInstallWithK8s1_22(t *testing.T) {
 }
 
 func TestPVCControllerWithInvalidValue(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1606,7 +1794,8 @@ func TestPVCControllerWithInvalidValue(t *testing.T) {
 }
 
 func TestPVCControllerInstallInKubeSystemNamespace(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1646,7 +1835,8 @@ func TestPVCControllerInstallInKubeSystemNamespace(t *testing.T) {
 }
 
 func TestPVCControllerInstallInNonKubeSystemNamespace(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1705,7 +1895,8 @@ func TestPVCControllerInstallInNonKubeSystemNamespace(t *testing.T) {
 }
 
 func TestPVCControllerInstallForPKS(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1739,7 +1930,8 @@ func TestPVCControllerInstallForPKS(t *testing.T) {
 }
 
 func TestPVCControllerInstallForEKS(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1773,7 +1965,8 @@ func TestPVCControllerInstallForEKS(t *testing.T) {
 }
 
 func TestPVCControllerInstallForGKE(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1807,7 +2000,8 @@ func TestPVCControllerInstallForGKE(t *testing.T) {
 }
 
 func TestPVCControllerInstallForOKE(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1841,7 +2035,8 @@ func TestPVCControllerInstallForOKE(t *testing.T) {
 }
 
 func TestPVCControllerInstallForAKS(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -1884,17 +2079,15 @@ func TestPVCControllerInstallForAKS(t *testing.T) {
 }
 
 func TestPVCControllerInstallForK3s(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-
-	k8sClient := testutil.FakeK8sClient()
-
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.0+k3s1",
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
@@ -1927,17 +2120,14 @@ func TestPVCControllerInstallForK3s(t *testing.T) {
 }
 
 func TestPVCControllerInstallForRke2(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
-	reregisterComponents()
-
-	k8sClient := testutil.FakeK8sClient()
-
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.0+rke2r1",
 	}
-	coreops.SetInstance(coreops.New(versionClient))
-
+	setUpMockCoreOps(mockCtrl, versionClient)
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
@@ -1970,7 +2160,8 @@ func TestPVCControllerInstallForRke2(t *testing.T) {
 }
 
 func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2014,7 +2205,8 @@ func TestPVCControllerWhenPVCControllerDisabledExplicitly(t *testing.T) {
 }
 
 func TestPVCControllerInstallWithPortworxDisabled(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2143,8 +2335,8 @@ func verifyPVCControllerDeploymentObject(
 }
 
 func TestPVCControllerCustomCPU(t *testing.T) {
-	// Set fake kubernetes client for k8s version
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2185,7 +2377,8 @@ func TestPVCControllerCustomCPU(t *testing.T) {
 }
 
 func TestPVCControllerInvalidCPU(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
 	driver := portworx{}
@@ -2213,7 +2406,8 @@ func TestPVCControllerInvalidCPU(t *testing.T) {
 }
 
 func TestPVCControllerCustomPorts(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2286,8 +2480,8 @@ func TestPVCControllerCustomPorts(t *testing.T) {
 }
 
 func TestPVCControllerRollbackImageChanges(t *testing.T) {
-	// Set fake kubernetes client for k8s version
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2332,11 +2526,12 @@ func TestPVCControllerRollbackImageChanges(t *testing.T) {
 }
 
 func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.7",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2368,6 +2563,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.6",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 	require.NoError(t, err)
@@ -2387,6 +2583,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.17.10",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -2405,6 +2602,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.17.9",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -2423,6 +2621,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.16.14",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -2441,6 +2640,7 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.16.13",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -2457,8 +2657,8 @@ func TestPVCControllerImageWithNewerK8sVersion(t *testing.T) {
 }
 
 func TestPVCControllerRollbackCommandChanges(t *testing.T) {
-	// Set fake kubernetes client for k8s version
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2500,7 +2700,8 @@ func TestPVCControllerRollbackCommandChanges(t *testing.T) {
 }
 
 func TestLighthouseInstall(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2531,7 +2732,8 @@ func TestLighthouseInstall(t *testing.T) {
 }
 
 func TestLighthouseInstallWithNonPrivileged(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2648,7 +2850,8 @@ func verifyLightHouseInstall(
 }
 
 func TestLighthouseServiceTypeForAKS(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2684,7 +2887,8 @@ func TestLighthouseServiceTypeForAKS(t *testing.T) {
 }
 
 func TestLighthouseServiceTypeForGKE(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2720,7 +2924,8 @@ func TestLighthouseServiceTypeForGKE(t *testing.T) {
 }
 
 func TestLighthouseServiceTypeForEKS(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2756,7 +2961,8 @@ func TestLighthouseServiceTypeForEKS(t *testing.T) {
 }
 
 func TestLighthouseServiceTypeWithOverride(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2823,7 +3029,8 @@ func TestLighthouseServiceTypeWithOverride(t *testing.T) {
 }
 
 func TestLighthouseWithoutImage(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
@@ -2863,7 +3070,8 @@ func TestLighthouseWithoutImage(t *testing.T) {
 }
 
 func TestLighthouseWithDesiredImage(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2909,7 +3117,8 @@ func TestLighthouseWithDesiredImage(t *testing.T) {
 }
 
 func TestLighthouseImageChange(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2951,7 +3160,8 @@ func TestLighthouseImageChange(t *testing.T) {
 }
 
 func TestLighthouseConfigInitImageChange(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -2998,7 +3208,8 @@ func TestLighthouseConfigInitImageChange(t *testing.T) {
 }
 
 func TestLighthouseStorkConnectorImageChange(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -3045,7 +3256,8 @@ func TestLighthouseStorkConnectorImageChange(t *testing.T) {
 }
 
 func TestLighthouseWithoutImageTag(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -3084,7 +3296,8 @@ func TestLighthouseWithoutImageTag(t *testing.T) {
 }
 
 func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -3134,11 +3347,12 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 
 func TestAutopilotInstall(t *testing.T) {
 	// Start test with newer version (1.25 beyond) of Kubernetes first, on which PodSecurityPolicy is no longer existing
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.25.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -3254,11 +3468,10 @@ func TestAutopilotInstall(t *testing.T) {
 
 	// Now test with older version (1.24 less) of Kubernetes, on which PodSecurityPolicy is used and
 	// injected into Autopilot's ClusterRole definition
-	versionClient = fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.24.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient = fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -3287,7 +3500,8 @@ func TestAutopilotInstall(t *testing.T) {
 }
 
 func TestAutopilotWithoutImage(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
@@ -3327,7 +3541,8 @@ func TestAutopilotWithoutImage(t *testing.T) {
 }
 
 func TestAutopilotWithEnvironmentVariables(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(0)
@@ -3377,7 +3592,8 @@ func TestAutopilotWithEnvironmentVariables(t *testing.T) {
 }
 
 func TestAutopilotWithDesiredImage(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -3435,7 +3651,8 @@ func TestAutopilotWithDesiredImage(t *testing.T) {
 }
 
 func TestAutopilotImageChange(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -3477,7 +3694,8 @@ func TestAutopilotImageChange(t *testing.T) {
 }
 
 func TestAutopilotArgumentsChange(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -3533,7 +3751,8 @@ func TestAutopilotArgumentsChange(t *testing.T) {
 }
 
 func TestAutopilotConfigArgumentsChange(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -3586,7 +3805,8 @@ func TestAutopilotConfigArgumentsChange(t *testing.T) {
 }
 
 func TestAutopilotEnvVarsChange(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -3653,7 +3873,8 @@ func TestAutopilotEnvVarsChange(t *testing.T) {
 }
 
 func TestAutopilotResources(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -3731,7 +3952,8 @@ func TestAutopilotResources(t *testing.T) {
 }
 
 func TestAutopilotCPUChange(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -3777,7 +3999,8 @@ func TestAutopilotCPUChange(t *testing.T) {
 }
 
 func TestAutopilotInvalidCPU(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
@@ -3809,7 +4032,8 @@ func TestAutopilotInvalidCPU(t *testing.T) {
 }
 
 func TestAutopilotSecurityContext(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	recorder := record.NewFakeRecorder(10)
@@ -3841,11 +4065,12 @@ func TestAutopilotSecurityContext(t *testing.T) {
 }
 
 func TestAutopilotVolumesChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
-		GitVersion: "v1.18.0",
+		GitVersion: "v1.18.7",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -4009,6 +4234,7 @@ func TestAutopilotVolumesChange(t *testing.T) {
 
 // test if user-workload can be enabled on non-openshift servers for AutoPilot
 func TestIsUserWorkloadSupportedOnNonOCPCluster(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -4020,7 +4246,7 @@ func TestIsUserWorkloadSupportedOnNonOCPCluster(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 
@@ -4037,6 +4263,7 @@ func TestIsUserWorkloadSupportedOnNonOCPCluster(t *testing.T) {
 
 // test if user-workload can be enabled on 4.14 version of openshift for AutoPilot
 func TestIsUserWorkloadSupportedForSupportedVersionOpenshift(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -4048,7 +4275,7 @@ func TestIsUserWorkloadSupportedForSupportedVersionOpenshift(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
@@ -4083,6 +4310,7 @@ func TestIsUserWorkloadSupportedForSupportedVersionOpenshift(t *testing.T) {
 
 // test if install can be enabled on 4.11 version of openshift for AutoPilot
 func TestIsUserWorkloadSupportedForUnsupportedVersionOpenshift(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -4094,8 +4322,7 @@ func TestIsUserWorkloadSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
-
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
 		ObjectMeta: metav1.ObjectMeta{
@@ -4131,6 +4358,7 @@ func TestIsUserWorkloadSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 // test Autopilot install and Uninstall on ocp cluster 4.14
 func TestAutopilotInstallAndUninstallOnOpenshift414(t *testing.T) {
 	// Start test with newer version (1.25 beyond) of Kubernetes first, on which PodSecurityPolicy is no longer existing
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -4142,7 +4370,7 @@ func TestAutopilotInstallAndUninstallOnOpenshift414(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
@@ -4295,6 +4523,7 @@ func TestAutopilotInstallAndUninstallOnOpenshift414(t *testing.T) {
 
 // test Autopilot install when user workload monitoring is not enabled
 func TestAutopilotWithOCPSecretNotFound(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -4306,8 +4535,7 @@ func TestAutopilotWithOCPSecretNotFound(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
-
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
 		ObjectMeta: metav1.ObjectMeta{
@@ -4409,6 +4637,7 @@ func TestAutopilotWithOCPSecretNotFound(t *testing.T) {
 
 // test Autopilot deployment and Secret after disabling and enabling autopilot
 func TestDisableEnableAutopilotOCP414(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -4420,7 +4649,7 @@ func TestDisableEnableAutopilotOCP414(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
@@ -4568,7 +4797,7 @@ func TestDisableEnableAutopilotOCP414(t *testing.T) {
 
 // test Autopilot default provider URL on OCP 4.14
 func TestAutopilotProviderURLOnOCP414(t *testing.T) {
-	// Start test with newer version (1.25 beyond) of Kubernetes first, on which PodSecurityPolicy is no longer existing
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -4580,7 +4809,7 @@ func TestAutopilotProviderURLOnOCP414(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
@@ -4687,7 +4916,7 @@ func TestAutopilotProviderURLOnOCP414(t *testing.T) {
 
 // test Autopilot install and Uninstall on ocp cluster 4.15
 func TestAutopilotInstallAndUninstallOnOpenshift415(t *testing.T) {
-
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -4699,7 +4928,7 @@ func TestAutopilotInstallAndUninstallOnOpenshift415(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
@@ -4852,8 +5081,9 @@ func TestAutopilotInstallAndUninstallOnOpenshift415(t *testing.T) {
 }
 
 func TestSecurityInstall(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	k8sClient := testutil.FakeK8sClient()
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	driver := portworx{}
 	recorder := record.NewFakeRecorder(100)
@@ -5081,8 +5311,9 @@ func TestSecurityInstall(t *testing.T) {
 }
 
 func TestSecurityTokenRefreshOnUpdate(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	k8sClient := testutil.FakeK8sClient()
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
 	reregisterComponents()
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
@@ -5251,7 +5482,8 @@ func TestSecuritySkipAnnotationIsAdded(t *testing.T) {
 	}
 
 	k8sClient := testutil.FakeK8sClient(sharedSecret, systemSecret, adminToken, userToken)
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(100))
@@ -5298,7 +5530,6 @@ func TestSecuritySkipAnnotationIsAdded(t *testing.T) {
 
 func TestGuestAccessSecurity(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
 
 	// Create the mock servers that can be used to mock SDK calls
 	mockRoleServer := mock.NewMockOpenStorageRoleServer(mockCtrl)
@@ -5328,7 +5559,7 @@ func TestGuestAccessSecurity(t *testing.T) {
 			},
 		},
 	})
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 
 	component.DeregisterAllComponents()
 	component.RegisterSecurityComponent()
@@ -5467,7 +5698,8 @@ func TestGuestAccessSecurity(t *testing.T) {
 }
 
 func TestDisableSecurity(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -5520,11 +5752,12 @@ func TestDisableSecurity(t *testing.T) {
 }
 
 func TestCSIInstallDisable(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.4",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -5580,11 +5813,12 @@ func TestCSIInstallDisable(t *testing.T) {
 }
 
 func TestCSIInstallWithEmptyImages(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.24.4",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -5712,11 +5946,12 @@ func TestCSIInstallWithEmptyImages(t *testing.T) {
 }
 
 func TestCSIInstall(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.4",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -5767,11 +6002,12 @@ func TestCSIInstall(t *testing.T) {
 }
 
 func TestCSIInstallNonPrivileged(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.4",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -5914,11 +6150,12 @@ func verifyCsiInstall(
 }
 
 func TestCSIInstallWithk8s1_13(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -5998,6 +6235,7 @@ func TestCSIInstallWithk8s1_13(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 	cluster.Spec.Image = "portworx/image:2.2"
@@ -6031,11 +6269,12 @@ func TestCSIInstallWithk8s1_13(t *testing.T) {
 }
 
 func TestCSIInstallWithk8s1_20(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.20.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -6130,11 +6369,12 @@ func TestCSIInstallWithk8s1_20(t *testing.T) {
 }
 
 func TestCSIInstallEphemeralWithK8s1_17VersionAndPX2_5(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.17.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -6182,11 +6422,12 @@ func TestCSIInstallEphemeralWithK8s1_17VersionAndPX2_5(t *testing.T) {
 }
 
 func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.20.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -6254,11 +6495,12 @@ func TestCSIInstallEphemeralWithK8s1_20VersionAndPX2_5(t *testing.T) {
 }
 
 func TestCSIInstallWithPKS(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -6323,14 +6565,15 @@ func TestCSIInstallWithPKS(t *testing.T) {
 }
 
 func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	extensionsClient := fakeextclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
-	apiextensionsops.SetInstance(apiextensionsops.New(extensionsClient))
 	// CSINodeInfo CRD should be created for k8s version 1.12.*
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
+	extensionsClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(extensionsClient))
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -6379,6 +6622,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.99",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -6407,6 +6651,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.99",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -6423,6 +6668,7 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -6436,11 +6682,12 @@ func TestCSIInstallShouldCreateNodeInfoCRD(t *testing.T) {
 }
 
 func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -6500,11 +6747,12 @@ func TestCSIInstallWithDeprecatedCSIDriverName(t *testing.T) {
 }
 
 func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -6577,6 +6825,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.16.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -6597,6 +6846,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.17.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -6619,6 +6869,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 	cluster.Spec.Env[0].Value = "false"
@@ -6641,6 +6892,7 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 	cluster.Spec.Env[0].Value = "invalid"
@@ -6660,11 +6912,12 @@ func TestCSIInstallWithAlphaFeaturesDisabled(t *testing.T) {
 }
 
 func TestCSIInstallWithTopology(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.20.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -6734,11 +6987,12 @@ func TestCSIInstallWithTopology(t *testing.T) {
 }
 
 func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -6773,11 +7027,12 @@ func TestCSIClusterRoleK8sVersionGreaterThan_1_14(t *testing.T) {
 }
 
 func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -6860,6 +7115,7 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -6885,11 +7141,12 @@ func TestCSI_1_0_ChangeImageVersions(t *testing.T) {
 }
 
 func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -6955,11 +7212,12 @@ func TestCSI_0_3_ChangeImageVersions(t *testing.T) {
 }
 
 func TestCSIChangeKubernetesVersions(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -7005,6 +7263,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.13.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -7038,6 +7297,7 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -7064,11 +7324,12 @@ func TestCSIChangeKubernetesVersions(t *testing.T) {
 }
 
 func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -7165,11 +7426,12 @@ func TestCSI_0_3_ImagePullSecretChange(t *testing.T) {
 }
 
 func TestCSI_0_3_TolerationsChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -7304,11 +7566,12 @@ func TestCSI_0_3_TolerationsChange(t *testing.T) {
 }
 
 func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -7421,11 +7684,12 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 }
 
 func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.4",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	nodeName := "testNode"
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -7535,11 +7799,12 @@ func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 }
 
 func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.22.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -7681,7 +7946,8 @@ func TestPrometheusUpgradeDefaultDesiredImages(t *testing.T) {
 }
 
 func TestPrometheusInstall(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -7916,7 +8182,8 @@ func TestPrometheusInstall(t *testing.T) {
 }
 
 func TestPrometheusInstallWithEmtpyImages(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -7983,7 +8250,8 @@ func TestPrometheusInstallWithEmtpyImages(t *testing.T) {
 }
 
 func TestGrafanaInstall(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -8086,11 +8354,12 @@ func TestGrafanaInstall(t *testing.T) {
 }
 
 func TestCompleteInstallDuringMigration(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -8193,11 +8462,12 @@ func TestCompleteInstallDuringMigration(t *testing.T) {
 }
 
 func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -8314,6 +8584,7 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -8331,6 +8602,7 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	driver.k8sVersion, _ = k8sutil.GetVersion()
 	driver.initializeComponents()
 
@@ -8350,11 +8622,12 @@ func TestCompleteInstallWithImagePullPolicy(t *testing.T) {
 }
 
 func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -8908,11 +9181,12 @@ func TestCompleteInstallWithCustomRegistryChange(t *testing.T) {
 }
 
 func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -9053,11 +9327,12 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_14(t *testing.T) {
 }
 
 func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -9198,11 +9473,12 @@ func TestCompleteInstallWithCustomRegistryChangeForK8s_1_12(t *testing.T) {
 }
 
 func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -9854,11 +10130,12 @@ func TestCompleteInstallWithCustomRepoRegistryChange(t *testing.T) {
 }
 
 func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -10027,11 +10304,12 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_14(t *testing.T) {
 }
 
 func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.12.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	err := createFakeCRD(fakeExtClient, "csinodeinfos.csi.storage.k8s.io")
@@ -10286,11 +10564,12 @@ func TestCompleteInstallWithCustomRepoRegistryChangeForK8s_1_12(t *testing.T) {
 }
 
 func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -10689,11 +10968,12 @@ func TestCompleteInstallWithImagePullSecretChange(t *testing.T) {
 }
 
 func TestCompleteInstallWithTolerationsChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -11188,11 +11468,12 @@ func TestCompleteInstallWithTolerationsChange(t *testing.T) {
 }
 
 func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.18.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -11575,8 +11856,8 @@ func TestCompleteInstallWithNodeAffinityChange(t *testing.T) {
 }
 
 func TestRemovePVCController(t *testing.T) {
-	// Set fake kubernetes client for k8s version
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -11636,8 +11917,8 @@ func TestRemovePVCController(t *testing.T) {
 }
 
 func TestDisablePVCController(t *testing.T) {
-	// Set fake kubernetes client for k8s version
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -11697,7 +11978,8 @@ func TestDisablePVCController(t *testing.T) {
 }
 
 func TestRemoveLighthouse(t *testing.T) {
-	// Set fake kubernetes client for k8s version
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -11768,7 +12050,8 @@ func TestRemoveLighthouse(t *testing.T) {
 }
 
 func TestDisableLighthouse(t *testing.T) {
-	// Set fake kubernetes client for k8s version
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -11839,6 +12122,8 @@ func TestDisableLighthouse(t *testing.T) {
 }
 
 func TestRemoveAutopilot(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -11908,6 +12193,8 @@ func TestRemoveAutopilot(t *testing.T) {
 }
 
 func TestDisableAutopilot(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -11978,8 +12265,9 @@ func TestDisableAutopilot(t *testing.T) {
 }
 
 func TestDisableCSI_0_3(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.11.4",
 	}
@@ -12079,11 +12367,12 @@ func TestDisableCSI_0_3(t *testing.T) {
 }
 
 func TestDisableCSI_1_0(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -12193,11 +12482,12 @@ func TestDisableCSI_1_0(t *testing.T) {
 
 // Test to check the movement of csi registrar container when px version is upgraded/downgraded from 2.13
 func TestCSIRegistrarContainerShift(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -12264,11 +12554,12 @@ func TestCSIRegistrarContainerShift(t *testing.T) {
 
 // Test to verify if disabling CSI for PX version >= 2.13 will remove csi-registrar container from px-api pods
 func TestDisableCSI_GTPxVersion2_13(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.14.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -12322,7 +12613,8 @@ func TestDisableCSI_GTPxVersion2_13(t *testing.T) {
 }
 
 func TestMonitoringMetricsEnabled(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -12422,7 +12714,8 @@ func TestMonitoringMetricsEnabled(t *testing.T) {
 }
 
 func TestDisableMonitoring(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -12702,7 +12995,6 @@ func TestDisablePrometheus(t *testing.T) {
 
 func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
 
 	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
 	mockClusterDomainServer := mock.NewMockOpenStorageClusterDomainsServer(mockCtrl)
@@ -12769,7 +13061,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 		},
 	})
 
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	component.DeregisterAllComponents()
 	component.RegisterDisruptionBudgetComponent()
 
@@ -12992,7 +13284,6 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 
 func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
 
 	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
 	mockClusterDomainServer := mock.NewMockOpenStorageClusterDomainsServer(mockCtrl)
@@ -13170,7 +13461,6 @@ func TestPodDisruptionBudgetWithMetroDR(t *testing.T) {
 
 func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
 
 	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
 	sdkServerIP := "127.0.0.1"
@@ -13222,7 +13512,7 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 		},
 	})
 
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	component.DeregisterAllComponents()
 	component.RegisterDisruptionBudgetComponent()
 
@@ -13303,7 +13593,6 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 
 func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
 
 	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
 	sdkServerIP := "127.0.0.1"
@@ -13363,7 +13652,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 		},
 	})
 
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	component.DeregisterAllComponents()
 	component.RegisterDisruptionBudgetComponent()
 
@@ -13405,7 +13694,6 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 
 func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
 	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
 	sdkServerIP := "127.0.0.1"
 	sdkServerPort := 21883
@@ -13446,7 +13734,7 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 		},
 	}
 
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	component.DeregisterAllComponents()
 	component.RegisterDisruptionBudgetComponent()
 
@@ -13514,7 +13802,6 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 
 func TestDisablePodDisruptionBudgets(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
 
 	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
 	sdkServerIP := "127.0.0.1"
@@ -13575,7 +13862,7 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 		},
 	})
 
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	component.DeregisterAllComponents()
 	component.RegisterDisruptionBudgetComponent()
 
@@ -13623,7 +13910,8 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 }
 
 func TestSCC(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 
@@ -13702,6 +13990,7 @@ func TestSCC(t *testing.T) {
 }
 
 func TestSCCOnOpenshift(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -13713,7 +14002,7 @@ func TestSCCOnOpenshift(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
@@ -13811,6 +14100,7 @@ func TestSCCOnOpenshift(t *testing.T) {
 }
 
 func TestSCCOnOpenshiftWithPXPrometheusEnabled(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -13822,7 +14112,7 @@ func TestSCCOnOpenshiftWithPXPrometheusEnabled(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
@@ -13942,7 +14232,8 @@ func TestSCCOnOpenshiftWithPXPrometheusEnabled(t *testing.T) {
 }
 
 func TestPodSecurityPoliciesEnabled(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 
@@ -14059,8 +14350,9 @@ func TestPodSecurityPoliciesEnabled(t *testing.T) {
 }
 
 func TestRemovePodSecurityPolicies(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 
@@ -14137,6 +14429,7 @@ func TestRemovePodSecurityPolicies(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.20.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	cluster.Annotations = nil
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
@@ -14148,7 +14441,8 @@ func TestRemovePodSecurityPolicies(t *testing.T) {
 }
 
 func TestDisablePodSecurityPolicies(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 
@@ -14210,7 +14504,8 @@ func TestDisablePodSecurityPolicies(t *testing.T) {
 }
 
 func TestTelemetryEnableAndDisable(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -14419,7 +14714,8 @@ func TestTelemetryEnableAndDisable(t *testing.T) {
 }
 
 func TestMetricsCollectorIsDisabledForOldPxVersions(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -14480,7 +14776,8 @@ func TestMetricsCollectorIsDisabledForOldPxVersions(t *testing.T) {
 }
 
 func TestTelemetryCCMProxy(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -14559,7 +14856,8 @@ func TestTelemetryCCMProxy(t *testing.T) {
 }
 
 func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -14829,7 +15127,8 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 }
 
 func TestTelemetryWithEmptyImagest(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -14905,7 +15204,8 @@ func TestTelemetryWithEmptyImagest(t *testing.T) {
 }
 
 func TestValidateTelemetryEnabled(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -15002,7 +15302,8 @@ func TestValidateTelemetryEnabled(t *testing.T) {
 }
 
 func TestSetTelemetryDefaultWithoutCertCreated(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -15138,7 +15439,8 @@ func TestSetTelemetryDefaultWithoutCertCreated(t *testing.T) {
 }
 
 func TestSetTelemetryDefaultWithCertCreated(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -15211,7 +15513,8 @@ func TestSetTelemetryDefaultWithCertCreated(t *testing.T) {
 }
 
 func TestTelemetryCCMGoUpgrade(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -15414,7 +15717,8 @@ func TestTelemetryCCMGoUpgrade(t *testing.T) {
 }
 
 func TestTelemetryCCMGoHTTPProxy(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -15590,7 +15894,8 @@ func TestTelemetryCCMGoHTTPProxy(t *testing.T) {
 
 // PWX-27401
 func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -15757,7 +16062,8 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 }
 
 func TestTelemetryCCMGoHTTPSProxy(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -15932,7 +16238,8 @@ func TestTelemetryCCMGoHTTPSProxy(t *testing.T) {
 }
 
 func TestTelemetrySecretDeletion(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -15996,7 +16303,8 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 }
 
 func TestTelemetryCCMGoRestartPhonehome(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -16075,7 +16383,8 @@ func TestTelemetryCCMGoRestartPhonehome(t *testing.T) {
 }
 
 func TestPortworxAPIServiceCustomLabels(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -16175,11 +16484,12 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 			},
 		},
 	}
-	versionClient := fakek8sclient.NewSimpleClientset(fakeNode)
+	mockCtrl := gomock.NewController(t)
+	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.17.0",
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -16248,11 +16558,12 @@ func TestCSIAndPVCControllerDeploymentWithPodTopologySpreadConstraints(t *testin
 }
 
 func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.17.0",
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 	reregisterComponents()
@@ -16295,7 +16606,8 @@ func TestCSIAndPVCControllerDeploymentWithoutPodTopologySpreadConstraints(t *tes
 }
 
 func TestServiceCustomAnnotations(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -16476,7 +16788,8 @@ func TestServiceCustomAnnotations(t *testing.T) {
 }
 
 func TestServiceTypeAnnotation(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -16704,8 +17017,8 @@ func TestServiceTypeAnnotation(t *testing.T) {
 }
 
 func TestCSISnapController(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 
@@ -16713,6 +17026,7 @@ func TestCSISnapController(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.16.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -16749,6 +17063,7 @@ func TestCSISnapController(t *testing.T) {
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.20.0",
 	}
+	setUpMockCoreOps(mockCtrl, versionClient)
 	reregisterComponents()
 	k8sClient = testutil.FakeK8sClient()
 	driver = portworx{}
@@ -17161,6 +17476,7 @@ func createTelemetrySecret(t *testing.T, k8sClient client.Client, namespace stri
 
 // test if install can be enabled on non-openshift servers for Plugin
 func TestInstallOnNonOpenshiftCluster(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -17172,7 +17488,7 @@ func TestInstallOnNonOpenshiftCluster(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 
@@ -17191,6 +17507,7 @@ func TestInstallOnNonOpenshiftCluster(t *testing.T) {
 
 // test if install can be enabled on 4.13 version of openshift for Plugin
 func TestIsVersionSupportedForSupportedVersionOpenshift(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -17202,7 +17519,7 @@ func TestIsVersionSupportedForSupportedVersionOpenshift(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
@@ -17239,6 +17556,7 @@ func TestIsVersionSupportedForSupportedVersionOpenshift(t *testing.T) {
 
 // test if install can be enabled on 4.11 version of openshift for Plugin
 func TestIsVersionSupportedForUnsupportedVersionOpenshift(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -17250,7 +17568,7 @@ func TestIsVersionSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
@@ -17287,6 +17605,7 @@ func TestIsVersionSupportedForUnsupportedVersionOpenshift(t *testing.T) {
 
 // test if PVC-Controler gets enabled on various configs
 func TestCheckPVCControllerEnablement(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -17298,7 +17617,7 @@ func TestCheckPVCControllerEnablement(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -17363,6 +17682,7 @@ func TestCheckPVCControllerEnablement(t *testing.T) {
 }
 
 func TestPluginInstallAndUninstall(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
 	versionClient.Resources = []*metav1.APIResourceList{
 		{
@@ -17374,7 +17694,7 @@ func TestPluginInstallAndUninstall(t *testing.T) {
 			},
 		},
 	}
-	coreops.SetInstance(coreops.New(versionClient))
+	setUpMockCoreOps(mockCtrl, versionClient)
 
 	reregisterComponents()
 	operator := &ocpconfig.ClusterOperator{
