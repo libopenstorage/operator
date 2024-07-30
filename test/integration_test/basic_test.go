@@ -162,6 +162,13 @@ var testStorageClusterBasicCases = []types.TestCase{
 				},
 			},
 		}),
+		ShouldSkip: func(tc *types.TestCase) bool {
+			skip := ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer24_2_0)
+			if skip {
+				logrus.Info("Skipping BasicInstallWithPxSaTokenRefresh, because PX Operator version is less than 24.2.0")
+			}
+			return skip
+		},
 		TestFunc: BasicInstallWithPxSaTokenRefresh,
 	},
 	{
