@@ -338,13 +338,14 @@ func DeepEqualObjects(
 // DeepEqualPodTemplate compares if two pod template specs are same.
 func DeepEqualPodTemplate(t1, t2 *v1.PodTemplateSpec) (bool, error) {
 	// DeepDerivative will return true if first argument is nil, hence check the length of volumes.
-	// The reason we don't2 use deepEqual for volumes is k8s API server may add defaultMode to it.
-	if !equality.Semantic.DeepDerivative(t1.Spec.Containers, t2.Spec.Containers) {
+	// The reason we don't use deepEqual for volumes is k8s API server may add defaultMode to it.
+	if len(t1.Spec.Containers) != len(t2.Spec.Containers) ||
+		!equality.Semantic.DeepDerivative(t1.Spec.Containers, t2.Spec.Containers) {
 		return false, fmt.Errorf("containers not equal, first: %+v, second: %+v", t1.Spec.Containers, t2.Spec.Containers)
 	}
 
-	if !(len(t1.Spec.Volumes) == len(t2.Spec.Volumes) &&
-		equality.Semantic.DeepDerivative(t1.Spec.Volumes, t2.Spec.Volumes)) {
+	if len(t1.Spec.Volumes) != len(t2.Spec.Volumes) ||
+		!equality.Semantic.DeepDerivative(t1.Spec.Volumes, t2.Spec.Volumes) {
 		return false, fmt.Errorf("volumes not equal, first: %+v, second: %+v", t1.Spec.Volumes, t2.Spec.Volumes)
 	}
 

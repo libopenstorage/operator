@@ -3,17 +3,19 @@ package storagenode
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"google.golang.org/grpc"
-	"strings"
-	"time"
 
 	"github.com/hashicorp/go-version"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -297,21 +299,37 @@ func (c *Controller) syncKVDB(
 			isRecentlyCreatedAfterNodeCordoned = k8s.IsPodRecentlyCreatedAfterNodeCordoned(node, c.nodeInfoMap, cluster)
 		}
 
-		if !isBeingDeleted && !isRecentlyCreatedAfterNodeCordoned && len(kvdbPods) == 0 {
+		if !isBeingDeleted && !isRecentlyCreatedAfterNodeCordoned {
 			pod, err := c.createKVDBPod(cluster, storageNode)
 			if err != nil {
 				return err
 			}
 
-			c.log(storageNode).Infof("creating portworx-kvdb pod")
-			_, err = coreops.Instance().CreatePod(pod)
-			if err != nil {
-				return err
+			if len(kvdbPods) == 0 {
+				c.log(storageNode).Infof("Creating %s/portworx-kvdb Pod", storageNode.Namespace)
+				_, err = coreops.Instance().CreatePod(pod)
+				if err != nil {
+					return err
+				}
+			} else {
+				// Ideally there will be only one kvdb pod per node, but in case of multiple pods,
+				// we will delete all of them and create a new one during the next reconciliation.
+				for _, kvdbPod := range kvdbPods {
+					if len(pod.Spec.Containers) != len(kvdbPod.Spec.Containers) ||
+						!equality.Semantic.DeepDerivative(pod.Spec.Containers, kvdbPod.Spec.Containers) {
+						c.log(storageNode).Infof("Deleting %s/%s Pod", kvdbPod.Namespace, kvdbPod.Name)
+						err = coreops.Instance().DeletePod(kvdbPod.Name, kvdbPod.Namespace, false)
+						if err != nil {
+							c.log(storageNode).Warnf("failed to delete pod: %s/%s due to: %v",
+								kvdbPod.Namespace, kvdbPod.Name, err)
+						}
+					}
+				}
 			}
 		}
 	} else { // delete pods if present
 		for _, p := range kvdbPods {
-			c.log(storageNode).Debugf("deleting kvdb pod: %s/%s", p.Namespace, p.Name)
+			c.log(storageNode).Debugf("Deleting %s/%s Pod", p.Namespace, p.Name)
 			err = coreops.Instance().DeletePod(p.Name, p.Namespace, false)
 			if err != nil {
 				c.log(storageNode).Warnf("failed to delete pod: %s/%s due to: %v", p.Namespace, p.Name, err)

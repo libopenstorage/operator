@@ -13,6 +13,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -173,56 +174,10 @@ func (c *portworxAPI) createDaemonSet(
 		return getErr
 	}
 
-	var existingPauseImageName string
-	var csiNodeRegistrarImageName string
-	var existingCsiDriverRegistrarImageName string
-	if len(existingDaemonSet.Spec.Template.Spec.Containers) > 0 {
-		existingPauseImageName = existingDaemonSet.Spec.Template.Spec.Containers[0].Image
-	}
+	daemonSet := getPortworxAPIDaemonSetSpec(cluster, ownerRef)
+	isPodTemplateEqual, _ := util.DeepEqualPodTemplate(&daemonSet.Spec.Template, &existingDaemonSet.Spec.Template)
 
-	pauseImageName := pxutil.ImageNamePause
-
-	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.Pause != "" {
-		pauseImageName = cluster.Status.DesiredImages.Pause
-	}
-
-	//  If px version is greater than 2.13 then update daemonset when csi-node-driver-registrar image changes if CSI is enabled
-	pxVersion := pxutil.GetPortworxVersion(cluster)
-	addOrRemoveCSIRegistrar := false
-	checkCSIDriverRegistrarChange := false
-	isCsiEnabled := pxutil.IsCSIEnabled(cluster)
-	pxVersionGTE2_13 := pxVersion.GreaterThanOrEqual(csiRegistrarAdditionPxVersion)
-	hasMultipleCsiContainers := len(existingDaemonSet.Spec.Template.Spec.Containers) > 1
-	isSingleCsiContainer := len(existingDaemonSet.Spec.Template.Spec.Containers) == 1
-
-	if isCsiEnabled && pxVersionGTE2_13 && hasMultipleCsiContainers {
-		existingCsiDriverRegistrarImageName = existingDaemonSet.Spec.Template.Spec.Containers[1].Image
-		csiNodeRegistrarImageName = cluster.Status.DesiredImages.CSINodeDriverRegistrar
-		csiNodeRegistrarImageName = util.GetImageURN(cluster, csiNodeRegistrarImageName)
-		checkCSIDriverRegistrarChange = true
-	} else if !isCsiEnabled && pxVersionGTE2_13 && hasMultipleCsiContainers {
-		// When CSI is disabled, remove the csi-node-driver-registrar container from the daemonset
-		addOrRemoveCSIRegistrar = true
-	} else if !pxVersionGTE2_13 && hasMultipleCsiContainers {
-		// When px version is less than 2.13, remove the csi-node-driver-registrar container from the daemonset
-		addOrRemoveCSIRegistrar = true
-	} else if isCsiEnabled && pxVersionGTE2_13 && isSingleCsiContainer {
-		// When px version is greater than 2.13 and CSI is enabled, add the csi-node-driver-registrar container to the daemonset
-		addOrRemoveCSIRegistrar = true
-	}
-
-	pauseImageName = util.GetImageURN(cluster, pauseImageName)
-	serviceAccount := pxutil.PortworxServiceAccountName(cluster)
-	existingServiceAccount := existingDaemonSet.Spec.Template.Spec.ServiceAccountName
-
-	modified := existingPauseImageName != pauseImageName || addOrRemoveCSIRegistrar ||
-		(checkCSIDriverRegistrarChange && (existingCsiDriverRegistrarImageName != csiNodeRegistrarImageName)) ||
-		existingServiceAccount != serviceAccount ||
-		util.HasPullSecretChanged(cluster, existingDaemonSet.Spec.Template.Spec.ImagePullSecrets) ||
-		util.HasNodeAffinityChanged(cluster, existingDaemonSet.Spec.Template.Spec.Affinity) ||
-		util.HaveTolerationsChanged(cluster, existingDaemonSet.Spec.Template.Spec.Tolerations)
-	if !c.isCreated || errors.IsNotFound(getErr) || modified {
-		daemonSet := getPortworxAPIDaemonSetSpec(cluster, ownerRef, pauseImageName)
+	if !c.isCreated || errors.IsNotFound(getErr) || !isPodTemplateEqual {
 		if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, daemonSet, ownerRef); err != nil {
 			return err
 		}
@@ -234,10 +189,15 @@ func (c *portworxAPI) createDaemonSet(
 func getPortworxAPIDaemonSetSpec(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
-	imageName string,
 ) *appsv1.DaemonSet {
 	maxUnavailable := intstr.FromString("100%")
 	startPort := pxutil.StartPort(cluster)
+
+	pauseImageName := pxutil.ImageNamePause
+	if cluster.Status.DesiredImages != nil && cluster.Status.DesiredImages.Pause != "" {
+		pauseImageName = cluster.Status.DesiredImages.Pause
+	}
+	pauseImageName = util.GetImageURN(cluster, pauseImageName)
 
 	newDaemonSet := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -266,10 +226,13 @@ func getPortworxAPIDaemonSetSpec(
 					Containers: []v1.Container{
 						{
 							Name:            "portworx-api",
-							Image:           imageName,
+							Image:           pauseImageName,
 							ImagePullPolicy: pxutil.ImagePullPolicy(cluster),
 							ReadinessProbe: &v1.Probe{
-								PeriodSeconds: int32(10),
+								PeriodSeconds:    int32(10),
+								TimeoutSeconds:   int32(1),
+								SuccessThreshold: int32(1),
+								FailureThreshold: int32(3),
 								ProbeHandler: v1.ProbeHandler{
 									HTTPGet: &v1.HTTPGetAction{
 										Host: "127.0.0.1",
@@ -283,6 +246,22 @@ func getPortworxAPIDaemonSetSpec(
 				},
 			},
 		},
+	}
+
+	if cluster.Spec.PortworxAPI != nil &&
+		cluster.Spec.PortworxAPI.Resources != nil {
+		newDaemonSet.Spec.Template.Spec.Containers[0].Resources = *cluster.Spec.PortworxAPI.Resources
+	} else {
+		newDaemonSet.Spec.Template.Spec.Containers[0].Resources = v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceMemory: resource.MustParse("50Mi"),
+				v1.ResourceCPU:    resource.MustParse("100m"),
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceMemory: resource.MustParse("100Mi"),
+				v1.ResourceCPU:    resource.MustParse("200m"),
+			},
+		}
 	}
 
 	// If CSI is enabled then run the csi-node-driver-registrar pods in the same daemonset
@@ -326,6 +305,7 @@ func getPortworxAPIDaemonSetSpec(
 			}
 		}
 	}
+
 	newDaemonSet.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(newDaemonSet.Spec.Template.ObjectMeta)
 
 	return newDaemonSet
@@ -376,7 +356,8 @@ func csiRegistrarContainer(cluster *corev1.StorageCluster) *v1.Container {
 				Name: "KUBE_NODE_NAME",
 				ValueFrom: &v1.EnvVarSource{
 					FieldRef: &v1.ObjectFieldSelector{
-						FieldPath: "spec.nodeName",
+						APIVersion: "v1",
+						FieldPath:  "spec.nodeName",
 					},
 				},
 			},
@@ -421,6 +402,24 @@ func csiRegistrarContainer(cluster *corev1.StorageCluster) *v1.Container {
 	if container.Name == "" {
 		return nil
 	}
+
+	if cluster.Spec.CSI != nil &&
+		cluster.Spec.CSI.NodeDriverRegistrar != nil &&
+		cluster.Spec.CSI.NodeDriverRegistrar.Resources != nil {
+		container.Resources = *cluster.Spec.CSI.NodeDriverRegistrar.Resources
+	} else {
+		container.Resources = v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceMemory: resource.MustParse("50Mi"),
+				v1.ResourceCPU:    resource.MustParse("100m"),
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceMemory: resource.MustParse("100Mi"),
+				v1.ResourceCPU:    resource.MustParse("200m"),
+			},
+		}
+	}
+
 	return &container
 }
 
