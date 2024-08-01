@@ -9928,6 +9928,10 @@ func TestDoesTelemetryMatch(t *testing.T) {
 	for _, tc := range cases {
 		driverName := "mock-driver"
 		cluster := createStorageCluster()
+		allowDisruption := false
+		cluster.Spec.UpdateStrategy.RollingUpdate.Disruption = &corev1.Disruption{
+			Allow: &allowDisruption,
+		}
 		// use monitoring spec from TC
 		cluster.Spec.Monitoring = tc.old.Monitoring
 		cluster.Spec.Image = "portworx:2.10.1"
