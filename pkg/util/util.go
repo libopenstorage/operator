@@ -345,6 +345,13 @@ func DeepEqualPodTemplate(t1, t2 *v1.PodTemplateSpec) (bool, error) {
 		return false, fmt.Errorf("containers not equal, first: %+v, second: %+v", t1.Spec.Containers, t2.Spec.Containers)
 	}
 
+	for i := range t1.Spec.Containers {
+		if !equality.Semantic.DeepEqual(t1.Spec.Containers[i].Resources, t2.Spec.Containers[i].Resources) {
+			return false, fmt.Errorf("resources for container %s not equal, first: %+v, second: %+v",
+				t1.Spec.Containers[i].Name, t1.Spec.Containers[i].Resources, t2.Spec.Containers[i].Resources)
+		}
+	}
+
 	if len(t1.Spec.Volumes) != len(t2.Spec.Volumes) ||
 		!equality.Semantic.DeepDerivative(t1.Spec.Volumes, t2.Spec.Volumes) {
 		return false, fmt.Errorf("volumes not equal, first: %+v, second: %+v", t1.Spec.Volumes, t2.Spec.Volumes)
