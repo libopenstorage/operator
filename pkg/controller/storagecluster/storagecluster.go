@@ -241,7 +241,6 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-
 	if err := c.validate(cluster); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, err.Error())
 		if updateErr := util.UpdateLiveStorageClusterLifecycle(c.client, cluster, corev1.ClusterStateDegraded); updateErr != nil {
