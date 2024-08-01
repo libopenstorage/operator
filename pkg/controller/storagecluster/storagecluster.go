@@ -1646,6 +1646,12 @@ func (c *Controller) setStorageClusterDefaults(cluster *corev1.StorageCluster) e
 			maxUnavailable := intstr.FromInt(defaultMaxUnavailablePods)
 			updateStrategy.RollingUpdate.MaxUnavailable = &maxUnavailable
 		}
+		// Temporarily disabling smart and parallel upgrades by setting value of disruption to true
+		if updateStrategy.RollingUpdate.Disruption == nil {
+			disruption := true
+			updateStrategy.RollingUpdate.Disruption = &corev1.Disruption{}
+			updateStrategy.RollingUpdate.Disruption.Allow = &disruption
+		}
 	}
 
 	if toUpdate.Spec.RevisionHistoryLimit == nil {

@@ -3098,6 +3098,8 @@ func TestKubevirtVMsDuringUpgrade(t *testing.T) {
 
 	// Mark the storage pods as not ready so that all are considered for an upgrade
 	for _, storagePod := range storagePods {
+		err = testutil.Get(k8sClient, storagePod, storagePod.Name, cluster.Namespace)
+		require.NoError(t, err)
 		storagePod.Status.Conditions = nil
 		err = k8sClient.Update(context.TODO(), storagePod)
 		require.NoError(t, err)
@@ -9216,6 +9218,10 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	allowDisruption := false
+	cluster.Spec.UpdateStrategy.RollingUpdate.Disruption = &corev1.Disruption{
+		Allow: &allowDisruption,
+	}
 	cluster.Spec.Image = "image/v1"
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)
 	driver := testutil.MockDriver(mockCtrl)
@@ -9265,6 +9271,7 @@ func TestUpdateClusterShouldHandleHashCollisions(t *testing.T) {
 			Namespace: cluster.Namespace,
 		},
 	}
+
 	result, err := controller.Reconcile(context.TODO(), request)
 	require.Empty(t, result)
 	require.Error(t, err)
@@ -10443,6 +10450,8 @@ func TestRequiredSCCAnnotationOnPortworxPods(t *testing.T) {
 	require.Equal(t, component.PxSCCName, podControl.Templates[0].Annotations[constants.AnnotationOpenshiftRequiredSCC])
 
 	// TestCase: Pod template should not have the required SCC annotation when not running on OpenShift
+	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
+	require.NoError(t, err)
 	podControl.Templates = nil
 	cluster.Annotations = nil
 	err = testutil.Update(k8sClient, cluster)
@@ -10475,6 +10484,10 @@ func TestNonDisruptiveRollingUpdate(t *testing.T) {
 	defer testutil.RestoreEtcHosts(t)
 	driverName := "mock-driver"
 	cluster := createStorageCluster()
+	allowDisruption := false
+	cluster.Spec.UpdateStrategy.RollingUpdate.Disruption = &corev1.Disruption{
+		Allow: &allowDisruption,
+	}
 	maxUnavailable := intstr.FromInt(2)
 	cluster.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable = &maxUnavailable
 	k8sVersion, _ := version.NewVersion(minSupportedK8sVersion)

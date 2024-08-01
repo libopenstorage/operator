@@ -412,8 +412,12 @@ func (c *disruptionBudget) updateMinAvailableForNodePDB(cluster *corev1.StorageC
 	// Calculate the minimum number of nodes that should be available
 	quorumValue := int(math.Floor(float64(storageNodesCount)/2) + 1)
 	calculatedMinAvailable := quorumValue
+
+	// TODO: Once the feature has been tested well enough, change behavior to enable feature by default
+	// For now, setting default behavior to disable non-disruptive upgrades
+
 	// When non disruptive upgrades is disabled
-	if cluster.Annotations != nil && cluster.Annotations[pxutil.AnnotationsDisableNonDisruptiveUpgrade] == "true" {
+	if cluster.Annotations == nil || cluster.Annotations[pxutil.AnnotationsDisableNonDisruptiveUpgrade] == "" || cluster.Annotations[pxutil.AnnotationsDisableNonDisruptiveUpgrade] == "true" {
 		if cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] == "" {
 			calculatedMinAvailable = storageNodesCount - 1
 		} else if userProvidedMinValue < quorumValue || userProvidedMinValue >= storageNodesCount {
