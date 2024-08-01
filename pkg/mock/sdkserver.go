@@ -18,6 +18,7 @@ type SdkServers struct {
 	Cluster         *MockOpenStorageClusterServer
 	Node            *MockOpenStorageNodeServer
 	Role            *MockOpenStorageRoleServer
+	Volume          *MockOpenStorageVolumeServer
 	PortworxService *MockPortworxServiceServer
 	ClusterDomains  *MockOpenStorageClusterDomainsServer
 }

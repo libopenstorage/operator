@@ -3,11 +3,12 @@ package storagenode
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"google.golang.org/grpc"
-	"strings"
-	"time"
 
 	"github.com/hashicorp/go-version"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
