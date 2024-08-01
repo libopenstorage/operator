@@ -36,10 +36,20 @@ spec:
           imagePullPolicy: Always
           readinessProbe:
             periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
             httpGet:
               host: 127.0.0.1
               path: /status
               port: 10001
+          resources:
+            requests:
+              cpu: 100m
+              memory: 50Mi
+            limits:
+              cpu: 200m
+              memory: 100Mi
         - args:
           - --v=5
           - --csi-address=$(ADDRESS)
@@ -50,12 +60,18 @@ spec:
           - name: KUBE_NODE_NAME
             valueFrom:
               fieldRef:
-                apiVersion: ""
+                apiVersion: "v1"
                 fieldPath: spec.nodeName
           image: quay.io/k8scsi/csi-node-driver-registrar:v1.2.3
           imagePullPolicy: Always
           name: csi-node-driver-registrar
-          resources: {}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 50Mi
+            limits:
+              cpu: 200m
+              memory: 100Mi
           terminationMessagePath: ""
           terminationMessagePolicy: ""
           volumeMounts:

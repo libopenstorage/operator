@@ -13,14 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libopenstorage/operator/pkg/mock/mockcore"
-	routev1 "github.com/openshift/api/route/v1"
-	authv1 "k8s.io/api/authentication/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/mock/gomock"
+	osdapi "github.com/libopenstorage/openstorage/api"
 	ocpconfig "github.com/openshift/api/config/v1"
+	routev1 "github.com/openshift/api/route/v1"
 	ocp_secv1 "github.com/openshift/api/security/v1"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -30,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 	appsv1 "k8s.io/api/apps/v1"
+	authv1 "k8s.io/api/authentication/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -42,6 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
@@ -50,13 +49,13 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	osdapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/component"
 	"github.com/libopenstorage/operator/drivers/storage/portworx/manifest"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/constants"
 	"github.com/libopenstorage/operator/pkg/mock"
+	"github.com/libopenstorage/operator/pkg/mock/mockcore"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -581,7 +580,233 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, "new/image", ds.Spec.Template.Spec.Containers[0].Image)
 	require.NotEqual(t, "new/csi-driver-image", ds.Spec.Template.Spec.Containers[1].Image)
+}
 
+func TestPortworxAPIResourcesChange(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:3.2.0",
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// TestCase: Both API and CSI registrar containers should have default resources.
+	defaultResources := v1.ResourceRequirements{
+		Requests: v1.ResourceList{
+			v1.ResourceMemory: resource.MustParse("50Mi"),
+			v1.ResourceCPU:    resource.MustParse("100m"),
+		},
+		Limits: v1.ResourceList{
+			v1.ResourceMemory: resource.MustParse("100Mi"),
+			v1.ResourceCPU:    resource.MustParse("200m"),
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, ds.Spec.Template.Spec.Containers, 2)
+	require.Equal(t, defaultResources, ds.Spec.Template.Spec.Containers[0].Resources)
+	require.Equal(t, defaultResources, ds.Spec.Template.Spec.Containers[1].Resources)
+
+	// TestCase: Add resources to API container
+	cluster.Spec.PortworxAPI = &corev1.PortworxAPISpec{
+		Resources: &v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceMemory: resource.MustParse("200Mi"),
+				v1.ResourceCPU:    resource.MustParse("200m"),
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceMemory: resource.MustParse("400Mi"),
+				v1.ResourceCPU:    resource.MustParse("400m"),
+			},
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, *cluster.Spec.PortworxAPI.Resources, ds.Spec.Template.Spec.Containers[0].Resources)
+	require.Equal(t, defaultResources, ds.Spec.Template.Spec.Containers[1].Resources)
+
+	// TestCase: Add resources to CSI registrar container
+	cluster.Spec.CSI.NodeDriverRegistrar = &corev1.CSINodeDriverRegistrarSpec{
+		Resources: &v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceMemory: resource.MustParse("200Mi"),
+				v1.ResourceCPU:    resource.MustParse("200m"),
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceMemory: resource.MustParse("400Mi"),
+				v1.ResourceCPU:    resource.MustParse("400m"),
+			},
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, *cluster.Spec.PortworxAPI.Resources, ds.Spec.Template.Spec.Containers[0].Resources)
+	require.Equal(t, *cluster.Spec.CSI.NodeDriverRegistrar.Resources, ds.Spec.Template.Spec.Containers[1].Resources)
+
+	// TestCase: Update resources for both containers
+	cluster.Spec.PortworxAPI.Resources.Requests[v1.ResourceMemory] = resource.MustParse("300Mi")
+	cluster.Spec.CSI.NodeDriverRegistrar.Resources.Requests[v1.ResourceMemory] = resource.MustParse("300Mi")
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, *cluster.Spec.PortworxAPI.Resources, ds.Spec.Template.Spec.Containers[0].Resources)
+	require.Equal(t, *cluster.Spec.CSI.NodeDriverRegistrar.Resources, ds.Spec.Template.Spec.Containers[1].Resources)
+
+	// TestCase: Removing resources should fallback to default
+	cluster.Spec.PortworxAPI.Resources = nil
+	cluster.Spec.CSI.NodeDriverRegistrar.Resources = nil
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, defaultResources, ds.Spec.Template.Spec.Containers[0].Resources)
+	require.Equal(t, defaultResources, ds.Spec.Template.Spec.Containers[1].Resources)
+}
+
+func TestPortworxAPIAnnotationsChange(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:3.2.0",
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// TestCase: API pods and daemonset should not have any annotations as it is not defined in the cluster spec.
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	ds := &appsv1.DaemonSet{}
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, ds.Annotations)
+	require.Empty(t, ds.Spec.Template.Annotations)
+
+	// TestCase: Define annotations for the API daemonset
+	apiDaemonsetAnnotationKey := fmt.Sprintf("%s/%s", k8sutil.DaemonSet, component.PxAPIDaemonSetName)
+	annotations := map[string]string{
+		"key1": "value1",
+	}
+	cluster.Spec.Metadata = &corev1.Metadata{
+		Annotations: map[string]map[string]string{
+			apiDaemonsetAnnotationKey: annotations,
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, ds.Annotations, ds.Spec.Template.Annotations)
+	require.Len(t, ds.Annotations, 2)
+	require.Contains(t, ds.Annotations, constants.AnnotationCustomAnnotations)
+	require.Equal(t, "value1", ds.Annotations["key1"])
+
+	// TestCase: Add annotations to the API daemonset
+	annotations["key2"] = "value2"
+	cluster.Spec.Metadata.Annotations[apiDaemonsetAnnotationKey] = annotations
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, ds.Annotations, ds.Spec.Template.Annotations)
+	require.Len(t, ds.Annotations, 3)
+	require.Contains(t, ds.Annotations, constants.AnnotationCustomAnnotations)
+	require.Equal(t, "value1", ds.Annotations["key1"])
+	require.Equal(t, "value2", ds.Annotations["key2"])
+
+	// TestCase: Change annotation value for the API daemonset
+	annotations["key2"] = "value2-changed"
+	cluster.Spec.Metadata.Annotations[apiDaemonsetAnnotationKey] = annotations
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, ds.Annotations, ds.Spec.Template.Annotations)
+	require.Len(t, ds.Annotations, 3)
+	require.Contains(t, ds.Annotations, constants.AnnotationCustomAnnotations)
+	require.Equal(t, "value1", ds.Annotations["key1"])
+	require.Equal(t, "value2-changed", ds.Annotations["key2"])
+
+	// TestCase: Remove an annotation key from the API daemonset.
+	// Also ensure that we don't remove any annotations that we did not add.
+	ds.Annotations["external-key"] = "external-value"
+	err = testutil.Update(k8sClient, ds)
+	require.NoError(t, err)
+
+	delete(annotations, "key2")
+	cluster.Spec.Metadata.Annotations[apiDaemonsetAnnotationKey] = annotations
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, ds.Annotations, ds.Spec.Template.Annotations)
+	require.Len(t, ds.Annotations, 3)
+	require.Contains(t, ds.Annotations, constants.AnnotationCustomAnnotations)
+	require.Equal(t, "value1", ds.Annotations["key1"])
+	require.Equal(t, "external-value", ds.Annotations["external-key"])
+
+	// TestCase: Remove all annotations from the API daemonset.
+	cluster.Spec.Metadata.Annotations[apiDaemonsetAnnotationKey] = nil
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, ds, component.PxAPIDaemonSetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, ds.Annotations, ds.Spec.Template.Annotations)
+	require.Len(t, ds.Annotations, 1)
+	require.Equal(t, "external-value", ds.Annotations["external-key"])
 }
 
 func TestPortworxProxyIsNotDeployedWhenClusterInKubeSystem(t *testing.T) {
@@ -7683,6 +7908,427 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 	require.Nil(t, csiStatefulSet.Spec.Template.Spec.Affinity)
 }
 
+func TestCSIExtResourcesChange(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.29.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:3.2.0",
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// TestCase: No resources defined in the cluster spec
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Len(t, csiDeployment.Spec.Template.Spec.Containers, 4)
+	for _, container := range csiDeployment.Spec.Template.Spec.Containers {
+		require.Empty(t, container.Resources)
+	}
+
+	// TestCase: Define resources in the cluster spec
+	cluster.Spec.CSI.ExternalProvisioner = &corev1.CSIExternalProvisionerSpec{
+		Resources: &v1.ResourceRequirements{
+			Limits: v1.ResourceList{
+				v1.ResourceCPU: resource.MustParse("100m"),
+			},
+		},
+	}
+	cluster.Spec.CSI.Snapshotter = &corev1.CSISnapshotterSpec{
+		Resources: &v1.ResourceRequirements{
+			Limits: v1.ResourceList{
+				v1.ResourceCPU: resource.MustParse("200m"),
+			},
+		},
+	}
+	cluster.Spec.CSI.Resizer = &corev1.CSIResizerSpec{
+		Resources: &v1.ResourceRequirements{
+			Limits: v1.ResourceList{
+				v1.ResourceCPU: resource.MustParse("300m"),
+			},
+		},
+	}
+	cluster.Spec.CSI.SnapshotController = &corev1.CSISnapshotControllerSpec{
+		Resources: &v1.ResourceRequirements{
+			Limits: v1.ResourceList{
+				v1.ResourceCPU: resource.MustParse("400m"),
+			},
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, *cluster.Spec.CSI.ExternalProvisioner.Resources, csiDeployment.Spec.Template.Spec.Containers[0].Resources)
+	require.Equal(t, *cluster.Spec.CSI.Snapshotter.Resources, csiDeployment.Spec.Template.Spec.Containers[1].Resources)
+	require.Equal(t, *cluster.Spec.CSI.Resizer.Resources, csiDeployment.Spec.Template.Spec.Containers[2].Resources)
+	require.Equal(t, *cluster.Spec.CSI.SnapshotController.Resources, csiDeployment.Spec.Template.Spec.Containers[3].Resources)
+
+	// TestCase: Change resources in the cluster spec
+	cluster.Spec.CSI.ExternalProvisioner.Resources.Requests = v1.ResourceList{
+		v1.ResourceCPU: resource.MustParse("100m"),
+	}
+	cluster.Spec.CSI.Snapshotter.Resources.Requests = v1.ResourceList{
+		v1.ResourceCPU: resource.MustParse("200m"),
+	}
+	cluster.Spec.CSI.Resizer.Resources.Requests = v1.ResourceList{
+		v1.ResourceCPU: resource.MustParse("300m"),
+	}
+	cluster.Spec.CSI.SnapshotController.Resources.Limits = v1.ResourceList{
+		v1.ResourceCPU: resource.MustParse("400m"),
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, *cluster.Spec.CSI.ExternalProvisioner.Resources, csiDeployment.Spec.Template.Spec.Containers[0].Resources)
+	require.Equal(t, *cluster.Spec.CSI.Snapshotter.Resources, csiDeployment.Spec.Template.Spec.Containers[1].Resources)
+	require.Equal(t, *cluster.Spec.CSI.Resizer.Resources, csiDeployment.Spec.Template.Spec.Containers[2].Resources)
+	require.Equal(t, *cluster.Spec.CSI.SnapshotController.Resources, csiDeployment.Spec.Template.Spec.Containers[3].Resources)
+
+	// TestCase: Remove resources from the cluster spec
+	cluster.Spec.CSI.ExternalProvisioner = nil
+	cluster.Spec.CSI.Snapshotter = nil
+	cluster.Spec.CSI.Resizer = nil
+	cluster.Spec.CSI.SnapshotController = nil
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	for _, container := range csiDeployment.Spec.Template.Spec.Containers {
+		require.Empty(t, container.Resources)
+	}
+}
+
+func TestCSIExtSpecificNodeAffinityChange(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.29.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+
+	nodeAffinity := &v1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+			NodeSelectorTerms: []v1.NodeSelectorTerm{
+				{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "px/csi",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"false"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:3.2.0",
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// TestCase: CSI pods should not have any affinity it is not defined in the cluster spec.
+	cluster.Spec.Placement.NodeAffinity = nil
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, csiDeployment.Spec.Template.Spec.Affinity)
+
+	// TestCase: Define node affinity in the CSI spec
+	cluster.Spec.CSI.Placement = &corev1.PlacementSpec{
+		NodeAffinity: nodeAffinity.DeepCopy(),
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, csiDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// TestCase: Update node affinity in the CSI spec
+	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
+		NodeSelectorTerms[0].
+		MatchExpressions[0].
+		Key = "portworx/csi"
+	cluster.Spec.CSI.Placement.NodeAffinity = nodeAffinity.DeepCopy()
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, nodeAffinity, csiDeployment.Spec.Template.Spec.Affinity.NodeAffinity)
+
+	// TestCase: Remove node affinity from the CSI spec
+	cluster.Spec.CSI.Placement.NodeAffinity = nil
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, csiDeployment.Spec.Template.Spec.Affinity)
+}
+
+func TestCSIExtSpecificTolerationsChange(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.29.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+
+	tolerations := []v1.Toleration{
+		{
+			Key:      "px/infra",
+			Value:    "csi",
+			Operator: v1.TolerationOpEqual,
+			Effect:   v1.TaintEffectNoSchedule,
+		},
+	}
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:3.2.0",
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// TestCase: CSI pods should not have any tolerations as it is not defined in the cluster spec.
+	cluster.Spec.Placement.Tolerations = nil
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	// TestCase: Define tolerations in the CSI spec
+	cluster.Spec.CSI.Placement = &corev1.PlacementSpec{
+		Tolerations: tolerations,
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	// TestCase: Update tolerations in the CSI spec
+	tolerations = append(tolerations, v1.Toleration{
+		Key:      "cluster/infra",
+		Value:    "true",
+		Operator: v1.TolerationOpEqual,
+		Effect:   v1.TaintEffectNoSchedule,
+	})
+	cluster.Spec.CSI.Placement.Tolerations = tolerations
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, tolerations, csiDeployment.Spec.Template.Spec.Tolerations)
+
+	// TestCase: Remove tolerations from the CSI spec
+	cluster.Spec.CSI.Placement.Tolerations = nil
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, csiDeployment.Spec.Template.Spec.Tolerations)
+}
+
+func TestCSIExtDeploymentAnnotationsChange(t *testing.T) {
+	versionClient := fakek8sclient.NewSimpleClientset()
+	coreops.SetInstance(coreops.New(versionClient))
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.29.0",
+	}
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(10))
+	require.NoError(t, err)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/image:3.2.0",
+		},
+	}
+	createTelemetrySecret(t, k8sClient, cluster.Namespace)
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// TestCase: CSI pods and deployments should not have any annotations as it is not defined in the cluster spec.
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	csiDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Empty(t, csiDeployment.Annotations)
+	require.Empty(t, csiDeployment.Spec.Template.Annotations)
+
+	// TestCase: Define annotations for the CSI deployment
+	csiDeploymentAnnotationKey := fmt.Sprintf("%s/%s", k8sutil.Deployment, component.CSIApplicationName)
+	annotations := map[string]string{
+		"key1": "value1",
+	}
+	cluster.Spec.Metadata = &corev1.Metadata{
+		Annotations: map[string]map[string]string{
+			csiDeploymentAnnotationKey: annotations,
+		},
+	}
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, csiDeployment.Annotations, csiDeployment.Spec.Template.Annotations)
+	require.Len(t, csiDeployment.Annotations, 2)
+	require.Contains(t, csiDeployment.Annotations, constants.AnnotationCustomAnnotations)
+	require.Equal(t, "value1", csiDeployment.Annotations["key1"])
+
+	// TestCase: Add annotations to the CSI deployment
+	annotations["key2"] = "value2"
+	cluster.Spec.Metadata.Annotations[csiDeploymentAnnotationKey] = annotations
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, csiDeployment.Annotations, csiDeployment.Spec.Template.Annotations)
+	require.Len(t, csiDeployment.Annotations, 3)
+	require.Contains(t, csiDeployment.Annotations, constants.AnnotationCustomAnnotations)
+	require.Equal(t, "value1", csiDeployment.Annotations["key1"])
+	require.Equal(t, "value2", csiDeployment.Annotations["key2"])
+
+	// TestCase: Change annotation value for the CSI deployment
+	annotations["key2"] = "value2-changed"
+	cluster.Spec.Metadata.Annotations[csiDeploymentAnnotationKey] = annotations
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, csiDeployment.Annotations, csiDeployment.Spec.Template.Annotations)
+	require.Len(t, csiDeployment.Annotations, 3)
+	require.Contains(t, csiDeployment.Annotations, constants.AnnotationCustomAnnotations)
+	require.Equal(t, "value1", csiDeployment.Annotations["key1"])
+	require.Equal(t, "value2-changed", csiDeployment.Annotations["key2"])
+
+	// TestCase: Remove an annotation key from the CSI deployment.
+	// Also ensure that we don't remove any annotations that we did not add.
+	csiDeployment.Annotations["external-key"] = "external-value"
+	err = testutil.Update(k8sClient, csiDeployment)
+	require.NoError(t, err)
+
+	delete(annotations, "key2")
+	cluster.Spec.Metadata.Annotations[csiDeploymentAnnotationKey] = annotations
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, csiDeployment.Annotations, csiDeployment.Spec.Template.Annotations)
+	require.Len(t, csiDeployment.Annotations, 3)
+	require.Contains(t, csiDeployment.Annotations, constants.AnnotationCustomAnnotations)
+	require.Equal(t, "value1", csiDeployment.Annotations["key1"])
+	require.Equal(t, "external-value", csiDeployment.Annotations["external-key"])
+
+	// TestCase: Remove all annotations from the CSI deployment
+	cluster.Spec.Metadata.Annotations[csiDeploymentAnnotationKey] = nil
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	err = testutil.Get(k8sClient, csiDeployment, component.CSIApplicationName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, csiDeployment.Annotations, csiDeployment.Spec.Template.Annotations)
+	require.Len(t, csiDeployment.Annotations, 1)
+	require.Equal(t, "external-value", csiDeployment.Annotations["external-key"])
+}
+
 func TestCSIInstallWithCustomKubeletDir(t *testing.T) {
 	versionClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(versionClient))
@@ -12513,7 +13159,6 @@ func TestDisableCSI_GTPxVersion2_13(t *testing.T) {
 	podSpec, err = driver.GetStoragePodSpec(cluster, "")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(podSpec.Containers))
-
 }
 
 func TestMonitoringMetricsEnabled(t *testing.T) {
