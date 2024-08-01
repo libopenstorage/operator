@@ -40,8 +40,10 @@ import (
 
 // Constants for k8s object kinds
 const (
-	Pod     = "pod"
-	Service = "service"
+	Pod        = "pod"
+	Service    = "service"
+	Deployment = "deployment"
+	DaemonSet  = "daemonset"
 
 	NodeRoleLabelMaster       = "node-role.kubernetes.io/master"
 	NodeRoleLabelControlPlane = "node-role.kubernetes.io/control-plane"
@@ -1000,7 +1002,7 @@ func CreateOrUpdateDeployment(
 		existingDeployment,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Infof("Creating %s Deployment", deployment.Name)
+		logrus.Infof("Creating %s/%s Deployment", deployment.Namespace, deployment.Name)
 		return k8sClient.Create(context.TODO(), deployment)
 	} else if err != nil {
 		return err
@@ -1012,7 +1014,7 @@ func CreateOrUpdateDeployment(
 		}
 	}
 
-	logrus.Debugf("Updating %s Deployment", deployment.Name)
+	logrus.Debugf("Updating %s/%s Deployment", deployment.Namespace, deployment.Name)
 	return k8sClient.Update(context.TODO(), deployment)
 }
 
@@ -1071,7 +1073,7 @@ func CreateOrUpdateStatefulSet(
 		existingSS,
 	)
 	if errors.IsNotFound(err) {
-		logrus.Infof("Creating %s StatefulSet", ss.Name)
+		logrus.Infof("Creating %s/%s StatefulSet", ss.Namespace, ss.Name)
 		return k8sClient.Create(context.TODO(), ss)
 	} else if err != nil {
 		return err
@@ -1083,7 +1085,7 @@ func CreateOrUpdateStatefulSet(
 		}
 	}
 
-	logrus.Debugf("Updating %s StatefulSet", ss.Name)
+	logrus.Debugf("Updating %s/%s StatefulSet", ss.Namespace, ss.Name)
 	return k8sClient.Update(context.TODO(), ss)
 }
 
@@ -1189,6 +1191,7 @@ func CreateOrUpdateDaemonSet(
 	}
 
 	existingDS.Labels = ds.Labels
+	existingDS.Annotations = ds.Annotations
 	existingDS.Spec = ds.Spec
 
 	logrus.Debugf("Updating %s/%s DaemonSet", ds.Namespace, ds.Name)
@@ -1804,7 +1807,7 @@ func CreateOrUpdateConsolePlugin(
 	)
 
 	if errors.IsNotFound(err) {
-		logrus.Infof("Creating %s Consoleplugin", cp.Name)
+		logrus.Infof("Creating %s/%s ConsolePlugin", cp.Namespace, cp.Name)
 		return k8sClient.Create(context.TODO(), cp)
 	} else if err != nil {
 		return err
@@ -1820,7 +1823,7 @@ func CreateOrUpdateConsolePlugin(
 
 	if modified || len(cp.OwnerReferences) > len(existingPlugin.OwnerReferences) {
 		cp.ResourceVersion = existingPlugin.ResourceVersion
-		logrus.Infof("Updating Console Plugin %s/%s", cp.Namespace, cp.Name)
+		logrus.Infof("Updating %s/%s ConsolePlugin", cp.Namespace, cp.Name)
 		return k8sClient.Update(context.TODO(), cp)
 	}
 	return nil

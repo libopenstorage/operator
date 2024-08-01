@@ -22,6 +22,7 @@ import (
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -458,14 +459,15 @@ func (c *csi) createDeployment(
 		return err
 	}
 
-	deployment := c.getCSIDeploymentSpec(cluster, csiConfig, ownerRef, updatedTopologySpreadConstraints)
+	deployment := c.getCSIDeploymentSpec(cluster, csiConfig, updatedTopologySpreadConstraints, existingDeployment.Annotations, ownerRef)
 	isPodTemplateEqual, _ := util.DeepEqualPodTemplate(&deployment.Spec.Template, &existingDeployment.Spec.Template)
 
 	modified := !isPodTemplateEqual ||
 		util.HasSchedulerStateChanged(cluster, existingDeployment.Spec.Template.Spec.SchedulerName) ||
 		util.HaveTopologySpreadConstraintsChanged(updatedTopologySpreadConstraints,
 			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints) ||
-		hasCSITopologyChanged(cluster, existingDeployment)
+		hasCSITopologyChanged(cluster, existingDeployment) ||
+		!equality.Semantic.DeepEqual(deployment.Annotations, existingDeployment.Annotations)
 	if !c.isCreated || modified {
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
@@ -524,8 +526,9 @@ func hasCSITopologyChanged(
 func (c *csi) getCSIDeploymentSpec(
 	cluster *corev1.StorageCluster,
 	csiConfig *pxutil.CSIConfiguration,
-	ownerRef *metav1.OwnerReference,
 	topologySpreadConstraints []v1.TopologySpreadConstraint,
+	existingAnnotations map[string]string,
+	ownerRef *metav1.OwnerReference,
 ) *appsv1.Deployment {
 	replicas := int32(3)
 	leaderElectionType := "leases"
@@ -614,10 +617,13 @@ func (c *csi) getCSIDeploymentSpec(
 		Privileged: boolPtr(true),
 	}
 
+	annotations := util.GetCombinedAnnotations(cluster, k8sutil.Deployment, CSIApplicationName, existingAnnotations)
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            CSIApplicationName,
 			Namespace:       cluster.Namespace,
+			Annotations:     annotations,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -627,7 +633,8 @@ func (c *csi) getCSIDeploymentSpec(
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: csiDeploymentTemplateLabels,
+					Labels:      csiDeploymentTemplateLabels,
+					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: CSIServiceAccountName,

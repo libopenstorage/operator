@@ -3,6 +3,7 @@ package storagenode
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -323,6 +324,14 @@ func (c *Controller) syncKVDB(
 							c.log(storageNode).Warnf("failed to delete pod: %s/%s due to: %v",
 								kvdbPod.Namespace, kvdbPod.Name, err)
 						}
+					} else if !reflect.DeepEqual(pod.Annotations, kvdbPod.Annotations) {
+						c.log(storageNode).Infof("Updating %s/%s Pod annotations", kvdbPod.Namespace, kvdbPod.Name)
+						kvdbPod.Annotations = pod.Annotations
+						_, err = coreops.Instance().UpdatePod(&kvdbPod)
+						if err != nil {
+							c.log(storageNode).Warnf("failed to update pod: %s/%s due to: %v",
+								kvdbPod.Namespace, kvdbPod.Name, err)
+						}
 					}
 				}
 			}
@@ -433,6 +442,7 @@ func (c *Controller) createKVDBPod(
 			GenerateName:    fmt.Sprintf("%s-kvdb-", c.Driver.String()),
 			Namespace:       storageNode.Namespace,
 			Labels:          c.kvdbPodLabels(cluster),
+			Annotations:     util.GetCustomAnnotations(cluster, k8s.Pod, fmt.Sprintf("%s-kvdb", c.Driver.String())),
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: podSpec,

@@ -12,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -174,10 +175,12 @@ func (c *portworxAPI) createDaemonSet(
 		return getErr
 	}
 
-	daemonSet := getPortworxAPIDaemonSetSpec(cluster, ownerRef)
+	daemonSet := getPortworxAPIDaemonSetSpec(cluster, existingDaemonSet.Annotations, ownerRef)
 	isPodTemplateEqual, _ := util.DeepEqualPodTemplate(&daemonSet.Spec.Template, &existingDaemonSet.Spec.Template)
 
-	if !c.isCreated || errors.IsNotFound(getErr) || !isPodTemplateEqual {
+	if !c.isCreated || errors.IsNotFound(getErr) ||
+		!isPodTemplateEqual ||
+		!equality.Semantic.DeepEqual(daemonSet.Annotations, existingDaemonSet.Annotations) {
 		if err := k8sutil.CreateOrUpdateDaemonSet(c.k8sClient, daemonSet, ownerRef); err != nil {
 			return err
 		}
@@ -188,6 +191,7 @@ func (c *portworxAPI) createDaemonSet(
 
 func getPortworxAPIDaemonSetSpec(
 	cluster *corev1.StorageCluster,
+	existingAnnotations map[string]string,
 	ownerRef *metav1.OwnerReference,
 ) *appsv1.DaemonSet {
 	maxUnavailable := intstr.FromString("100%")
@@ -199,10 +203,13 @@ func getPortworxAPIDaemonSetSpec(
 	}
 	pauseImageName = util.GetImageURN(cluster, pauseImageName)
 
+	annotations := util.GetCombinedAnnotations(cluster, k8sutil.DaemonSet, PxAPIDaemonSetName, existingAnnotations)
+
 	newDaemonSet := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            PxAPIDaemonSetName,
 			Namespace:       cluster.Namespace,
+			Annotations:     annotations,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: appsv1.DaemonSetSpec{
@@ -217,7 +224,8 @@ func getPortworxAPIDaemonSetSpec(
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: getPortworxAPIServiceLabels(),
+					Labels:      getPortworxAPIServiceLabels(),
+					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: pxutil.PortworxServiceAccountName(cluster),

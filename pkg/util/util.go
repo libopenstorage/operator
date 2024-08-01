@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"path"
@@ -452,6 +453,59 @@ func GetCustomAnnotations(
 		return annotations
 	}
 	return nil
+}
+
+// GetCombinedAnnotations returns all annotations that are in the existing list and the custom annotations.
+// We store the custom annotations in a special annotation so that we can detect when an annotation that
+// was added by us is removed.
+func GetCombinedAnnotations(
+	cluster *corev1.StorageCluster,
+	k8sObjKind string,
+	componentName string,
+	existing map[string]string,
+) map[string]string {
+	newCustomAnnotations := GetCustomAnnotations(cluster, k8sObjKind, componentName)
+
+	var oldCustomAnnotations map[string]string
+	if encodedAnnotations, ok := existing[constants.AnnotationCustomAnnotations]; ok {
+		if err := json.Unmarshal([]byte(encodedAnnotations), &oldCustomAnnotations); err != nil {
+			logrus.Errorf("Failed to unmarshal custom annotations: %v", err)
+		}
+	}
+
+	output := make(map[string]string)
+	for k, v := range existing {
+		if k == constants.AnnotationCustomAnnotations {
+			continue
+		}
+		if newVal, ok := newCustomAnnotations[k]; ok {
+			// Use the newer value if it exists
+			output[k] = newVal
+		} else if _, ok := oldCustomAnnotations[k]; !ok {
+			// If the annotation does not exist in the new annotations, nor was it present in the previous
+			// custom annotations, then it is added by an external entity. We should keep that value.
+			output[k] = v
+		}
+		// Remove the annotation if it does not exist in the new annotations and was present in the previous.
+	}
+
+	// Copy the new annotations and give it's value more precedence in case of a matching key.
+	for k, v := range newCustomAnnotations {
+		output[k] = v
+	}
+
+	// Keep a copy of the current annotations, so we detect when an annotation
+	// is removed next time by comparing it with this copy.
+	if len(newCustomAnnotations) > 0 {
+		encodedAnnotations, err := json.Marshal(newCustomAnnotations)
+		if err != nil {
+			logrus.Errorf("Failed to marshal custom annotations: %v", err)
+		} else {
+			output[constants.AnnotationCustomAnnotations] = string(encodedAnnotations)
+		}
+	}
+
+	return output
 }
 
 // GetCustomLabels returns custom labels for different StorageCluster components from spec
