@@ -1679,7 +1679,7 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 		}
 	}
 
-	if cluster.Annotations != nil && cluster.Annotations[AnnotationsDisableNonDisruptiveUpgrade] == "true" {
+	if cluster.Annotations == nil || cluster.Annotations[AnnotationsDisableNonDisruptiveUpgrade] == "" || cluster.Annotations[AnnotationsDisableNonDisruptiveUpgrade] == "true" {
 		return canBeUpgradedNodes, cordonedPxNodesMap, nodesDown, nil
 	}
 

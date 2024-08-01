@@ -13674,9 +13674,7 @@ func TestUpdateNodePodDisruptionBudgetParallelEnabled(t *testing.T) {
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
-		Times(2)
-
-	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(&osdapi.SdkFilterNonOverlappingNodesResponse{}, nil).Times(1)
+		Times(3)
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -13733,31 +13731,47 @@ func TestUpdateNodePodDisruptionBudgetParallelEnabled(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, pdbList.Items, 6)
 
-	// Testcase : When FilterNonOverlappingNodes returns nodes count lesser than portworx quorum, update minAvailable to 0 for those nodes
-
-	// Update nodes 1,2 to be unschedulable
+	// Testcase : The feature is not enabled by default. Only 1 node can be upgraded at a time when no minAvailable is provided
 	fakeK8sNodes.Items[0].Spec.Unschedulable = true
 	fakeK8sNodes.Items[1].Spec.Unschedulable = true
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[0])
+	require.NoError(t, err)
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[1])
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 6)
+	require.Equal(t, "px-node1", pdbList.Items[1].Name)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, "px-node2", pdbList.Items[2].Name)
+	require.Equal(t, 1, pdbList.Items[2].Spec.MinAvailable.IntValue())
+
+	// Enable the feature
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationsDisableNonDisruptiveUpgrade: "false",
+	}
+
+	// Testcase : When FilterNonOverlappingNodes returns nodes count lesser than portworx quorum, update minAvailable to 0 for those nodes
 
 	// Cordon nodes in which px is not part of quorum and is decommissioned, they should not be in input to filterNonOverlappingNodes API
 	// These nodes are not included in quorum calculation either
 	fakeK8sNodes.Items[5].Spec.Unschedulable = true
 	fakeK8sNodes.Items[6].Spec.Unschedulable = true
-
-	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[0])
-	require.NoError(t, err)
-	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[1])
-	require.NoError(t, err)
 	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[5])
 	require.NoError(t, err)
 	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[6])
 	require.NoError(t, err)
 
 	upgradeNodesResponse := &osdapi.SdkFilterNonOverlappingNodesResponse{
-		NodeIds: []string{"pxnode1", "pxnode2"},
+		NodeIds: []string{"pxnode2"},
 	}
 	filterNodesRequest := &osdapi.SdkFilterNonOverlappingNodesRequest{
 		InputNodes: []string{"pxnode1", "pxnode2"},
+		DownNodes:  []string{"pxnode1"},
 	}
 	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), filterNodesRequest).Return(upgradeNodesResponse, nil).Times(1)
 
@@ -13816,9 +13830,7 @@ func TestUpdateNodePodDisruptionBudgetParallelEnabled(t *testing.T) {
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(expectedNodeEnumerateResp, nil).
 		AnyTimes()
-	cluster.Annotations = map[string]string{
-		pxutil.AnnotationStoragePodDisruptionBudget: "4",
-	}
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "4"
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
