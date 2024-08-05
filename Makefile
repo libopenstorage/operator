@@ -32,6 +32,18 @@ ifndef BASE_REGISTRY_IMG
     $(warning BASE_REGISTRY_IMG not defined, using '$(BASE_REGISTRY_IMG)' instead)
 endif
 
+ifndef PROTOC
+PROTOC = protoc
+endif
+
+ifndef PROTOS_PATH
+PROTOS_PATH = $(GOPATH)/src
+endif
+
+ifndef PROTOSRC_PATH
+PROTOSRC_PATH = $(PROTOS_PATH)/github.com/libopenstorage/operator
+endif
+
 export GO111MODULE=on
 export GOFLAGS=-mod=vendor
 
@@ -78,7 +90,7 @@ BUILD_OPTIONS := -ldflags=$(LDFLAGS)
 .DEFAULT_GOAL=all
 .PHONY: operator deploy clean vendor vendor-update test generate manifests tools-check
 
-all: operator pretest downloads
+all: operator px-resource-gateway pretest downloads
 
 vendor-update:
 	go mod download
@@ -178,6 +190,11 @@ operator:
 	@echo "Building the cluster operator binary"
 	@cd cmd/operator && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
 	@cd cmd/dryrun && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/dryrun
+
+px-resource-gateway:
+	@echo "Building the px-resource-gateway binary"
+	@echo "CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/px-resource-gateway"
+	@cd cmd/px-resource-gateway && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/px-resource-gateway
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
@@ -298,3 +315,41 @@ clean: clean-release-manifest clean-bundle
 	@go clean -i $(PKGS)
 	@echo "Deleting image "$(OPERATOR_IMG)
 	@docker rmi -f $(OPERATOR_IMG) registry.access.redhat.com/ubi9-minimal:latest
+
+px-resource-gateway-proto-build-docker-proto:
+	docker build -t pure-artifactory.dev.purestorage.com/px-docker-dev-virtual/dgoel/px-resource-gateway-proto --network=host -f Dockerfile.proto .
+
+px-resource-gateway-docker-proto:
+	docker run \
+		--privileged --rm \
+		-v $(shell pwd):/go/src/github.com/libopenstorage/operator \
+		-e "GOPATH=/go" \
+		-e "DOCKER_PROTO=yes" \
+		-e "PATH=/bin:/usr/bin:/usr/local/bin:/go/bin:/usr/local/go/bin" \
+		pure-artifactory.dev.purestorage.com/px-docker-dev-virtual/dgoel/px-resource-gateway-proto \
+			make px-resource-gateway-proto
+
+px-resource-gateway-proto: $(GOPATH)/bin/protoc-gen-go $(GOPATH)/bin/protoc-gen-grpc-gateway $(GOPATH)/bin/protoc-gen-swagger
+ifndef DOCKER_PROTO
+	$(error Do not run directly. Run 'make docker-proto' instead.)
+endif
+	@echo ">>> Generating protobuf definitions from api/api.proto"
+	$(PROTOC) -I $(PROTOSRC_PATH) \
+		-I /usr/local/include \
+		-I $(PROTOS_PATH)/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
+		--go_out=plugins=grpc:. \
+		$(PROTOSRC_PATH)/proto/pxresourcegateway.proto
+	$(PROTOC) -I $(PROTOSRC_PATH) \
+		-I /usr/local/include \
+		-I $(PROTOS_PATH)/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
+		--grpc-gateway_out=logtostderr=true:. \
+		$(PROTOSRC_PATH)/proto/pxresourcegateway.proto
+	$(PROTOC) -I $(PROTOSRC_PATH) \
+		-I /usr/local/include \
+		-I $(PROTOS_PATH)/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
+		--swagger_out=logtostderr=true:$(PROTOSRC_PATH) \
+		$(PROTOSRC_PATH)/proto/pxresourcegateway.proto
+	@echo ">>> Upgrading swagger 2.0 to openapi 3.0"
+	mv proto/pxresourcegateway.swagger.json proto/20pxresourcegateway.swagger.json
+	swagger2openapi proto/20pxresourcegateway.swagger.json -o proto/pxresourcegateway.swagger.json
+	rm -f proto/20pxresourcegateway.swagger.json
