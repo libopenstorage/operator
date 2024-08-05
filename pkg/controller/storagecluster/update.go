@@ -661,7 +661,19 @@ func (c *Controller) getPodAvailability(
 			if len(storageNode.SchedulerNodeName) == 0 {
 				nonK8sStorageNodes = append(nonK8sStorageNodes, storageNode)
 			} else {
-				storageNodeMap[storageNode.SchedulerNodeName] = storageNode
+				if existing, ok := storageNodeMap[storageNode.SchedulerNodeName]; ok {
+					// During a k8s upgrade, it may happen that a new node is started on the same k8s host using
+					// a scheduler node name that was previously used by a different node. In this case, if we have
+					// a storage node that is healthy, then we can ignore the old node which is not healthy as it will
+					// either find a new k8s node or it will be a storageless node that will get auto-decommissioned.
+					// It is mostly not possible that a storageless node will replace a storage node on the same node.
+					// But if it does, then refer - https://purestorage.atlassian.net/browse/PWX-38505 for more details.
+					if existing.Status != storageapi.Status_STATUS_OK && storageNode.Status == storageapi.Status_STATUS_OK {
+						storageNodeMap[storageNode.SchedulerNodeName] = storageNode
+					}
+				} else {
+					storageNodeMap[storageNode.SchedulerNodeName] = storageNode
+				}
 			}
 		}
 	}

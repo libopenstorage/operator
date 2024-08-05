@@ -4449,7 +4449,12 @@ func TestUpdateStorageClusterBasedOnStorageNodeStatuses(t *testing.T) {
 	var storageNodes []*storageapi.StorageNode
 	storageNodes = append(storageNodes, createStorageNode("k8s-node-0", true))
 	storageNodes = append(storageNodes, createStorageNode("k8s-node-1", true))
+	// Create duplicate storage nodes with unhealthy statuses and one with healthy status.
+	// We need to verify that the one with healthy status is considered when calculating
+	// what nodes to upgrade next.
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", false))
 	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", true))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", false))
 	storageNodes = append(storageNodes, createStorageNode("not-k8s-node", false))
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
@@ -4508,7 +4513,7 @@ func TestUpdateStorageClusterBasedOnStorageNodeStatuses(t *testing.T) {
 	require.Empty(t, podControl.DeletePodName)
 
 	// TestCase: Mark the unhealthy storage node to healthy, the update should begin.
-	storageNodes[3].Status = storageapi.Status_STATUS_OK
+	storageNodes[5].Status = storageapi.Status_STATUS_OK
 	result, err = controller.Reconcile(context.TODO(), request)
 	require.NoError(t, err)
 	require.Empty(t, result)
