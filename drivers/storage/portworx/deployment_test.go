@@ -97,7 +97,9 @@ func TestBasicRuncPodSpec(t *testing.T) {
 }
 
 func TestPodSpecWithCustomKubeletDir(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	// expected := getExpectedPodSpecFromDaemonset(t, "testspec/runc.yaml")
 	nodeName := "testNode"
 	customKubeletPath := "/data/kubelet"
@@ -159,6 +161,8 @@ func TestPodSpecWithCustomKubeletDir(t *testing.T) {
 	}
 
 	driver := portworx{}
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
 
 	// Case 1: When portworx version is lesser than 2.13
 	actual, err := driver.GetStoragePodSpec(cluster, nodeName)

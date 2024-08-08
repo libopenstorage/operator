@@ -205,7 +205,7 @@ spec:
       expr: px_alerts_poolexpandsuccessful > 1
       labels:
         issue: Portworx pool expand successful.
-        severity: warning
+        severity: info
         resource_type: portworx-node
         resource_name: "{{$labels.node}}"
         scrape_target_type: portworx-node
@@ -231,7 +231,7 @@ spec:
       expr: px_alerts_volumeresizesuccessful == 1
       labels:
         issue: Portworx volume resize successful.
-        severity: warning
+        severity: info
         resource_type: portworx-volume
         resource_name: "{{$labels.volumeid}}"
         scrape_target_type: portworx-node
