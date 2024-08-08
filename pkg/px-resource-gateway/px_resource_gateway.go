@@ -13,7 +13,7 @@ import (
 
 type semaphoreServer struct {
 	k8s         core.Ops
-	semaphorePQ SemaphorePriorityQueue
+	semaphorePQ map[string]SemaphorePriorityQueue
 	pb.UnimplementedSemaphoreServiceServer
 }
 

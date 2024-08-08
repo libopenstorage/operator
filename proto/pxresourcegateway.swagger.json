@@ -5,7 +5,7 @@
         "version": "version not set"
     },
     "paths": {
-        "/v1/pxe/pxresourcegateway:acquirelock": {
+        "/v1/pxe/pxresourcegateway:acquireLock": {
             "post": {
                 "summary": "(-- api-linter: core::0131::synonyms=disabled\n    aip.dev/not-precedent: We need to do this because this service\n    has a semaphore implementation which needs to define AcquireLock interface. --)\nAcquireLock acquires a semaphore lock or reserves a place in the queue for the resource",
                 "operationId": "SemaphoreService_AcquireLock",

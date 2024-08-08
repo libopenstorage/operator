@@ -20,7 +20,7 @@ service SemaphoreService {
   rpc AcquireLock(AcquireLockRequest)
     returns (AcquireLockResponse) {
     option (google.api.http) = {
-        post : "/v1/pxe/pxresourcegateway:acquirelock"
+        post : "/v1/pxe/pxresourcegateway:acquireLock"
         body : "*"
     };
   }

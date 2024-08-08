@@ -107,7 +107,7 @@ func (s *semaphorePriorityQueue) AcquireLock(clientId string, priority pb.Semaph
 			<-s.configMapUpdateDone
 		}
 	}()
-	logrus.Infof("Received AcquireLock request for node %v", clientId)
+	logrus.Debugf("Received AcquireLock request for node %v", clientId)
 
 	_, alreadyExists := s.locks[clientId]
 	if alreadyExists {
@@ -133,13 +133,13 @@ func (s *semaphorePriorityQueue) AcquireLock(clientId string, priority pb.Semaph
 	return pb.SemaphoreAccessStatus_QUEUED, nil
 }
 
+// called with mutex locked
 func (s *semaphorePriorityQueue) release(clientId string, lockId uint32) {
 	delete(s.locks, clientId)
 	s.availableLocks = append(s.availableLocks, lockId)
 }
 
 func (s *semaphorePriorityQueue) ReleaseLock(clientId string) error {
-	logrus.Infof("Received ReleaseLock request for node %v - acquiring mutex", clientId)
 	s.mutex.Lock()
 	updateDone := false
 	defer func() {
@@ -148,7 +148,7 @@ func (s *semaphorePriorityQueue) ReleaseLock(clientId string) error {
 			<-s.configMapUpdateDone
 		}
 	}()
-	logrus.Infof("Received ReleaseLock request for node %v", clientId)
+	logrus.Debugf("Received ReleaseLock request for node %v", clientId)
 
 	// release the lock
 	lockId, ok := s.locks[clientId]
@@ -171,6 +171,7 @@ func (s *semaphorePriorityQueue) ReleaseLock(clientId string) error {
 func (s *semaphorePriorityQueue) KeepAlive(clientId string) {
 	s.heartBeatMutex.Lock()
 	defer s.heartBeatMutex.Unlock()
+
 	logrus.Debugf("Received KeepAlive request for node %v", clientId)
 	s.heartbeats[clientId] = time.Now()
 }
@@ -232,7 +233,6 @@ func (s *semaphorePriorityQueue) updateConfigMap() error {
 	logrus.Infof("Updating configmap: %v", s.locks)
 	configMap, err := core.Instance().UpdateConfigMap(s.configMap)
 	if err != nil {
-		logrus.Errorf("Failed to update configmap: %v", err)
 		return err
 	}
 	s.configMap = configMap

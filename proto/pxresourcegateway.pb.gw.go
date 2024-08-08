@@ -315,7 +315,7 @@ func RegisterSemaphoreServiceHandlerClient(ctx context.Context, mux *runtime.Ser
 }
 
 var (
-	pattern_SemaphoreService_AcquireLock_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "pxe", "pxresourcegateway"}, "acquirelock", runtime.AssumeColonVerbOpt(true)))
+	pattern_SemaphoreService_AcquireLock_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "pxe", "pxresourcegateway"}, "acquireLock", runtime.AssumeColonVerbOpt(true)))
 
 	pattern_SemaphoreService_ReleaseLock_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "pxe", "pxresourcegateway"}, "releaseLock", runtime.AssumeColonVerbOpt(true)))
 
