@@ -588,7 +588,7 @@ func updateCaCrtIfNeeded(secret *v1.Secret) (bool, error) {
 }
 
 func refreshTokenIfNeeded(secret *v1.Secret, cluster *corev1.StorageCluster) (bool, error) {
-	needRefreshToken, err := isTokenRefreshRequired(secret)
+	needRefreshToken, err := pxutil.IsTokenRefreshRequired(secret, PxSaTokenRefreshTimeKey)
 	if err != nil {
 		return false, err
 	}
@@ -596,20 +596,6 @@ func refreshTokenIfNeeded(secret *v1.Secret, cluster *corev1.StorageCluster) (bo
 		if err := refreshToken(secret, cluster); err != nil {
 			return false, fmt.Errorf("failed to refresh the token secret for px container: %w", err)
 		}
-		return true, nil
-	}
-	return false, nil
-}
-
-func isTokenRefreshRequired(secret *v1.Secret) (bool, error) {
-	if len(secret.Data) == 0 || len(secret.Data[v1.ServiceAccountTokenKey]) == 0 {
-		return true, nil
-	}
-	expirationTime, err := time.Parse(time.RFC3339, string(secret.Data[PxSaTokenRefreshTimeKey]))
-	if err != nil {
-		return false, fmt.Errorf("error parsing expiration time: %w", err)
-	}
-	if time.Now().UTC().After(expirationTime) {
 		return true, nil
 	}
 	return false, nil
