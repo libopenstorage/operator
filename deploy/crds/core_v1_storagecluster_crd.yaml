@@ -931,6 +931,45 @@ spec:
                           cpu:
                             type: string
                             description: CPU limit.
+              pxResourceGateway:
+                type: object
+                description: Contains spec of px-resource-gateway component for storage driver.
+                properties:
+                  enabled:
+                    type: boolean
+                    description: Flag indicating whether px-resource-gateway needs to be enabled.
+                  image:
+                    type: string
+                    description: Docker image of the px-resource-gateway container.
+                  args:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                    description: >-
+                      It is a map of arguments provided to px-resource-gateway. Example: log-level: debug
+                  resources:
+                    type: object
+                    description: Specifies the resource requirements for the px-resource-gateway pod.
+                    properties:
+                      requests:
+                        type: object
+                        description: Requested resources.
+                        properties:
+                          memory:
+                            type: string
+                            description: Requested memory.
+                          cpu:
+                            type: string
+                            description: Requested cpu.
+                      limits:
+                        type: object
+                        description: Resource limit.
+                        properties:
+                          memory:
+                            type: string
+                            description: Memory limit.
+                          cpu:
+                            type: string
+                            description: CPU limit.
               monitoring:
                 type: object
                 description: Contains monitoring configuration for the storage cluster.

@@ -3,22 +3,32 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	_ "net/http/pprof"
 	"os"
 
 	"github.com/libopenstorage/grpc-framework/pkg/util"
-	grpcServer "github.com/libopenstorage/grpc-framework/server"
-	server "github.com/libopenstorage/operator/pkg/px-resource-gateway"
+	grpcFramework "github.com/libopenstorage/grpc-framework/server"
+	pxResourceGateway "github.com/libopenstorage/operator/pkg/px-resource-gateway"
 	"github.com/libopenstorage/operator/pkg/version"
 	pb "github.com/libopenstorage/operator/proto"
+	"github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
-	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"google.golang.org/grpc"
 )
 
 const (
-	socket = "/tmp/px-resource-gate.sock"
+	// PxResourceGatewayString is the common string for px-resource-gateway components
+	PxResourceGatewayString = "px-resource-gateway"
+	// PxResourceGatewayServerName is the service name for px-resource-gateway
+	PxResourceGatewayServerName = PxResourceGatewayString
+	// PxResourceGatewayServerHost is the host for px-resource-gateway
+	PxResourceGatewayServerHost = "0.0.0.0"
+	// PxResourceGatewayServerPortEnv is the environment variable for px-resource-gateway service port
+	PxResourceGatewayServerPortEnv = "PX_RESOURCE_GATEWAY_PORT"
+	// PxResourceGatewayServerSocket is the socket for px-resource-gateway
+	PxResourceGatewayServerSocket = "/tmp/px-resource-gate.sock"
 )
 
 func main() {
@@ -30,8 +40,8 @@ func main() {
 
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
-			Name:  "verbose",
-			Usage: "Enable verbose logging",
+			Name:  "debug",
+			Usage: "Set log level to debug",
 		},
 	}
 
@@ -41,18 +51,31 @@ func main() {
 }
 
 func run(c *cli.Context) {
-	logrus.SetLevel(logrus.DebugLevel)
-	semaphoreServer := server.NewServer()
+	if c.Bool("debug") {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
+
+	// TODO: expose method to initialize k8s client in sched-ops
+	// initialize k8s client
+	version, err := core.Instance().GetVersion()
+	if err != nil {
+		logrus.Fatalf("Failed to get k8s version: %v", err)
+	}
+	logrus.Debugf("Running on k8s version: %s", version.String())
+
+	pxResourceGatewayServerPort := os.Getenv(PxResourceGatewayServerPortEnv)
 
 	// TODO: add security
-	config := &grpcServer.ServerConfig{
-		Name:         "px-resource-gate",
-		Address:      "127.0.0.1:9009",
-		Socket:       socket,
+	pxResourceGatewayServerConfig := &grpcFramework.ServerConfig{
+		Name:         PxResourceGatewayServerName,
+		Address:      fmt.Sprintf("%s:%s", PxResourceGatewayServerHost, pxResourceGatewayServerPort),
+		Socket:       PxResourceGatewayServerSocket,
 		AuditOutput:  os.Stdout,
 		AccessOutput: os.Stdout,
 	}
-	config.
+
+	semaphoreServer := pxResourceGateway.NewSemaphoreServer()
+	pxResourceGatewayServerConfig.
 		RegisterGrpcServers(func(gs *grpc.Server) {
 			pb.RegisterSemaphoreServiceServer(gs, semaphoreServer)
 		}).
@@ -61,9 +84,7 @@ func run(c *cli.Context) {
 		).
 		WithDefaultGenericRoleManager()
 
-	// Create grpc framework server
-	os.Remove(socket)
-	s, err := grpcServer.New(config)
+	pxResourceGatewayServer, err := grpcFramework.New(pxResourceGatewayServerConfig)
 	if err != nil {
 		fmt.Printf("Unable to create server: %v", err)
 		os.Exit(1)
@@ -71,14 +92,18 @@ func run(c *cli.Context) {
 
 	// Setup a signal handler
 	signal_handler := util.NewSigIntManager(func() {
-		s.Stop()
-		os.Remove(socket)
+		pxResourceGatewayServer.Stop()
+		os.Remove(PxResourceGatewayServerSocket)
 		os.Exit(0)
 	})
-	signal_handler.Start()
+	err = signal_handler.Start()
+	if err != nil {
+		fmt.Printf("Unable to start signal handler: %v", err)
+		os.Exit(1)
+	}
 
-	// Start server
-	err = s.Start()
+	// start server
+	err = pxResourceGatewayServer.Start()
 	if err != nil {
 		fmt.Printf("Unable to start server: %v", err)
 		os.Exit(1)
@@ -95,7 +120,6 @@ func gRPCInterceptor(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	logrus.Info("In Px gRPC interceptor")
-
+	logrus.Debug("In Px gRPC interceptor")
 	return handler(ctx, req)
 }

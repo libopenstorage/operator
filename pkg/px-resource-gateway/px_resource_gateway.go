@@ -12,22 +12,22 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type server struct {
+type semaphoreServer struct {
 	k8s         core.Ops
 	semaphorePQ SemaphorePriorityQueue
 	pb.UnimplementedSemaphoreServiceServer
 }
 
 // TODO implement semaphore map for different resource ids
-func NewServer() *server {
-	s := &server{
+func NewSemaphoreServer() *semaphoreServer {
+	s := &semaphoreServer{
 		k8s:         core.Instance(),
 		semaphorePQ: NewSemaphorePriorityQueue(),
 	}
 	return s
 }
 
-func (s *server) AcquireLock(ctx context.Context, req *pb.AcquireLockRequest) (*pb.AcquireLockResponse, error) {
+func (s *semaphoreServer) AcquireLock(ctx context.Context, req *pb.AcquireLockRequest) (*pb.AcquireLockResponse, error) {
 	// validate request
 	if req.ResourceId == "" {
 		return &pb.AcquireLockResponse{}, status.Error(codes.InvalidArgument, "Resource ID is required")
@@ -52,7 +52,7 @@ func (s *server) AcquireLock(ctx context.Context, req *pb.AcquireLockRequest) (*
 	return response, nil
 }
 
-func (s *server) ReleaseLock(ctx context.Context, req *pb.ReleaseLockRequest) (*emptypb.Empty, error) {
+func (s *semaphoreServer) ReleaseLock(ctx context.Context, req *pb.ReleaseLockRequest) (*emptypb.Empty, error) {
 	// validate request
 	if req.ResourceId == "" {
 		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "Resource ID is required")
@@ -69,7 +69,7 @@ func (s *server) ReleaseLock(ctx context.Context, req *pb.ReleaseLockRequest) (*
 	return &emptypb.Empty{}, nil
 }
 
-func (s *server) KeepAlive(ctx context.Context, req *pb.KeepAliveRequest) (*emptypb.Empty, error) {
+func (s *semaphoreServer) KeepAlive(ctx context.Context, req *pb.KeepAliveRequest) (*emptypb.Empty, error) {
 	// validate request
 	if req.ResourceId == "" {
 		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "Resource ID is required")

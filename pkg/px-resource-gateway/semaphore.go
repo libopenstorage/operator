@@ -159,8 +159,8 @@ func (s *semaphorePriorityQueue) ReleaseLock(clientId string) error {
 
 	// update internal structures
 	s.heartBeatMutex.Lock()
-	s.heartBeatMutex.Unlock()
 	delete(s.heartbeats, clientId)
+	s.heartBeatMutex.Unlock()
 
 	s.release(clientId, lockId)
 	updateDone = true
@@ -232,28 +232,24 @@ func (s *semaphorePriorityQueue) updateConfigMap() error {
 	logrus.Infof("Updating configmap: %v", s.locks)
 	configMap, err := core.Instance().UpdateConfigMap(s.configMap)
 	if err != nil {
-		logrus.Errorf("Failed to update configmap", err)
+		logrus.Errorf("Failed to update configmap: %v", err)
 		return err
 	}
 	s.configMap = configMap
 	return nil
 }
 
-func (s *semaphorePriorityQueue) configMapUpdateRoutine() error {
+func (s *semaphorePriorityQueue) configMapUpdateRoutine() {
 	ticker := time.NewTicker(ConfigMapUpdateInterval)
 	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			err := s.updateConfigMap()
-			if err != nil {
-				panic(err)
-			}
-			// Signal other goroutines that the work is done
-			close(s.configMapUpdateDone)
-			s.configMapUpdateDone = make(chan struct{})
+	for range ticker.C {
+		err := s.updateConfigMap()
+		if err != nil {
+			panic(err)
 		}
+		// Signal other goroutines that the work is done
+		close(s.configMapUpdateDone)
+		s.configMapUpdateDone = make(chan struct{})
 	}
 }
 
@@ -297,14 +293,10 @@ func (s *semaphorePriorityQueue) cleanupDeadNodes() {
 	}
 }
 
-func (s *semaphorePriorityQueue) cleanupDeadNodesRoutine() error {
+func (s *semaphorePriorityQueue) cleanupDeadNodesRoutine() {
 	ticker := time.NewTicker(DeadNodeTimeout)
 	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			s.cleanupDeadNodes()
-		}
+	for range ticker.C {
+		s.cleanupDeadNodes()
 	}
 }
