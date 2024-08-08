@@ -5080,39 +5080,6 @@ func TestAutopilotInstallAndUninstallOnOpenshift415(t *testing.T) {
 
 }
 
-// For some reason simpleClientset doesn't work with createToken, erroring out with serviceaccounts "" not found.
-// Thus wrap the simpleClientset with MockCoreOps.
-func setUpMockCoreOps(mockCtrl *gomock.Controller, clientset *fakek8sclient.Clientset) *mockcore.MockOps {
-	mockCoreOps := mockcore.NewMockOps(mockCtrl)
-	coreops.SetInstance(mockCoreOps)
-	defaultTokenExpirationSeconds := int64(12 * 60 * 60)
-
-	simpleClientset := coreops.New(clientset)
-	mockCoreOps.EXPECT().
-		CreateToken(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&authv1.TokenRequest{
-			Spec: authv1.TokenRequestSpec{
-				ExpirationSeconds: &defaultTokenExpirationSeconds,
-			},
-			Status: authv1.TokenRequestStatus{
-				Token: "dG9rZW4tdmFsdWU=",
-			},
-		}, nil).
-		AnyTimes()
-	mockCoreOps.EXPECT().
-		GetVersion().
-		Return(clientset.Discovery().ServerVersion()).
-		AnyTimes()
-	mockCoreOps.EXPECT().
-		ResourceExists(gomock.Any()).
-		Return(simpleClientset.ResourceExists(schema.GroupVersionKind{
-			Kind:    pxutil.ClusterOperatorKind,
-			Version: pxutil.ClusterOperatorVersion,
-		})).
-		AnyTimes()
-	return mockCoreOps
-}
-
 // test Autopilot install and Uninstall on ocp cluster 4.16
 func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
 
