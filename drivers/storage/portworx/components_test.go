@@ -74,9 +74,9 @@ const (
 func setUpMockCoreOps(mockCtrl *gomock.Controller, clientset *fakek8sclient.Clientset) *mockcore.MockOps {
 	mockCoreOps := mockcore.NewMockOps(mockCtrl)
 	coreops.SetInstance(mockCoreOps)
+	defaultTokenExpirationSeconds := int64(12 * 60 * 60)
 
 	simpleClientset := coreops.New(clientset)
-	defaultTokenExpirationSeconds := int64(12 * 60 * 60)
 	mockCoreOps.EXPECT().
 		CreateToken(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&authv1.TokenRequest{
@@ -84,7 +84,7 @@ func setUpMockCoreOps(mockCtrl *gomock.Controller, clientset *fakek8sclient.Clie
 				ExpirationSeconds: &defaultTokenExpirationSeconds,
 			},
 			Status: authv1.TokenRequestStatus{
-				Token: "xxxx",
+				Token: "dG9rZW4tdmFsdWU=",
 			},
 		}, nil).
 		AnyTimes()
@@ -5309,6 +5309,9 @@ func TestAutopilotUpgradeFrom415To416(t *testing.T) {
 	err := k8sClient.Create(context.TODO(), operator)
 	require.NoError(t, err)
 
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, versionClient)
+
 	driver := portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
@@ -5401,9 +5404,6 @@ func TestAutopilotUpgradeFrom415To416(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expectedDeployment415.Spec.Template.Spec.Volumes, autopilotDeployment415.Spec.Template.Spec.Volumes)
 	require.Equal(t, expectedDeployment415.Spec.Template.Spec.Containers[0].VolumeMounts, autopilotDeployment415.Spec.Template.Spec.Containers[0].VolumeMounts)
-
-	mockCtrl := gomock.NewController(t)
-	setUpMockCoreOps(mockCtrl, versionClient)
 
 	// upgrade cluster to OCP 4.16
 	operator.Status.Versions[0].Version = "4.16"
