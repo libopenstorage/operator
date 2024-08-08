@@ -289,7 +289,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, cluster.Name, saTokenSecret.OwnerReferences[0].Name)
 	require.Equal(t, len(expectedPXSaTokenSecret.Data), len(saTokenSecret.Data))
 	require.Equal(t, []byte(cluster.Namespace), saTokenSecret.Data["namespace"])
-	require.Equal(t, []byte("xxxx"), saTokenSecret.Data["token"])
+	require.Equal(t, []byte("dG9rZW4tdmFsdWU="), saTokenSecret.Data["token"])
 
 	// Portworx KVDB Service
 	expectedPXKVDBService := testutil.GetExpectedService(t, "portworxKVDBService.yaml")
