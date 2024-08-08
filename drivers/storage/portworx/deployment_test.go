@@ -391,6 +391,27 @@ func TestPodSpecWithEnvOverrides(t *testing.T) {
 	assertPodSpecEqual(t, expected, &actual)
 }
 
+func TestPodSpecWithPriorityClassName(t *testing.T) {
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	nodeName := "testNode"
+	priorityClassName := "high-priority"
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image:             "portworx/oci-monitor:2.1.1",
+			PriorityClassName: priorityClassName,
+		},
+	}
+	driver := portworx{}
+	actual, err := driver.GetStoragePodSpec(cluster, nodeName)
+	assert.NoError(t, err, "Unexpected error on GetStoragePodSpec")
+	assert.Equal(t, priorityClassName, actual.PriorityClassName)
+}
+
 func TestGetKVDBPodSpec(t *testing.T) {
 	fakeClient := fakek8sclient.NewSimpleClientset()
 	coreops.SetInstance(coreops.New(fakeClient))
