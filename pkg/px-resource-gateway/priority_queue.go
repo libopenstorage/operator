@@ -1,8 +1,7 @@
-package server
+package px_resource_gateway
 
 import (
 	"container/list"
-	"fmt"
 	"sync"
 
 	pb "github.com/libopenstorage/operator/proto"
@@ -30,7 +29,7 @@ type priorityQueue struct {
 }
 
 func NewPriorityQueue() PriorityQueue {
-	queues := map[pb.SemaphoreAccessPriority_Type]*list.List{}
+	queues := make(map[pb.SemaphoreAccessPriority_Type]*list.List)
 	for _, priority := range priorityDescendingOrder {
 		queues[priority] = list.New()
 	}
@@ -43,8 +42,6 @@ func (pq *priorityQueue) Enqueue(clientId string, priority pb.SemaphoreAccessPri
 	pq.Lock()
 	defer pq.Unlock()
 
-	fmt.Printf("Enqueueing client %v with priority %v\n", clientId, priority)
-	fmt.Printf("Queue: %v\n", pq.queues)
 	pq.queues[priority].PushBack(clientId)
 }
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	_ "net/http/pprof"
@@ -79,9 +78,6 @@ func run(c *cli.Context) {
 		RegisterGrpcServers(func(gs *grpc.Server) {
 			pb.RegisterSemaphoreServiceServer(gs, semaphoreServer)
 		}).
-		WithServerUnaryInterceptors(
-			gRPCInterceptor,
-		).
 		WithDefaultGenericRoleManager()
 
 	pxResourceGatewayServer, err := grpcFramework.New(pxResourceGatewayServerConfig)
@@ -112,14 +108,4 @@ func run(c *cli.Context) {
 	// Wait. The signal handler will exit cleanly
 	logrus.Info("Px gRPC server running")
 	select {}
-}
-
-func gRPCInterceptor(
-	ctx context.Context,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	logrus.Debug("In Px gRPC interceptor")
-	return handler(ctx, req)
 }

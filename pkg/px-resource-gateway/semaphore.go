@@ -1,4 +1,4 @@
-package server
+package px_resource_gateway
 
 import (
 	"fmt"
@@ -121,7 +121,7 @@ func (s *semaphorePriorityQueue) AcquireLock(clientId string, priority pb.Semaph
 	s.heartBeatMutex.Unlock()
 
 	if !alreadyExists {
-		logrus.Debugf("Enqueueing node %v", clientId)
+		logrus.Debugf("Enqueueing node %v with priority %v", clientId, priority)
 		s.priorityQ.Enqueue(clientId, priority) // no heartbeat - new node request
 	}
 

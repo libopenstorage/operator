@@ -1,11 +1,10 @@
-package server
+package px_resource_gateway
 
 import (
 	"context"
 
 	pb "github.com/libopenstorage/operator/proto"
 	"github.com/portworx/sched-ops/k8s/core"
-	"github.com/sirupsen/logrus"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 
 	"google.golang.org/grpc/codes"
@@ -29,20 +28,18 @@ func NewSemaphoreServer() *semaphoreServer {
 
 func (s *semaphoreServer) AcquireLock(ctx context.Context, req *pb.AcquireLockRequest) (*pb.AcquireLockResponse, error) {
 	// validate request
-	if req.ResourceId == "" {
+	if req.GetResourceId() == "" {
 		return &pb.AcquireLockResponse{}, status.Error(codes.InvalidArgument, "Resource ID is required")
 	}
-	if req.ClientId == "" {
+	if req.GetClientId() == "" {
 		return &pb.AcquireLockResponse{}, status.Error(codes.InvalidArgument, "Client ID is required")
 	}
-	accessPriority := req.AccessPriority
-	if accessPriority == pb.SemaphoreAccessPriority_TYPE_UNSPECIFIED {
-		logrus.Debugf("Access priority not specified. Defaulting to LOW")
-		accessPriority = pb.SemaphoreAccessPriority_LOW
+	if req.GetAccessPriority() == pb.SemaphoreAccessPriority_TYPE_UNSPECIFIED {
+		return &pb.AcquireLockResponse{}, status.Error(codes.InvalidArgument, "Access Priority is required")
 	}
 
 	// process request to acquire lock
-	resourceState, err := s.semaphorePQ.AcquireLock(req.ClientId, accessPriority)
+	resourceState, err := s.semaphorePQ.AcquireLock(req.ClientId, req.AccessPriority)
 	if err != nil {
 		return &pb.AcquireLockResponse{}, status.Error(codes.Internal, err.Error())
 	}
@@ -54,10 +51,10 @@ func (s *semaphoreServer) AcquireLock(ctx context.Context, req *pb.AcquireLockRe
 
 func (s *semaphoreServer) ReleaseLock(ctx context.Context, req *pb.ReleaseLockRequest) (*emptypb.Empty, error) {
 	// validate request
-	if req.ResourceId == "" {
+	if req.GetResourceId() == "" {
 		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "Resource ID is required")
 	}
-	if req.ClientId == "" {
+	if req.GetClientId() == "" {
 		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "Client ID is required")
 	}
 
@@ -71,10 +68,10 @@ func (s *semaphoreServer) ReleaseLock(ctx context.Context, req *pb.ReleaseLockRe
 
 func (s *semaphoreServer) KeepAlive(ctx context.Context, req *pb.KeepAliveRequest) (*emptypb.Empty, error) {
 	// validate request
-	if req.ResourceId == "" {
+	if req.GetResourceId() == "" {
 		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "Resource ID is required")
 	}
-	if req.ClientId == "" {
+	if req.GetClientId() == "" {
 		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "Client ID is required")
 	}
 
