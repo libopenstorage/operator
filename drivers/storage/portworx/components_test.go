@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/fs"
 	"math/rand"
 	"net"
 	"os"
@@ -12,8 +13,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	routev1 "github.com/openshift/api/route/v1"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/mock/gomock"
