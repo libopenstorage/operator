@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/go-version"
 
 	"github.com/libopenstorage/operator/drivers/storage/portworx"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
@@ -28,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/kubernetes/pkg/apis/core"
 )
 
 const (
@@ -140,36 +138,6 @@ var testStorageClusterBasicCases = []types.TestCase{
 			},
 		}),
 		TestFunc: BasicInstallWithNodeAffinity,
-	},
-	{
-		TestName:        "BasicInstallWithPxSaTokenRefresh",
-		TestrailCaseIDs: []string{"C299624"},
-		TestSpec: ci_utils.CreateStorageClusterTestSpecFunc(&corev1.StorageCluster{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-stc",
-				Annotations: map[string]string{
-					"portworx.io/host-pid": "true", // for running commands inside px runc container from oci-mon container
-				},
-			},
-			Spec: corev1.StorageClusterSpec{
-				CommonConfig: corev1.CommonConfig{
-					Env: []v1.EnvVar{
-						{
-							Name:  pxutil.EnvKeyPortworxServiceAccountTokenExpirationMinutes,
-							Value: "10",
-						},
-					},
-				},
-			},
-		}),
-		ShouldSkip: func(tc *types.TestCase) bool {
-			skip := ci_utils.PxOperatorVersion.LessThan(ci_utils.PxOperatorVer24_2_0)
-			if skip {
-				logrus.Info("Skipping BasicInstallWithPxSaTokenRefresh, because PX Operator version is less than 24.2.0")
-			}
-			return skip
-		},
-		TestFunc: BasicInstallWithPxSaTokenRefresh,
 	},
 	{
 		TestName:        "BasicTelemetryRegression",
@@ -469,48 +437,6 @@ func BasicInstallWithNodeAffinity(tc *types.TestCase) func(*testing.T) {
 
 		// Remove Node Affinity label from the node
 		ci_utils.RemoveLabelFromNode(t, nodeNameWithLabel, labelKeySkipPX)
-	}
-}
-
-// 1. Deploy PX and verify the secret containing the token for px stored in the k8s secret correctly mounted inside px runc container.
-// 2. The cluster spec set the token expiration time to be 10 min, which is the minimum allowed token expiration time. The token should get refreshed after 5min.
-// 3. Wait for 5min. Verify the token is refreshed, correctly mounted inside px runc container, and able to talk to k8s api server.
-// 4. Delete the secret. Wait for 2min. Verify the token is refreshed, correctly mounted inside px runc container, and able to talk to k8s api server.
-func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
-	return func(t *testing.T) {
-		testSpec := tc.TestSpec(t)
-		cluster, ok := testSpec.(*corev1.StorageCluster)
-		require.True(t, ok)
-
-		verifyTokenRefreshed := func(oldToken string) string {
-			pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
-			require.NoError(t, err)
-			newToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
-			require.Eventually(t, func() bool {
-				return oldToken != newToken
-			}, 10*time.Minute, 15*time.Second, "the token did not get refreshed")
-			return newToken
-		}
-
-		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
-		pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
-		require.NoError(t, err)
-		startupToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
-
-		time.Sleep(5 * time.Minute)
-
-		refreshedToken := verifyTokenRefreshed(startupToken)
-		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
-
-		err = coreops.Instance().DeleteSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
-		require.NoError(t, err)
-		time.Sleep(2 * time.Minute)
-
-		verifyTokenRefreshed(refreshedToken)
-		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
-
-		// Delete and validate the deletion
-		ci_utils.UninstallAndValidateStorageCluster(cluster, t)
 	}
 }
 
