@@ -1845,6 +1845,11 @@ func validatePortworxTokenRefresh(cluster *corev1.StorageCluster, timeout, inter
 		logrus.Infof("pxVersion: %v, opVersion: %v. Skip verification because px token refresh is not supported with these versions.", pxVersion, opVersion)
 		return nil
 	}
+	pidEnabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/host-pid"])
+	if err != nil || !pidEnabled {
+		logrus.Infof("Annotation `host-pid: true` is required for verifying token refresh because we need to run command inside px runc container. Thus Skipping verification.")
+		return nil
+	}
 	logrus.Infof("Verifying px runc container token...")
 	// Get one Portworx pod to run commands inside the px runc container on the same node
 	pxPods, err := coreops.Instance().GetPods(cluster.Namespace, map[string]string{"name": "portworx"})
