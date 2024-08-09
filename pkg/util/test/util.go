@@ -232,7 +232,6 @@ var (
 	pxVer3_0, _   = version.NewVersion("3.0")
 	pxVer3_1, _   = version.NewVersion("3.1")
 	pxVer3_1_2, _ = version.NewVersion("3.1.2")
-	pxVer3_2, _   = version.NewVersion("3.2")
 
 	// minimumPxVersionCCMJAVA minimum PX version to install ccm-java
 	minimumPxVersionCCMJAVA, _ = version.NewVersion("2.8")
