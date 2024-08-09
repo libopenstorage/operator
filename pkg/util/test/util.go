@@ -1847,6 +1847,13 @@ func validatePortworxTokenRefresh(cluster *corev1.StorageCluster, timeout, inter
 	}
 	pidEnabled, err := strconv.ParseBool(cluster.Annotations["portworx.io/host-pid"])
 	if err != nil || !pidEnabled {
+		pxSaSecret, err := coreops.Instance().GetSecret(pxSaTokenSecretName, cluster.Namespace)
+		if err != nil {
+			return fmt.Errorf("px serviceaccount token validation failed. Unable to get px serviceaccount secret. Err: %w", err)
+		}
+		if len(pxSaSecret.Data[core.ServiceAccountTokenKey]) == 0 {
+			return fmt.Errorf("px serviceaccount token validation failed. Token doesn't exist or length is 0")
+		}
 		logrus.Infof("Annotation `host-pid: true` is required for verifying token refresh because we need to run command inside px runc container. Thus Skipping verification.")
 		return nil
 	}
