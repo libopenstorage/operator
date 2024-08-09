@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	oidc "github.com/coreos/go-oidc"
+	"github.com/libopenstorage/openstorage/pkg/grpcutil"
 )
 
 // OIDCAuthConfig configures an OIDC connection
@@ -55,9 +56,8 @@ type OIDCAuthenticator struct {
 
 // NewOIDC returns a new OIDC authenticator
 func NewOIDC(config *OIDCAuthConfig) (*OIDCAuthenticator, error) {
-	// Reverting the defaultTimeout base context as some of the coreos oidc api
-	// takes this context for subsequent call and end up using expired context.
-	ctx := context.Background()
+	ctx, cancel := grpcutil.WithDefaultTimeout(context.Background())
+	defer cancel()
 
 	p, err := oidc.NewProvider(ctx, config.Issuer)
 	if err != nil {
