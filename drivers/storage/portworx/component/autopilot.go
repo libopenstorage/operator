@@ -263,13 +263,10 @@ func (c *autopilot) createConfigMap(
 			if key == AutopilotDefaultReviewersKey {
 				params += fmt.Sprintf(`
     %s:`, AutopilotDefaultReviewersKey)
-				var reviewers []interface{} = val.([]interface{})
-				for _, reviewer := range reviewers {
-					if r, ok := reviewer.(string); ok {
-						r = strings.TrimSpace(r)
-						params += fmt.Sprintf(`
-      - "%s"`, r)
-					}
+				for _, reviewer := range strings.Split(val, ",") {
+					reviewer = strings.TrimSpace(reviewer)
+					params += fmt.Sprintf(`
+      - "%s"`, reviewer)
 				}
 				continue
 			}
