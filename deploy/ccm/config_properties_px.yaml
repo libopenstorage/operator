@@ -26,6 +26,7 @@ envoy:
 cloud:
   auth:
     version: "1.0"
+  internalHostnameLookupRetryCount: 3
 productName: "portworx"
 certStoreType: "k8s"
 k8s:
