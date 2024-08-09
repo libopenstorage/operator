@@ -271,6 +271,7 @@ const (
 	OpenshiftAPIServer                  = "openshift-apiserver"
 	OpenshiftPrometheusSupportedVersion = "4.12"
 	Openshift_4_15_Version              = "4.15"
+	Openshift_4_16_version              = "4.16"
 	// OpenshiftMonitoringRouteName name of OCP user-workload route
 	OpenshiftMonitoringRouteName = "thanos-querier"
 	// OpenshiftMonitoringRouteName namespace of OCP user-workload route
@@ -899,6 +900,8 @@ func GenerateToken(
 	token, err := auth.Token(claims, signature, &auth.Options{
 		Expiration: time.Now().
 			Add(duration).Unix(),
+		// set IAT to 10 minutes in the past to avoid clock skew issues
+		IATSubtract: 10 * time.Minute,
 	})
 	if err != nil {
 		return "", err
@@ -1532,6 +1535,20 @@ func ShouldUseClusterDomain(node *api.StorageNode) (bool, error) {
 	return true, nil
 }
 
+func IsTokenRefreshRequired(secret *v1.Secret, tokenRefreshTimeKey string) (bool, error) {
+	if len(secret.Data) == 0 || len(secret.Data[v1.ServiceAccountTokenKey]) == 0 {
+		return true, nil
+	}
+	expirationTime, err := time.Parse(time.RFC3339, string(secret.Data[tokenRefreshTimeKey]))
+	if err != nil {
+		return false, fmt.Errorf("error parsing expiration time: %w", err)
+	}
+	if time.Now().UTC().After(expirationTime) {
+		return true, nil
+	}
+	return false, nil
+}
+
 // Get list of storagenodes that are a part of the current cluster that need a node PDB
 func NodesNeedingPDB(k8sClient client.Client, nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse, k8sNodeList *v1.NodeList) ([]string, error) {
 
@@ -1726,3 +1743,4 @@ func nodeStatusDown(status api.Status) bool {
 	}
 	return true
 }
+
