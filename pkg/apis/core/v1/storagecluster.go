@@ -103,6 +103,8 @@ type StorageClusterSpec struct {
 	// to the storage driver. The autopilot component could augment the storage
 	// driver to take intelligent actions based on the current state of the cluster.
 	Autopilot *AutopilotSpec `json:"autopilot,omitempty"`
+	// PxResourceGateway limits Px access to external resources to prevent throttling
+	PxResourceGateway *PxResourceGatewaySpec `json:"pxResourceGateway,omitempty"`
 	// Monitoring contains monitoring configuration for the storage cluster.
 	Monitoring *MonitoringSpec `json:"monitoring,omitempty"`
 	// Security configurations for setting up an auth enabled or disabled cluster
@@ -488,6 +490,18 @@ type AutopilotSpec struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
+// PxResourceGatewaySpec contains details of an PxResourceGateway component
+type PxResourceGatewaySpec struct {
+	// Enabled decides whether PxResourceGateway needs to be enabled
+	Enabled bool `json:"enabled,omitempty"`
+	// Image is docker image of the PxResourceGateway container
+	Image string `json:"image,omitempty"`
+	// Args is a map of arguments given to PxResourceGateway
+	Args map[string]string `json:"args,omitempty"`
+	// Resources for PxResourceGateway pods, e.g. CPU and memory requests or limits
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
 // DataProviderSpec contains the details for data providers for components like autopilot
 type DataProviderSpec struct {
 	// Name is the unique name for the provider
@@ -600,6 +614,7 @@ type ComponentImages struct {
 	Stork                      string `json:"stork,omitempty"`
 	UserInterface              string `json:"userInterface,omitempty"`
 	Autopilot                  string `json:"autopilot,omitempty"`
+	PxResourceGateway          string `json:"pxResourceGateway,omitempty"`
 	CSINodeDriverRegistrar     string `json:"csiNodeDriverRegistrar,omitempty"`
 	CSIDriverRegistrar         string `json:"csiDriverRegistrar,omitempty"`
 	CSIProvisioner             string `json:"csiProvisioner,omitempty"`

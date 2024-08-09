@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package operator.pxresourcegateway;
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "/;pxresourcegateway";
+option java_multiple_files = true;
+option java_package = "com.operator.pxresourcegateway";
+option java_outer_classname = "PxResourceGatewayProto";
+
+// SemaphoreService provides a counting semaphore to limit access to resources
+// and a priority queue to distinguish between different types of clients/requests
+service SemaphoreService {
+  // (-- api-linter: core::0131::synonyms=disabled
+  //     aip.dev/not-precedent: We need to do this because this service
+  //     has a semaphore implementation which needs to define AcquireLock interface. --)
+  // AcquireLock acquires a semaphore lock or reserves a place in the queue for the resource
+  rpc AcquireLock(AcquireLockRequest)
+    returns (AcquireLockResponse) {
+    option (google.api.http) = {
+        post : "/v1/pxe/pxresourcegateway:acquireLock"
+        body : "*"
+    };
+  }
+
+  // ReleaseLock releases the semaphore lock on the resource
+  rpc ReleaseLock (ReleaseLockRequest)
+  returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+        post : "/v1/pxe/pxresourcegateway:releaseLock"
+        body : "*"
+    };
+  }
+
+  // KeepAlive sends a heartbeat to the semaphore service to keep the lock alive
+  rpc KeepAlive (KeepAliveRequest)
+  returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+        post : "/v1/pxe/pxresourcegateway:keepAlive"
+        body : "*"
+    };
+  }
+}
+
+// SemaphoreAccessPriority specifies the priority of the client's access to the resource
+message SemaphoreAccessPriority {
+  // Type of priority
+  enum Type {
+    // Unspecified, do NOT use
+    TYPE_UNSPECIFIED = 0;
+    // Enqueued to low priority queue
+    LOW = 1;
+    // Enqueued to medium priority queue
+    MEDIUM = 2;
+    // Enqueued to high priority queue
+    HIGH = 3;
+  }
+}
+
+// SemaphoreAccessStatus specifies the status of the client's access to the resource
+message SemaphoreAccessStatus{
+  // Type of status
+  enum Type {
+    // Unspecified, do NOT use
+    TYPE_UNSPECIFIED = 0;
+    // Resource is queued
+    QUEUED = 1;
+    // Resource is locked
+    LOCKED = 2;
+  }
+}
+
+// AcquireLockRequest is the request to acquire a semaphore lock
+message AcquireLockRequest {
+  // Resource ID to acquire the lock for
+  string resource_id = 1;
+  // Client ID to acquire the resource for
+  string client_id = 2;
+  // Priority of the client's access to the resource
+  SemaphoreAccessPriority.Type access_priority = 3;
+}
+
+// AcquireLockResponse is the response to acquire a semaphore lock
+message AcquireLockResponse {
+  // Status of the client's access to the resource
+  SemaphoreAccessStatus.Type access_status = 1;
+}
+
+// ReleaseLockRequest is the request to release a semaphore lock
+message ReleaseLockRequest {
+  // Resource ID to release the lock for
+  string resource_id = 1;
+  // Client ID to release the resource for
+  string client_id = 2;
+}
+
+// KeepAliveRequest is the request to send a heartbeat to the semaphore service
+message KeepAliveRequest {
+  // Resource ID to keep the lock alive for
+  string resource_id = 1;
+  // Client ID to keep the lock alive for
+  string client_id = 2;
+}
