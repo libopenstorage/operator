@@ -504,9 +504,9 @@ func WithDisableServiceConfig() DialOption {
 // WithDefaultServiceConfig returns a DialOption that configures the default
 // service config, which will be used in cases where:
 //
-// 1. WithDisableServiceConfig is also used.
-// 2. Resolver does not return a service config or if the resolver returns an
-//    invalid service config.
+//  1. WithDisableServiceConfig is also used.
+//  2. Resolver does not return a service config or if the resolver returns an
+//     invalid service config.
 //
 // This API is EXPERIMENTAL.
 func WithDefaultServiceConfig(s string) DialOption {

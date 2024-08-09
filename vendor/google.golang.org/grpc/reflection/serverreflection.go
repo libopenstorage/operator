@@ -25,6 +25,7 @@ The service implemented is defined in:
 https://github.com/grpc/grpc/blob/master/src/proto/grpc/reflection/v1alpha/reflection.proto.
 
 To register server reflection on a gRPC server:
+
 	import "google.golang.org/grpc/reflection"
 
 	s := grpc.NewServer()
@@ -34,7 +35,6 @@ To register server reflection on a gRPC server:
 	reflection.Register(s)
 
 	s.Serve(lis)
-
 */
 package reflection // import "google.golang.org/grpc/reflection"
 

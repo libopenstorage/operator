@@ -254,7 +254,7 @@ func (c *consulClientImpl) writeRetryFunc(f writeFunc) (*api.WriteMeta, error) {
 	return meta, err
 }
 
-/// reconnectIfConnectionError returns (retry, error), retry is true is client reconnected
+// / reconnectIfConnectionError returns (retry, error), retry is true is client reconnected
 func (c *consulClientImpl) reconnectIfConnectionError(conn *consulConnection, err error) (bool, error) {
 	if err == nil {
 		return false, nil

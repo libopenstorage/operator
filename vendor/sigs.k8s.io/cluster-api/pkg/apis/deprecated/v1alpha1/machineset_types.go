@@ -29,7 +29,7 @@ import (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-/// [MachineSet]
+// / [MachineSet]
 // MachineSet ensures that a specified number of machines replicas are running at any given time.
 // +k8s:openapi-gen=true
 // +kubebuilder:resource:path=machinesets,shortName=ms
@@ -44,7 +44,7 @@ type MachineSet struct {
 
 /// [MachineSet]
 
-/// [MachineSetSpec]
+// / [MachineSetSpec]
 // MachineSetSpec defines the desired state of MachineSet
 type MachineSetSpec struct {
 	// Replicas is the number of desired replicas.
@@ -101,7 +101,7 @@ const (
 
 /// [MachineSetSpec] // doxygen marker
 
-/// [MachineTemplateSpec] // doxygen marker
+// / [MachineTemplateSpec] // doxygen marker
 // MachineTemplateSpec describes the data needed to create a Machine from a template
 type MachineTemplateSpec struct {
 	// Standard object's metadata.
@@ -117,7 +117,7 @@ type MachineTemplateSpec struct {
 
 /// [MachineTemplateSpec]
 
-/// [MachineSetStatus]
+// / [MachineSetStatus]
 // MachineSetStatus defines the observed state of MachineSet
 type MachineSetStatus struct {
 	// Replicas is the most recently observed number of replicas.

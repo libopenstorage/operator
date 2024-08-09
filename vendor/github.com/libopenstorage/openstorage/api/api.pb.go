@@ -24957,7 +24957,6 @@ func (x *SdkCloudBackupSizeResponse) GetCapacityRequiredForRestore() uint64 {
 	return 0
 }
 
-//
 // SdkRule is the message used to construct custom roles in the OpenStorage SDK.
 //
 // ### Format
@@ -24979,6 +24978,7 @@ func (x *SdkCloudBackupSizeResponse) GetCapacityRequiredForRestore() uint64 {
 // SdkRule:
 //   - Services: ["*"]
 //     Apis: ["*"]
+//
 // ```
 //
 // * Allow only cluster operations:
@@ -24987,6 +24987,7 @@ func (x *SdkCloudBackupSizeResponse) GetCapacityRequiredForRestore() uint64 {
 // SdkRule:
 //   - services: ["cluster"]
 //     apis: ["*"]
+//
 // ```
 //
 // * Allow inspection of any object and listings of only volumes
@@ -24997,6 +24998,7 @@ func (x *SdkCloudBackupSizeResponse) GetCapacityRequiredForRestore() uint64 {
 //     Apis: ["*enumerate*"]
 //   - Services: ["*"]
 //     Apis: ["inspect*"]
+//
 // ```
 //
 // * Allow all volume call except create
@@ -25005,8 +25007,8 @@ func (x *SdkCloudBackupSizeResponse) GetCapacityRequiredForRestore() uint64 {
 // SdkRule:
 //   - Services: ["volumes"]
 //     Apis: ["*", "!create"]
-// ```
 //
+// ```
 type SdkRule struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

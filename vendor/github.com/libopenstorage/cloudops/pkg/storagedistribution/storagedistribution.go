@@ -70,12 +70,14 @@ func GetStorageUpdateConfig(
 // - Calculate currentDriveSize from the request.								 //
 // - Calculate the requiredDriveCount for achieving the deltaCapacity.						 //
 // - Find out if any rows from the decision matrix fit in our new configuration					 //
-//      - Filter out the rows which do not have the same input.DriveType					 //
-//      - Filter out rows which do not fit input.CurrentDriveSize in row.MinSize and row.MaxSize		 //
-//      - Filter out rows which do not fit requiredDriveCount in row.InstanceMinDrives and row.InstanceMaxDrives //
+//   - Filter out the rows which do not have the same input.DriveType					 //
+//   - Filter out rows which do not fit input.CurrentDriveSize in row.MinSize and row.MaxSize		 //
+//   - Filter out rows which do not fit requiredDriveCount in row.InstanceMinDrives and row.InstanceMaxDrives //
+//
 // - Pick the 1st row from the decision matrix as your candidate.						 //
 // - If no row found:												 //
-//     - failed to AddDisk											 //
+//   - failed to AddDisk											 //
+//
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 func AddDisk(
 	request *cloudops.StoragePoolUpdateRequest,
@@ -173,9 +175,10 @@ func AddDisk(
 // - Sort the rows by IOPS								        //
 // - First row in the filtered decision matrix is our best candidate.			        //
 // - If input.CurrentDriveSize + deltaCapacityPerDrive > row.MaxSize:			        //
-//       - failed to expand								        //
-//   Else										        //
-//       - success									        //
+//   - failed to expand								        //
+//     Else										        //
+//   - success									        //
+//
 // ////////////////////////////////////////////////////////////////////////////////////////////////
 func ResizeDisk(
 	request *cloudops.StoragePoolUpdateRequest,
@@ -270,28 +273,31 @@ func calculateDriveCapacity(request *cloudops.StoragePoolUpdateRequest) uint64 {
 // - Calculate minCapacityPerZone = input.MinCapacity / zoneCount	    //
 // - Calculate maxCapacityPerZone = input.MaxCapacity / zoneCount	    //
 // - Filter the decision matrix based of our requirements:		    //
-//     - Filter out the rows which do not have the same input.DriveType	    //
-//     - Filter out the rows which do not meet input.IOPS		    //
-//     - Sort the decision matrix by IOPS				    //
-//     - Sort the decision matrix by Priority				    //
+//   - Filter out the rows which do not have the same input.DriveType	    //
+//   - Filter out the rows which do not meet input.IOPS		    //
+//   - Sort the decision matrix by IOPS				    //
+//   - Sort the decision matrix by Priority				    //
+//
 // - instancesPerZone = input.RequestedInstancesPerZone			    //
 // - (row_loop) For each of the filtered row:				    //
-//     - (instances_per_zone_loop) For instancesPerZone > 0:		    //
-//         - Find capacityPerNode = minCapacityPerZone / instancesPerZone   //
-//             - (drive_count_loop) For driveCount > row.InstanceMinDrives: //
-//                 - driveSize = capacityPerNode / driveCount		    //
-//                 - If driveSize within row.MinSize and row.MaxSize:	    //
-//                     break drive_count_loop (Found candidate)		    //
-//             - If (drive_count_loop) fails/exhausts:			    //
-//                   - reduce instancesPerZone by 1			    //
-//                   - goto (instances_per_zone_loop)			    //
-//               Else found candidate					    //
-//                   - break instances_per_zone_loop (Found candidate)	    //
-//     - If (instances_per_zone_loop) fails:				    //
-//         - Try the next filtered row					    //
-//         - goto (row_loop)						    //
+//   - (instances_per_zone_loop) For instancesPerZone > 0:		    //
+//   - Find capacityPerNode = minCapacityPerZone / instancesPerZone   //
+//   - (drive_count_loop) For driveCount > row.InstanceMinDrives: //
+//   - driveSize = capacityPerNode / driveCount		    //
+//   - If driveSize within row.MinSize and row.MaxSize:	    //
+//     break drive_count_loop (Found candidate)		    //
+//   - If (drive_count_loop) fails/exhausts:			    //
+//   - reduce instancesPerZone by 1			    //
+//   - goto (instances_per_zone_loop)			    //
+//     Else found candidate					    //
+//   - break instances_per_zone_loop (Found candidate)	    //
+//   - If (instances_per_zone_loop) fails:				    //
+//   - Try the next filtered row					    //
+//   - goto (row_loop)						    //
+//
 // - If (row_loop) fails:						    //
-//       - failed to get a candidate					    //
+//   - failed to get a candidate					    //
+//
 // ////////////////////////////////////////////////////////////////////////////
 func GetStorageDistributionForPool(
 	decisionMatrix *cloudops.StorageDecisionMatrix,

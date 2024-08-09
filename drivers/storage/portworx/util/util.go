@@ -1335,7 +1335,6 @@ func GetStorageNodeMapping(
 	return nodeNameToNodeID, nodeIDToNodeName, nil
 }
 
-
 func CleanupObject(obj client.Object) {
 	obj.SetGenerateName("")
 	obj.SetUID("")

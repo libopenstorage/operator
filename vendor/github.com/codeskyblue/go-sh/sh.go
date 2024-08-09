@@ -162,7 +162,7 @@ func newEnviron(env map[string]string, inherit bool) []string { //map[string]str
 	environ := make([]string, 0, len(env))
 	if inherit {
 		for _, line := range os.Environ() {
-			for k, _ := range env {
+			for k := range env {
 				if strings.HasPrefix(line, k+"=") {
 					goto CONTINUE
 				}

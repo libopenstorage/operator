@@ -34,7 +34,7 @@ const (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-/// [Machine]
+// / [Machine]
 // Machine is the Schema for the machines API
 // +k8s:openapi-gen=true
 // +kubebuilder:resource:path=machines,shortName=ma
@@ -48,7 +48,7 @@ type Machine struct {
 
 /// [Machine]
 
-/// [MachineSpec]
+// / [MachineSpec]
 // MachineSpec defines the desired state of Machine
 type MachineSpec struct {
 	// ObjectMeta will autopopulate the Node created. Use this to
@@ -103,7 +103,7 @@ type MachineSpec struct {
 
 /// [MachineSpec]
 
-/// [MachineStatus]
+// / [MachineStatus]
 // MachineStatus defines the observed state of Machine
 type MachineStatus struct {
 	// NodeRef will point to the corresponding Node if it exists.
@@ -219,7 +219,7 @@ type LastOperation struct {
 
 /// [MachineStatus]
 
-/// [MachineVersionInfo]
+// / [MachineVersionInfo]
 type MachineVersionInfo struct {
 	// Kubelet is the semantic version of kubelet to run
 	Kubelet string `json:"kubelet"`
