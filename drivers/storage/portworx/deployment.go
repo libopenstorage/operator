@@ -824,6 +824,8 @@ func (t *template) getCloudProvider() string {
 	} else if pxutil.IsPKS(t.cluster) {
 		// PKS runs on non-vsphere too but we haven't seen any customers doing so.
 		return cloudops.Vsphere
+	} else if pxutil.IsPure(t.cluster) {
+		return cloudops.Pure
 	}
 
 	return ""

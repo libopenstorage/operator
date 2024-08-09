@@ -29,10 +29,19 @@ func IsAWS() bool {
 	return Instance().ProviderName() == string(cloudops.AWS)
 }
 
+func IsVsphere() bool {
+	return Instance().ProviderName() == string(cloudops.Vsphere)
+}
+
+func IsPure() bool {
+	return Instance().ProviderName() == string(cloudops.Pure)
+}
+
 // RequiresCheck returns whether a preflight check is needed based on the platform
 func RequiresCheck() bool {
 	return Instance().ProviderName() == string(cloudops.AWS) ||
-		Instance().ProviderName() == string(cloudops.Vsphere)
+		Instance().ProviderName() == string(cloudops.Vsphere) ||
+		Instance().ProviderName() == string(cloudops.Pure)
 }
 
 // RunningOnCloud checks whether portworx is running on cloud
