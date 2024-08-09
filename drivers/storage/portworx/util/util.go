@@ -1743,4 +1743,3 @@ func nodeStatusDown(status api.Status) bool {
 	}
 	return true
 }
-
