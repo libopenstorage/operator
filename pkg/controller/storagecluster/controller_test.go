@@ -4790,15 +4790,15 @@ func TestUpdateStorageClusterBasedOnStorageNodeStatuses(t *testing.T) {
 	}
 
 	var storageNodes []*storageapi.StorageNode
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-0", true))
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-1", true))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-0", true, "3.1.2"))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-1", true, "3.1.2"))
 	// Create duplicate storage nodes with unhealthy statuses and one with healthy status.
 	// We need to verify that the one with healthy status is considered when calculating
 	// what nodes to upgrade next.
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", false))
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", true))
-	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", false))
-	storageNodes = append(storageNodes, createStorageNode("not-k8s-node", false))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", false, "3.1.2"))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", true, "3.1.2"))
+	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", false, "3.1.2"))
+	storageNodes = append(storageNodes, createStorageNode("not-k8s-node", false, "3.1.2"))
 
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
@@ -7924,7 +7924,7 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 	err = k8sClient.Update(context.TODO(), cluster)
 	require.NoError(t, err)
 
-	//Change existing pod's hash to latest revision, to simulate new pod with latest spec
+	// Change existing pod's hash to latest revision, to simulate new pod with latest spec
 	revs := &appsv1.ControllerRevisionList{}
 	err = k8sClient.List(context.TODO(), revs, &client.ListOptions{})
 	require.NoError(t, err)
@@ -10766,7 +10766,7 @@ func TestStorageSpecValidation(t *testing.T) {
 			Namespace: "ns",
 		},
 	}
-	//Testcase: Cluster has both storage types and no node specs
+	// Testcase: Cluster has both storage types and no node specs
 	useAllDevices := true
 	cluster.Spec.Storage = &corev1.StorageSpec{
 		UseAll: &useAllDevices,
@@ -10809,7 +10809,7 @@ func TestStorageSpecValidation(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, result)
 
-	//Testcase: Validate node having both storage and cloudstorage and cluster has cloudstorage
+	// Testcase: Validate node having both storage and cloudstorage and cluster has cloudstorage
 
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
@@ -10853,7 +10853,7 @@ func TestStorageSpecValidation(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, result)
 
-	//Testcase: Node has both specs and cluster has storage
+	// Testcase: Node has both specs and cluster has storage
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -10876,7 +10876,7 @@ func TestStorageSpecValidation(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, result)
 
-	//Testcase: Validate when cluster has both specs and node has cloud
+	// Testcase: Validate when cluster has both specs and node has cloud
 
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
@@ -10918,7 +10918,7 @@ func TestStorageSpecValidation(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, result)
 
-	//Testcase: When cluster has both and node has storage
+	// Testcase: When cluster has both and node has storage
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -10952,7 +10952,7 @@ func TestStorageSpecValidation(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, result)
 
-	//Update specs to have no error
+	// Update specs to have no error
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
@@ -10986,7 +10986,7 @@ func TestStorageSpecValidation(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result)
 
-	//Another valid case
+	// Another valid case
 	err = testutil.Get(k8sClient, cluster, cluster.Name, cluster.Namespace)
 	require.NoError(t, err)
 
