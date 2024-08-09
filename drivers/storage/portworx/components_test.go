@@ -15562,16 +15562,16 @@ func TestTelemetryWithEmptyImagest(t *testing.T) {
 		Telemetry:        "purestorage/ccm-go:1.2.2",
 		TelemetryProxy:   "purestorage/telemetry-envoy:1.1.15",
 		LogUploader:      "purestorage/log-uploader:1.1.8",
-		MetricsCollector: "purestorage/realtime-metrics:1.0.23",
+		MetricsCollector: "purestorage/realtime-metrics:1.0.29",
 	}
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
-	// Will contain 2 deployments - portworx-pvc-controller and px-telemetry-registration
+	// Will contain 3 deployments - portworx-pvc-controller and px-telemetry-registration and px-telemetry-metrics-collector
 	deploymentList := &appsv1.DeploymentList{}
 	err = testutil.List(k8sClient, deploymentList)
 	require.NoError(t, err)
-	require.Len(t, deploymentList.Items, 2)
+	require.Len(t, deploymentList.Items, 3)
 }
 
 func TestValidateTelemetryEnabled(t *testing.T) {
@@ -16263,8 +16263,7 @@ func TestTelemetryCCMGoHTTPProxy(t *testing.T) {
 	require.True(t, errors.IsNotFound(err))
 }
 
-// PWX-27401
-func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
+func TestTelemetryMetricsCollectorEnabledByDefault(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	reregisterComponents()
@@ -16272,7 +16271,7 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 	driver := portworx{}
 	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
 	require.NoError(t, err)
-	// Deploy px with CCM Java enabled
+	// Deploy px with CCM enabled
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "px-cluster",
@@ -16304,7 +16303,7 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// TestCase: enabling telemetry doesn't create metrics collector
+	// TestCase: enabling telemetry creates metrics collector
 	err = driver.SetDefaultsOnStorageCluster(cluster)
 	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
@@ -16312,67 +16311,43 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 
 	serviceAccount := &v1.ServiceAccount{}
 	err = testutil.Get(k8sClient, serviceAccount, component.CollectorServiceAccountName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.Nil(t, err)
+	require.NotEmpty(t, serviceAccount.ObjectMeta.Name)
+
 	clusterRole := &rbacv1.ClusterRole{}
 	err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
-	require.True(t, errors.IsNotFound(err))
+	require.Nil(t, err)
+	fmt.Printf("clusterRole:%v", clusterRole)
+
 	clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
 	err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
-	require.True(t, errors.IsNotFound(err))
+	require.Nil(t, err)
+	fmt.Printf("clusterRoleBinding:%v", clusterRoleBinding)
+
 	role := &rbacv1.Role{}
 	err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.Nil(t, err)
+	fmt.Printf("role:%v", role)
+
 	roleBinding := &rbacv1.RoleBinding{}
 	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.Nil(t, err)
+	fmt.Printf("roleBinding:%v", roleBinding)
+
 	configMap := &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.Nil(t, err)
+	fmt.Printf("configMap:%v", configMap)
+
 	configMap = &v1.ConfigMap{}
 	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.Nil(t, err)
+	fmt.Printf("configMap:%v", configMap)
+
 	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
-
-	// TestCase: deploy metrics collector V1 and restart operator, collector should be reconciled
-	err = k8sClient.Create(
-		context.TODO(),
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      component.CollectorDeploymentName,
-				Namespace: cluster.Namespace,
-			},
-		},
-		&client.CreateOptions{},
-	)
-	require.NoError(t, err)
-
-	reregisterComponents()
-	driver = portworx{}
-	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
-	require.NoError(t, err)
-	err = driver.SetDefaultsOnStorageCluster(cluster)
-	require.NoError(t, err)
-	err = driver.PreInstall(cluster)
-	require.NoError(t, err)
-
-	err = testutil.Get(k8sClient, serviceAccount, component.CollectorServiceAccountName, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, clusterRole, component.CollectorClusterRoleName, "")
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, clusterRoleBinding, component.CollectorClusterRoleBindingName, "")
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, role, component.CollectorRoleName, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, roleBinding, component.CollectorRoleBindingName, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, configMap, component.CollectorProxyConfigMapName, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, configMap, component.CollectorConfigMapName, cluster.Namespace)
-	require.NoError(t, err)
-	err = testutil.Get(k8sClient, deployment, component.CollectorDeploymentName, cluster.Namespace)
-	require.NoError(t, err)
+	require.Nil(t, err)
+	fmt.Printf("deployment:%v", deployment)
 
 	// TestCase: upgrade to ccm go, new collector should be reconciled
 	cluster.Spec.Image = "portworx/oci-monitor:2.12.1"
@@ -16407,13 +16382,21 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryCollectorV2, cluster.Namespace)
 	require.NoError(t, err)
 
-	// TestCase: disable telemetry, restart operator and re-enable telemetry, collector v2 should not be created
-	cluster.Spec.Monitoring.Telemetry.Enabled = false
+	// TestCase: disable telemetry, rerun operator, telemetry should not be present
 	err = driver.SetDefaultsOnStorageCluster(cluster)
+	cluster.Spec.Monitoring.Telemetry.Enabled = false
 	require.NoError(t, err)
 	err = driver.PreInstall(cluster)
 	require.NoError(t, err)
 
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorV2, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryCollectorV2, cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// TestCase: restore defaults, rerun operator, telemetry should be present
 	reregisterComponents()
 	driver = portworx{}
 	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
@@ -16425,11 +16408,11 @@ func TestTelemetryMetricsCollectorDisabledByDefault(t *testing.T) {
 	require.NoError(t, err)
 
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorV2, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.NoError(t, err)
 	err = testutil.Get(k8sClient, configMap, component.ConfigMapNameTelemetryCollectorProxyV2, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.NoError(t, err)
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryCollectorV2, cluster.Namespace)
-	require.True(t, errors.IsNotFound(err))
+	require.NoError(t, err)
 }
 
 func TestTelemetryCCMGoHTTPSProxy(t *testing.T) {
