@@ -69,8 +69,6 @@ const (
 	PortworxSDKPortName = "px-sdk"
 	// PortworxKVDBPortName name of the Portworx internal KVDB port
 	PortworxKVDBPortName = "px-kvdb"
-	// PortworxServiceAccountTokenSecretName is the secret name for storing the service account token for px to communicate with k8s
-	PortworxServiceAccountTokenSecretName = "px-sa-token-secret"
 	// EssentialsSecretName name of the Portworx Essentials secret
 	EssentialsSecretName = "px-essential"
 	// EssentialsUserIDKey is the secret key for Essentials user ID
@@ -172,9 +170,6 @@ const (
 	// EnvKeyPortworxServiceAccount key for the env var which tells custom Portworx
 	// service account
 	EnvKeyPortworxServiceAccount = "PX_SERVICE_ACCOUNT"
-	// EnvKeyPortworxServiceAccountTokenExpirationMinutes key for the env var which tells after how
-	// many minutes thg service account token will expire
-	EnvKeyPortworxServiceAccountTokenExpirationMinutes = "PX_SERVICE_ACCOUNT_TOKEN_EXPIRATION_MINUTES"
 	// EnvKeyPortworxServiceName key for the env var which tells the name of the
 	// portworx service to be used
 	EnvKeyPortworxServiceName = "PX_SERVICE_NAME"
