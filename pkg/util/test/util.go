@@ -1849,7 +1849,7 @@ func validatePortworxTokenRefresh(cluster *corev1.StorageCluster, timeout, inter
 	if err != nil || !pidEnabled {
 		pxSaSecret, err := coreops.Instance().GetSecret(pxSaTokenSecretName, cluster.Namespace)
 		if err != nil {
-			return fmt.Errorf("px serviceaccount token validation failed. Unable to get px serviceaccount secret. Err: %w", err)
+			return fmt.Errorf("failed to get px serviceaccount secret [%s] in namespace [%s]. Err: %w", pxSaTokenSecretName, cluster.Namespace, err)
 		}
 		if len(pxSaSecret.Data[core.ServiceAccountTokenKey]) == 0 {
 			return fmt.Errorf("px serviceaccount token validation failed. Token doesn't exist or length is 0")
