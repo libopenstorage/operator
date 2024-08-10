@@ -1,0 +1,93 @@
+name: Validate STC CRD and Helm Template Sync
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+    paths:
+      - 'deploy/crds/**'
+
+jobs:
+  check-crd-changes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Check if StorageCluster CRD has changes
+        id: crd_check
+        run: |
+          echo "Checking CRD changes..."
+          if git diff --exit-code HEAD^ HEAD -- deploy/crds/; then
+            echo "crd_changed=false" >> $GITHUB_ENV
+          else
+            echo "crd_changed=true" >> $GITHUB_ENV
+          fi
+
+      - name: Validate PR Description for Helm Link
+        id: validate_pr_description
+        run: |
+          echo "Extracting PR body..."
+          PR_BODY=$(jq -r '.pull_request.body' "$GITHUB_EVENT_PATH")
+          echo "PR_BODY: $PR_BODY"
+          
+          # Extract the HELM_PR_LINK value
+          HELM_PR_LINK=$(echo "$PR_BODY" | grep -oP 'HELM_PR_LINK[[:space:]]*=[[:space:]]*.*' | awk -F '=' '{print $2}' | xargs)
+          echo "HELM_PR_LINK: '$HELM_PR_LINK'"
+
+          if [[ -z "$HELM_PR_LINK" ]]; then
+            echo "Error: HELM_PR_LINK is missing in the description."
+            exit 1
+          elif [[ "$HELM_PR_LINK" == "NOT_NEEDED" ]]; then
+            echo "helm_check=skipped" >> $GITHUB_ENV
+          else
+            echo "helm_pr_link=true" >> $GITHUB_ENV
+            echo "helm_pr_link_url=$HELM_PR_LINK" >> $GITHUB_ENV
+          fi
+
+      - name: Extract Branch Name from Helm PR Link
+        id: extract_branch
+        if: env.helm_pr_link == 'true'
+        run: |        
+            # Extract the PR number from the HELM_PR_LINK URL
+            PR_NUMBER=$(echo "${{ env.helm_pr_link_url }}" | grep -o '[0-9]\+')
+            echo "PR_NUMBER: $PR_NUMBER"
+            
+            # Check if PR_NUMBER extraction was successful
+            if [ -z "$PR_NUMBER" ]; then
+              echo "Error: PR_NUMBER could not be extracted."
+              exit 1
+            fi
+        
+            # Fetch the branch name using the GitHub API
+            HELM_BRANCH=$(curl -s "https://api.github.com/repos/portworx/helm/pulls/$PR_NUMBER" | jq -r '.head.ref')
+            echo "HELM_BRANCH: $HELM_BRANCH"
+            
+            # Check if HELM_BRANCH was successfully extracted
+            if [ -z "$HELM_BRANCH" ]; then
+              echo "Error: Failed to extract the branch name from the Helm PR."
+              exit 1
+            else
+              echo "helm_branch=$HELM_BRANCH" >> $GITHUB_ENV
+            fi
+
+      - name: Checkout Helm Repo
+        if: env.crd_changed == 'true' && env.helm_pr_link == 'true'
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+          repository: portworx/helm 
+          ref: ${{ env.helm_branch }}
+
+      - name: Verify Helm Template Changes
+        if: env.crd_changed == 'true' && env.helm_pr_link == 'true'
+        run: |
+          echo "Checking Helm template changes..."
+          if git diff --exit-code HEAD^ HEAD -- charts/portworx/templates/storage-cluster.yaml; then
+            echo "Error: No changes detected in Helm storagecluster template."
+            exit 1
+          else
+            echo "Helm storagecluster template changes detected."
+          fi
+
+      - name: Final Status
+        run: echo "Validation completed successfully."
