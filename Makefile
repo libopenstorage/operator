@@ -61,6 +61,7 @@ OPERATOR_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_OPERATOR_IMG):$(DOCKER_HUB_OPERATOR
 OPERATOR_TEST_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_OPERATOR_TEST_IMG):$(DOCKER_HUB_OPERATOR_TEST_TAG)
 BUNDLE_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_BUNDLE_IMG):$(RELEASE_VER)
 REGISTRY_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_REGISTRY_IMG):$(RELEASE_VER)
+
 PX_DOC_HOST ?= https://docs.portworx.com
 PX_INSTALLER_HOST ?= https://install.portworx.com
 PROMETHEUS_OPERATOR_HELM_CHARTS_TAG ?= kube-prometheus-stack-42.1.0
@@ -78,7 +79,8 @@ BUILD_OPTIONS := -ldflags=$(LDFLAGS)
 .DEFAULT_GOAL=all
 .PHONY: operator deploy clean vendor vendor-update test generate manifests tools-check
 
-all: operator pretest downloads
+all: operator px-resource-gateway pretest downloads
+dev: operator px-resource-gateway container deploy
 
 vendor-update:
 	go mod download
@@ -178,6 +180,11 @@ operator:
 	@echo "Building the cluster operator binary"
 	@cd cmd/operator && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
 	@cd cmd/dryrun && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/dryrun
+
+px-resource-gateway:
+	@echo "Building the px-resource-gateway binary"
+	@echo "CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/px-resource-gateway"
+	@cd cmd/px-resource-gateway && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/px-resource-gateway
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
@@ -298,3 +305,6 @@ clean: clean-release-manifest clean-bundle
 	@go clean -i $(PKGS)
 	@echo "Deleting image "$(OPERATOR_IMG)
 	@docker rmi -f $(OPERATOR_IMG) registry.access.redhat.com/ubi9-minimal:latest
+
+px-resource-gateway-proto:
+	$(MAKE) -C proto px-resource-gateway-docker-proto

@@ -1,0 +1,81 @@
+/// Please use the following editor setup for this file:
+// Tab size=2; Tabs as spaces; Clean up trailing whitepsace
+//
+// In vim add: au FileType proto setl sw=2 ts=2 expandtab list
+//
+// In vscode install vscode-proto3 extension and add this to your settings.json:
+//    "[proto3]": {
+//        "editor.tabSize": 2,
+//        "editor.insertSpaces": true,
+//        "editor.rulers": [80],
+//        "editor.detectIndentation": true,
+//        "files.trimTrailingWhitespace": true
+//    }
+//
+syntax = "proto3";
+
+package role;
+
+option go_package = "./role;role";
+
+//
+// Rule is the message used to construct custom RBAC roles
+//
+// #### Format
+// The following shows the supported format for Rule:
+//
+// * Services: Is the gRPC service name in `[tag]<service name>` in lowercase
+// * Apis: Is the API name in the service in lowercase
+//
+// Values can also be set to `*`, or start or end with `*` to allow multiple matches in services or apis.
+//
+// Services and APIs can also be denied by prefixing the value with a `!`. Note that on rule conflicts,
+// denial will always be chosen.
+//
+// #### Examples
+//
+// * Allow any call:
+//
+// ```yaml
+// Rule:
+//   - Services: ["*"]
+//     Apis: ["*"]
+// ```
+//
+// * Allow only cluster operations:
+//
+// ```yaml
+// Rule:
+//   - services: ["cluster"]
+//     apis: ["*"]
+// ```
+//
+// * Allow inspection of any object and listings of only volumes
+//
+// ```yaml
+// Rule:
+//   - Services: ["volumes"]
+//     Apis: ["*enumerate*"]
+//   - Services: ["*"]
+//     Apis: ["inspect*"]
+// ```
+//
+// * Allow all volume call except create
+//
+// ```yaml
+// Rule:
+//   - Services: ["volumes"]
+//     Apis: ["*", "!create"]
+// ```
+//
+message Rule {
+  // The gRPC service name in `[tag]<service name>` in lowercase
+  repeated string services = 1;
+  // The API name in the service in lowercase
+  repeated string apis = 2;
+}
+
+message Role {
+  string name = 1;
+  repeated Rule rules = 2;
+}

@@ -109,6 +109,8 @@ const (
 	AnnotationPVCControllerSecurePort = pxAnnotationPrefix + "/pvc-controller-secure-port"
 	// AnnotationAutopilotCPU annotation for overriding the default CPU for Autopilot
 	AnnotationAutopilotCPU = pxAnnotationPrefix + "/autopilot-cpu"
+	// AnnotationPxResourceGatewayCPU annotation for overriding the default CPU for PxResourceGateway
+	AnnotationPxResourceGatewayCPU = pxAnnotationPrefix + "/px-resource-gateway-cpu"
 	// AnnotationServiceType annotation indicating k8s service type for all services
 	// deployed by the operator
 	AnnotationServiceType = pxAnnotationPrefix + "/service-type"
