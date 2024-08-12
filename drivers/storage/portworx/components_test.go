@@ -14,11 +14,10 @@ import (
 	"testing"
 	"time"
 
-	routev1 "github.com/openshift/api/route/v1"
-
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/mock/gomock"
 	ocpconfig "github.com/openshift/api/config/v1"
+	routev1 "github.com/openshift/api/route/v1"
 	ocp_secv1 "github.com/openshift/api/security/v1"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -74,9 +73,9 @@ const (
 func setUpMockCoreOps(mockCtrl *gomock.Controller, clientset *fakek8sclient.Clientset) *mockcore.MockOps {
 	mockCoreOps := mockcore.NewMockOps(mockCtrl)
 	coreops.SetInstance(mockCoreOps)
+	defaultTokenExpirationSeconds := int64(12 * 60 * 60)
 
 	simpleClientset := coreops.New(clientset)
-	defaultTokenExpirationSeconds := int64(12 * 60 * 60)
 	mockCoreOps.EXPECT().
 		CreateToken(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&authv1.TokenRequest{
@@ -84,7 +83,7 @@ func setUpMockCoreOps(mockCtrl *gomock.Controller, clientset *fakek8sclient.Clie
 				ExpirationSeconds: &defaultTokenExpirationSeconds,
 			},
 			Status: authv1.TokenRequestStatus{
-				Token: "xxxx",
+				Token: "dG9rZW4tdmFsdWU=",
 			},
 		}, nil).
 		AnyTimes()
@@ -289,7 +288,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, cluster.Name, saTokenSecret.OwnerReferences[0].Name)
 	require.Equal(t, len(expectedPXSaTokenSecret.Data), len(saTokenSecret.Data))
 	require.Equal(t, []byte(cluster.Namespace), saTokenSecret.Data["namespace"])
-	require.Equal(t, []byte("xxxx"), saTokenSecret.Data["token"])
+	require.Equal(t, []byte("dG9rZW4tdmFsdWU="), saTokenSecret.Data["token"])
 
 	// Portworx KVDB Service
 	expectedPXKVDBService := testutil.GetExpectedService(t, "portworxKVDBService.yaml")
@@ -5077,6 +5076,377 @@ func TestAutopilotInstallAndUninstallOnOpenshift415(t *testing.T) {
 	err = autopilotComponent.Delete(cluster)
 	autopilotComponent.MarkDeleted()
 	require.NoError(t, err)
+
+}
+
+// test Autopilot install and Uninstall on ocp cluster 4.16
+func TestAutopilotInstallAndUninstallOnOpenshift416(t *testing.T) {
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, versionClient)
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.16",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	stcSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:1.1.1",
+				Providers: []corev1.DataProviderSpec{
+					{
+						Name: "default",
+						Type: "prometheus",
+						Params: map[string]string{
+							"url": "http://prometheus:9090",
+						},
+					},
+					{
+						Name: "second",
+						Type: "datadog",
+						Params: map[string]string{
+							"url":  "http://datadog:9090",
+							"auth": "foobar",
+						},
+					},
+				},
+				Args: map[string]string{
+					"min_poll_interval": "4",
+					"log-level":         "info",
+				},
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+
+	cluster := stcSpec.DeepCopy()
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// on OCP 4.16+ , autopilot-prometheus service account will be used for authentication
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftClusterViewRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:     "User",
+				Name:     "example-user",
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     "view",
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), clusterRoleBinding)
+	require.NoError(t, err)
+
+	// Autopilot ConfigMap
+	expectedConfigMap := testutil.GetExpectedConfigMap(t, "autopilotConfigMap.yaml")
+	autopilotConfigMap := &v1.ConfigMap{}
+	err = testutil.Get(k8sClient, autopilotConfigMap, component.AutopilotConfigMapName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedConfigMap.Name, autopilotConfigMap.Name)
+	require.Equal(t, expectedConfigMap.Namespace, autopilotConfigMap.Namespace)
+	require.Len(t, autopilotConfigMap.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, autopilotConfigMap.OwnerReferences[0].Name)
+	require.Equal(t, expectedConfigMap.Data, autopilotConfigMap.Data)
+
+	// Autopilot ServiceAccount
+	sa := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, sa, component.AutopilotServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, component.AutopilotServiceAccountName, sa.Name)
+	require.Equal(t, cluster.Namespace, sa.Namespace)
+	require.Len(t, sa.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, sa.OwnerReferences[0].Name)
+
+	// Autopilot ClusterRoleBinding
+	expectedCRB := testutil.GetExpectedClusterRoleBinding(t, "autopilotClusterRoleBinding.yaml")
+	actualCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualCRB, component.AutopilotClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedCRB.Name, actualCRB.Name)
+	require.Empty(t, actualCRB.OwnerReferences)
+	require.ElementsMatch(t, expectedCRB.Subjects, actualCRB.Subjects)
+	require.Equal(t, expectedCRB.RoleRef, actualCRB.RoleRef)
+
+	// Autopilot Prometheus Service Account
+	expectedSA := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, expectedSA, component.AutopilotPrometheusServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, component.AutopilotPrometheusServiceAccountName, expectedSA.Name)
+	require.Equal(t, cluster.Namespace, expectedSA.Namespace)
+	require.Len(t, expectedSA.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, expectedSA.OwnerReferences[0].Name)
+
+	// Autopilot Prometheus Cluster role binding
+	expectedPrometheusCRB := testutil.GetExpectedClusterRoleBinding(t, "autopilotPrometheusClusterRoleBinding.yaml")
+	actualClusterRoleCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualClusterRoleCRB, component.AutopilotPrometheusClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedPrometheusCRB.Name, actualClusterRoleCRB.Name)
+	require.Empty(t, actualCRB.OwnerReferences)
+	require.ElementsMatch(t, expectedPrometheusCRB.Subjects, actualClusterRoleCRB.Subjects)
+	require.Equal(t, expectedPrometheusCRB.RoleRef, actualClusterRoleCRB.RoleRef)
+
+	// Autopilot Secret
+	expectedSecret := testutil.GetExpectedSecret(t, "autopilot-auth-token-secret_4_16.yaml")
+	actualSecret := &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret, component.AutopilotSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSecret.Type, actualSecret.Type)
+	require.Equal(t, expectedSecret.Annotations, actualSecret.Annotations)
+
+	// Autopilot Deployment
+	expectedDeployment := testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_16.yaml")
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Volumes, autopilotDeployment.Spec.Template.Spec.Volumes)
+	require.Equal(t, expectedDeployment.Spec.Template.Spec.Containers[0].VolumeMounts, autopilotDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	autopilotComponent, _ := component.Get(component.AutopilotComponentName)
+	err = autopilotComponent.Delete(cluster)
+	autopilotComponent.MarkDeleted()
+	require.NoError(t, err)
+
+}
+
+// test OCP upgrade from 4.15 to 4.16
+func TestAutopilotUpgradeFrom415To416(t *testing.T) {
+
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: component.ClusterOperatorVersion,
+			APIResources: []metav1.APIResource{
+				{
+					Kind: component.ClusterOperatorKind,
+				},
+			},
+		},
+	}
+	coreops.SetInstance(coreops.New(versionClient))
+
+	reregisterComponents()
+	operator := &ocpconfig.ClusterOperator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: component.OpenshiftAPIServer,
+		},
+		Status: ocpconfig.ClusterOperatorStatus{
+			RelatedObjects: []ocpconfig.ObjectReference{
+				{Name: component.OpenshiftAPIServer},
+			},
+			Versions: []ocpconfig.OperandVersion{
+				{
+					Name:    component.OpenshiftAPIServer,
+					Version: "4.15",
+				},
+			},
+		},
+	}
+	k8sClient := testutil.FakeK8sClient()
+	err := k8sClient.Create(context.TODO(), operator)
+	require.NoError(t, err)
+
+	mockCtrl := gomock.NewController(t)
+	setUpMockCoreOps(mockCtrl, versionClient)
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	stcSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+			Annotations: map[string]string{
+				pxutil.AnnotationPVCController: "true",
+			},
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:1.1.1",
+				Providers: []corev1.DataProviderSpec{
+					{
+						Name: "default",
+						Type: "prometheus",
+						Params: map[string]string{
+							"url": "http://prometheus:9090",
+						},
+					},
+					{
+						Name: "second",
+						Type: "datadog",
+						Params: map[string]string{
+							"url":  "http://datadog:9090",
+							"auth": "foobar",
+						},
+					},
+				},
+				Args: map[string]string{
+					"min_poll_interval": "4",
+					"log-level":         "info",
+				},
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+
+	cluster := stcSpec.DeepCopy()
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// on OCP 4.15 , thanos-ruler-token secret is used for certificate and token
+	// this secret is created by openshift
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "thanos-ruler-token-abcd",
+			Namespace: "openshift-user-workload-monitoring",
+		},
+		Data: map[string][]byte{
+			"token":  []byte("dG9rZW4tdmFsdWU="),
+			"ca.crt": []byte("Y2VydGlmaWNhdGUtdmFsdWU="),
+		},
+	}
+
+	err = k8sClient.Create(context.TODO(), secret)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Autopilot Secret on 4.15
+	expectedSecret415 := testutil.GetExpectedSecret(t, "autopilot-auth-token-secret.yaml")
+	actualSecret415 := &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret415, component.AutopilotSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSecret415.Data, actualSecret415.Data)
+	// on OCP 4.15, token refresh time is not set
+	require.Empty(t, expectedSecret415.Data[component.AutopilotSaTokenRefreshTimeKey])
+
+	// Autopilot Deployment on 4.15
+	expectedDeployment415 := testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_14.yaml")
+	autopilotDeployment415 := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment415, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment415.Spec.Template.Spec.Volumes, autopilotDeployment415.Spec.Template.Spec.Volumes)
+	require.Equal(t, expectedDeployment415.Spec.Template.Spec.Containers[0].VolumeMounts, autopilotDeployment415.Spec.Template.Spec.Containers[0].VolumeMounts)
+
+	// upgrade cluster to OCP 4.16
+	operator.Status.Versions[0].Version = "4.16"
+	err = k8sClient.Update(context.Background(), operator)
+	require.NoError(t, err)
+
+	// reconcile storagecluster
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Autopilot Prometheus Service Account on OCP 4.16
+	expectedSA := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, expectedSA, component.AutopilotPrometheusServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, component.AutopilotPrometheusServiceAccountName, expectedSA.Name)
+	require.Equal(t, cluster.Namespace, expectedSA.Namespace)
+	require.Len(t, expectedSA.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, expectedSA.OwnerReferences[0].Name)
+
+	// Autopilot Prometheus Cluster role binding on OCP 4.16
+	expectedPrometheusCRB := testutil.GetExpectedClusterRoleBinding(t, "autopilotPrometheusClusterRoleBinding.yaml")
+	actualClusterRoleCRB := &rbacv1.ClusterRoleBinding{}
+	err = testutil.Get(k8sClient, actualClusterRoleCRB, component.AutopilotPrometheusClusterRoleBindingName, "")
+	require.NoError(t, err)
+	require.Equal(t, expectedPrometheusCRB.Name, actualClusterRoleCRB.Name)
+	require.ElementsMatch(t, expectedPrometheusCRB.Subjects, actualClusterRoleCRB.Subjects)
+	require.Equal(t, expectedPrometheusCRB.RoleRef, actualClusterRoleCRB.RoleRef)
+
+	// Autopilot Secret on OCP 4.16
+	expectedSecret416 := testutil.GetExpectedSecret(t, "autopilot-auth-token-secret_4_16.yaml")
+	actualSecret416 := &v1.Secret{}
+	err = testutil.Get(k8sClient, actualSecret416, component.AutopilotSecretName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedSecret416.Data["token"], actualSecret416.Data["token"])
+	// on OCP 4.16, token refresh time is set
+	require.NotEmpty(t, expectedSecret416.Data[component.AutopilotSaTokenRefreshTimeKey])
+
+	// Autopilot Deployment on OCP 4.16
+	expectedDeployment416 := testutil.GetExpectedDeployment(t, "autopilotDeployment_Openshift_4_16.yaml")
+	autopilotDeployment416 := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment416, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeployment416.Spec.Template.Spec.Volumes, autopilotDeployment416.Spec.Template.Spec.Volumes)
+	require.Equal(t, expectedDeployment416.Spec.Template.Spec.Containers[0].VolumeMounts, autopilotDeployment416.Spec.Template.Spec.Containers[0].VolumeMounts)
 
 }
 
@@ -13013,7 +13383,7 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
-			{SchedulerNodeName: "node1"},
+			{SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 		},
 	}
 
@@ -13102,8 +13472,8 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 
 	// TestCase: Do not create storage PDB if total nodes with storage is less than 3
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
-		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
-		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 		{Pools: []*osdapi.StoragePool{}},
 		{},
 	}
@@ -13135,11 +13505,11 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	// Also, ignore the annotation if the value is an invalid integer
 	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "invalid"
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
-		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
-		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 		{Pools: []*osdapi.StoragePool{}},
 		{},
-		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3"},
+		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 	}
 
 	err = driver.PreInstall(cluster)
@@ -13162,11 +13532,11 @@ func TestPodDisruptionBudgetEnabled(t *testing.T) {
 	// Also, ignore the annotation if the value is an invalid integer
 	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "still_invalid"
 	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
-		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
-		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
-		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3"},
-		{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4"},
-		{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5"},
+		{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 4}}, SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+		{Pools: []*osdapi.StoragePool{{ID: 5}}, SchedulerNodeName: "node5", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 		{Pools: []*osdapi.StoragePool{}},
 		{},
 	}
@@ -13485,6 +13855,7 @@ func TestPodDisruptionBudgetWithDifferentKvdbClusterSize(t *testing.T) {
 		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedInspectCurrentResponse, nil).
 		AnyTimes()
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(&osdapi.SdkFilterNonOverlappingNodesResponse{}, nil).AnyTimes()
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -13606,9 +13977,9 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
-			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
-			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
-			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3"},
+			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 		},
 	}
 	mockNodeServer.EXPECT().
@@ -13623,6 +13994,7 @@ func TestPodDisruptionBudgetDuringInitialization(t *testing.T) {
 		InspectCurrent(gomock.Any(), gomock.Any()).
 		Return(expectedInspectCurrentResponse, nil).
 		AnyTimes()
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(&osdapi.SdkFilterNonOverlappingNodesResponse{}, nil).AnyTimes()
 
 	cluster := &corev1.StorageCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -13784,7 +14156,7 @@ func TestPodDisruptionBudgetWithErrors(t *testing.T) {
 	mockNodeServer.EXPECT().
 		EnumerateWithFilters(gomock.Any(), gomock.Any()).
 		Return(nil, fmt.Errorf("NodeEnumerate error")).
-		Times(1)
+		AnyTimes()
 	cluster.Spec.Security.Enabled = false
 
 	err = driver.PreInstall(cluster)
@@ -13815,9 +14187,9 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 
 	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
 		Nodes: []*osdapi.StorageNode{
-			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1"},
-			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2"},
-			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3"},
+			{Pools: []*osdapi.StoragePool{{ID: 1}}, SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+			{Pools: []*osdapi.StoragePool{{ID: 2}}, SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+			{Pools: []*osdapi.StoragePool{{ID: 3}}, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
 		},
 	}
 	mockNodeServer.EXPECT().
@@ -13907,6 +14279,633 @@ func TestDisablePodDisruptionBudgets(t *testing.T) {
 	kvdbPDB = &policyv1.PodDisruptionBudget{}
 	err = testutil.Get(k8sClient, kvdbPDB, component.KVDBPodDisruptionBudgetName, cluster.Namespace)
 	require.True(t, errors.IsNotFound(err))
+}
+
+func TestCreateNodePodDisruptionBudget(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+
+	// PDB should not be created for non quorum members, nodes not part of current cluster and nodes in decommissioned state
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+			// If node version is empty, then skip that node to determine if feature is supported
+			{SchedulerNodeName: "node2"},
+			{NonQuorumMember: true, SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+			{SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+			{NonQuorumMember: false, Status: osdapi.Status_STATUS_DECOMMISSION},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(&osdapi.SdkFilterNonOverlappingNodesResponse{}, nil).AnyTimes()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:3.1.2",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateRunning),
+		},
+	}
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
+	},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	}, fakeK8sNodes)
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// PDB is created for 2 storage nodes and kvdb
+	pdbList := &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 3)
+
+	storagePDB := &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, "px-node1", cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 1, storagePDB.Spec.MinAvailable.IntValue())
+	require.Equal(t, "node1", storagePDB.Spec.Selector.MatchLabels[constants.OperatorLabelNodeNameKey])
+
+	err = testutil.Get(k8sClient, storagePDB, "px-node3", cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+	err = testutil.Get(k8sClient, storagePDB, "px-node4", cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Testcase : PDB per node should not be created for any node even if 1 node is lesser than 3.1.2
+	// Use cluster wide PDB in this case
+	expectedNodeEnumerateResp.Nodes = []*osdapi.StorageNode{
+		{SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+		{SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+		{SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.1"}},
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	storagePDB = &policyv1.PodDisruptionBudget{}
+	err = testutil.Get(k8sClient, storagePDB, component.StoragePodDisruptionBudgetName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, 2, storagePDB.Spec.MinAvailable.IntValue())
+
+}
+
+func TestDeleteNodePodDisruptionBudget(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+			{SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+			{SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+			{NonQuorumMember: true, SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}},
+			{NonQuorumMember: false, Status: osdapi.Status_STATUS_DECOMMISSION},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(&osdapi.SdkFilterNonOverlappingNodesResponse{}, nil).AnyTimes()
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:3.1.2",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateRunning),
+		},
+	}
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node4"}},
+	},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	}, fakeK8sNodes)
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	err = driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList := &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 4)
+
+	// Testcase: Removing kubernetes node2 from the cluster should delete node PDB
+	err = testutil.Delete(k8sClient, &fakeK8sNodes.Items[1])
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 3)
+
+	err = testutil.Get(k8sClient, &policyv1.PodDisruptionBudget{}, "px-node2", cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+	// Testcase: Making node 3 non quorum member should delete node PDB
+	expectedNodeEnumerateResp.Nodes[2].NonQuorumMember = true
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 2)
+
+	err = testutil.Get(k8sClient, &policyv1.PodDisruptionBudget{}, "px-node3", cluster.Namespace)
+	require.True(t, errors.IsNotFound(err))
+
+}
+
+func TestUpdateNodePodDisruptionBudgetParallelEnabled(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			// Nodes in few specific states will be considered as up during PDB updates
+			{SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode1", Status: osdapi.Status_STATUS_STORAGE_DOWN},
+			{SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode2", Status: osdapi.Status_STATUS_MAINTENANCE},
+			{SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode3", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode4", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node5", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode5", Status: osdapi.Status_STATUS_OK},
+			// Nodes in decommissioned state are not included in the input request to filterNonOverlappingNodes API
+			{SchedulerNodeName: "node6", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode6", Status: osdapi.Status_STATUS_DECOMMISSION},
+			// Nodes part of quorum are not included in the input request to filterNonOverlappingNodes API
+			{NonQuorumMember: true, SchedulerNodeName: "node7", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode7", Status: osdapi.Status_STATUS_OK},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(2)
+
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(&osdapi.SdkFilterNonOverlappingNodesResponse{}, nil).Times(1)
+
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:3.1.2",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateRunning),
+		},
+	}
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node4"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node5"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node6"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node7"}},
+	},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	}, fakeK8sNodes)
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	recorder := record.NewFakeRecorder(10)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList := &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 6)
+
+	// Testcase : When FilterNonOverlappingNodes returns nodes count lesser than portworx quorum, update minAvailable to 0 for those nodes
+
+	// Update nodes 1,2 to be unschedulable
+	fakeK8sNodes.Items[0].Spec.Unschedulable = true
+	fakeK8sNodes.Items[1].Spec.Unschedulable = true
+
+	// Cordon nodes in which px is not part of quorum and is decommissioned, they should not be in input to filterNonOverlappingNodes API
+	// These nodes are not included in quorum calculation either
+	fakeK8sNodes.Items[5].Spec.Unschedulable = true
+	fakeK8sNodes.Items[6].Spec.Unschedulable = true
+
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[0])
+	require.NoError(t, err)
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[1])
+	require.NoError(t, err)
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[5])
+	require.NoError(t, err)
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[6])
+	require.NoError(t, err)
+
+	upgradeNodesResponse := &osdapi.SdkFilterNonOverlappingNodesResponse{
+		NodeIds: []string{"pxnode1", "pxnode2"},
+	}
+	filterNodesRequest := &osdapi.SdkFilterNonOverlappingNodesRequest{
+		InputNodes: []string{"pxnode1", "pxnode2"},
+	}
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), filterNodesRequest).Return(upgradeNodesResponse, nil).Times(1)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 6)
+	require.Equal(t, "px-node1", pdbList.Items[1].Name)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, "px-node2", pdbList.Items[2].Name)
+	require.Equal(t, 0, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, "px-node3", pdbList.Items[3].Name)
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
+	// Testcase : When FilterNonOverlappingNodes returns nodes but num(storagenodes)-quorum number of nodes are already upgrading/ ready for upgrade or down, don't do anything
+	// Here node1 is selected for upgrade and node2 has px down status
+	minAvailable := intstr.FromInt(1)
+	pdbList.Items[2].Spec.MinAvailable = &minAvailable
+	err = testutil.Update(k8sClient, &pdbList.Items[2])
+	require.NoError(t, err)
+
+	expectedNodeEnumerateResp.Nodes[1].Status = osdapi.Status_STATUS_OFFLINE
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		Times(1)
+
+	fakeK8sNodes.Items[2].Spec.Unschedulable = true
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[2])
+	require.NoError(t, err)
+	upgradeNodesResponse.NodeIds = []string{"pxnode3"}
+
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(upgradeNodesResponse, nil).Times(1)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
+	// Testcase : When user provides minAvailable annotation, use that instead of portworx quorum
+	for i := 1; i < 4; i++ {
+		pdbList.Items[i].Spec.MinAvailable = &minAvailable
+		err = testutil.Update(k8sClient, &pdbList.Items[i])
+		require.NoError(t, err)
+	}
+	expectedNodeEnumerateResp.Nodes[1].Status = osdapi.Status_STATUS_OK
+	upgradeNodesResponse.NodeIds = []string{"pxnode1", "pxnode2", "pxnode3", "pxnode4"}
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(upgradeNodesResponse, nil).Times(1)
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationStoragePodDisruptionBudget: "4",
+	}
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
+	// Testcase: When minAvailable is invalid, use portworx quorum
+	pdbList.Items[1].Spec.MinAvailable = &minAvailable
+	err = testutil.Update(k8sClient, &pdbList.Items[1])
+	require.NoError(t, err)
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "5"
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(upgradeNodesResponse, nil).Times(2)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Invalid minAvailable annotation value for storage pod disruption budget. Using default value: %d",
+			v1.EventTypeWarning, util.InvalidMinAvailable, 3),
+	)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, 0, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
+	// 2nd reconcile loop
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Empty(t, recorder.Events)
+
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, 0, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
+	// When node PDB is deleted and node is cordoned, consider it as upgrading node
+	// Here node 2 PDB is deleted but node is still cordoned, node 3 should not be selected for uupgrade
+	err = testutil.Delete(k8sClient, &pdbList.Items[2])
+	require.NoError(t, err)
+	upgradeNodesResponse.NodeIds = []string{"pxnode3"}
+	mockNodeServer.EXPECT().FilterNonOverlappingNodes(gomock.Any(), gomock.Any()).Return(upgradeNodesResponse, nil).Times(1)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, "px-node3", pdbList.Items[2].Name)
+	require.Equal(t, 1, pdbList.Items[2].Spec.MinAvailable.IntValue())
+
+}
+
+func TestUpdateNodePodDisruptionBudgetParallelDisabled(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockNodeServer := mock.NewMockOpenStorageNodeServer(mockCtrl)
+	sdkServerIP := "127.0.0.1"
+	sdkServerPort := 21883
+	mockSdk := mock.NewSdkServer(mock.SdkServers{
+		Node: mockNodeServer,
+	})
+	err := mockSdk.StartOnAddress(sdkServerIP, strconv.Itoa(sdkServerPort))
+	require.NoError(t, err)
+	defer mockSdk.Stop()
+
+	testutil.SetupEtcHosts(t, sdkServerIP, pxutil.PortworxServiceName+".kube-test")
+	defer testutil.RestoreEtcHosts(t)
+
+	expectedNodeEnumerateResp := &osdapi.SdkNodeEnumerateWithFiltersResponse{
+		Nodes: []*osdapi.StorageNode{
+			{SchedulerNodeName: "node1", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode1", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node2", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode2", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node3", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode3", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node4", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode4", Status: osdapi.Status_STATUS_OK},
+			{SchedulerNodeName: "node5", NodeLabels: map[string]string{pxutil.NodeLabelPortworxVersion: "3.1.2"}, Id: "pxnode5", Status: osdapi.Status_STATUS_OK},
+		},
+	}
+	mockNodeServer.EXPECT().
+		EnumerateWithFilters(gomock.Any(), gomock.Any()).
+		Return(expectedNodeEnumerateResp, nil).
+		AnyTimes()
+
+	cluster := &corev1.StorageCluster{
+
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:3.1.2",
+		},
+		Status: corev1.StorageClusterStatus{
+			Phase: string(corev1.ClusterStateRunning),
+		},
+	}
+	cluster.Annotations = map[string]string{
+		pxutil.AnnotationsDisableNonDisruptiveUpgrade: "true",
+	}
+
+	fakeK8sNodes := &v1.NodeList{Items: []v1.Node{
+		{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node3"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node4"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "node5"}},
+	},
+	}
+
+	k8sClient := testutil.FakeK8sClient(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pxutil.PortworxServiceName,
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: sdkServerIP,
+			Ports: []v1.ServicePort{
+				{
+					Name: pxutil.PortworxSDKPortName,
+					Port: int32(sdkServerPort),
+				},
+			},
+		},
+	}, fakeK8sNodes)
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	component.DeregisterAllComponents()
+	component.RegisterDisruptionBudgetComponent()
+
+	driver := portworx{}
+	recorder := record.NewFakeRecorder(10)
+	err = driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList := &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Len(t, pdbList.Items, 6)
+
+	fakeK8sNodes.Items[0].Spec.Unschedulable = true
+	fakeK8sNodes.Items[1].Spec.Unschedulable = true
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[0])
+	require.NoError(t, err)
+	err = testutil.Update(k8sClient, &fakeK8sNodes.Items[1])
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// When no minAvailable is given, upgrade only 1 by default
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Equal(t, "px-node1", pdbList.Items[1].Name)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, "px-node2", pdbList.Items[2].Name)
+	require.Equal(t, 1, pdbList.Items[2].Spec.MinAvailable.IntValue())
+
+	// When minAvailable value is valid, use that
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "3"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, 0, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
+	// When minAvailable value is invalid, upgrade only 1 at a time
+	minAvailable := intstr.FromInt(1)
+	pdbList.Items[1].Spec.MinAvailable = &minAvailable
+	err = testutil.Update(k8sClient, &pdbList.Items[1])
+	require.NoError(t, err)
+	pdbList.Items[2].Spec.MinAvailable = &minAvailable
+	err = testutil.Update(k8sClient, &pdbList.Items[2])
+	require.NoError(t, err)
+
+	cluster.Annotations[pxutil.AnnotationStoragePodDisruptionBudget] = "2"
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Contains(t, <-recorder.Events,
+		fmt.Sprintf("%v %v Invalid minAvailable annotation value for storage pod disruption budget. Using default value: %d",
+			v1.EventTypeWarning, util.InvalidMinAvailable, 4),
+	)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
+	// 2nd reconcile loop
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	pdbList = &policyv1.PodDisruptionBudgetList{}
+	err = testutil.List(k8sClient, pdbList)
+	require.NoError(t, err)
+	require.Empty(t, recorder.Events)
+	require.Equal(t, 0, pdbList.Items[1].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[2].Spec.MinAvailable.IntValue())
+	require.Equal(t, 1, pdbList.Items[3].Spec.MinAvailable.IntValue())
+
 }
 
 func TestSCC(t *testing.T) {
@@ -16302,6 +17301,99 @@ func TestTelemetrySecretDeletion(t *testing.T) {
 	require.Empty(t, secret.OwnerReferences)
 }
 
+func TestTelemetrySecretRefresh(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
+
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	recorder := record.NewFakeRecorder(10)
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), recorder)
+	require.NoError(t, err)
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Image: "portworx/oci-monitor:3.2.0",
+			Monitoring: &corev1.MonitoringSpec{
+				Telemetry: &corev1.TelemetrySpec{
+					Enabled: true,
+				},
+			},
+			DeleteStrategy: &corev1.StorageClusterDeleteStrategy{
+				Type: corev1.UninstallAndWipeStorageClusterStrategyType,
+			},
+		},
+		Status: corev1.StorageClusterStatus{
+			ClusterUID: "test-clusteruid",
+		},
+	}
+
+	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
+	require.NotEmpty(t, ownerRef)
+
+	err = k8sClient.Create(
+		context.TODO(),
+		&v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            component.TelemetryCertName,
+				Namespace:       cluster.Namespace,
+				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+			},
+			Data: map[string][]byte{
+				"cert": []byte(`-----BEGIN CERTIFICATE-----
+MIIFEzCCA3ugAwIBAgIDASXwMA0GCSqGSIb3DQEBCwUAMFkxCzAJBgNVBAYTAlVT
+MRkwFwYDVQQKDBBQdXJlIFN0b3JhZ2UgSW5jMQ4wDAYDVQQLDAVQdXJlMTEfMB0G
+A1UEAwwWUHVyZTEgU3Vib3JkaW5hdGUgQ0EgNDAeFw0yNDA1MTQwNjExNDBaFw0y
+NTA1MTQwNjExNDBaMIHoMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5p
+YTEWMBQGA1UEBxMNTW91bnRhaW4gVmlldzEUMBIGA1UEChMLUHVyZVN0b3JhZ2Ux
+EzARBgNVBAsTClB1cmUgSW5mcmExEDAOBgNVBAMTB3Vua25vd24xLTArBgNVBAUT
+JDMxY2RmNzc0LTk0YTktNDE4MS04MGNkLTIxNWJkZDRmZWI1MzEtMCsGA1UEQRYk
+Yzc1ZTJjYmYtMTc2NS00MDY4LTkxM2QtNzYxODNlNjhmOGNjMREwDwYDVQQEFghw
+b3J0d29yeDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAONBSa5q3wyl
+6qVWZO7KCWZASUDPkFv8y31vtKAoS1jhAe4mDtDWyDxXrBMK9ngdKMpWfrBaoZZQ
+Z7FtOGsaVzansSXZAReYiZj1OFZKZkEEhhulNxHPOV3zKJKQxNOrdGfi0i8ZhlDG
+9YbYIJDeeiJE44UaYn/K+Vs/m+x5K95dFqtXdvIuhL00dVT1DR56pcskprAJ8R+i
+ILTYKkkwn+noeajESpIzdUHdtDbWF/+kw5j+e+CUWxtsKw1xfTz7fj+6Vufemrhw
+MV/DP5fbjS1RBHBhCN3LDFmwPSPJAniDECOYRsiR5eFkIHd42wQOu/EceFMfwjzA
+mtOSQzvQdC0CAwEAAaOB0zCB0DAMBgNVHRMBAf8EAjAAMB8GA1UdIwQYMBaAFA5o
+8M8qUnCkQY/IRLW9P0hXo2+HMFsGCCsGAQUFBwEBBE8wTTBLBggrBgEFBQcwAYY/
+aHR0cDovL3N1Yi1jYS0wNC5zZWMuY2xvdWQtc3VwcG9ydC5wdXJlc3RvcmFnZS5j
+b206ODA4MC9jYS9vY3NwMA4GA1UdDwEB/wQEAwIEsDATBgNVHSUEDDAKBggrBgEF
+BQcDAjAdBgNVHQ4EFgQUvcvcmGzxsDP2oLRIl72EsV0P12IwDQYJKoZIhvcNAQEL
+BQADggGBAJRfBb4D1ojq8vj006xKpp/eLMyAxMRMuYwzrooDa+U4kdvPlk0ibA3i
+zChg117eRV19mjzTHaVPovwlzfhCqZFYyRR+c0iOFu/DUBBOamMZLx2rcZsnA9XC
+QN/9TIyDnXyup9dG6WAu1z5RW6VPifek1DUjdngj9TiyJQOchwLWD/iBG86Ap2gJ
++zt/G4Nwq5VZOp6qX7zfuW+hY9t8FVAz0X9+ohQHgN2eCxvdajgly4+TpVxybubQ
+tooUqkPNRKZ5P0IT9Do0E1z9ZlAQqGTC5abC9RNwAXf/KpIFpardKC/p5BwOZI2P
+aqDgX/Bcx/XoiRHBtDv450/GnAdgD+1yxFCjVkt3vnJybSgdbYV5f2+Owowc3aUw
+agq/IJO6rOF10LX7cDqVKfoQqbpU80v4Uk1Ls6FntKkzUj6njnpoPWdoFqxJmoDG
+zvz7BX4rQqGCD6ElMHyQM7rdq77/ywgSiRJlFf7eQsWNKTpHueulgqnqdW55pNaW
+JhBhJjN84g==
+-----END CERTIFICATE-----`),
+			},
+		},
+		&client.CreateOptions{},
+	)
+	require.NoError(t, err)
+
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+	require.Len(t, recorder.Events, 0)
+
+	// male sure invalid secret got deleted
+	secret := v1.Secret{}
+	err = testutil.Get(k8sClient, &secret, component.TelemetryCertName, cluster.Namespace)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
 func TestTelemetryCCMGoRestartPhonehome(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
@@ -17443,6 +18535,8 @@ func validateTokenLifetime(t *testing.T, cluster *corev1.StorageCluster, jwtClai
 	iatTime := time.Unix(int64(iatFloat64), 0)
 	expTime := time.Unix(int64(expFloat64), 0)
 	tokenLifetime := expTime.Sub(iatTime)
+	// subtract 10 minutes from tokenLifetime to adjust for the iat time creation for ntp sync
+	tokenLifetime = tokenLifetime - 10*time.Minute
 	duration, err := pxutil.ParseExtendedDuration(*cluster.Spec.Security.Auth.SelfSigned.TokenLifetime)
 	require.NoError(t, err)
 	require.Equal(t, tokenLifetime, duration)

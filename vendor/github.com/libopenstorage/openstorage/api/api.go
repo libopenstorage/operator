@@ -10,7 +10,6 @@ import (
 
 	"github.com/golang/protobuf/ptypes"
 	"github.com/mohae/deepcopy"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 
 	"github.com/libopenstorage/openstorage/pkg/auth"
 )
@@ -65,17 +64,17 @@ const (
 	SpecExportOptions               = "export_options"
 	SpecExportOptionsEmpty          = "empty_export_options"
 	SpecMountOptions                = "mount_options"
+	SpecCSIMountOptions             = "csi_mount_options"
+	SpecSharedv4MountOptions        = "sharedv4_mount_options"
 	// spec key cannot change due to parity with existing PSO storageclasses
-	SpecFsFormatOptions      = "createoptions"
-	SpecCSIMountOptions      = "csi_mount_options"
-	SpecSharedv4MountOptions = "sharedv4_mount_options"
-	SpecProxyProtocolS3      = "s3"
-	SpecProxyProtocolPXD     = "pxd"
-	SpecProxyProtocolNFS     = "nfs"
-	SpecProxyEndpoint        = "proxy_endpoint"
-	SpecProxyNFSSubPath      = "proxy_nfs_subpath"
-	SpecProxyNFSExportPath   = "proxy_nfs_exportpath"
-	SpecProxyS3Bucket        = "proxy_s3_bucket"
+	SpecFsFormatOptions    = "createoptions"
+	SpecProxyProtocolS3    = "s3"
+	SpecProxyProtocolPXD   = "pxd"
+	SpecProxyProtocolNFS   = "nfs"
+	SpecProxyEndpoint      = "proxy_endpoint"
+	SpecProxyNFSSubPath    = "proxy_nfs_subpath"
+	SpecProxyNFSExportPath = "proxy_nfs_exportpath"
+	SpecProxyS3Bucket      = "proxy_s3_bucket"
 	// SpecBestEffortLocationProvisioning default is false. If set provisioning request will succeed
 	// even if specified data location parameters could not be satisfied.
 	SpecBestEffortLocationProvisioning = "best_effort_location_provisioning"
@@ -94,6 +93,7 @@ const (
 	SpecScanPolicyTrigger                   = "scan_policy_trigger"
 	SpecScanPolicyAction                    = "scan_policy_action"
 	SpecProxyWrite                          = "proxy_write"
+	SpecFastpath                            = "fastpath"
 	SpecSharedv4ServiceType                 = "sharedv4_svc_type"
 	SpecSharedv4ServiceName                 = "sharedv4_svc_name"
 	SpecSharedv4FailoverStrategy            = "sharedv4_failover_strategy"
@@ -101,19 +101,18 @@ const (
 	SpecSharedv4FailoverStrategyAggressive  = "aggressive"
 	SpecSharedv4FailoverStrategyUnspecified = ""
 	SpecSharedv4ExternalAccess              = "sharedv4_external_access"
-	SpecFastpath                            = "fastpath"
 	SpecAutoFstrim                          = "auto_fstrim"
 	SpecBackendVolName                      = "pure_vol_name"
 	SpecBackendType                         = "backend"
 	SpecBackendPureBlock                    = "pure_block"
 	SpecBackendPureFile                     = "pure_file"
 	SpecPureFileExportRules                 = "pure_export_rules"
+	SpecPureNFSEnpoint                      = "pure_nfs_endpoint"
+	SpecPurePodName                         = "pure_fa_pod_name"
 	SpecIoThrottleRdIOPS                    = "io_throttle_rd_iops"
 	SpecIoThrottleWrIOPS                    = "io_throttle_wr_iops"
 	SpecIoThrottleRdBW                      = "io_throttle_rd_bw"
 	SpecIoThrottleWrBW                      = "io_throttle_wr_bw"
-	SpecReadahead                           = "readahead"
-	SpecWinshare                            = "winshare"
 )
 
 // OptionKey specifies a set of recognized query params.
@@ -369,7 +368,7 @@ type CloudBackupCreateRequest struct {
 	// Labels are list of key value pairs to tag the cloud backup. These labels
 	// are stored in the metadata associated with the backup.
 	Labels map[string]string
-	// FullBackupFrequency indicates number of incremental backup after which
+	// FullBackupFrequency indicates number of incremental backup after whcih
 	// a fullbackup must be created. This is to override the default value for
 	// manual/user triggerred backups and not applicable for scheduled backups.
 	// Value of 0 retains the default behavior.
@@ -455,8 +454,8 @@ type CloudBackupGenericRequest struct {
 	// MetadataFilter indicates backups whose metadata has these kv pairs
 	MetadataFilter map[string]string
 	// CloudBackupID must be specified if one needs to enumerate known single
-	// backup (format is clusteruuidORBucketName/srcVolId-SnapId(-incr). If t\
-	// this is specified, everything else n the command is ignored
+	// backup (format is clusteruuidORBucketName/srcVolId-SnapId(-incr). If
+	// this is specified, everything else in the command is ignored
 	CloudBackupID string
 	// MissingSrcVol set to true enumerates cloudbackups for which srcVol is not
 	// present in the cluster. Either the source volume is deleted or the
@@ -483,7 +482,7 @@ type CloudBackupInfo struct {
 	Status string
 	// ClusterType indicates if the cloudbackup was uploaded by this
 	// cluster. Could be unknown with older version cloudbackups
-	ClusterType SdkCloudBackupClusterType
+	ClusterType SdkCloudBackupClusterType_Value
 	// Namespace to which this cloudbackup belongs to
 	Namespace string
 }
@@ -672,7 +671,7 @@ type CloudBackupScheduleInfo struct {
 	SrcVolumeID string
 	// CredentialUUID is the cloud credential used with this schedule
 	CredentialUUID string
-	// Schedule is the frequencies of backup
+	// Schedule is the frequence of backup
 	Schedule string
 	// MaxBackups are the maximum number of backups retained
 	// in cloud.Older backups are deleted
@@ -1495,24 +1494,6 @@ func (s *ProxySpec) GetPureFullVolumeName() string {
 
 	return ""
 }
-
-// GetAllEnumInfo returns an EnumInfo for every proto enum
-func GetAllEnumInfo() []protoimpl.EnumInfo {
-	return file_api_api_proto_enumTypes
-}
-
-// Constants defined for proxy mounts
-const (
-	// OptProxyCaller is an option to pass NodeID of the client requesting a sharedv4
-	// mount from the server
-	OptProxyCaller = "caller"
-	// OptProxyCallerIP is an option to pass NodeIP of the client requesting a sharedv4
-	// mount from the server
-	OptProxyCallerIP = "caller_ip"
-	// OptMountID is an option to pass mount path of the client requesting a sharedv4
-	// mount from the server
-	OptMountID = "mountID"
-)
 
 const (
 	// SharedVolExportPrefix is the export path where shared volumes are mounted

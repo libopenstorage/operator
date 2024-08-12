@@ -78,6 +78,9 @@ type ClusterPluginInterface interface {
 	GetStorageNodes(cluster *corev1.StorageCluster) ([]*storageapi.StorageNode, error)
 	// GetKVDBMembers returns a map of Nodes with kvdb and if its healthy or not
 	GetKVDBMembers(cluster *corev1.StorageCluster) (map[string]bool, error)
+	// GetNodesSelectedForUpgrade returns a list of pods that can be upgraded without losing volume quorum
+	// The function calls filterNonOverlappingNodes API for portworx versions greater than or equal to  3.1.2
+	GetNodesSelectedForUpgrade(cluster *corev1.StorageCluster, nodesToBeUpgraded []string, unavailableNodes []string) ([]string, error)
 }
 
 var (

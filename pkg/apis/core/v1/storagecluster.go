@@ -112,10 +112,12 @@ type StorageClusterSpec struct {
 	// Nodes node level configurations that will override the ones at cluster
 	// level. These configurations can be grouped based on label selectors.
 	Nodes []NodeSpec `json:"nodes,omitempty"`
-	// Resource requirements for portworx container in a storage cluster pod, e.g. CPU and memory requests or limits
+	// Resource requirements for portworx container in  a storage cluster pod, e.g. CPU and memory requests or limits
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 	// CSI configurations for setting up CSI
 	CSI *CSISpec `json:"csi,omitempty"`
+	// Priority Class Name to be passed to Podspec of px pods for it to be scheduled accordingly
+	PriorityClassName string `json:"priorityClassName,omitempty"`
 }
 
 // VolumeSpec describes a volume that needs to be mounted inside a container
@@ -273,6 +275,17 @@ type RollingUpdateStorageCluster struct {
 	// Defaults to 0 (pod will be considered available as soon as it is ready)
 	// +optional
 	MinReadySeconds int32 `json:"minReadySeconds,omitempty"`
+
+	// The default behavior is non-disruptive upgrades. This setting disables the default
+	// non-disruptive upgrades and reverts to the previous behavior of upgrading nodes in
+	// parallel without worrying about disruption.
+	Disruption *Disruption `json:"disruption,omitempty"`
+}
+
+// Disruption contains configuration for disruption
+type Disruption struct {
+	// Flag indicates whether updates are non-disruptive or disruptive.
+	Allow *bool `json:"allow,omitempty"`
 }
 
 // StorageClusterDeleteStrategyType is enum for storage cluster delete strategies
