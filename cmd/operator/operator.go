@@ -152,7 +152,7 @@ func run(c *cli.Context) {
 		}()
 	}
 
-    diagControllerEnabled := c.Bool(flagEnableDiagController)
+	diagControllerEnabled := c.Bool(flagEnableDiagController)
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -292,7 +292,7 @@ func run(c *cli.Context) {
 			log.Fatalf("Error starting watch on portworx diag controller: %v", err)
 		}
 	}
-	
+
 	if c.BoolT(flagMigration) {
 		log.Info("Migration is enabled")
 		migrationHandler := migration.New(&storageClusterController)
