@@ -808,6 +808,30 @@ func (p *portworx) GetKVDBMembers(cluster *corev1.StorageCluster) (map[string]bo
 	return kvdbMap, nil
 }
 
+func (p *portworx) GetNodesSelectedForUpgrade(cluster *corev1.StorageCluster, nodesToBeUpgraded []string, unavailableNodes []string) ([]string, error) {
+	var err error
+	p.sdkConn, err = pxutil.GetPortworxConn(p.sdkConn, p.k8sClient, cluster.Namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Portworx connection: %v", err)
+	}
+	nodeClient := storageapi.NewOpenStorageNodeClient(p.sdkConn)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup context with token: %v", err)
+	}
+	nodeFilterResponse, err := nodeClient.FilterNonOverlappingNodes(
+		ctx,
+		&storageapi.SdkFilterNonOverlappingNodesRequest{
+			InputNodes: nodesToBeUpgraded,
+			DownNodes:  unavailableNodes,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get non overlapping nodes: %v", err)
+	}
+	return nodeFilterResponse.NodeIds, nil
+}
+
 func (p *portworx) DeleteStorage(
 	cluster *corev1.StorageCluster,
 ) (*corev1.ClusterCondition, error) {

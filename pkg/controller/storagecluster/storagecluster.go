@@ -241,7 +241,6 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-
 	if err := c.validate(cluster); err != nil {
 		k8s.WarningEvent(c.recorder, cluster, util.FailedValidationReason, err.Error())
 		if updateErr := util.UpdateLiveStorageClusterLifecycle(c.client, cluster, corev1.ClusterStateDegraded); updateErr != nil {
@@ -1433,6 +1432,7 @@ func (c *Controller) CreatePodTemplate(
 	podSpec.NodeName = node.Name
 	labels := c.StorageClusterSelectorLabels(cluster)
 	labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
+	labels[constants.OperatorLabelNodeNameKey] = node.Name
 	newTemplate := v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:   cluster.Namespace,
