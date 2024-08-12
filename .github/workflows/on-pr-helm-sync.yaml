@@ -12,12 +12,14 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
+        with:
+            fetch-depth: 2
 
       - name: Check if StorageCluster CRD has changes
         id: crd_check
         run: |
           echo "Checking CRD changes..."
-          if git diff --exit-code HEAD^ HEAD -- deploy/crds/; then
+          if git diff --exit-code HEAD^ HEAD -- deploy/crds/core_v1_storagecluster_crd.yaml; then
             echo "crd_changed=false" >> $GITHUB_ENV
           else
             echo "crd_changed=true" >> $GITHUB_ENV
