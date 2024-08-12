@@ -2,9 +2,6 @@ syntax = "proto3";
 
 package operator.pxresourcegateway;
 
-import "google/api/annotations.proto";
-import "google/protobuf/empty.proto";
-
 option go_package = "/;pxresourcegateway";
 option java_multiple_files = true;
 option java_package = "com.operator.pxresourcegateway";
@@ -13,35 +10,17 @@ option java_outer_classname = "PxResourceGatewayProto";
 // SemaphoreService provides a counting semaphore to limit access to resources
 // and a priority queue to distinguish between different types of clients/requests
 service SemaphoreService {
-  // (-- api-linter: core::0131::synonyms=disabled
-  //     aip.dev/not-precedent: We need to do this because this service
-  //     has a semaphore implementation which needs to define AcquireLock interface. --)
   // AcquireLock acquires a semaphore lock or reserves a place in the queue for the resource
   rpc AcquireLock(AcquireLockRequest)
-    returns (AcquireLockResponse) {
-    option (google.api.http) = {
-        post : "/v1/pxe/pxresourcegateway:acquireLock"
-        body : "*"
-    };
-  }
+    returns (AcquireLockResponse) {}
 
   // ReleaseLock releases the semaphore lock on the resource
   rpc ReleaseLock (ReleaseLockRequest)
-  returns (google.protobuf.Empty) {
-    option (google.api.http) = {
-        post : "/v1/pxe/pxresourcegateway:releaseLock"
-        body : "*"
-    };
-  }
+  returns (ReleaseLockResponse) {}
 
   // KeepAlive sends a heartbeat to the semaphore service to keep the lock alive
   rpc KeepAlive (KeepAliveRequest)
-  returns (google.protobuf.Empty) {
-    option (google.api.http) = {
-        post : "/v1/pxe/pxresourcegateway:keepAlive"
-        body : "*"
-    };
-  }
+  returns (KeepAliveResponse) {}
 }
 
 // SemaphoreAccessPriority specifies the priority of the client's access to the resource
@@ -102,4 +81,13 @@ message KeepAliveRequest {
   string resource_id = 1;
   // Client ID to keep the lock alive for
   string client_id = 2;
+}
+
+// ReleaseLockResponse is the response to acquire a semaphore lock
+message ReleaseLockResponse {}
+
+// KeepAliveLockResponse is the response to acquire a semaphore lock
+message KeepAliveResponse {
+  // Status of the client's access to the resource
+  SemaphoreAccessStatus.Type access_status = 1;
 }

@@ -1,7 +1,7 @@
 # This Dockerfile is used to build base image for Px Resource Gateway proto files
 # The image is based on osd-proto image provided by OpenStorage
 
-FROM quay.io/openstorage/osd-proto
+FROM quay.io/openstorage/osd-proto-clients
 
 LABEL author="dgoel"
 

@@ -45,21 +45,7 @@ endif
 		-I $(PROTOS_PATH)/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
 		--go_out=plugins=grpc:. \
 		$(PROTOSRC_PATH)/pxresourcegateway.proto
-	$(PROTOC) -I $(PROTOSRC_PATH) \
-		-I /usr/local/include \
-		-I $(PROTOS_PATH)/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
-		--grpc-gateway_out=logtostderr=true:. \
-		$(PROTOSRC_PATH)/pxresourcegateway.proto
-	$(PROTOC) -I $(PROTOSRC_PATH) \
-		-I /usr/local/include \
-		-I $(PROTOS_PATH)/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
-		--swagger_out=logtostderr=true:$(PROTOSRC_PATH) \
-		$(PROTOSRC_PATH)/pxresourcegateway.proto
-	@echo ">>> Upgrading swagger 2.0 to openapi 3.0"
-	mv pxresourcegateway.swagger.json 20pxresourcegateway.swagger.json
-	swagger2openapi 20pxresourcegateway.swagger.json -o pxresourcegateway.swagger.json
-	rm -f 20pxresourcegateway.swagger.json
 
 clean:
-	rm -f pxresourcegateway.pb.go pxresourcegateway.pb.gw.go pxresourcegateway.swagger.json
+	rm -f pxresourcegateway.pb.go
 	rm -rf proto/

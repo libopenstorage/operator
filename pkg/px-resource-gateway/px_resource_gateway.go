@@ -5,7 +5,6 @@ import (
 
 	pb "github.com/libopenstorage/operator/proto"
 	"github.com/portworx/sched-ops/k8s/core"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -13,8 +12,7 @@ import (
 
 type semaphoreServer struct {
 	k8s         core.Ops
-	semaphorePQ map[string]SemaphorePriorityQueue
-	pb.UnimplementedSemaphoreServiceServer
+	semaphorePQ SemaphorePriorityQueue
 }
 
 // TODO implement semaphore map for different resource ids
@@ -49,33 +47,33 @@ func (s *semaphoreServer) AcquireLock(ctx context.Context, req *pb.AcquireLockRe
 	return response, nil
 }
 
-func (s *semaphoreServer) ReleaseLock(ctx context.Context, req *pb.ReleaseLockRequest) (*emptypb.Empty, error) {
+func (s *semaphoreServer) ReleaseLock(ctx context.Context, req *pb.ReleaseLockRequest) (*pb.ReleaseLockResponse, error) {
 	// validate request
 	if req.GetResourceId() == "" {
-		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "Resource ID is required")
+		return &pb.ReleaseLockResponse{}, status.Error(codes.InvalidArgument, "Resource ID is required")
 	}
 	if req.GetClientId() == "" {
-		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "Client ID is required")
+		return &pb.ReleaseLockResponse{}, status.Error(codes.InvalidArgument, "Client ID is required")
 	}
 
 	// process request to release lock
 	err := s.semaphorePQ.ReleaseLock(req.ClientId)
 	if err != nil {
-		return &emptypb.Empty{}, status.Error(codes.Internal, err.Error())
+		return &pb.ReleaseLockResponse{}, status.Error(codes.Internal, err.Error())
 	}
-	return &emptypb.Empty{}, nil
+	return &pb.ReleaseLockResponse{}, nil
 }
 
-func (s *semaphoreServer) KeepAlive(ctx context.Context, req *pb.KeepAliveRequest) (*emptypb.Empty, error) {
+func (s *semaphoreServer) KeepAlive(ctx context.Context, req *pb.KeepAliveRequest) (*pb.KeepAliveResponse, error) {
 	// validate request
 	if req.GetResourceId() == "" {
-		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "Resource ID is required")
+		return &pb.KeepAliveResponse{}, status.Error(codes.InvalidArgument, "Resource ID is required")
 	}
 	if req.GetClientId() == "" {
-		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "Client ID is required")
+		return &pb.KeepAliveResponse{}, status.Error(codes.InvalidArgument, "Client ID is required")
 	}
 
 	// process request to keep alive
 	s.semaphorePQ.KeepAlive(req.ClientId)
-	return &emptypb.Empty{}, nil
+	return &pb.KeepAliveResponse{}, nil
 }
