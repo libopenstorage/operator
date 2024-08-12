@@ -4800,6 +4800,7 @@ func TestUpdateStorageClusterBasedOnStorageNodeStatuses(t *testing.T) {
 	storageNodes = append(storageNodes, createStorageNode("k8s-node-2", false, "3.1.2"))
 	storageNodes = append(storageNodes, createStorageNode("not-k8s-node", false, "3.1.2"))
 
+	nodeResponse := []string{"k8s-node-0"}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
@@ -4811,6 +4812,7 @@ func TestUpdateStorageClusterBasedOnStorageNodeStatuses(t *testing.T) {
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	driver.EXPECT().GetKVDBMembers(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetNodesSelectedForUpgrade(gomock.Any(), gomock.Any(), gomock.Any()).Return(nodeResponse, nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
 	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
@@ -7823,17 +7825,20 @@ func TestUpdateCloudStorageClusterNodeSpec(t *testing.T) {
 		nodeInfoMap:       maps.MakeSyncMap[string, *k8s.NodeInfo](),
 		kubevirt:          testutil.NoopKubevirtManager(mockCtrl),
 	}
-
+	var storageNodes []*storageapi.StorageNode
+	storageNodes = append(storageNodes, createStorageNode("k8s-node", true, "3.1.2"))
+	nodeResponse := []string{"k8s-node"}
 	driver.EXPECT().Validate(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().SetDefaultsOnStorageCluster(gomock.Any()).AnyTimes()
 	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
 	driver.EXPECT().String().Return(driverName).AnyTimes()
 	driver.EXPECT().PreInstall(gomock.Any()).Return(nil).AnyTimes()
-	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(nil, nil).AnyTimes()
+	driver.EXPECT().GetStorageNodes(gomock.Any()).Return(storageNodes, nil).AnyTimes()
 	driver.EXPECT().UpdateDriver(gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().GetStoragePodSpec(gomock.Any(), gomock.Any()).Return(v1.PodSpec{}, nil).AnyTimes()
 	driver.EXPECT().UpdateStorageClusterStatus(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	driver.EXPECT().IsPodUpdated(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	driver.EXPECT().GetNodesSelectedForUpgrade(gomock.Any(), gomock.Any(), gomock.Any()).Return(nodeResponse, nil).AnyTimes()
 
 	// This will create a revision which we will map to our pre-created pods
 	rev1Hash, err := createRevision(k8sClient, cluster, driverName)
