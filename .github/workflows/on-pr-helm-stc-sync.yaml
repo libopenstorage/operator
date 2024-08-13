@@ -1,4 +1,4 @@
-name: Validate operator and Helm StorageCluster Sync
+name: Validate operator and helm storageCluster Sync
 
 on:
   pull_request:
@@ -27,6 +27,7 @@ jobs:
 
       - name: Validate PR Description for Helm Link
         id: validate_pr_description
+        if: env.crd_changed == 'true'
         run: |
           echo "Extracting PR body..."
           PR_BODY=$(jq -r '.pull_request.body' "$GITHUB_EVENT_PATH")
@@ -37,7 +38,9 @@ jobs:
           echo "HELM_PR_LINK: '$HELM_PR_LINK'"
 
           if [[ -z "$HELM_PR_LINK" ]]; then
+            echo "Changes detected in storageCluster CRD file"
             echo "Error: HELM_PR_LINK is missing in the description."
+            echo "Please make similar changes in the Helm StorageCluster CRD and add the PR link in the description using the format: HELM_PR_LINK=<helm-stc-changes-pr>"
             exit 1
           else
             echo "helm_pr_link=true" >> $GITHUB_ENV
@@ -78,7 +81,7 @@ jobs:
           repository: portworx/helm 
           ref: ${{ env.helm_branch }}
 
-      - name: Verify Helm StorageCluster Changes
+      - name: Verify Helm StorageCluster CRD Changes
         if: env.crd_changed == 'true' && env.helm_pr_link == 'true'
         run: |
           echo "Checking Helm template changes..."
