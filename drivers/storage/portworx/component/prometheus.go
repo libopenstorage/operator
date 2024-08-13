@@ -269,6 +269,7 @@ func (c *prometheus) createOperatorClusterRole() error {
 						"alertmanagers",
 						"alertmanagers/finalizers",
 						"alertmanagerconfigs",
+						"alertmanagers/status",
 						"prometheuses",
 						"prometheuses/status",
 						"prometheuses/finalizers",
