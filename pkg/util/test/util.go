@@ -26,6 +26,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/operator/pkg/apis"
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	appops "github.com/portworx/sched-ops/k8s/apps"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -33,7 +34,6 @@ import (
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	prometheusops "github.com/portworx/sched-ops/k8s/prometheus"
 	rbacops "github.com/portworx/sched-ops/k8s/rbac"
-	"github.com/libopenstorage/operator/pkg/apis"
 	"github.com/portworx/sched-ops/task"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
