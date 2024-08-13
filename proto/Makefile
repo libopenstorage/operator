@@ -22,10 +22,12 @@ endif
 
 PX_RESOURCE_GATEWAY_PROTO_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_PX_RESOURCE_GATEWAY_PROTO_IMG):$(DOCKER_HUB_PX_RESOURCE_GATEWAY_PROTO_TAG)
 
-px-resource-gateway-proto-build-docker-proto:
+# builds the container to compile proto files
+build-docker:
 	docker build -t $(PX_RESOURCE_GATEWAY_PROTO_IMG) .
 
-px-resource-gateway-docker-proto:
+# builds the proto target inside the build container
+docker-proto:
 	docker run \
 		--privileged --rm -it \
 		-v $(shell pwd):/go/src/github.com/libopenstorage/operator/proto \
@@ -33,9 +35,10 @@ px-resource-gateway-docker-proto:
 		-e "DOCKER_PROTO=yes" \
 		-e "PATH=/bin:/usr/bin:/usr/local/bin:/go/bin:/usr/local/go/bin" \
 		$(PX_RESOURCE_GATEWAY_PROTO_IMG) \
-		make px-resource-gateway-proto
+		make proto
 
-px-resource-gateway-proto: $(GOPATH)/bin/protoc-gen-go $(GOPATH)/bin/protoc-gen-grpc-gateway $(GOPATH)/bin/protoc-gen-swagger
+# compiles the proto files - should be run inside the build container
+proto: $(GOPATH)/bin/protoc-gen-go $(GOPATH)/bin/protoc-gen-grpc-gateway $(GOPATH)/bin/protoc-gen-swagger
 ifndef DOCKER_PROTO
 	$(error Do not run directly. Run 'make docker-proto' instead.)
 endif
@@ -44,8 +47,7 @@ endif
 		-I /usr/local/include \
 		-I $(PROTOS_PATH)/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
 		--go_out=plugins=grpc:. \
-		$(PROTOSRC_PATH)/pxresourcegateway.proto
+		$(PROTOSRC_PATH)/px_resource_gateway.proto
 
 clean:
-	rm -f pxresourcegateway.pb.go
-	rm -rf proto/
+	rm -f px_resource_gateway.pb.go

@@ -15,6 +15,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 const (
@@ -23,9 +25,13 @@ const (
 	// PxResourceGatewayServerName is the service name for px-resource-gateway
 	PxResourceGatewayServerName = PxResourceGatewayString
 	// PxResourceGatewayServerHost is the host for px-resource-gateway
-	PxResourceGatewayServerHost = "0.0.0.0"
+	PxResourceGatewayServerHostEnv = "PX_RESOURCE_GATEWAY_HOST"
+	// PxResourceGatewayServerHostDefault is the default host for px-resource-gateway
+	PxResourceGatewayServerHostDefault = "127.0.0.1"
 	// PxResourceGatewayServerPortEnv is the environment variable for px-resource-gateway service port
 	PxResourceGatewayServerPortEnv = "PX_RESOURCE_GATEWAY_PORT"
+	// PxResourceGatewayServerPortDefault is the default port for px-resource-gateway service
+	PxResourceGatewayServerPortDefault = "50051"
 	// PxResourceGatewayServerSocket is the socket for px-resource-gateway
 	PxResourceGatewayServerSocket = "/tmp/px-resource-gate.sock"
 )
@@ -62,21 +68,32 @@ func run(c *cli.Context) {
 	}
 	logrus.Debugf("Running on k8s version: %s", version.String())
 
+	pxResourceGatewayServerHost := os.Getenv(PxResourceGatewayServerHostEnv)
+	if pxResourceGatewayServerHost == "" {
+		pxResourceGatewayServerHost = PxResourceGatewayServerHostDefault
+	}
 	pxResourceGatewayServerPort := os.Getenv(PxResourceGatewayServerPortEnv)
+	if pxResourceGatewayServerPort == "" {
+		pxResourceGatewayServerPort = PxResourceGatewayServerPortDefault
+	}
 
 	// TODO: add security
 	pxResourceGatewayServerConfig := &grpcFramework.ServerConfig{
 		Name:         PxResourceGatewayServerName,
-		Address:      fmt.Sprintf("%s:%s", PxResourceGatewayServerHost, pxResourceGatewayServerPort),
+		Address:      fmt.Sprintf("%s:%s", pxResourceGatewayServerHost, pxResourceGatewayServerPort),
 		Socket:       PxResourceGatewayServerSocket,
 		AuditOutput:  os.Stdout,
 		AccessOutput: os.Stdout,
 	}
 
 	semaphoreServer := pxResourceGateway.NewSemaphoreServer()
+	healthcheckServer := health.NewServer()
 	pxResourceGatewayServerConfig.
 		RegisterGrpcServers(func(gs *grpc.Server) {
 			pb.RegisterSemaphoreServiceServer(gs, semaphoreServer)
+		}).
+		RegisterGrpcServers(func(gs *grpc.Server) {
+			healthpb.RegisterHealthServer(gs, healthcheckServer)
 		}).
 		WithDefaultGenericRoleManager()
 
@@ -89,6 +106,7 @@ func run(c *cli.Context) {
 	// Setup a signal handler
 	signal_handler := util.NewSigIntManager(func() {
 		pxResourceGatewayServer.Stop()
+		healthcheckServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
 		os.Remove(PxResourceGatewayServerSocket)
 		os.Exit(0)
 	})
@@ -99,6 +117,7 @@ func run(c *cli.Context) {
 	}
 
 	// start server
+	healthcheckServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 	err = pxResourceGatewayServer.Start()
 	if err != nil {
 		fmt.Printf("Unable to start server: %v", err)
