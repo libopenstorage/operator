@@ -31,14 +31,13 @@ jobs:
         run: |
           echo "Extracting PR body..."
           PR_BODY=$(jq -r '.pull_request.body' "$GITHUB_EVENT_PATH")
-          echo "PR_BODY: $PR_BODY"
+          echo "PR_BODY: '$PR_BODY'"
           
           # Extract the HELM_PR_LINK value
           HELM_PR_LINK=$(echo "$PR_BODY" | grep -oP 'HELM_PR_LINK[[:space:]]*=[[:space:]]*.*' | awk -F '=' '{print $2}' | xargs)
-          IS_CONFIGURABLE = $(echo "$PR_BODY" | grep -oP 'IS_USER_CONFIGURABLE_FIELD_ADDED[[:space:]]*=[[:space:]]*.*' | awk -F '=' '{print $2}' | xargs)
-          echo "HELM_PR_LINK: '$HELM_PR_LINK'"
-          echo "IS_USER_CONFIGURABLE_FIELD_ADDED": '$IS_CONFIGURABLE'
-
+          IS_CONFIGURABLE=$(echo "$PR_BODY" | grep -oP 'IS_USER_CONFIGURABLE_FIELD_ADDED[[:space:]]*=[[:space:]]*.*' | awk -F '=' '{print $2}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | xargs)
+          
+          # Check if HELM_PR_LINK is missing
           if [[ -z "$HELM_PR_LINK" ]]; then
             echo "Changes detected in storageCluster CRD file"
             echo "Error: HELM_PR_LINK is missing in the description."
@@ -48,14 +47,16 @@ jobs:
             echo "helm_pr_link=true" >> $GITHUB_ENV
             echo "helm_pr_link_url=$HELM_PR_LINK" >> $GITHUB_ENV
           fi
-
-          if [[ "$IS_CONFIGURABLE" == "YES" ]]; then
+          
+          # Validate  value
+          if [[ "$IS_CONFIGURABLE" == 'YES' ]]; then
             echo "is_configurable=true" >> $GITHUB_ENV
-          elif [[ "$IS_CONFIGURABLE" == "NO" ]]; then
+          elif [[ "$IS_CONFIGURABLE" == 'NO' ]]; then
             echo "is_configurable=false" >> $GITHUB_ENV
           else
-            echo "Error: Please specify IS_USER_CONFIGURABLE_FIELD_ADDED as either YES or NO."
-            echo "If you are adding a new field in the storageCluster CRD that is configurable or editable by the user, it should be added in the helm storageCluster template and values.yaml."
+            echo "Changes detected in storageCluster CRD file"
+            echo "Error: Please specify IS_USER_CONFIGURABLE_FIELD_ADDED as either YES or NO in PR description."
+            echo "If you are adding a new field in the storageCluster CRD that is configurable or editable by the user, it should be added in the Helm StorageCluster template and values.yaml."
             exit 1
           fi
 
@@ -108,7 +109,7 @@ jobs:
         if: env.crd_changed == 'true' && env.helm_pr_link == 'true' && env.is_configurable== 'true'
         run: |
           
-          echo "Checking Helm storagecluster template changes..."
+          echo "Checking Helm storagecluster CRD changes..."
           if git diff --exit-code HEAD^ HEAD -- charts/portworx/crds/core_v1_storagecluster_crd.yaml; then
             echo "Error: No changes detected in Helm storagecluster template file."
             exit 1
@@ -116,7 +117,7 @@ jobs:
             echo "Helm storagecluster template changes detected."
           fi
 
-          echo "Checking Helm storagecluster template changes..."
+          echo "Checking Helm charts/portworx/values.yaml changes..."
           if git diff --exit-code HEAD^ HEAD -- charts/portworx/values.yaml; then
             echo "Error: No changes detected in Helm values.yaml file."
             exit 1
