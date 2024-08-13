@@ -26,6 +26,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/libopenstorage/openstorage/api"
+	"github.com/libopenstorage/operator/pkg/apis"
 	ocp_configv1 "github.com/openshift/api/config/v1"
 	appops "github.com/portworx/sched-ops/k8s/apps"
 	coreops "github.com/portworx/sched-ops/k8s/core"
@@ -116,7 +117,7 @@ func NoopKubevirtManager(mockCtrl *gomock.Controller) *mock.MockKubevirtManager 
 // adds the CRDs defined in this repository to the scheme
 func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 	s := scheme.Scheme
-	if err := corev1.AddToScheme(s); err != nil {
+	if err := apis.AddToScheme(s); err != nil {
 		logrus.Error(err)
 	}
 	if err := monitoringv1.AddToScheme(s); err != nil {
