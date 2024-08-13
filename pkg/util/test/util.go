@@ -33,6 +33,7 @@ import (
 	operatorops "github.com/portworx/sched-ops/k8s/operator"
 	prometheusops "github.com/portworx/sched-ops/k8s/prometheus"
 	rbacops "github.com/portworx/sched-ops/k8s/rbac"
+	"github.com/libopenstorage/operator/pkg/apis"
 	"github.com/portworx/sched-ops/task"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/sirupsen/logrus"
@@ -116,7 +117,7 @@ func NoopKubevirtManager(mockCtrl *gomock.Controller) *mock.MockKubevirtManager 
 // adds the CRDs defined in this repository to the scheme
 func FakeK8sClient(initObjects ...runtime.Object) client.Client {
 	s := scheme.Scheme
-	if err := corev1.AddToScheme(s); err != nil {
+	if err := apis.AddToScheme(s); err != nil {
 		logrus.Error(err)
 	}
 	if err := monitoringv1.AddToScheme(s); err != nil {

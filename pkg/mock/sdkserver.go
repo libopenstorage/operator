@@ -56,6 +56,9 @@ func (m *SdkServer) StartOnAddress(ip, port string) error {
 	if m.servers.Node != nil {
 		api.RegisterOpenStorageNodeServer(m.server, m.servers.Node)
 	}
+	if m.servers.Volume != nil {
+		api.RegisterOpenStorageVolumeServer(m.server, m.servers.Volume)
+	}
 	if m.servers.Role != nil {
 		api.RegisterOpenStorageRoleServer(m.server, m.servers.Role)
 	}
