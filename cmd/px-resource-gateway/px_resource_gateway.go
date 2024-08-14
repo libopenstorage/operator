@@ -5,6 +5,8 @@ import (
 	"log"
 	_ "net/http/pprof"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/libopenstorage/grpc-framework/pkg/util"
 	grpcFramework "github.com/libopenstorage/grpc-framework/server"
@@ -20,30 +22,77 @@ import (
 )
 
 const (
-	// PxResourceGatewayString is the common string for px-resource-gateway components
-	PxResourceGatewayString = "px-resource-gateway"
-	// PxResourceGatewayServerName is the service name for px-resource-gateway
-	PxResourceGatewayServerName = PxResourceGatewayString
-	// PxResourceGatewayServerHost is the host for px-resource-gateway
-	PxResourceGatewayServerHostEnv = "PX_RESOURCE_GATEWAY_HOST"
-	// PxResourceGatewayServerHostDefault is the default host for px-resource-gateway
-	PxResourceGatewayServerHostDefault = "127.0.0.1"
-	// PxResourceGatewayServerPortEnv is the environment variable for px-resource-gateway service port
-	PxResourceGatewayServerPortEnv = "PX_RESOURCE_GATEWAY_PORT"
-	// PxResourceGatewayServerPortDefault is the default port for px-resource-gateway service
-	PxResourceGatewayServerPortDefault = "50051"
-	// PxResourceGatewayServerSocket is the socket for px-resource-gateway
-	PxResourceGatewayServerSocket = "/tmp/px-resource-gate.sock"
+	// pxResourceGatewayStr is the common string for px-resource-gateway components
+	pxResourceGatewayStr = "px-resource-gateway"
+
+	// configuration values for px-resource-gateway server
+	//
+	// serverName is the service name for px-resource-gateway
+	serverName = pxResourceGatewayStr
+	// socket is the socket for px-resource-gateway
+	socket = "/tmp/px-resource-gate.sock"
+
+	// default values for semaphore server
+	//
+	// defaultServerHost is the default host for px-resource-gateway
+	defaultServerHost = "127.0.0.1"
+	// defaultServerPort is the default port for px-resource-gateway service
+	defaultServerPort = "50051"
+	// defaultConfigMapName is the default name for semaphore configmap
+	defaultConfigMapName = pxResourceGatewayStr
+	// defaultConfigMapNamespace is the default namespace to create semaphore configmap
+	defaultConfigMapNamespace = "kube-system"
+	// defaultConfigMapLabels are the default labels applied to semaphore configmap
+	defaultConfigMapLabels = "name=px-resource-gateway"
+	// defaultConfigMapUpdatePeriod is the default time period between configmap updates
+	defaultConfigMapUpdatePeriod = 5 * time.Second
+	// defaultDeadNodeTimeout is the default time period after which a node is considered dead
+	defaultDeadNodeTimeout = 10 * time.Second
 )
 
 func main() {
 	app := cli.NewApp()
-	app.Name = "openstorage-operator"
-	app.Usage = "Operator to manage openstorage clusters"
+	app.Name = "px-resource-gateway"
+	app.Usage = "gRPC service for managing resources"
 	app.Version = version.Version
 	app.Action = run
 
 	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "serverHost",
+			Usage: "Host for px-resource-gateway gRPC server",
+			Value: defaultServerHost,
+		},
+		cli.StringFlag{
+			Name:  "serverPort",
+			Usage: "Port for px-resource-gateway gRPC server",
+			Value: defaultServerPort,
+		},
+		cli.StringFlag{
+			Name:  "configMapName",
+			Usage: "Name of the configmap to use for semaphore",
+			Value: defaultConfigMapName,
+		},
+		cli.StringFlag{
+			Name:  "configMapNamespace",
+			Usage: "Name of the configmap to use for semaphore",
+			Value: defaultConfigMapNamespace,
+		},
+		cli.StringFlag{
+			Name:  "configMapLabels",
+			Usage: "Labels to use for the configmap",
+			Value: defaultConfigMapLabels,
+		},
+		cli.DurationFlag{
+			Name:  "configMapUpdatePeriod",
+			Usage: "Time period between configmap updates",
+			Value: defaultConfigMapUpdatePeriod,
+		},
+		cli.DurationFlag{
+			Name:  "deadNodeTimeout",
+			Usage: "Time period after which a node is considered dead",
+			Value: defaultDeadNodeTimeout,
+		},
 		cli.BoolFlag{
 			Name:  "debug",
 			Usage: "Set log level to debug",
@@ -51,10 +100,12 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		log.Fatalf("Error starting openstorage operator: %v", err)
+		log.Fatalf("Error starting px resource gateway gRPC server: %v", err)
 	}
 }
 
+// run is the main function for px-resource-gateway gRPC server
+// it initializes the k8s client, creates the gRPC server, and runs the server...
 func run(c *cli.Context) {
 	if c.Bool("debug") {
 		logrus.SetLevel(logrus.DebugLevel)
@@ -68,32 +119,24 @@ func run(c *cli.Context) {
 	}
 	logrus.Debugf("Running on k8s version: %s", version.String())
 
-	pxResourceGatewayServerHost := os.Getenv(PxResourceGatewayServerHostEnv)
-	if pxResourceGatewayServerHost == "" {
-		pxResourceGatewayServerHost = PxResourceGatewayServerHostDefault
-	}
-	pxResourceGatewayServerPort := os.Getenv(PxResourceGatewayServerPortEnv)
-	if pxResourceGatewayServerPort == "" {
-		pxResourceGatewayServerPort = PxResourceGatewayServerPortDefault
-	}
-
 	// TODO: add security
+	// create the config for px-resource-gateway gRPC server
 	pxResourceGatewayServerConfig := &grpcFramework.ServerConfig{
-		Name:         PxResourceGatewayServerName,
-		Address:      fmt.Sprintf("%s:%s", pxResourceGatewayServerHost, pxResourceGatewayServerPort),
-		Socket:       PxResourceGatewayServerSocket,
+		Name:         serverName,
+		Address:      fmt.Sprintf("%s:%s", c.String("serverHost"), c.String("serverPort")),
+		Socket:       socket,
 		AuditOutput:  os.Stdout,
 		AccessOutput: os.Stdout,
 	}
 
-	semaphoreServer := pxResourceGateway.NewSemaphoreServer()
-	healthcheckServer := health.NewServer()
+	// register the various services with px-resource-gateway gRPC server
+	healthCheckServer := health.NewServer()
 	pxResourceGatewayServerConfig.
 		RegisterGrpcServers(func(gs *grpc.Server) {
-			pb.RegisterSemaphoreServiceServer(gs, semaphoreServer)
+			pb.RegisterSemaphoreServiceServer(gs, newSemaphoreServer(c))
 		}).
 		RegisterGrpcServers(func(gs *grpc.Server) {
-			healthpb.RegisterHealthServer(gs, healthcheckServer)
+			healthpb.RegisterHealthServer(gs, healthCheckServer)
 		}).
 		WithDefaultGenericRoleManager()
 
@@ -103,11 +146,11 @@ func run(c *cli.Context) {
 		os.Exit(1)
 	}
 
-	// Setup a signal handler
+	// setup a signal handler to stop the server
 	signal_handler := util.NewSigIntManager(func() {
 		pxResourceGatewayServer.Stop()
-		healthcheckServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
-		os.Remove(PxResourceGatewayServerSocket)
+		healthCheckServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
+		os.Remove(socket)
 		os.Exit(0)
 	})
 	err = signal_handler.Start()
@@ -116,15 +159,38 @@ func run(c *cli.Context) {
 		os.Exit(1)
 	}
 
-	// start server
-	healthcheckServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+	// start the px-resource-gateway gRPC server
 	err = pxResourceGatewayServer.Start()
 	if err != nil {
 		fmt.Printf("Unable to start server: %v", err)
 		os.Exit(1)
 	}
+	healthCheckServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 
 	// Wait. The signal handler will exit cleanly
 	logrus.Info("Px gRPC server running")
 	select {}
+}
+
+// newSemaphoreServer creates a SemaphoreConfig object with provided cli arguments
+// to initialize a new semaphore server and returns the pb.SemaphoreServiceServer object
+func newSemaphoreServer(c *cli.Context) pb.SemaphoreServiceServer {
+	configMapLabels := make(map[string]string)
+	for _, kv := range strings.Split(c.String("configMapLabels"), ",") {
+		kvSplit := strings.Split(kv, "=")
+		if len(kvSplit) != 2 {
+			logrus.Errorf("Invalid configMapLabels: %s", kvSplit)
+			continue
+		}
+		configMapLabels[kvSplit[0]] = kvSplit[1]
+	}
+	semaphoreServerConfig := &pxResourceGateway.SemaphoreConfig{
+		ConfigMapName:         c.String("configMapName"),
+		ConfigMapNamespace:    c.String("configMapNamespace"),
+		ConfigMapLabels:       configMapLabels,
+		ConfigMapUpdatePeriod: c.Duration("configMapUpdatePeriod"),
+		DeadNodeTimeout:       c.Duration("deadNodeTimeout"),
+	}
+	semaphoreServer := pxResourceGateway.NewSemaphoreServer(semaphoreServerConfig)
+	return semaphoreServer
 }

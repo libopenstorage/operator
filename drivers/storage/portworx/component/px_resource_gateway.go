@@ -3,7 +3,6 @@ package component
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -16,7 +15,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,40 +26,61 @@ import (
 const (
 	// PxResourceGatewayComponentName name of the PxResourceGateway component
 	PxResourceGatewayComponentName = "PxResourceGateway"
-	// PxResourceGatewayString common string value for pxResourceGateway k8s subparts
-	PxResourceGatewayString = "px-resource-gateway"
+	// PxResourceGatewayStr common string value for pxResourceGateway k8s subparts
+	PxResourceGatewayStr = "px-resource-gateway"
+
+	// names for px-resource-gateway kubernetes resources
+	//
 	// PxResourceGatewayServiceAccountName name of the pxResourceGateway service account
-	PxResourceGatewayServiceAccountName = PxResourceGatewayString
-	// PxResourceGatewayClusterRoleName name of the pxResourceGateway cluster role
-	PxResourceGatewayClusterRoleName = PxResourceGatewayString
-	// PxResourceGatewayClusterRoleBindingName name of the pxResourceGateway cluster role binding
-	PxResourceGatewayClusterRoleBindingName = PxResourceGatewayString
+	PxResourceGatewayServiceAccountName = PxResourceGatewayStr
+	// PxResourceGatewayRoleName name of the pxResourceGateway cluster role
+	PxResourceGatewayRoleName = PxResourceGatewayStr
+	// PxResourceGatewayRoleBindingName name of the pxResourceGateway cluster role binding
+	PxResourceGatewayRoleBindingName = PxResourceGatewayStr
 	// PxResourceGatewayDeploymentName name of the pxResourceGateway deployment
-	PxResourceGatewayDeploymentName = PxResourceGatewayString
+	PxResourceGatewayDeploymentName = PxResourceGatewayStr
 	// PxResourceGatewayServiceName name of the pxResourceGateway service
-	PxResourceGatewayServiceName = PxResourceGatewayString
+	PxResourceGatewayServiceName = PxResourceGatewayStr
 	// PxResourceGatewayContainerName name of the pxResourceGateway container
-	PxResourceGatewayContainerName = PxResourceGatewayString
+	PxResourceGatewayContainerName = PxResourceGatewayStr
 	// PxResourceGatewayLabelName label name for pxResourceGateway
-	PxResourceGatewayLabelName = PxResourceGatewayString
+	PxResourceGatewayLabelName = PxResourceGatewayStr
+
+	// configuration values for px-resource-gateway deployment and service
+	//
 	// PxResourceGatewayPortName name of the pxResourceGateway port
 	PxResourceGatewayPortName = "px-res-gate" // must be no more than 15 characters
+	// PxResourceGatewayDeploymentHost is the host pxResourceGateway deployment listens on
+	PxResourceGatewayDeploymentHost = "0.0.0.0"
 	// PxResourceGatewayPort common port for pxResourceGateway components
 	PxResourceGatewayPort = 50051
 	// PxResourceGatewayDeploymentPort is the port pxResourceGateway deployment listens on
 	PxResourceGatewayDeploymentPort = PxResourceGatewayPort
 	// PxResourceGatewayServicePort is the port pxResourceGateway service listens on
 	PxResourceGatewayServicePort = PxResourceGatewayPort
-	// defaultPxResourceGatewayCPU default CPU request for pxResourceGateway
-	defaultPxResourceGatewayCPU = "0.1"
-	// defaultPxResourceGatewayCPULimit default CPU limit for pxResourceGateway
-	defaultPxResourceGatewayCPULimit = "0.25"
+
+	// configuration values for px-resource-gateway server
+	//
+	// PxResourceGatewayConfigmapName is the name of the configmap used by px-resource-gateway
+	PxResourceGatewayConfigmapName = "px-resource-gateway"
+	// PxResourceGatewayConfigmapUpdatePeriod is the time period between configmap updates
+	PxResourceGatewayConfigmapUpdatePeriod = "1s"
+	// PxResourceGatewayDeadNodeTimeout is the time period after which a dead node is removed
+	PxResourceGatewayDeadNodeTimeout = "5s"
 )
 
+var defaultPxResourceGatewayCommandArgs = map[string]string{
+	"serverHost":            PxResourceGatewayDeploymentHost,
+	"serverPort":            string(PxResourceGatewayPort),
+	"configMapName":         PxResourceGatewayConfigmapName,
+	"namespace":             "",
+	"configMapUpdatePeriod": PxResourceGatewayConfigmapUpdatePeriod,
+	"deadNodeTimeout":       PxResourceGatewayDeadNodeTimeout,
+}
+
+// pxResourceGateway is the PortworxComponent implementation for the px-resource-gateway component
 type pxResourceGateway struct {
-	isCreated  bool
-	k8sClient  client.Client
-	k8sVersion version.Version
+	k8sClient client.Client
 }
 
 func (p *pxResourceGateway) Name() string {
@@ -74,12 +93,11 @@ func (p *pxResourceGateway) Priority() int32 {
 
 func (p *pxResourceGateway) Initialize(
 	k8sClient client.Client,
-	k8sVersion version.Version,
+	_ version.Version,
 	_ *runtime.Scheme,
 	_ record.EventRecorder,
 ) {
 	p.k8sClient = k8sClient
-	p.k8sVersion = k8sVersion
 }
 
 func (p *pxResourceGateway) IsPausedForMigration(cluster *corev1.StorageCluster) bool {
@@ -95,10 +113,10 @@ func (p *pxResourceGateway) Reconcile(cluster *corev1.StorageCluster) error {
 	if err := p.createServiceAccount(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := p.createClusterRole(); err != nil {
+	if err := p.createRole(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
-	if err := p.createClusterRoleBinding(cluster.Namespace); err != nil {
+	if err := p.createRoleBinding(cluster.Namespace, ownerRef); err != nil {
 		return err
 	}
 	if err := p.createDeployment(cluster, ownerRef); err != nil {
@@ -115,10 +133,10 @@ func (p *pxResourceGateway) Delete(cluster *corev1.StorageCluster) error {
 	if err := k8sutil.DeleteServiceAccount(p.k8sClient, PxResourceGatewayServiceAccountName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRole(p.k8sClient, PxResourceGatewayClusterRoleName); err != nil {
+	if err := k8sutil.DeleteRole(p.k8sClient, PxResourceGatewayRoleName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	if err := k8sutil.DeleteClusterRoleBinding(p.k8sClient, PxResourceGatewayClusterRoleBindingName); err != nil {
+	if err := k8sutil.DeleteRoleBinding(p.k8sClient, PxResourceGatewayRoleBindingName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
 	if err := k8sutil.DeleteDeployment(p.k8sClient, PxResourceGatewayDeploymentName, cluster.Namespace, *ownerRef); err != nil {
@@ -128,9 +146,7 @@ func (p *pxResourceGateway) Delete(cluster *corev1.StorageCluster) error {
 	return nil
 }
 
-func (p *pxResourceGateway) MarkDeleted() {
-	p.isCreated = false
-}
+func (p *pxResourceGateway) MarkDeleted() {}
 
 func (p *pxResourceGateway) createServiceAccount(
 	clusterNamespace string,
@@ -149,59 +165,95 @@ func (p *pxResourceGateway) createServiceAccount(
 	)
 }
 
-func (p *pxResourceGateway) createClusterRole() error {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{""},
-			Resources: []string{"configmaps"},
-			Verbs:     []string{"create", "get", "list", "patch", "update", "watch"},
-		},
-	}
-	return k8sutil.CreateOrUpdateClusterRole(
+func (p *pxResourceGateway) createRole(
+	clusterNamespace string,
+	ownerRef *metav1.OwnerReference,
+) error {
+	return k8sutil.CreateOrUpdateRole(
 		p.k8sClient,
-		&rbacv1.ClusterRole{
+		&rbacv1.Role{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: PxResourceGatewayClusterRoleName,
+				Name:      PxResourceGatewayRoleName,
+				Namespace: clusterNamespace,
 			},
-			Rules: rules,
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"configmaps"},
+					Verbs:     []string{"create", "get", "list", "patch", "update", "watch"},
+				},
+			},
 		},
+		ownerRef,
 	)
 }
 
-func (p *pxResourceGateway) createClusterRoleBinding(
+func (p *pxResourceGateway) createRoleBinding(
 	clusterNamespace string,
+	ownerRef *metav1.OwnerReference,
 ) error {
-	return k8sutil.CreateOrUpdateClusterRoleBinding(
+	return k8sutil.CreateOrUpdateRoleBinding(
 		p.k8sClient,
-		&rbacv1.ClusterRoleBinding{
+		&rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: PxResourceGatewayClusterRoleBindingName,
+				Name:      PxResourceGatewayRoleBindingName,
+				Namespace: clusterNamespace,
 			},
 			Subjects: []rbacv1.Subject{
 				{
-					Kind:      "ServiceAccount",
-					Name:      PxResourceGatewayServiceAccountName,
-					Namespace: clusterNamespace,
+					Kind: "ServiceAccount",
+					Name: PxResourceGatewayServiceAccountName,
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
-				Kind:     "ClusterRole",
-				Name:     PxResourceGatewayClusterRoleName,
+				Kind:     "Role",
+				Name:     PxResourceGatewayRoleName,
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},
+		ownerRef,
 	)
+}
+
+// getCommand returns the command to run the px-resource-gateway server with custom configuration
+// it uses the configuration values from the StorageCluster spec and sets default values if not present
+func (p *pxResourceGateway) getCommand(cluster *corev1.StorageCluster) []string {
+	args := map[string]string{}
+
+	// parse user arguments from the StorageCluster spec
+	for k, v := range cluster.Spec.PxResourceGateway.Args {
+		key := strings.TrimLeft(k, "-")
+		if len(key) > 0 && len(v) > 0 {
+			args[key] = v
+		}
+	}
+
+	// override some arguments with default
+	args["configMapLabels"] = defaultPxResourceGatewayCommandArgs["configMapLabels"]
+
+	// fill in the missing arguments with default values
+	defaultPxResourceGatewayCommandArgs["namespace"] = cluster.Namespace // set namespace
+	for k, v := range defaultPxResourceGatewayCommandArgs {
+		if _, ok := args[k]; !ok {
+			args[k] = v
+		}
+	}
+
+	argList := make([]string, 0)
+	for k, v := range args {
+		argList = append(argList, fmt.Sprintf("--%s=%s", k, v))
+	}
+	sort.Strings(argList)
+
+	command := append([]string{"/px-resource-gateway"}, argList...)
+	return command
 }
 
 func (p *pxResourceGateway) createDeployment(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
 ) error {
-	imageName := p.getDesiredPxResourceGatewayImage(cluster)
-	if imageName == "" {
-		return fmt.Errorf("pxResourceGateway image cannot be empty")
-	}
-
+	// get the existing deployment
 	existingDeployment := &appsv1.Deployment{}
 	err := p.k8sClient.Get(
 		context.TODO(),
@@ -215,68 +267,19 @@ func (p *pxResourceGateway) createDeployment(
 		return err
 	}
 
-	targetCPU := defaultPxResourceGatewayCPU
-	if cpuStr, ok := cluster.Annotations[pxutil.AnnotationPxResourceGatewayCPU]; ok {
-		targetCPU = cpuStr
-	}
-	targetCPUQuantity, err := resource.ParseQuantity(targetCPU)
-	if err != nil {
-		return err
-	}
-
-	targetCPULimitQuantity, err := resource.ParseQuantity(defaultPxResourceGatewayCPULimit)
-	if err != nil {
-		return err
-	}
-
-	args := map[string]string{}
-	for k, v := range cluster.Spec.PxResourceGateway.Args {
-		if _, exists := autopilotConfigParams[k]; exists {
-			continue
-		}
-		key := strings.TrimLeft(k, "-")
-		if len(key) > 0 && len(v) > 0 {
-			args[key] = v
-		}
-	}
-
-	argList := make([]string, 0)
-	for k, v := range args {
-		argList = append(argList, fmt.Sprintf("--%s=%s", k, v))
-	}
-	sort.Strings(argList)
-	command := append([]string{"/px-resource-gateway"}, argList...)
-
+	// get the target deployment
+	imageName := cluster.Status.DesiredImages.PxResourceGateway
 	imageName = util.GetImageURN(cluster, imageName)
+	command := p.getCommand(cluster)
+	targetDeployment := p.getPxResourceGatewayDeploymentSpec(cluster, ownerRef, imageName, command)
 
-	var existingImage string
-	var existingCommand []string
-	var existingEnvs []v1.EnvVar
-	for _, c := range existingDeployment.Spec.Template.Spec.Containers {
-		if c.Name == PxResourceGatewayContainerName {
-			existingImage = c.Image
-			existingCommand = c.Command
-			existingEnvs = append([]v1.EnvVar{}, c.Env...)
-			sort.Sort(k8sutil.EnvByName(existingEnvs))
-			break
-		}
-	}
-
-	targetDeployment := p.getPxResourceGatewayDeploymentSpec(cluster, ownerRef, imageName,
-		command, targetCPUQuantity, targetCPULimitQuantity)
-
-	// Check if the deployment has changed
-	modified := existingImage != imageName ||
-		!reflect.DeepEqual(existingCommand, command) ||
-		util.HasResourcesChanged(existingDeployment.Spec.Template.Spec.Containers[0].Resources, targetDeployment.Spec.Template.Spec.Containers[0].Resources) ||
-		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
-		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations)
-	if !p.isCreated || modified {
+	// compare existing and target deployments and create/update the deployment if necessary
+	isPodTemplateEqual, _ := util.DeepEqualPodTemplate(&targetDeployment.Spec.Template, &existingDeployment.Spec.Template)
+	if !isPodTemplateEqual {
 		if err = k8sutil.CreateOrUpdateDeployment(p.k8sClient, targetDeployment, ownerRef); err != nil {
 			return err
 		}
 	}
-	p.isCreated = true
 	return nil
 }
 
@@ -316,55 +319,30 @@ func (p *pxResourceGateway) getPxResourceGatewayDeploymentSpec(
 	ownerRef *metav1.OwnerReference,
 	imageName string,
 	command []string,
-	cpuQuantity resource.Quantity,
-	cpuLimitQuantity resource.Quantity,
 ) *appsv1.Deployment {
-	deploymentLabels := map[string]string{
-		"name": PxResourceGatewayLabelName,
-		"tier": "control-plane",
-	}
-	templateLabels := map[string]string{
-		"name": PxResourceGatewayLabelName,
-		"tier": "control-plane",
-	}
-	selectorLabels := map[string]string{
+	commonLabels := map[string]string{
 		"name": PxResourceGatewayLabelName,
 		"tier": "control-plane",
 	}
 
 	replicas := int32(1)
-	maxUnavailable := intstr.FromInt(1)
-	maxSurge := intstr.FromInt(1)
 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      PxResourceGatewayDeploymentName,
-			Namespace: cluster.Namespace,
-			Annotations: map[string]string{
-				"scheduler.alpha.kubernetes.io/critical-pod": "",
-			},
-			Labels:          deploymentLabels,
+			Name:            PxResourceGatewayDeploymentName,
+			Namespace:       cluster.Namespace,
+			Labels:          commonLabels,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RollingUpdateDeploymentStrategyType,
-				RollingUpdate: &appsv1.RollingUpdateDeployment{
-					MaxUnavailable: &maxUnavailable,
-					MaxSurge:       &maxSurge,
-				},
-			},
 			Selector: &metav1.LabelSelector{
-				MatchLabels: selectorLabels,
+				MatchLabels: commonLabels,
 			},
 			Replicas: &replicas,
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"scheduler.alpha.kubernetes.io/critical-pod": "",
-					},
-					Labels: templateLabels,
+					Labels: commonLabels,
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: PxResourceGatewayServiceAccountName,
@@ -374,14 +352,6 @@ func (p *pxResourceGateway) getPxResourceGatewayDeploymentSpec(
 							Image:           imageName,
 							ImagePullPolicy: imagePullPolicy,
 							Command:         command,
-							Resources: v1.ResourceRequirements{
-								Requests: map[v1.ResourceName]resource.Quantity{
-									v1.ResourceCPU: cpuQuantity,
-								},
-								Limits: map[v1.ResourceName]resource.Quantity{
-									v1.ResourceCPU: cpuLimitQuantity,
-								},
-							},
 							SecurityContext: &v1.SecurityContext{
 								AllowPrivilegeEscalation: boolPtr(false),
 								Privileged:               boolPtr(false),
@@ -391,12 +361,6 @@ func (p *pxResourceGateway) getPxResourceGatewayDeploymentSpec(
 									Name:          PxResourceGatewayPortName,
 									ContainerPort: PxResourceGatewayDeploymentPort,
 									Protocol:      v1.ProtocolTCP,
-								},
-							},
-							Env: []v1.EnvVar{
-								{
-									Name:  "PX_RESOURCE_GATEWAY_PORT",
-									Value: fmt.Sprintf("%d", PxResourceGatewayDeploymentPort),
 								},
 							},
 						},
@@ -415,23 +379,12 @@ func (p *pxResourceGateway) getPxResourceGatewayDeploymentSpec(
 		)
 	}
 
-	// If resources is specified in the spec, the resources specified by annotation (such as portworx.io/pxResourceGateway-cpu)
-	// will be overwritten.
 	if cluster.Spec.PxResourceGateway.Resources != nil {
 		deployment.Spec.Template.Spec.Containers[0].Resources = *cluster.Spec.PxResourceGateway.Resources
 	}
 	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
 	return deployment
-}
-
-func (p *pxResourceGateway) getDesiredPxResourceGatewayImage(cluster *corev1.StorageCluster) string {
-	if cluster.Spec.PxResourceGateway.Image != "" {
-		return cluster.Spec.PxResourceGateway.Image
-	} else if cluster.Status.DesiredImages != nil {
-		return cluster.Status.DesiredImages.PxResourceGateway
-	}
-	return ""
 }
 
 // RegisterPxResourceGatewayComponent registers the PxResourceGateway component

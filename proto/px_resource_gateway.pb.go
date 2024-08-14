@@ -54,7 +54,7 @@ func (x SemaphoreAccessPriority_Type) String() string {
 	return proto.EnumName(SemaphoreAccessPriority_Type_name, int32(x))
 }
 func (SemaphoreAccessPriority_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_px_resource_gateway_4d2d477768cf6d85, []int{0, 0}
+	return fileDescriptor_px_resource_gateway_629a048cec867dd1, []int{0, 0}
 }
 
 // Type of status
@@ -84,7 +84,7 @@ func (x SemaphoreAccessStatus_Type) String() string {
 	return proto.EnumName(SemaphoreAccessStatus_Type_name, int32(x))
 }
 func (SemaphoreAccessStatus_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_px_resource_gateway_4d2d477768cf6d85, []int{1, 0}
+	return fileDescriptor_px_resource_gateway_629a048cec867dd1, []int{1, 0}
 }
 
 // SemaphoreAccessPriority specifies the priority of the client's access to the resource
@@ -98,7 +98,7 @@ func (m *SemaphoreAccessPriority) Reset()         { *m = SemaphoreAccessPriority
 func (m *SemaphoreAccessPriority) String() string { return proto.CompactTextString(m) }
 func (*SemaphoreAccessPriority) ProtoMessage()    {}
 func (*SemaphoreAccessPriority) Descriptor() ([]byte, []int) {
-	return fileDescriptor_px_resource_gateway_4d2d477768cf6d85, []int{0}
+	return fileDescriptor_px_resource_gateway_629a048cec867dd1, []int{0}
 }
 func (m *SemaphoreAccessPriority) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SemaphoreAccessPriority.Unmarshal(m, b)
@@ -129,7 +129,7 @@ func (m *SemaphoreAccessStatus) Reset()         { *m = SemaphoreAccessStatus{} }
 func (m *SemaphoreAccessStatus) String() string { return proto.CompactTextString(m) }
 func (*SemaphoreAccessStatus) ProtoMessage()    {}
 func (*SemaphoreAccessStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_px_resource_gateway_4d2d477768cf6d85, []int{1}
+	return fileDescriptor_px_resource_gateway_629a048cec867dd1, []int{1}
 }
 func (m *SemaphoreAccessStatus) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SemaphoreAccessStatus.Unmarshal(m, b)
@@ -149,6 +149,95 @@ func (m *SemaphoreAccessStatus) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SemaphoreAccessStatus proto.InternalMessageInfo
 
+// CreateResourceRequest is the request to create a new semaphore resource
+type CreateResourceRequest struct {
+	// Resource ID of the new semaphore resource
+	ResourceId string `protobuf:"bytes,1,opt,name=resource_id,json=resourceId" json:"resource_id,omitempty"`
+	// Number of locks that can be acquired for the resource
+	NLocks uint32 `protobuf:"varint,2,opt,name=n_locks,json=nLocks" json:"n_locks,omitempty"`
+	// Max duration for which a lock can be held
+	LockHoldTimeout      uint64   `protobuf:"varint,3,opt,name=lock_hold_timeout,json=lockHoldTimeout" json:"lock_hold_timeout,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *CreateResourceRequest) Reset()         { *m = CreateResourceRequest{} }
+func (m *CreateResourceRequest) String() string { return proto.CompactTextString(m) }
+func (*CreateResourceRequest) ProtoMessage()    {}
+func (*CreateResourceRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_px_resource_gateway_629a048cec867dd1, []int{2}
+}
+func (m *CreateResourceRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_CreateResourceRequest.Unmarshal(m, b)
+}
+func (m *CreateResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_CreateResourceRequest.Marshal(b, m, deterministic)
+}
+func (dst *CreateResourceRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CreateResourceRequest.Merge(dst, src)
+}
+func (m *CreateResourceRequest) XXX_Size() int {
+	return xxx_messageInfo_CreateResourceRequest.Size(m)
+}
+func (m *CreateResourceRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_CreateResourceRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CreateResourceRequest proto.InternalMessageInfo
+
+func (m *CreateResourceRequest) GetResourceId() string {
+	if m != nil {
+		return m.ResourceId
+	}
+	return ""
+}
+
+func (m *CreateResourceRequest) GetNLocks() uint32 {
+	if m != nil {
+		return m.NLocks
+	}
+	return 0
+}
+
+func (m *CreateResourceRequest) GetLockHoldTimeout() uint64 {
+	if m != nil {
+		return m.LockHoldTimeout
+	}
+	return 0
+}
+
+// CreateResourceResponse is the response to create a new semaphore resource
+type CreateResourceResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *CreateResourceResponse) Reset()         { *m = CreateResourceResponse{} }
+func (m *CreateResourceResponse) String() string { return proto.CompactTextString(m) }
+func (*CreateResourceResponse) ProtoMessage()    {}
+func (*CreateResourceResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_px_resource_gateway_629a048cec867dd1, []int{3}
+}
+func (m *CreateResourceResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_CreateResourceResponse.Unmarshal(m, b)
+}
+func (m *CreateResourceResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_CreateResourceResponse.Marshal(b, m, deterministic)
+}
+func (dst *CreateResourceResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CreateResourceResponse.Merge(dst, src)
+}
+func (m *CreateResourceResponse) XXX_Size() int {
+	return xxx_messageInfo_CreateResourceResponse.Size(m)
+}
+func (m *CreateResourceResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_CreateResourceResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CreateResourceResponse proto.InternalMessageInfo
+
 // AcquireLockRequest is the request to acquire a semaphore lock
 type AcquireLockRequest struct {
 	// Resource ID to acquire the lock for
@@ -166,7 +255,7 @@ func (m *AcquireLockRequest) Reset()         { *m = AcquireLockRequest{} }
 func (m *AcquireLockRequest) String() string { return proto.CompactTextString(m) }
 func (*AcquireLockRequest) ProtoMessage()    {}
 func (*AcquireLockRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_px_resource_gateway_4d2d477768cf6d85, []int{2}
+	return fileDescriptor_px_resource_gateway_629a048cec867dd1, []int{4}
 }
 func (m *AcquireLockRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_AcquireLockRequest.Unmarshal(m, b)
@@ -220,7 +309,7 @@ func (m *AcquireLockResponse) Reset()         { *m = AcquireLockResponse{} }
 func (m *AcquireLockResponse) String() string { return proto.CompactTextString(m) }
 func (*AcquireLockResponse) ProtoMessage()    {}
 func (*AcquireLockResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_px_resource_gateway_4d2d477768cf6d85, []int{3}
+	return fileDescriptor_px_resource_gateway_629a048cec867dd1, []int{5}
 }
 func (m *AcquireLockResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_AcquireLockResponse.Unmarshal(m, b)
@@ -262,7 +351,7 @@ func (m *ReleaseLockRequest) Reset()         { *m = ReleaseLockRequest{} }
 func (m *ReleaseLockRequest) String() string { return proto.CompactTextString(m) }
 func (*ReleaseLockRequest) ProtoMessage()    {}
 func (*ReleaseLockRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_px_resource_gateway_4d2d477768cf6d85, []int{4}
+	return fileDescriptor_px_resource_gateway_629a048cec867dd1, []int{6}
 }
 func (m *ReleaseLockRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ReleaseLockRequest.Unmarshal(m, b)
@@ -296,6 +385,37 @@ func (m *ReleaseLockRequest) GetClientId() string {
 	return ""
 }
 
+// ReleaseLockResponse is the response to release a semaphore lock
+type ReleaseLockResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ReleaseLockResponse) Reset()         { *m = ReleaseLockResponse{} }
+func (m *ReleaseLockResponse) String() string { return proto.CompactTextString(m) }
+func (*ReleaseLockResponse) ProtoMessage()    {}
+func (*ReleaseLockResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_px_resource_gateway_629a048cec867dd1, []int{7}
+}
+func (m *ReleaseLockResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ReleaseLockResponse.Unmarshal(m, b)
+}
+func (m *ReleaseLockResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ReleaseLockResponse.Marshal(b, m, deterministic)
+}
+func (dst *ReleaseLockResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReleaseLockResponse.Merge(dst, src)
+}
+func (m *ReleaseLockResponse) XXX_Size() int {
+	return xxx_messageInfo_ReleaseLockResponse.Size(m)
+}
+func (m *ReleaseLockResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReleaseLockResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ReleaseLockResponse proto.InternalMessageInfo
+
 // KeepAliveRequest is the request to send a heartbeat to the semaphore service
 type KeepAliveRequest struct {
 	// Resource ID to keep the lock alive for
@@ -311,7 +431,7 @@ func (m *KeepAliveRequest) Reset()         { *m = KeepAliveRequest{} }
 func (m *KeepAliveRequest) String() string { return proto.CompactTextString(m) }
 func (*KeepAliveRequest) ProtoMessage()    {}
 func (*KeepAliveRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_px_resource_gateway_4d2d477768cf6d85, []int{5}
+	return fileDescriptor_px_resource_gateway_629a048cec867dd1, []int{8}
 }
 func (m *KeepAliveRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_KeepAliveRequest.Unmarshal(m, b)
@@ -345,38 +465,7 @@ func (m *KeepAliveRequest) GetClientId() string {
 	return ""
 }
 
-// ReleaseLockResponse is the response to acquire a semaphore lock
-type ReleaseLockResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *ReleaseLockResponse) Reset()         { *m = ReleaseLockResponse{} }
-func (m *ReleaseLockResponse) String() string { return proto.CompactTextString(m) }
-func (*ReleaseLockResponse) ProtoMessage()    {}
-func (*ReleaseLockResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_px_resource_gateway_4d2d477768cf6d85, []int{6}
-}
-func (m *ReleaseLockResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ReleaseLockResponse.Unmarshal(m, b)
-}
-func (m *ReleaseLockResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ReleaseLockResponse.Marshal(b, m, deterministic)
-}
-func (dst *ReleaseLockResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ReleaseLockResponse.Merge(dst, src)
-}
-func (m *ReleaseLockResponse) XXX_Size() int {
-	return xxx_messageInfo_ReleaseLockResponse.Size(m)
-}
-func (m *ReleaseLockResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_ReleaseLockResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ReleaseLockResponse proto.InternalMessageInfo
-
-// KeepAliveLockResponse is the response to acquire a semaphore lock
+// KeepAliveLockResponse is the response to keep a semaphore lock alive
 type KeepAliveResponse struct {
 	// Status of the client's access to the resource
 	AccessStatus         SemaphoreAccessStatus_Type `protobuf:"varint,1,opt,name=access_status,json=accessStatus,enum=operator.pxresourcegateway.SemaphoreAccessStatus_Type" json:"access_status,omitempty"`
@@ -389,7 +478,7 @@ func (m *KeepAliveResponse) Reset()         { *m = KeepAliveResponse{} }
 func (m *KeepAliveResponse) String() string { return proto.CompactTextString(m) }
 func (*KeepAliveResponse) ProtoMessage()    {}
 func (*KeepAliveResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_px_resource_gateway_4d2d477768cf6d85, []int{7}
+	return fileDescriptor_px_resource_gateway_629a048cec867dd1, []int{9}
 }
 func (m *KeepAliveResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_KeepAliveResponse.Unmarshal(m, b)
@@ -419,11 +508,13 @@ func (m *KeepAliveResponse) GetAccessStatus() SemaphoreAccessStatus_Type {
 func init() {
 	proto.RegisterType((*SemaphoreAccessPriority)(nil), "operator.pxresourcegateway.SemaphoreAccessPriority")
 	proto.RegisterType((*SemaphoreAccessStatus)(nil), "operator.pxresourcegateway.SemaphoreAccessStatus")
+	proto.RegisterType((*CreateResourceRequest)(nil), "operator.pxresourcegateway.CreateResourceRequest")
+	proto.RegisterType((*CreateResourceResponse)(nil), "operator.pxresourcegateway.CreateResourceResponse")
 	proto.RegisterType((*AcquireLockRequest)(nil), "operator.pxresourcegateway.AcquireLockRequest")
 	proto.RegisterType((*AcquireLockResponse)(nil), "operator.pxresourcegateway.AcquireLockResponse")
 	proto.RegisterType((*ReleaseLockRequest)(nil), "operator.pxresourcegateway.ReleaseLockRequest")
-	proto.RegisterType((*KeepAliveRequest)(nil), "operator.pxresourcegateway.KeepAliveRequest")
 	proto.RegisterType((*ReleaseLockResponse)(nil), "operator.pxresourcegateway.ReleaseLockResponse")
+	proto.RegisterType((*KeepAliveRequest)(nil), "operator.pxresourcegateway.KeepAliveRequest")
 	proto.RegisterType((*KeepAliveResponse)(nil), "operator.pxresourcegateway.KeepAliveResponse")
 	proto.RegisterEnum("operator.pxresourcegateway.SemaphoreAccessPriority_Type", SemaphoreAccessPriority_Type_name, SemaphoreAccessPriority_Type_value)
 	proto.RegisterEnum("operator.pxresourcegateway.SemaphoreAccessStatus_Type", SemaphoreAccessStatus_Type_name, SemaphoreAccessStatus_Type_value)
@@ -441,6 +532,8 @@ const _ = grpc.SupportPackageIsVersion4
 
 type SemaphoreServiceClient interface {
 	// AcquireLock acquires a semaphore lock or reserves a place in the queue for the resource
+	CreateResource(ctx context.Context, in *CreateResourceRequest, opts ...grpc.CallOption) (*CreateResourceResponse, error)
+	// AcquireLock acquires a semaphore lock or reserves a place in the queue for the resource
 	AcquireLock(ctx context.Context, in *AcquireLockRequest, opts ...grpc.CallOption) (*AcquireLockResponse, error)
 	// ReleaseLock releases the semaphore lock on the resource
 	ReleaseLock(ctx context.Context, in *ReleaseLockRequest, opts ...grpc.CallOption) (*ReleaseLockResponse, error)
@@ -454,6 +547,15 @@ type semaphoreServiceClient struct {
 
 func NewSemaphoreServiceClient(cc *grpc.ClientConn) SemaphoreServiceClient {
 	return &semaphoreServiceClient{cc}
+}
+
+func (c *semaphoreServiceClient) CreateResource(ctx context.Context, in *CreateResourceRequest, opts ...grpc.CallOption) (*CreateResourceResponse, error) {
+	out := new(CreateResourceResponse)
+	err := grpc.Invoke(ctx, "/operator.pxresourcegateway.SemaphoreService/CreateResource", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *semaphoreServiceClient) AcquireLock(ctx context.Context, in *AcquireLockRequest, opts ...grpc.CallOption) (*AcquireLockResponse, error) {
@@ -487,6 +589,8 @@ func (c *semaphoreServiceClient) KeepAlive(ctx context.Context, in *KeepAliveReq
 
 type SemaphoreServiceServer interface {
 	// AcquireLock acquires a semaphore lock or reserves a place in the queue for the resource
+	CreateResource(context.Context, *CreateResourceRequest) (*CreateResourceResponse, error)
+	// AcquireLock acquires a semaphore lock or reserves a place in the queue for the resource
 	AcquireLock(context.Context, *AcquireLockRequest) (*AcquireLockResponse, error)
 	// ReleaseLock releases the semaphore lock on the resource
 	ReleaseLock(context.Context, *ReleaseLockRequest) (*ReleaseLockResponse, error)
@@ -496,6 +600,24 @@ type SemaphoreServiceServer interface {
 
 func RegisterSemaphoreServiceServer(s *grpc.Server, srv SemaphoreServiceServer) {
 	s.RegisterService(&_SemaphoreService_serviceDesc, srv)
+}
+
+func _SemaphoreService_CreateResource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateResourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SemaphoreServiceServer).CreateResource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/operator.pxresourcegateway.SemaphoreService/CreateResource",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SemaphoreServiceServer).CreateResource(ctx, req.(*CreateResourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _SemaphoreService_AcquireLock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -557,6 +679,10 @@ var _SemaphoreService_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*SemaphoreServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "CreateResource",
+			Handler:    _SemaphoreService_CreateResource_Handler,
+		},
+		{
 			MethodName: "AcquireLock",
 			Handler:    _SemaphoreService_AcquireLock_Handler,
 		},
@@ -574,38 +700,43 @@ var _SemaphoreService_serviceDesc = grpc.ServiceDesc{
 }
 
 func init() {
-	proto.RegisterFile("px_resource_gateway.proto", fileDescriptor_px_resource_gateway_4d2d477768cf6d85)
+	proto.RegisterFile("px_resource_gateway.proto", fileDescriptor_px_resource_gateway_629a048cec867dd1)
 }
 
-var fileDescriptor_px_resource_gateway_4d2d477768cf6d85 = []byte{
-	// 461 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x94, 0xdf, 0x6e, 0x12, 0x41,
-	0x14, 0xc6, 0x59, 0x68, 0xb0, 0x9c, 0x2a, 0x8e, 0x83, 0xd5, 0x8a, 0x89, 0x36, 0x7b, 0xd5, 0x0b,
-	0xdd, 0x26, 0x68, 0x8c, 0x49, 0xaf, 0x68, 0x59, 0xdb, 0x4d, 0x41, 0xd6, 0xa5, 0x68, 0xd4, 0x0b,
-	0x32, 0x0e, 0x27, 0xba, 0x4a, 0x3b, 0xd3, 0x99, 0xd9, 0x0a, 0x0f, 0xe6, 0x0b, 0xf9, 0x24, 0x66,
-	0xff, 0x40, 0x96, 0x62, 0x37, 0x35, 0x69, 0xbc, 0x3d, 0xf3, 0xcd, 0xf9, 0xce, 0xf7, 0x3b, 0x93,
-	0x81, 0x47, 0x72, 0x3a, 0x52, 0xa8, 0x45, 0xa4, 0x38, 0x8e, 0xbe, 0x32, 0x83, 0x3f, 0xd9, 0xcc,
-	0x91, 0x4a, 0x18, 0x41, 0x9b, 0x42, 0xa2, 0x62, 0x46, 0x28, 0x47, 0x4e, 0xe7, 0x92, 0x4c, 0x61,
-	0xbf, 0x87, 0x87, 0x03, 0x3c, 0x65, 0xf2, 0x9b, 0x50, 0xd8, 0xe6, 0x1c, 0xb5, 0xf6, 0x55, 0x28,
-	0x54, 0x68, 0x66, 0xf6, 0x1e, 0xac, 0x9d, 0xcc, 0x24, 0xd2, 0xfb, 0x40, 0x4e, 0x3e, 0xfa, 0xee,
-	0x68, 0xf8, 0x76, 0xe0, 0xbb, 0x07, 0xde, 0x1b, 0xcf, 0xed, 0x90, 0x12, 0xbd, 0x05, 0x95, 0x6e,
-	0xff, 0x03, 0xb1, 0x28, 0x40, 0xb5, 0xe7, 0x76, 0xbc, 0x61, 0x8f, 0x94, 0xe9, 0x3a, 0xac, 0x1d,
-	0x79, 0x87, 0x47, 0xa4, 0x62, 0xf7, 0x60, 0xf3, 0x52, 0xdf, 0x81, 0x61, 0x26, 0xd2, 0xf6, 0xcb,
-	0xc2, 0xae, 0x00, 0xd5, 0x77, 0x43, 0x77, 0xe8, 0x76, 0xd2, 0xc6, 0xdd, 0xfe, 0xc1, 0xb1, 0xdb,
-	0x21, 0x65, 0xfb, 0x97, 0x05, 0xb4, 0xcd, 0xcf, 0xa3, 0x50, 0x61, 0x57, 0xf0, 0x1f, 0x01, 0x9e,
-	0x47, 0xa8, 0x0d, 0x7d, 0x0a, 0x1b, 0x8b, 0xcc, 0xe1, 0x78, 0xcb, 0xda, 0xb6, 0x76, 0x6a, 0x01,
-	0xcc, 0x4b, 0xde, 0x98, 0x3e, 0x86, 0x1a, 0x9f, 0x84, 0x78, 0x66, 0xe2, 0xe3, 0x72, 0x72, 0xbc,
-	0x9e, 0x16, 0xbc, 0x31, 0x65, 0x70, 0x97, 0x25, 0xa3, 0x8d, 0x64, 0x96, 0x79, 0xab, 0xb2, 0x6d,
-	0xed, 0xd4, 0x5b, 0xaf, 0x9d, 0xab, 0x89, 0x39, 0x57, 0xe0, 0x72, 0xe2, 0x54, 0x41, 0x9d, 0x2d,
-	0x33, 0x54, 0xd0, 0x58, 0x1a, 0x5b, 0x4b, 0x71, 0xa6, 0x91, 0x7e, 0x86, 0x3b, 0x99, 0xb3, 0x4e,
-	0xa8, 0x24, 0x93, 0xd7, 0x5b, 0xaf, 0xfe, 0xc1, 0x37, 0xc5, 0x99, 0xba, 0xde, 0x66, 0x79, 0xc2,
-	0x01, 0xd0, 0x00, 0x27, 0xc8, 0xf4, 0xcd, 0xa1, 0xb2, 0x7d, 0x20, 0xc7, 0x88, 0xb2, 0x3d, 0x09,
-	0x2f, 0xf0, 0x66, 0x3a, 0x6e, 0x42, 0x63, 0x69, 0xca, 0x94, 0x8c, 0x2d, 0xe1, 0x5e, 0xce, 0xe8,
-	0x3f, 0xe0, 0x6a, 0xfd, 0x2e, 0x03, 0x59, 0x88, 0x07, 0xa8, 0x2e, 0x42, 0x8e, 0x54, 0xc2, 0x46,
-	0x6e, 0x6f, 0xd4, 0x29, 0x72, 0x5a, 0x7d, 0x97, 0xcd, 0xdd, 0x6b, 0xeb, 0xb3, 0xd8, 0xa5, 0xd8,
-	0x31, 0xc7, 0xa3, 0xd8, 0x71, 0x75, 0xbd, 0xc5, 0x8e, 0x7f, 0x03, 0x5d, 0xa2, 0xdf, 0xa1, 0xb6,
-	0x40, 0x4d, 0x9f, 0x15, 0xdd, 0xbf, 0xbc, 0xfa, 0xe6, 0xf3, 0x6b, 0xaa, 0xe7, 0x5e, 0xfb, 0x7d,
-	0x78, 0xc2, 0xc5, 0x69, 0xc1, 0xad, 0xfd, 0x07, 0xfe, 0x34, 0xc8, 0x4a, 0x87, 0x69, 0xc9, 0x8f,
-	0x3f, 0x2f, 0xdf, 0xfa, 0xd4, 0xd8, 0xdd, 0x5b, 0x91, 0x7f, 0xa9, 0x26, 0x5f, 0xdb, 0x8b, 0x3f,
-	0x01, 0x00, 0x00, 0xff, 0xff, 0xf2, 0xdc, 0x29, 0xa0, 0xf7, 0x04, 0x00, 0x00,
+var fileDescriptor_px_resource_gateway_629a048cec867dd1 = []byte{
+	// 543 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x54, 0x5d, 0x6f, 0x12, 0x41,
+	0x14, 0xed, 0x42, 0x43, 0xcb, 0xad, 0xa5, 0xdb, 0x41, 0x5a, 0xc4, 0x44, 0xc9, 0x3e, 0x11, 0xa3,
+	0xdb, 0x88, 0xc6, 0x98, 0xf4, 0x89, 0xc2, 0x5a, 0x36, 0x05, 0x59, 0x17, 0xd0, 0xa8, 0x0f, 0x9b,
+	0x75, 0xb9, 0xb1, 0xab, 0x0b, 0x33, 0x9d, 0x1d, 0x2a, 0x3c, 0xf8, 0xb3, 0xfc, 0x39, 0xfe, 0x17,
+	0xb3, 0x1f, 0x10, 0x3e, 0xda, 0x0d, 0x4d, 0x1a, 0x1f, 0xe7, 0xde, 0x73, 0xcf, 0xb9, 0x73, 0xcf,
+	0x9d, 0x81, 0x47, 0x6c, 0x62, 0x71, 0xf4, 0xe9, 0x98, 0x3b, 0x68, 0x7d, 0xb7, 0x05, 0xfe, 0xb2,
+	0xa7, 0x2a, 0xe3, 0x54, 0x50, 0x52, 0xa2, 0x0c, 0xb9, 0x2d, 0x28, 0x57, 0xd9, 0x64, 0x06, 0x89,
+	0x11, 0xca, 0x47, 0x38, 0xee, 0xe2, 0xd0, 0x66, 0x97, 0x94, 0x63, 0xcd, 0x71, 0xd0, 0xf7, 0x0d,
+	0xee, 0x52, 0xee, 0x8a, 0xa9, 0x72, 0x0a, 0xdb, 0xbd, 0x29, 0x43, 0xf2, 0x10, 0xe4, 0xde, 0x67,
+	0x43, 0xb3, 0xfa, 0xef, 0xbb, 0x86, 0x56, 0xd7, 0xdf, 0xe9, 0x5a, 0x43, 0xde, 0x22, 0x3b, 0x90,
+	0x6e, 0x75, 0x3e, 0xc9, 0x12, 0x01, 0xc8, 0xb4, 0xb5, 0x86, 0xde, 0x6f, 0xcb, 0x29, 0xb2, 0x0b,
+	0xdb, 0x4d, 0xfd, 0xbc, 0x29, 0xa7, 0x95, 0x36, 0x14, 0x56, 0x78, 0xbb, 0xc2, 0x16, 0x63, 0x5f,
+	0x79, 0x9d, 0xc8, 0x0a, 0x90, 0xf9, 0xd0, 0xd7, 0xfa, 0x5a, 0x23, 0x22, 0x6e, 0x75, 0xea, 0x17,
+	0x5a, 0x43, 0x4e, 0x29, 0xbf, 0xa1, 0x50, 0xe7, 0x68, 0x0b, 0x34, 0xe3, 0xfe, 0x4d, 0xbc, 0x1a,
+	0xa3, 0x2f, 0xc8, 0x53, 0xd8, 0x9b, 0xdf, 0xda, 0x1d, 0x14, 0xa5, 0xb2, 0x54, 0xc9, 0x9a, 0x30,
+	0x0b, 0xe9, 0x03, 0x72, 0x0c, 0x3b, 0x23, 0xcb, 0xa3, 0xce, 0x4f, 0xbf, 0x98, 0x2a, 0x4b, 0x95,
+	0x7d, 0x33, 0x33, 0x6a, 0x05, 0x27, 0xf2, 0x0c, 0x0e, 0x83, 0xb0, 0x75, 0x49, 0xbd, 0x81, 0x25,
+	0xdc, 0x21, 0xd2, 0xb1, 0x28, 0xa6, 0xcb, 0x52, 0x65, 0xdb, 0x3c, 0x08, 0x12, 0x4d, 0xea, 0x0d,
+	0x7a, 0x51, 0x58, 0x29, 0xc2, 0xd1, 0xaa, 0xbc, 0xcf, 0xe8, 0xc8, 0x47, 0xe5, 0x8f, 0x04, 0xa4,
+	0xe6, 0x5c, 0x8d, 0x5d, 0x8e, 0x01, 0xed, 0xc6, 0x6d, 0x3d, 0x86, 0xac, 0xe3, 0xb9, 0x38, 0x12,
+	0x41, 0x3a, 0x15, 0xa6, 0x77, 0xa3, 0x80, 0x3e, 0x20, 0x36, 0x1c, 0xd8, 0xe1, 0xcc, 0x2c, 0x16,
+	0x9b, 0x11, 0x36, 0x96, 0xab, 0xbe, 0x55, 0x6f, 0xb7, 0x52, 0xbd, 0xc5, 0x47, 0x35, 0x18, 0xb7,
+	0x99, 0xb3, 0x97, 0xcd, 0xe5, 0x90, 0x5f, 0x6a, 0x3b, 0xba, 0x0e, 0xf9, 0x0a, 0xfb, 0xb1, 0xb2,
+	0x1f, 0xda, 0x15, 0x76, 0x9e, 0xab, 0xbe, 0xb9, 0x83, 0x6e, 0xe4, 0x73, 0xa4, 0xfa, 0xc0, 0x5e,
+	0xb4, 0xde, 0x04, 0x62, 0xa2, 0x87, 0xb6, 0x7f, 0x7f, 0xa3, 0x52, 0x0a, 0x90, 0x5f, 0xe2, 0x8c,
+	0x6d, 0x31, 0x40, 0xbe, 0x40, 0x64, 0x35, 0xcf, 0xbd, 0xc6, 0xfb, 0x11, 0x62, 0x70, 0xb8, 0xc0,
+	0xf8, 0x1f, 0xc6, 0x55, 0xfd, 0x9b, 0x06, 0x79, 0x0e, 0xee, 0x22, 0xbf, 0x76, 0x1d, 0x24, 0x53,
+	0xc8, 0x2d, 0x6f, 0x22, 0x79, 0x99, 0x24, 0x76, 0xe3, 0xa3, 0x29, 0x55, 0xef, 0x52, 0x12, 0x4f,
+	0x74, 0x8b, 0x30, 0xd8, 0x5b, 0x58, 0x19, 0xa2, 0x26, 0x91, 0xac, 0x3f, 0x89, 0xd2, 0xc9, 0xc6,
+	0xf8, 0x45, 0xc5, 0x05, 0x73, 0x93, 0x15, 0xd7, 0x37, 0x2b, 0x59, 0xf1, 0xa6, 0xad, 0xd9, 0x22,
+	0x3f, 0x20, 0x3b, 0x77, 0x99, 0x3c, 0x4f, 0xaa, 0x5f, 0x5d, 0xaf, 0xd2, 0x8b, 0x0d, 0xd1, 0x33,
+	0xad, 0xb3, 0x0e, 0x3c, 0x71, 0xe8, 0x30, 0xa1, 0xea, 0xec, 0xc8, 0x98, 0xcc, 0x7c, 0x38, 0x8f,
+	0x42, 0x46, 0xf0, 0xa1, 0x1b, 0xd2, 0x97, 0xfc, 0xc9, 0xe9, 0x1a, 0xfc, 0x5b, 0x26, 0xfc, 0xee,
+	0x5f, 0xfd, 0x0b, 0x00, 0x00, 0xff, 0xff, 0xba, 0x2a, 0xdb, 0xaa, 0x0b, 0x06, 0x00, 0x00,
 }

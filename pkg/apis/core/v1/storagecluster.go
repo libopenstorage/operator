@@ -492,11 +492,9 @@ type AutopilotSpec struct {
 type PxResourceGatewaySpec struct {
 	// Enabled decides whether PxResourceGateway needs to be enabled
 	Enabled bool `json:"enabled,omitempty"`
-	// Image is docker image of the PxResourceGateway container
-	Image string `json:"image,omitempty"`
 	// Args is a map of arguments given to PxResourceGateway
 	Args map[string]string `json:"args,omitempty"`
-	// Resources for PxResourceGateway pods, e.g. CPU and memory requests or limits
+	// Resources requests and limits (like CPU and memory) for PxResourceGateway pod
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 

@@ -14,18 +14,7 @@ import (
 )
 
 const (
-	K8sNamespace         = "kube-system"
-	ConfigMapName        = "px-bringup-configmap"
-	NULL_LOCK     uint32 = 0
-)
-
-var (
-	NLocks                  = 10
-	ConfigMapUpdateInterval = time.Second * 1
-	DeadNodeTimeout         = time.Second * 5
-	labels                  = map[string]string{
-		"app": "grpc-server",
-	}
+	nullLock uint32 = 0
 )
 
 type SemaphorePriorityQueue interface {
@@ -34,6 +23,17 @@ type SemaphorePriorityQueue interface {
 	KeepAlive(clientId string)
 }
 
+type SemaphoreConfig struct {
+	NLocks                uint32
+	ConfigMapName         string
+	ConfigMapNamespace    string
+	ConfigMapLabels       map[string]string
+	ConfigMapUpdatePeriod time.Duration
+	DeadNodeTimeout       time.Duration
+	LockHoldTimeout       time.Duration
+}
+
+// semaphorePriorityQueue implements the SemaphorePriorityQueue interface
 type semaphorePriorityQueue struct {
 	priorityQ PriorityQueue
 
@@ -49,37 +49,40 @@ type semaphorePriorityQueue struct {
 	// configmap backend
 	configMap           *corev1.ConfigMap
 	configMapUpdateDone chan struct{}
+
+	// semaphore config
+	config SemaphoreConfig
 }
 
-func NewSemaphorePriorityQueue() SemaphorePriorityQueue {
+func NewSemaphorePriorityQueue(config *SemaphoreConfig) SemaphorePriorityQueue {
 	// initialize the semaphore structures
 	locks := map[string]uint32{}
 	availableLocks := []uint32{}
 	heartbeats := map[string]time.Time{}
 
 	// populate available locks with all lock ids
-	for i := NULL_LOCK + 1; i <= uint32(NLocks); i++ {
+	for i := nullLock + 1; i <= config.NLocks; i++ {
 		availableLocks = append(availableLocks, i)
 	}
 
 	// create configmap if it doesn't exist
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ConfigMapName,
-			Namespace: K8sNamespace,
-			Labels:    labels,
+			Name:      config.ConfigMapName,
+			Namespace: config.ConfigMapNamespace,
+			Labels:    config.ConfigMapLabels,
 		},
 		Data: map[string]string{},
 	}
 	_, err := core.Instance().CreateConfigMap(configMap)
 	if err != nil && !k8s_errors.IsAlreadyExists(err) {
-		panic(fmt.Sprintf("Failed to create configmap %s in namespace %s: %v", ConfigMapName, K8sNamespace, err))
+		panic(fmt.Sprintf("Failed to create configmap %s in namespace %s: %v", config.ConfigMapName, config.ConfigMapNamespace, err))
 	}
 
 	// get the latest copy of configmap
-	configMap, err = core.Instance().GetConfigMap(ConfigMapName, K8sNamespace)
+	configMap, err = core.Instance().GetConfigMap(config.ConfigMapName, config.ConfigMapNamespace)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to get configmap %s in namespace %s: %v", ConfigMapName, K8sNamespace, err))
+		panic(fmt.Sprintf("Failed to get configmap %s in namespace %s: %v", config.ConfigMapName, config.ConfigMapNamespace, err))
 	}
 
 	semPQ := &semaphorePriorityQueue{
@@ -89,6 +92,7 @@ func NewSemaphorePriorityQueue() SemaphorePriorityQueue {
 		heartbeats:          heartbeats,
 		configMap:           configMap,
 		configMapUpdateDone: make(chan struct{}),
+		config:              *config,
 	}
 
 	// start background workers
@@ -178,7 +182,7 @@ func (s *semaphorePriorityQueue) KeepAlive(clientId string) {
 
 func (s *semaphorePriorityQueue) fetchAvailableLock() uint32 {
 	if len(s.availableLocks) == 0 {
-		return NULL_LOCK
+		return nullLock
 	}
 	lockId := s.availableLocks[0]
 	s.availableLocks = s.availableLocks[1:]
@@ -197,7 +201,7 @@ func (s *semaphorePriorityQueue) tryLock(clientId string) bool {
 	}
 	// check if any lock is available
 	lockId := s.fetchAvailableLock()
-	if lockId == NULL_LOCK {
+	if lockId == nullLock {
 		return false
 	}
 
@@ -207,6 +211,9 @@ func (s *semaphorePriorityQueue) tryLock(clientId string) bool {
 	return true
 }
 
+/////// Background workers ///////
+
+// updateConfigMap updates the configmap with the latest lock information if required
 func (s *semaphorePriorityQueue) updateConfigMap() error {
 
 	isUpdateRequired := func(map1, map2 map[string]string) bool {
@@ -239,8 +246,10 @@ func (s *semaphorePriorityQueue) updateConfigMap() error {
 	return nil
 }
 
+// configMapUpdateRoutine calls the updateConfigMap periodically
+// as defined by ConfigMapUpdatePeriod parameter
 func (s *semaphorePriorityQueue) configMapUpdateRoutine() {
-	ticker := time.NewTicker(ConfigMapUpdateInterval)
+	ticker := time.NewTicker(s.config.ConfigMapUpdatePeriod)
 	defer ticker.Stop()
 	for range ticker.C {
 		err := s.updateConfigMap()
@@ -253,6 +262,11 @@ func (s *semaphorePriorityQueue) configMapUpdateRoutine() {
 	}
 }
 
+// cleanupDeadNodes removes the dead nodes from the priority queue
+// and releases the locks if any
+//
+// Dead node is defined as a node that has not sent a heartbeat
+// for more than DeadNodeTimeout duration
 func (s *semaphorePriorityQueue) cleanupDeadNodes() {
 	deadNodes := []string{}
 	removedNode := map[string]string{}
@@ -268,7 +282,7 @@ func (s *semaphorePriorityQueue) cleanupDeadNodes() {
 	}()
 
 	for clientId, lastHeartbeat := range s.heartbeats {
-		if time.Since(lastHeartbeat) > DeadNodeTimeout {
+		if time.Since(lastHeartbeat) > s.config.DeadNodeTimeout {
 			delete(s.heartbeats, clientId) // remove the resource footprint
 			deadNodes = append(deadNodes, clientId)
 		}
@@ -293,8 +307,10 @@ func (s *semaphorePriorityQueue) cleanupDeadNodes() {
 	}
 }
 
+// cleanupDeadNodesRoutine calls the cleanupDeadNodes periodically
+// as defined by DeadNodeTimeout parameter
 func (s *semaphorePriorityQueue) cleanupDeadNodesRoutine() {
-	ticker := time.NewTicker(DeadNodeTimeout)
+	ticker := time.NewTicker(s.config.DeadNodeTimeout)
 	defer ticker.Stop()
 	for range ticker.C {
 		s.cleanupDeadNodes()

@@ -11,6 +11,10 @@ option java_outer_classname = "PxResourceGatewayProto";
 // and a priority queue to distinguish between different types of clients/requests
 service SemaphoreService {
   // AcquireLock acquires a semaphore lock or reserves a place in the queue for the resource
+  rpc CreateResource(CreateResourceRequest)
+    returns (CreateResourceResponse) {}
+
+    // AcquireLock acquires a semaphore lock or reserves a place in the queue for the resource
   rpc AcquireLock(AcquireLockRequest)
     returns (AcquireLockResponse) {}
 
@@ -51,6 +55,19 @@ message SemaphoreAccessStatus{
   }
 }
 
+// CreateResourceRequest is the request to create a new semaphore resource
+message CreateResourceRequest {
+  // Resource ID of the new semaphore resource
+  string resource_id = 1;
+  // Number of locks that can be acquired for the resource
+  uint32 n_locks = 2;
+  // Max duration for which a lock can be held
+  uint64 lock_hold_timeout = 3;
+}
+
+// CreateResourceResponse is the response to create a new semaphore resource
+message CreateResourceResponse {}
+
 // AcquireLockRequest is the request to acquire a semaphore lock
 message AcquireLockRequest {
   // Resource ID to acquire the lock for
@@ -75,6 +92,9 @@ message ReleaseLockRequest {
   string client_id = 2;
 }
 
+// ReleaseLockResponse is the response to release a semaphore lock
+message ReleaseLockResponse {}
+
 // KeepAliveRequest is the request to send a heartbeat to the semaphore service
 message KeepAliveRequest {
   // Resource ID to keep the lock alive for
@@ -83,10 +103,7 @@ message KeepAliveRequest {
   string client_id = 2;
 }
 
-// ReleaseLockResponse is the response to acquire a semaphore lock
-message ReleaseLockResponse {}
-
-// KeepAliveLockResponse is the response to acquire a semaphore lock
+// KeepAliveLockResponse is the response to keep a semaphore lock alive
 message KeepAliveResponse {
   // Status of the client's access to the resource
   SemaphoreAccessStatus.Type access_status = 1;

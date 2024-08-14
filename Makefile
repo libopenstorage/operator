@@ -176,15 +176,15 @@ codegen:
 	@echo "Generating CRD"
 	(GOFLAGS="" hack/update-codegen.sh)
 
-operator:
+px-resource-gateway:
+	@echo "Building the px-resource-gateway binary"
+	@cd cmd/px-resource-gateway && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/px-resource-gateway
+
+operator: px-resource-gateway
 	@echo "Building the cluster operator binary"
 	@cd cmd/operator && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
 	@cd cmd/dryrun && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/dryrun
 
-px-resource-gateway:
-	@echo "Building the px-resource-gateway binary"
-	@echo "CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/px-resource-gateway"
-	@cd cmd/px-resource-gateway && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/px-resource-gateway
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
@@ -307,4 +307,4 @@ clean: clean-release-manifest clean-bundle
 	@docker rmi -f $(OPERATOR_IMG) registry.access.redhat.com/ubi9-minimal:latest
 
 px-resource-gateway-proto:
-	$(MAKE) -C proto px-resource-gateway-docker-proto
+	$(MAKE) -C proto docker-proto

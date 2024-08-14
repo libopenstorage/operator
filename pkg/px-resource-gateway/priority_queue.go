@@ -49,7 +49,9 @@ func (pq *priorityQueue) Dequeue(priority pb.SemaphoreAccessPriority_Type) {
 	pq.Lock()
 	defer pq.Unlock()
 
-	pq.queues[priority].Remove(pq.queues[priority].Front())
+	if pq.queues[priority].Front() != nil {
+		pq.queues[priority].Remove(pq.queues[priority].Front())
+	}
 }
 
 func (pq *priorityQueue) Front() (string, pb.SemaphoreAccessPriority_Type) {
