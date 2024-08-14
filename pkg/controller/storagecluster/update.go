@@ -129,7 +129,7 @@ func (c *Controller) rollingUpdate(cluster *corev1.StorageCluster, hash string, 
 		}
 	}
 	// Non disruptive upgrade of nodes only if update strategy is rolling and if allow disruption is false
-	if cluster.Spec.UpdateStrategy.RollingUpdate == nil || cluster.Spec.UpdateStrategy.RollingUpdate.Disruption == nil || !*cluster.Spec.UpdateStrategy.RollingUpdate.Disruption.Allow {
+	if cluster.Spec.UpdateStrategy.RollingUpdate == nil || cluster.Spec.UpdateStrategy.RollingUpdate.Disruption == nil || !cluster.Spec.UpdateStrategy.RollingUpdate.Disruption.Allow {
 		oldAvailablePods, err = c.parallelUpgradeNodesList(cluster, oldAvailablePods, unavailableNodes, storageNodeList)
 		if err != nil {
 			return err
