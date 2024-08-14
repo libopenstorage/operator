@@ -285,7 +285,7 @@ type RollingUpdateStorageCluster struct {
 // Disruption contains configuration for disruption
 type Disruption struct {
 	// Flag indicates whether updates are non-disruptive or disruptive.
-	Allow *bool `json:"allow,omitempty"`
+	Allow bool `json:"allow,omitempty"`
 }
 
 // StorageClusterDeleteStrategyType is enum for storage cluster delete strategies
