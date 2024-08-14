@@ -1980,13 +1980,13 @@ func ConvertNodeListToNodeNameList(nodeList []v1.Node) []string {
 func GetFullVersion() (*version.Version, string, error) {
 	k8sVersion, err := coreops.Instance().GetVersion()
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to get kubernetes version: %v", err)
+		return nil, "", fmt.Errorf("unable to get kubernetes version, Err: %v", err)
 	}
 
 	kbVerRegex := regexp.MustCompile(`^(v\d+\.\d+\.\d+)(.*)`)
 	matches := kbVerRegex.FindStringSubmatch(k8sVersion.GitVersion)
 	if len(matches) < 2 {
-		return nil, "", fmt.Errorf("invalid kubernetes version received: %v", k8sVersion.GitVersion)
+		return nil, "", fmt.Errorf("invalid kubernetes version received [%v]", k8sVersion.GitVersion)
 	}
 
 	ver, err := version.NewVersion(matches[1])
@@ -4518,67 +4518,76 @@ func ValidateAlertManager(pxImageList map[string]string, cluster *corev1.Storage
 // ValidateAlertManagerEnabled validates alert manager components are enabled/installed as expected
 func ValidateAlertManagerEnabled(pxImageList map[string]string, cluster *corev1.StorageCluster, timeout, interval time.Duration) error {
 	// Validate Alert Manager statefulset, pods and images
-	logrus.Info("Validating AlertManager components")
+	logrus.Info("Validating AlertManager and its components..")
 	alertManagerSset := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "alertmanager-portworx",
 			Namespace: cluster.Namespace,
 		},
 	}
-	if err := appops.Instance().ValidateStatefulSet(alertManagerSset, timeout); err != nil {
-		return err
-	}
-
-	alertManagerSset, err := appops.Instance().GetStatefulSet(alertManagerSset.Name, alertManagerSset.Namespace)
-	if err != nil {
-		return err
-	}
-
-	pods, err := appops.Instance().GetStatefulSetPods(alertManagerSset)
-	if err != nil {
-		return err
-	}
-
-	if image, ok := pxImageList["alertManager"]; ok {
-		if err := validateContainerImageInsidePods(cluster, image, "alertmanager", &v1.PodList{Items: pods}); err != nil {
-			return err
-		}
-	} else {
-		return fmt.Errorf("failed to find image for telemetry")
-	}
 
 	K8sVer1_22, _ := version.NewVersion("1.22")
 	kubeVersion, _, err := GetFullVersion()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get full k8s versions, Err: %v", err)
 	}
 
-	// NOTE: Prometheus uses different images for k8s 1.22 and up then for 1.21 and below
-	var configReloaderImageName string
-	if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) {
-		value, ok := pxImageList["prometheusConfigReloader"]
-		if !ok {
-			return fmt.Errorf("failed to find image for prometheus config reloader")
+	t := func() (interface{}, bool, error) {
+		if err := appops.Instance().ValidateStatefulSet(alertManagerSset, timeout); err != nil {
+			return nil, true, err
 		}
-		configReloaderImageName = value
-	} else {
-		value, ok := pxImageList["prometheusConfigMapReload"]
-		if !ok {
-			return fmt.Errorf("failed to find image for prometheus configmap reloader")
+
+		alertManagerSset, err := appops.Instance().GetStatefulSet(alertManagerSset.Name, alertManagerSset.Namespace)
+		if err != nil {
+			return nil, true, err
 		}
-		configReloaderImageName = value
+
+		pods, err := appops.Instance().GetStatefulSetPods(alertManagerSset)
+		if err != nil {
+			return nil, true, err
+		}
+
+		if image, ok := pxImageList["alertManager"]; ok {
+			if err := validateContainerImageInsidePods(cluster, image, "alertmanager", &v1.PodList{Items: pods}); err != nil {
+				return nil, true, err
+			}
+		} else {
+			return nil, false, fmt.Errorf("failed to find image for alertmanager")
+		}
+
+		// NOTE: Prometheus uses different images for k8s 1.22 and up then for 1.21 and below
+		var configReloaderImageName string
+		if kubeVersion != nil && kubeVersion.GreaterThanOrEqual(K8sVer1_22) {
+			value, ok := pxImageList["prometheusConfigReloader"]
+			if !ok {
+				return nil, false, fmt.Errorf("failed to find image for prometheus config reloader")
+			}
+			configReloaderImageName = value
+		} else {
+			value, ok := pxImageList["prometheusConfigMapReload"]
+			if !ok {
+				return nil, false, fmt.Errorf("failed to find image for prometheus configmap reloader")
+			}
+			configReloaderImageName = value
+		}
+
+		if err := validateContainerImageInsidePods(cluster, configReloaderImageName, "config-reloader", &v1.PodList{Items: pods}); err != nil {
+			return nil, true, err
+		}
+
+		// Verify alert manager services
+		if _, err := coreops.Instance().GetService("alertmanager-portworx", cluster.Namespace); err != nil {
+			return nil, true, fmt.Errorf("failed to get service alertmanager-portworx")
+		}
+
+		return nil, false, nil
 	}
 
-	if err := validateContainerImageInsidePods(cluster, configReloaderImageName, "config-reloader", &v1.PodList{Items: pods}); err != nil {
-		return err
+	if _, err := task.DoRetryWithTimeout(t, timeout, interval); err != nil {
+		return fmt.Errorf("failed to validate AlertManager and its components, Err: %v", err)
 	}
 
-	// Verify alert manager services
-	if _, err := coreops.Instance().GetService("alertmanager-portworx", cluster.Namespace); err != nil {
-		return fmt.Errorf("failed to get service alertmanager-portworx")
-	}
-
-	logrus.Infof("Alert manager is enabled and deployed")
+	logrus.Infof("Successfully validated that AlertManager is enabled and deployed")
 	return nil
 }
 
