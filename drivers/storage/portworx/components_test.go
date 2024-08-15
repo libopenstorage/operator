@@ -3568,8 +3568,8 @@ func TestAutopilotInstall(t *testing.T) {
 				GitOps: &corev1.GitOpsSpec{
 					Name: "test",
 					Type: "bitbucket-scm",
-					Params: map[string]interface{}{
-						"defaultReviewers": []interface{}{"user1", "user2"},
+					Params: map[string]string{
+						"defaultReviewers": "user1,user2",
 						"user":             "oksana",
 						"repo":             "autopilot-bb",
 						"folder":           "workloads",
@@ -5059,8 +5059,8 @@ func TestAutopilotInstallAndUninstallOnOpenshift414(t *testing.T) {
 				GitOps: &corev1.GitOpsSpec{
 					Name: "test",
 					Type: "bitbucket-scm",
-					Params: map[string]interface{}{
-						"defaultReviewers": []interface{}{"user1", "user2"},
+					Params: map[string]string{
+						"defaultReviewers": "user1,user2",
 						"user":             "oksana",
 						"repo":             "autopilot-bb",
 						"folder":           "workloads",
@@ -5236,8 +5236,8 @@ func TestAutopilotWithOCPSecretNotFound(t *testing.T) {
 				GitOps: &corev1.GitOpsSpec{
 					Name: "test",
 					Type: "bitbucket-scm",
-					Params: map[string]interface{}{
-						"defaultReviewers": []interface{}{"user1", "user2"},
+					Params: map[string]string{
+						"defaultReviewers": "user1,user2",
 						"user":             "oksana",
 						"repo":             "autopilot-bb",
 						"folder":           "workloads",
@@ -5364,8 +5364,8 @@ func TestDisableEnableAutopilotOCP414(t *testing.T) {
 				GitOps: &corev1.GitOpsSpec{
 					Name: "test",
 					Type: "bitbucket-scm",
-					Params: map[string]interface{}{
-						"defaultReviewers": []interface{}{"user1", "user2"},
+					Params: map[string]string{
+						"defaultReviewers": "user1,user2",
 						"user":             "oksana",
 						"repo":             "autopilot-bb",
 						"folder":           "workloads",
@@ -5548,8 +5548,8 @@ func TestAutopilotProviderURLOnOCP414(t *testing.T) {
 				GitOps: &corev1.GitOpsSpec{
 					Name: "test",
 					Type: "bitbucket-scm",
-					Params: map[string]interface{}{
-						"defaultReviewers": []interface{}{"user1", "user2"},
+					Params: map[string]string{
+						"defaultReviewers": "user1,user2",
 						"user":             "oksana",
 						"repo":             "autopilot-bb",
 						"folder":           "workloads",
@@ -5670,8 +5670,8 @@ func TestAutopilotInstallAndUninstallOnOpenshift415(t *testing.T) {
 				GitOps: &corev1.GitOpsSpec{
 					Name: "test",
 					Type: "bitbucket-scm",
-					Params: map[string]interface{}{
-						"defaultReviewers": []interface{}{"user1", "user2"},
+					Params: map[string]string{
+						"defaultReviewers": "user1,user2",
 						"user":             "oksana",
 						"repo":             "autopilot-bb",
 						"folder":           "workloads",
