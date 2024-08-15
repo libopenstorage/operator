@@ -50,8 +50,10 @@ import (
 	"k8s.io/utils/integer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -66,6 +68,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
 	"github.com/libopenstorage/operator/pkg/util/maps"
+	coreops "github.com/portworx/sched-ops/k8s/core"
 )
 
 const (
@@ -116,7 +119,9 @@ type Controller struct {
 	ctrl                          controller.Controller
 	kubevirt                      KubevirtManager
 	// Node to NodeInfo map
-	nodeInfoMap maps.SyncMap[string, *k8s.NodeInfo]
+	nodeInfoMap           maps.SyncMap[string, *k8s.NodeInfo]
+	nodesUpdatedMap       map[string]bool
+	secretResourceVersion string
 }
 
 // Init initialize the storage cluster controller
@@ -127,6 +132,8 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	c.recorder = mgr.GetEventRecorderFor(ControllerName)
 	c.nodeInfoMap = maps.MakeSyncMap[string, *k8s.NodeInfo]()
 	c.kubevirt = newKubevirtManager()
+	c.nodesUpdatedMap = nil
+	c.secretResourceVersion = ""
 
 	// Create a new controller
 	c.ctrl, err = controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
@@ -155,6 +162,18 @@ func (c *Controller) Init(mgr manager.Manager) error {
 		return fmt.Errorf("error setting node name index on pod cache: %v", err)
 	}
 
+	// Store resource version of vsphere secret
+	secrets, err := clientset.CoreV1().Secrets("").List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		logrus.Warnf("Failed to list secrets. %v", err)
+	} else {
+		for _, secret := range secrets.Items {
+			if secret.Data["VSPHERE_USER"] != nil {
+				c.secretResourceVersion = secret.ResourceVersion
+				break
+			}
+		}
+	}
 	return nil
 }
 
@@ -240,6 +259,23 @@ func (c *Controller) Reconcile(_ context.Context, request reconcile.Request) (re
 		}
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
+	}
+
+	// If env variable for vsphere secret and secret exists, then check if the secret has changed
+	for _, env := range cluster.Spec.Env {
+		if env.Name == "VSPHERE_USER" && len(env.ValueFrom.SecretKeyRef.Name) > 0 {
+			secretName := env.ValueFrom.SecretKeyRef.Name
+			secret, err := coreops.Instance().GetSecret(secretName, cluster.Namespace)
+			if err != nil {
+				logrus.Warnf("Failed to get vsphere secret %s in namespace %s. %v", secretName, cluster.Namespace, err)
+				break
+			}
+			if c.secretResourceVersion != secret.ResourceVersion {
+				c.nodesUpdatedMap = make(map[string]bool)
+				c.secretResourceVersion = secret.ResourceVersion
+			}
+			break
+		}
 	}
 
 	if err := c.validate(cluster); err != nil {
@@ -1107,6 +1143,9 @@ func (c *Controller) syncNodes(
 			go func(idx int) {
 				defer createWait.Done()
 				nodeName := nodesNeedingStoragePods[idx]
+				if c.nodesUpdatedMap != nil {
+					c.nodesUpdatedMap[nodeName] = true
+				}
 				err := c.podControl.CreatePods(
 					context.TODO(),
 					cluster.Namespace,

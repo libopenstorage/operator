@@ -624,6 +624,11 @@ func (c *Controller) groupStorageClusterPods(
 			}
 		}
 	}
+
+	// If secrets was updated and all px pods have completed update then reset the nodesUpdatedMap to nil
+	if c.nodesUpdatedMap != nil && len(oldPods) == 0 && len(c.nodesUpdatedMap) == len(newPods) {
+		c.nodesUpdatedMap = nil
+	}
 	return newPods, oldPods
 }
 
@@ -841,6 +846,13 @@ func (c *Controller) syncStoragePod(
 	// are compared below with corresponding history revision.
 	if updated := c.Driver.IsPodUpdated(cluster, pod); !updated {
 		return false
+	}
+
+	// If secret has changed and pod not updated, then pod should be updated
+	if c.nodesUpdatedMap != nil {
+		if _, ok := c.nodesUpdatedMap[node.Name]; !ok {
+			return false
+		}
 	}
 
 	var oldNodeLabels map[string]string
