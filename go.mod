@@ -53,6 +53,7 @@ require (
 	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dgrijalva/jwt-go v3.2.1-0.20180719211823-0b96aaa70776+incompatible // indirect
 	github.com/docker/distribution v2.8.2+incompatible // indirect
 	github.com/emicklei/go-restful/v3 v3.10.2 // indirect
 	github.com/evanphx/json-patch v5.6.0+incompatible // indirect
@@ -130,7 +131,7 @@ require (
 replace (
 	github.com/coreos/prometheus-operator => github.com/prometheus-operator/prometheus-operator v0.46.0
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v5.1.1-0.20190919185747-9394ee8dd536+incompatible
-	github.com/libopenstorage/openstorage => github.com/libopenstorage/openstorage v1.0.1-0.20240221210452-7757fdc2b8ff
+	github.com/libopenstorage/openstorage => github.com/libopenstorage/openstorage v1.0.1-0.20240606014227-75ac074bb81d
 	github.com/portworx/sched-ops => github.com/portworx/sched-ops v1.20.4-rc1.0.20240731224434-94e4e354c4b2
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring => github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.46.0
 	golang.org/x/tools => golang.org/x/tools v0.1.11
