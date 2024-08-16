@@ -815,7 +815,7 @@ func (p *portworx) GetNodesSelectedForUpgrade(cluster *corev1.StorageCluster, no
 		return nil, fmt.Errorf("failed to get Portworx connection: %v", err)
 	}
 	nodeClient := storageapi.NewOpenStorageNodeClient(p.sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient, false)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup context with token: %v", err)
 	}
