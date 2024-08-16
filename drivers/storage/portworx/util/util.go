@@ -966,7 +966,7 @@ func SetupContextWithToken(ctx context.Context, cluster *corev1.StorageCluster, 
 	if errors.IsNotFound(err) {
 		if SecurityEnabled(cluster) {
 			// when security is enabled in STC, and secret is not found, return error
-			return nil, fmt.Errorf("failed to get portworx system secret: %v", err.Error())
+			return nil, fmt.Errorf("failed to get portworx apps secret: %v", err.Error())
 		}
 		// if security is not enabled in STC, it is okay to proceed without the secret
 		return ctx, nil
