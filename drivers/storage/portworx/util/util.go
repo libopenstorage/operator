@@ -79,8 +79,6 @@ const (
 	EssentialsOSBEndpointKey = "px-osb-endpoint"
 	// EnvKeyKubeletDir env var to set custom kubelet directory
 	EnvKeyKubeletDir = "KUBELET_DIR"
-	// Dummy Secret value for authentication when Security is disabled
-	DummySecretValue = "dummy-secret-value"
 
 	// AnnotationIsPKS annotation indicating whether it is a PKS cluster
 	AnnotationIsPKS = pxAnnotationPrefix + "/is-pks"
@@ -955,29 +953,26 @@ func SecurityEnabled(cluster *corev1.StorageCluster) bool {
 }
 
 // SetupContextWithToken Gets token or from secret for authenticating with the SDK server
-func SetupContextWithToken(ctx context.Context, cluster *corev1.StorageCluster, k8sClient client.Client, skipSecurityCheck bool) (context.Context, error) {
-	// auth not declared in cluster spec
-	// if security enabled check is skipped, proceed without returning context
-	if !SecurityEnabled(cluster) && !skipSecurityCheck {
-		return ctx, nil
-	}
+func SetupContextWithToken(ctx context.Context, cluster *corev1.StorageCluster, k8sClient client.Client) (context.Context, error) {
 
+	// Get the secret key for the system issuer
+	// return error if error is not NotFound
 	pxAppsSecret, err := GetSecretValue(ctx, cluster, k8sClient, SecurityPXSystemSecretsSecretName, SecurityAppsSecretKey)
-	if err != nil {
-		if !skipSecurityCheck {
-			return ctx, fmt.Errorf("failed to get portworx apps secret: %v", err.Error())
-		}
-		// if security enabled check is skipped and secret is not present, proceed with dummy secret value
-		// this is case of fresh install where security was never enabled
-		if errors.IsNotFound(err) && skipSecurityCheck {
-			pxAppsSecret = DummySecretValue
-		}
+	if err != nil && !errors.IsNotFound(err) {
+		return nil, err
 	}
 
-	if pxAppsSecret == "" {
+	// if secret is not found, check if security is enabled
+	if errors.IsNotFound(err) {
+		if SecurityEnabled(cluster) {
+			// when security is enabled in STC, and secret is not found, return error
+			return nil, fmt.Errorf("failed to get portworx system secret: %v", err.Error())
+		}
+		// if security is not enabled in STC, it is okay to proceed without the secret
 		return ctx, nil
 	}
 
+	// security is enabled and secret is found
 	// Generate token and add to metadata.
 	name := "operator"
 	pxAppsIssuerVersion, err := version.NewVersion("2.6.0")
@@ -1127,7 +1122,7 @@ func CountStorageNodes(
 	nodeEnumerateResponse *api.SdkNodeEnumerateWithFiltersResponse,
 ) (int, error) {
 	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
-	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient, false)
+	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
 	if err != nil {
 		return -1, err
 	}
@@ -1707,7 +1702,7 @@ func GetNodesToUpgrade(cluster *corev1.StorageCluster,
 
 	// Make a request to SDK API FilterNonOverlappingNodes to get output of list of nodes that can be upgraded in parallel
 	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
-	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient, false)
+	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
 	if err != nil {
 		return nil, nil, -1, err
 	}
