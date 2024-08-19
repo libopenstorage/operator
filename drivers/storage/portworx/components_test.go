@@ -15880,7 +15880,8 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			ClusterUID: "test-clusteruid",
+			ClusterUID:  "test-clusteruid",
+			ClusterName: "test-clustername",
 		},
 	}
 

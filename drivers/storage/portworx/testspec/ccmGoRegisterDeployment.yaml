@@ -42,6 +42,8 @@ spec:
           value: config/config_properties_px.yaml
         - name: APPLIANCE_ID
           value: test-clusteruid
+        - name: APPLIANCE_NAME
+          value: test-clustername
         image: docker.io/portworx/px-telemetry:4.3.2
         imagePullPolicy: Always
         name: registration
