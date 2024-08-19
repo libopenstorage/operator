@@ -442,24 +442,28 @@ func (c *csi) createDeployment(
 		return err
 	}
 
-	if cluster.Spec.CSI.InstallSnapshotController != nil &&
-		*cluster.Spec.CSI.InstallSnapshotController &&
-		cluster.Status.DesiredImages.CSISnapshotController != "" {
-		// Check if a snapshot controller was installed already using image "snapshot-controller",
-		// Only do this once to avoid scanning all pods frequently.
-		if c.csiSnapshotControllerPreInstalled == nil {
-			if err := c.findPreinstalledCSISnapshotController(); err != nil {
-				return err
-			}
-		}
-	}
+	// if cluster.Spec.CSI.InstallSnapshotController != nil &&
+	// 	*cluster.Spec.CSI.InstallSnapshotController &&
+	// 	cluster.Status.DesiredImages.CSISnapshotController != "" {
+	// 	// Check if a snapshot controller was installed already using image "snapshot-controller",
+	// 	// Only do this once to avoid scanning all pods frequently.
+	// 	if c.csiSnapshotControllerPreInstalled == nil {
+	// 		if err := c.findPreinstalledCSISnapshotController(); err != nil {
+	// 			return err
+	// 		}
+	// 	}
+	// }
 
 	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.k8sClient, csiDeploymentTemplateSelectorLabels)
 	if err != nil {
 		return err
 	}
 
-	deployment := c.getCSIDeploymentSpec(cluster, csiConfig, updatedTopologySpreadConstraints, existingDeployment.Annotations, ownerRef)
+	deployment, err := c.getCSIDeploymentSpec(cluster, csiConfig, updatedTopologySpreadConstraints, existingDeployment.Annotations, ownerRef)
+	if err != nil {
+		return err
+	}
+
 	isPodTemplateEqual, _ := util.DeepEqualPodTemplate(&deployment.Spec.Template, &existingDeployment.Spec.Template)
 
 	modified := !isPodTemplateEqual ||
@@ -529,7 +533,7 @@ func (c *csi) getCSIDeploymentSpec(
 	topologySpreadConstraints []v1.TopologySpreadConstraint,
 	existingAnnotations map[string]string,
 	ownerRef *metav1.OwnerReference,
-) *appsv1.Deployment {
+) (*appsv1.Deployment, error) {
 	replicas := int32(3)
 	leaderElectionType := "leases"
 	provisionerLeaderElectionType := "leases"
@@ -552,34 +556,62 @@ func (c *csi) getCSIDeploymentSpec(
 		cluster,
 		cluster.Status.DesiredImages.CSIProvisioner,
 	)
+
+	if provisionerImage == "" {
+		return nil, fmt.Errorf("csi provisioner image not found")
+	}
+
 	if csiConfig.IncludeAttacher && cluster.Status.DesiredImages.CSIAttacher != "" {
 		attacherImage = util.GetImageURN(
 			cluster,
 			cluster.Status.DesiredImages.CSIAttacher,
 		)
+
+		if attacherImage == "" {
+			return nil, fmt.Errorf("csi attacher image not found")
+		}
 	}
-	if csiConfig.IncludeSnapshotter && cluster.Status.DesiredImages.CSISnapshotter != "" {
+	if csiConfig.IncludeSnapshotter {
 		snapshotterImage = util.GetImageURN(
 			cluster,
 			cluster.Status.DesiredImages.CSISnapshotter,
 		)
+
+		if snapshotterImage == "" {
+			return nil, fmt.Errorf("csi snapshotter image not found")
+		}
 	}
-	if csiConfig.IncludeResizer && cluster.Status.DesiredImages.CSIResizer != "" {
+	if csiConfig.IncludeResizer {
 		resizerImage = util.GetImageURN(
 			cluster,
 			cluster.Status.DesiredImages.CSIResizer,
 		)
+
+		if resizerImage == "" {
+			return nil, fmt.Errorf("csi resizer image not found")
+		}
 	}
 
 	if cluster.Spec.CSI.InstallSnapshotController != nil &&
 		*cluster.Spec.CSI.InstallSnapshotController &&
-		cluster.Status.DesiredImages.CSISnapshotController != "" &&
-		!*c.csiSnapshotControllerPreInstalled {
-		snapshotControllerImage = util.GetImageURN(
-			cluster,
-			cluster.Status.DesiredImages.CSISnapshotController,
-		)
-
+		cluster.Status.DesiredImages.CSISnapshotController != "" {
+		// Check if a snapshot controller was installed already using image "snapshot-controller",
+		// Only do this once to avoid scanning all pods frequently.
+		if c.csiSnapshotControllerPreInstalled == nil {
+			if err := c.findPreinstalledCSISnapshotController(); err != nil {
+				return nil, err
+			}
+		}
+		if !*c.csiSnapshotControllerPreInstalled {
+			snapshotControllerImage = util.GetImageURN(
+				cluster,
+				cluster.Status.DesiredImages.CSISnapshotController,
+			)
+		}
+	} else if cluster.Spec.CSI.InstallSnapshotController != nil &&
+		*cluster.Spec.CSI.InstallSnapshotController &&
+		cluster.Status.DesiredImages.CSISnapshotController == "" {
+		return nil, fmt.Errorf("csi snapshot controller image not found")
 	}
 
 	if csiConfig.IncludeHealthMonitorController && cluster.Status.DesiredImages.CSIHealthMonitorController != "" {
@@ -587,6 +619,10 @@ func (c *csi) getCSIDeploymentSpec(
 			cluster,
 			cluster.Status.DesiredImages.CSIHealthMonitorController,
 		)
+
+		if healthMonitorControllerImage == "" {
+			return nil, fmt.Errorf("csi health monitor controller image not found")
+		}
 	}
 
 	var args []string
@@ -885,7 +921,7 @@ func (c *csi) getCSIDeploymentSpec(
 	}
 	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
-	return deployment
+	return deployment, nil
 }
 
 func (c *csi) createStatefulSet(

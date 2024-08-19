@@ -667,7 +667,14 @@ func TestPortworxAPIDaemonSetAlwaysDeploys(t *testing.T) {
 }
 
 func TestPortworxAPIResourcesChange(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.29.0",
+	}
+
+	setUpMockCoreOps(mockCtrl, versionClient)
+
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -779,7 +786,14 @@ func TestPortworxAPIResourcesChange(t *testing.T) {
 }
 
 func TestPortworxAPIAnnotationsChange(t *testing.T) {
-	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	mockCtrl := gomock.NewController(t)
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.29.0",
+	}
+
+	setUpMockCoreOps(mockCtrl, versionClient)
+
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
@@ -8280,11 +8294,14 @@ func TestCSI_0_3_NodeAffinityChange(t *testing.T) {
 }
 
 func TestCSIExtResourcesChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.29.0",
 	}
+
+	setUpMockCoreOps(mockCtrl, versionClient)
+
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 
@@ -8400,11 +8417,14 @@ func TestCSIExtResourcesChange(t *testing.T) {
 }
 
 func TestCSIExtSpecificNodeAffinityChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.29.0",
 	}
+
+	setUpMockCoreOps(mockCtrl, versionClient)
+
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 
@@ -8492,11 +8512,14 @@ func TestCSIExtSpecificNodeAffinityChange(t *testing.T) {
 }
 
 func TestCSIExtSpecificTolerationsChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.29.0",
 	}
+
+	setUpMockCoreOps(mockCtrl, versionClient)
+
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 
@@ -8579,11 +8602,14 @@ func TestCSIExtSpecificTolerationsChange(t *testing.T) {
 }
 
 func TestCSIExtDeploymentAnnotationsChange(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
 	versionClient := fakek8sclient.NewSimpleClientset()
-	coreops.SetInstance(coreops.New(versionClient))
 	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
 		GitVersion: "v1.29.0",
 	}
+
+	setUpMockCoreOps(mockCtrl, versionClient)
+
 	fakeExtClient := fakeextclient.NewSimpleClientset()
 	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
 
@@ -16503,6 +16529,7 @@ func TestTelemetryCCMProxy(t *testing.T) {
 func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
+
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
