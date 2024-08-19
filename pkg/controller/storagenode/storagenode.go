@@ -510,7 +510,7 @@ func (c *Controller) isStorageNode(storageNode *corev1.StorageNode, cluster *cor
 	}
 
 	nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, c.client, false)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, c.client)
 	if err != nil {
 		logrus.Errorf("failed to setup context with token: %v", err)
 		return false, err

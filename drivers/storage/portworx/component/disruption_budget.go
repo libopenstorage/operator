@@ -90,7 +90,7 @@ func (c *disruptionBudget) Reconcile(cluster *corev1.StorageCluster) error {
 
 	// Get list of portworx storage nodes
 	nodeClient := api.NewOpenStorageNodeClient(c.sdkConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, c.k8sClient, false)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, c.k8sClient)
 	if err != nil {
 		return err
 	}
