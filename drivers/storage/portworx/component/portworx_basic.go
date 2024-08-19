@@ -592,6 +592,7 @@ func refreshTokenIfNeeded(secret *v1.Secret, cluster *corev1.StorageCluster) (bo
 	if err != nil {
 		return false, err
 	}
+
 	if needRefreshToken {
 		if err := refreshToken(secret, cluster); err != nil {
 			return false, fmt.Errorf("failed to refresh the token secret for px container: %w", err)

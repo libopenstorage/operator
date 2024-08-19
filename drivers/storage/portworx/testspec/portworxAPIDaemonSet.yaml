@@ -36,9 +36,19 @@ spec:
           imagePullPolicy: Always
           readinessProbe:
             periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
             httpGet:
               host: 127.0.0.1
               path: /status
               port: 10001
+          resources:
+            requests:
+              cpu: 100m
+              memory: 50Mi
+            limits:
+              cpu: 200m
+              memory: 100Mi
       restartPolicy: Always
       serviceAccountName: portworx

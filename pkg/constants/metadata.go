@@ -19,6 +19,8 @@ const (
 	AnnotationEvictVMsDuringUpdate = OperatorPrefix + "/evict-vms-during-update"
 	// AnnotationNodeLabels is the storage pod annotation that contains node labels
 	AnnotationNodeLabels = OperatorPrefix + "/node-labels"
+	// AnnotationCustomAnnotations is an annotation that contains all the custom annotations a user adds on an object.
+	AnnotationCustomAnnotations = OperatorPrefix + "/custom-annotations"
 	// AnnotationDisableStorage annotation to disable the storage pods from running (default: false)
 	AnnotationDisableStorage = OperatorPrefix + "/disable-storage"
 	// AnnotationReconcileObject annotation to toggle reconciliation of operator created objects

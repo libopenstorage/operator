@@ -22,6 +22,7 @@ import (
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -441,108 +442,36 @@ func (c *csi) createDeployment(
 		return err
 	}
 
-	var (
-		existingProvisionerImage                     = k8sutil.GetImageFromDeployment(existingDeployment, csiProvisionerContainerName)
-		existingAttacherImage                        = k8sutil.GetImageFromDeployment(existingDeployment, csiAttacherContainerName)
-		existingSnapshotterImage                     = k8sutil.GetImageFromDeployment(existingDeployment, csiSnapshotterContainerName)
-		existingResizerImage                         = k8sutil.GetImageFromDeployment(existingDeployment, csiResizerContainerName)
-		existingSnapshotControllerImage              = k8sutil.GetImageFromDeployment(existingDeployment, csiSnapshotControllerContainerName)
-		existingHealthMonitorControllerContainerName = k8sutil.GetImageFromDeployment(existingDeployment, csiHealthMonitorControllerContainerName)
-		provisionerImage                             string
-		attacherImage                                string
-		snapshotterImage                             string
-		resizerImage                                 string
-		snapshotControllerImage                      string
-		healthMonitorControllerImage                 string
-	)
-
-	provisionerImage = util.GetImageURN(
-		cluster,
-		cluster.Status.DesiredImages.CSIProvisioner,
-	)
-	if provisionerImage == "" {
-		return fmt.Errorf("csi provisioner image not found")
-	}
-	if csiConfig.IncludeAttacher {
-		attacherImage = util.GetImageURN(
-			cluster,
-			cluster.Status.DesiredImages.CSIAttacher,
-		)
-		if attacherImage == "" {
-			return fmt.Errorf("csi attacher image not found")
-		}
-	}
-	if csiConfig.IncludeSnapshotter {
-		snapshotterImage = util.GetImageURN(
-			cluster,
-			cluster.Status.DesiredImages.CSISnapshotter,
-		)
-		if snapshotterImage == "" {
-			return fmt.Errorf("csi snapshotter image not found")
-		}
-	}
-	if csiConfig.IncludeResizer {
-		resizerImage = util.GetImageURN(
-			cluster,
-			cluster.Status.DesiredImages.CSIResizer,
-		)
-		if resizerImage == "" {
-			return fmt.Errorf("csi resizer image not found")
-		}
-	}
-
-	if cluster.Spec.CSI.InstallSnapshotController != nil &&
-		*cluster.Spec.CSI.InstallSnapshotController &&
-		cluster.Status.DesiredImages.CSISnapshotController != "" {
-		// Check if a snapshot controller was installed already using image "snapshot-controller",
-		// Only do this once to avoid scanning all pods frequently.
-		if c.csiSnapshotControllerPreInstalled == nil {
-			if err := c.findPreinstalledCSISnapshotController(); err != nil {
-				return err
-			}
-		}
-		if !*c.csiSnapshotControllerPreInstalled {
-			snapshotControllerImage = util.GetImageURN(
-				cluster,
-				cluster.Status.DesiredImages.CSISnapshotController,
-			)
-		}
-	} else if cluster.Spec.CSI.InstallSnapshotController != nil &&
-		*cluster.Spec.CSI.InstallSnapshotController &&
-		cluster.Status.DesiredImages.CSISnapshotController == "" {
-		return fmt.Errorf("csi snapshot controller image not found")
-	}
-
-	if csiConfig.IncludeHealthMonitorController {
-		healthMonitorControllerImage = util.GetImageURN(
-			cluster,
-			cluster.Status.DesiredImages.CSIHealthMonitorController,
-		)
-		if cluster.Status.DesiredImages.CSIHealthMonitorController != "" {
-			return fmt.Errorf("csi health monitor controller image not found")
-		}
-	}
+	// if cluster.Spec.CSI.InstallSnapshotController != nil &&
+	// 	*cluster.Spec.CSI.InstallSnapshotController &&
+	// 	cluster.Status.DesiredImages.CSISnapshotController != "" {
+	// 	// Check if a snapshot controller was installed already using image "snapshot-controller",
+	// 	// Only do this once to avoid scanning all pods frequently.
+	// 	if c.csiSnapshotControllerPreInstalled == nil {
+	// 		if err := c.findPreinstalledCSISnapshotController(); err != nil {
+	// 			return err
+	// 		}
+	// 	}
+	// }
 
 	updatedTopologySpreadConstraints, err := util.GetTopologySpreadConstraints(c.k8sClient, csiDeploymentTemplateSelectorLabels)
 	if err != nil {
 		return err
 	}
 
-	deployment := getCSIDeploymentSpec(cluster, csiConfig, ownerRef, provisionerImage, attacherImage,
-		snapshotterImage, resizerImage, snapshotControllerImage, healthMonitorControllerImage, updatedTopologySpreadConstraints)
-	modified := provisionerImage != existingProvisionerImage ||
-		attacherImage != existingAttacherImage ||
-		snapshotterImage != existingSnapshotterImage ||
-		resizerImage != existingResizerImage ||
-		snapshotControllerImage != existingSnapshotControllerImage ||
-		healthMonitorControllerImage != existingHealthMonitorControllerContainerName ||
-		util.HasPullSecretChanged(cluster, existingDeployment.Spec.Template.Spec.ImagePullSecrets) ||
-		util.HasNodeAffinityChanged(cluster, existingDeployment.Spec.Template.Spec.Affinity) ||
+	deployment, err := c.getCSIDeploymentSpec(cluster, csiConfig, updatedTopologySpreadConstraints, existingDeployment.Annotations, ownerRef)
+	if err != nil {
+		return err
+	}
+
+	isPodTemplateEqual, _ := util.DeepEqualPodTemplate(&deployment.Spec.Template, &existingDeployment.Spec.Template)
+
+	modified := !isPodTemplateEqual ||
 		util.HasSchedulerStateChanged(cluster, existingDeployment.Spec.Template.Spec.SchedulerName) ||
-		util.HaveTolerationsChanged(cluster, existingDeployment.Spec.Template.Spec.Tolerations) ||
 		util.HaveTopologySpreadConstraintsChanged(updatedTopologySpreadConstraints,
 			existingDeployment.Spec.Template.Spec.TopologySpreadConstraints) ||
-		hasCSITopologyChanged(cluster, existingDeployment)
+		hasCSITopologyChanged(cluster, existingDeployment) ||
+		!equality.Semantic.DeepEqual(deployment.Annotations, existingDeployment.Annotations)
 	if !c.isCreated || modified {
 		if err = k8sutil.CreateOrUpdateDeployment(c.k8sClient, deployment, ownerRef); err != nil {
 			return err
@@ -598,16 +527,13 @@ func hasCSITopologyChanged(
 	return existingTopologyFeatureGate != updatedTopologyFeatureGate
 }
 
-func getCSIDeploymentSpec(
+func (c *csi) getCSIDeploymentSpec(
 	cluster *corev1.StorageCluster,
 	csiConfig *pxutil.CSIConfiguration,
-	ownerRef *metav1.OwnerReference,
-	provisionerImage, attacherImage string,
-	snapshotterImage, resizerImage string,
-	snapshotControllerImage string,
-	healthMonitorControllerImage string,
 	topologySpreadConstraints []v1.TopologySpreadConstraint,
-) *appsv1.Deployment {
+	existingAnnotations map[string]string,
+	ownerRef *metav1.OwnerReference,
+) (*appsv1.Deployment, error) {
 	replicas := int32(3)
 	leaderElectionType := "leases"
 	provisionerLeaderElectionType := "leases"
@@ -616,6 +542,88 @@ func getCSIDeploymentSpec(
 		provisionerLeaderElectionType = "endpoints"
 	}
 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
+
+	var (
+		provisionerImage             string
+		attacherImage                string
+		snapshotterImage             string
+		resizerImage                 string
+		snapshotControllerImage      string
+		healthMonitorControllerImage string
+	)
+
+	provisionerImage = util.GetImageURN(
+		cluster,
+		cluster.Status.DesiredImages.CSIProvisioner,
+	)
+
+	if provisionerImage == "" {
+		return nil, fmt.Errorf("csi provisioner image not found")
+	}
+
+	if csiConfig.IncludeAttacher && cluster.Status.DesiredImages.CSIAttacher != "" {
+		attacherImage = util.GetImageURN(
+			cluster,
+			cluster.Status.DesiredImages.CSIAttacher,
+		)
+
+		if attacherImage == "" {
+			return nil, fmt.Errorf("csi attacher image not found")
+		}
+	}
+	if csiConfig.IncludeSnapshotter {
+		snapshotterImage = util.GetImageURN(
+			cluster,
+			cluster.Status.DesiredImages.CSISnapshotter,
+		)
+
+		if snapshotterImage == "" {
+			return nil, fmt.Errorf("csi snapshotter image not found")
+		}
+	}
+	if csiConfig.IncludeResizer {
+		resizerImage = util.GetImageURN(
+			cluster,
+			cluster.Status.DesiredImages.CSIResizer,
+		)
+
+		if resizerImage == "" {
+			return nil, fmt.Errorf("csi resizer image not found")
+		}
+	}
+
+	if cluster.Spec.CSI.InstallSnapshotController != nil &&
+		*cluster.Spec.CSI.InstallSnapshotController &&
+		cluster.Status.DesiredImages.CSISnapshotController != "" {
+		// Check if a snapshot controller was installed already using image "snapshot-controller",
+		// Only do this once to avoid scanning all pods frequently.
+		if c.csiSnapshotControllerPreInstalled == nil {
+			if err := c.findPreinstalledCSISnapshotController(); err != nil {
+				return nil, err
+			}
+		}
+		if !*c.csiSnapshotControllerPreInstalled {
+			snapshotControllerImage = util.GetImageURN(
+				cluster,
+				cluster.Status.DesiredImages.CSISnapshotController,
+			)
+		}
+	} else if cluster.Spec.CSI.InstallSnapshotController != nil &&
+		*cluster.Spec.CSI.InstallSnapshotController &&
+		cluster.Status.DesiredImages.CSISnapshotController == "" {
+		return nil, fmt.Errorf("csi snapshot controller image not found")
+	}
+
+	if csiConfig.IncludeHealthMonitorController && cluster.Status.DesiredImages.CSIHealthMonitorController != "" {
+		healthMonitorControllerImage = util.GetImageURN(
+			cluster,
+			cluster.Status.DesiredImages.CSIHealthMonitorController,
+		)
+
+		if healthMonitorControllerImage == "" {
+			return nil, fmt.Errorf("csi health monitor controller image not found")
+		}
+	}
 
 	var args []string
 	if util.GetImageMajorVersion(provisionerImage) >= 2 {
@@ -645,10 +653,13 @@ func getCSIDeploymentSpec(
 		Privileged: boolPtr(true),
 	}
 
+	annotations := util.GetCombinedAnnotations(cluster, k8sutil.Deployment, CSIApplicationName, existingAnnotations)
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            CSIApplicationName,
 			Namespace:       cluster.Namespace,
+			Annotations:     annotations,
 			OwnerReferences: []metav1.OwnerReference{*ownerRef},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -658,7 +669,8 @@ func getCSIDeploymentSpec(
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: csiDeploymentTemplateLabels,
+					Labels:      csiDeploymentTemplateLabels,
+					Annotations: annotations,
 				},
 				Spec: v1.PodSpec{
 					ServiceAccountName: CSIServiceAccountName,
@@ -697,6 +709,11 @@ func getCSIDeploymentSpec(
 				},
 			},
 		},
+	}
+
+	if cluster.Spec.CSI.ExternalProvisioner != nil &&
+		cluster.Spec.CSI.ExternalProvisioner.Resources != nil {
+		deployment.Spec.Template.Spec.Containers[0].Resources = *cluster.Spec.CSI.ExternalProvisioner.Resources
 	}
 
 	if pxutil.IsStorkEnabled(cluster) {
@@ -763,6 +780,10 @@ func getCSIDeploymentSpec(
 				"--leader-election-type=configmaps",
 			)
 		}
+		if cluster.Spec.CSI.Snapshotter != nil &&
+			cluster.Spec.CSI.Snapshotter.Resources != nil {
+			snapshotterContainer.Resources = *cluster.Spec.CSI.Snapshotter.Resources
+		}
 		deployment.Spec.Template.Spec.Containers = append(
 			deployment.Spec.Template.Spec.Containers,
 			snapshotterContainer,
@@ -770,47 +791,57 @@ func getCSIDeploymentSpec(
 	}
 
 	if csiConfig.IncludeResizer && resizerImage != "" {
+		resizerContainer := v1.Container{
+			Name:            csiResizerContainerName,
+			Image:           resizerImage,
+			ImagePullPolicy: imagePullPolicy,
+			Args: []string{
+				"--v=3",
+				"--csi-address=$(ADDRESS)",
+				"--leader-election=true",
+			},
+			Env: []v1.EnvVar{
+				{
+					Name:  "ADDRESS",
+					Value: "/csi/csi.sock",
+				},
+			},
+			VolumeMounts: []v1.VolumeMount{
+				{
+					Name:      "socket-dir",
+					MountPath: "/csi",
+				},
+			},
+			SecurityContext: sc,
+		}
+		if cluster.Spec.CSI.Resizer != nil &&
+			cluster.Spec.CSI.Resizer.Resources != nil {
+			resizerContainer.Resources = *cluster.Spec.CSI.Resizer.Resources
+		}
 		deployment.Spec.Template.Spec.Containers = append(
 			deployment.Spec.Template.Spec.Containers,
-			v1.Container{
-				Name:            csiResizerContainerName,
-				Image:           resizerImage,
-				ImagePullPolicy: imagePullPolicy,
-				Args: []string{
-					"--v=3",
-					"--csi-address=$(ADDRESS)",
-					"--leader-election=true",
-				},
-				Env: []v1.EnvVar{
-					{
-						Name:  "ADDRESS",
-						Value: "/csi/csi.sock",
-					},
-				},
-				VolumeMounts: []v1.VolumeMount{
-					{
-						Name:      "socket-dir",
-						MountPath: "/csi",
-					},
-				},
-				SecurityContext: sc,
-			},
+			resizerContainer,
 		)
 	}
 
 	if csiConfig.IncludeSnapshotController && snapshotControllerImage != "" {
+		controllerContainer := v1.Container{
+			Name:            csiSnapshotControllerContainerName,
+			Image:           snapshotControllerImage,
+			ImagePullPolicy: imagePullPolicy,
+			Args: []string{
+				"--v=3",
+				"--leader-election=true",
+			},
+			SecurityContext: sc,
+		}
+		if cluster.Spec.CSI.SnapshotController != nil &&
+			cluster.Spec.CSI.SnapshotController.Resources != nil {
+			controllerContainer.Resources = *cluster.Spec.CSI.SnapshotController.Resources
+		}
 		deployment.Spec.Template.Spec.Containers = append(
 			deployment.Spec.Template.Spec.Containers,
-			v1.Container{
-				Name:            csiSnapshotControllerContainerName,
-				Image:           snapshotControllerImage,
-				ImagePullPolicy: imagePullPolicy,
-				Args: []string{
-					"--v=3",
-					"--leader-election=true",
-				},
-				SecurityContext: sc,
-			},
+			controllerContainer,
 		)
 	}
 
@@ -860,21 +891,28 @@ func getCSIDeploymentSpec(
 		)
 	}
 
-	if cluster.Spec.Placement != nil {
-		if cluster.Spec.Placement.NodeAffinity != nil {
-			deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
-				NodeAffinity: cluster.Spec.Placement.NodeAffinity.DeepCopy(),
-			}
-		}
+	var nodeAffinity *v1.NodeAffinity
+	var tolerations []v1.Toleration
+	if cluster.Spec.CSI.Placement != nil {
+		nodeAffinity = cluster.Spec.CSI.Placement.NodeAffinity
+		tolerations = cluster.Spec.CSI.Placement.Tolerations
+	} else if cluster.Spec.Placement != nil {
+		nodeAffinity = cluster.Spec.Placement.NodeAffinity
+		tolerations = cluster.Spec.Placement.Tolerations
+	}
 
-		if len(cluster.Spec.Placement.Tolerations) > 0 {
-			deployment.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
-			for _, toleration := range cluster.Spec.Placement.Tolerations {
-				deployment.Spec.Template.Spec.Tolerations = append(
-					deployment.Spec.Template.Spec.Tolerations,
-					*(toleration.DeepCopy()),
-				)
-			}
+	if nodeAffinity != nil {
+		deployment.Spec.Template.Spec.Affinity = &v1.Affinity{
+			NodeAffinity: nodeAffinity.DeepCopy(),
+		}
+	}
+	if len(tolerations) > 0 {
+		deployment.Spec.Template.Spec.Tolerations = make([]v1.Toleration, 0)
+		for _, toleration := range tolerations {
+			deployment.Spec.Template.Spec.Tolerations = append(
+				deployment.Spec.Template.Spec.Tolerations,
+				*(toleration.DeepCopy()),
+			)
 		}
 	}
 
@@ -883,7 +921,7 @@ func getCSIDeploymentSpec(
 	}
 	deployment.Spec.Template.ObjectMeta = k8sutil.AddManagedByOperatorLabel(deployment.Spec.Template.ObjectMeta)
 
-	return deployment
+	return deployment, nil
 }
 
 func (c *csi) createStatefulSet(

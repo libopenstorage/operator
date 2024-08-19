@@ -116,6 +116,8 @@ type StorageClusterSpec struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 	// CSI configurations for setting up CSI
 	CSI *CSISpec `json:"csi,omitempty"`
+	// PortworxAPI is the spec to configure the portworx API component.
+	PortworxAPI *PortworxAPISpec `json:"portworxApi,omitempty"`
 	// Priority Class Name to be passed to Podspec of px pods for it to be scheduled accordingly
 	PriorityClassName string `json:"priorityClassName,omitempty"`
 }
@@ -158,14 +160,56 @@ type NodeSpec struct {
 
 // CSISpec is used to define the CSI configurations
 type CSISpec struct {
-	Enabled                   bool             `json:"enabled,omitempty"`
-	InstallSnapshotController *bool            `json:"installSnapshotController,omitempty"`
-	Topology                  *CSITopologySpec `json:"topology,omitempty"`
+	Enabled                   bool                        `json:"enabled,omitempty"`
+	InstallSnapshotController *bool                       `json:"installSnapshotController,omitempty"`
+	Topology                  *CSITopologySpec            `json:"topology,omitempty"`
+	Placement                 *PlacementSpec              `json:"placement,omitempty"`
+	NodeDriverRegistrar       *CSINodeDriverRegistrarSpec `json:"nodeDriverRegistrar,omitempty"`
+	ExternalProvisioner       *CSIExternalProvisionerSpec `json:"externalProvisioner,omitempty"`
+	Snapshotter               *CSISnapshotterSpec         `json:"snapshotter,omitempty"`
+	Resizer                   *CSIResizerSpec             `json:"resizer,omitempty"`
+	SnapshotController        *CSISnapshotControllerSpec  `json:"snapshotController,omitempty"`
 }
 
 // CSITopologySpec is used to define the CSI topology configurations
 type CSITopologySpec struct {
 	Enabled bool `json:"enabled,omitempty"`
+}
+
+// CSINodeDriverRegistrarSpec is used to define the CSI node driver registrar configurations
+type CSINodeDriverRegistrarSpec struct {
+	// Resources for csi-node-driver-registrar container, e.g. CPU and memory requests or limits
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// CSIExternalProvisionerSpec is used to define the CSI external provisioner configurations
+type CSIExternalProvisionerSpec struct {
+	// Resources for csi-external-provisioner container, e.g. CPU and memory requests or limits
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// CSISnapshotterSpec is used to define the CSI snapshotter configurations
+type CSISnapshotterSpec struct {
+	// Resources for csi-snapshotter container, e.g. CPU and memory requests or limits
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// CSIResizerSpec is used to define the CSI resizer configurations
+type CSIResizerSpec struct {
+	// Resources for csi-resizer container, e.g. CPU and memory requests or limits
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// CSISnapshotControllerSpec is used to define the CSI snapshot controller configurations
+type CSISnapshotControllerSpec struct {
+	// Resources for csi snapshot-controller container, e.g. CPU and memory requests or limits
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// PortworxAPISpec is used to configure the Portworx API component.
+type PortworxAPISpec struct {
+	// Resources for portworx-api container, e.g. CPU and memory requests or limits
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // SecuritySpec is used to define the security configuration for a cluster.
@@ -332,6 +376,8 @@ type KvdbSpec struct {
 	// to authenticate with the kvdb. It could have the username/password
 	// for basic auth, certificate information or ACL token.
 	AuthSecret string `json:"authSecret,omitempty"`
+	// Resources for portworx-kvdb pods, e.g. CPU and memory requests or limits
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // NetworkSpec contains network information
