@@ -88,6 +88,7 @@ const (
 	daemonsetFileNameTelemetryPhonehome              = "phonehome-cluster.yaml"
 
 	configParameterApplianceID                           = "APPLIANCE_ID"
+	configParameterApplianceName                         = "APPLIANCE_NAME"
 	configParameterComponentSN                           = "COMPONENT_SN"
 	configParameterProductVersion                        = "PRODUCT_VERSION"
 	configParameterRegisterProxyURL                      = "REGISTER_PROXY_URL"
@@ -588,6 +589,7 @@ func (t *telemetry) createCCMGoConfigMapRegisterProxy(
 	cloudSupportPort, tcpProxyPort, envoyRedirectPort := getCCMCloudSupportPorts(cluster, defaultRegisterPort)
 	replaceMap := map[string]string{
 		configParameterApplianceID:              cluster.Status.ClusterUID,
+		configParameterApplianceName:            cluster.Status.ClusterName,
 		configParameterComponentSN:              cluster.Name,
 		configParameterProductVersion:           pxutil.GetPortworxVersion(cluster).String(),
 		configParameterRegisterProxyURL:         getArcusRegisterProxyURL(cluster),
@@ -644,6 +646,7 @@ func (t *telemetry) createCCMGoConfigMapTelemetryPhonehomeProxy(
 	cloudSupportPort, tcpProxyPort, envoyRedirectPort := getCCMCloudSupportPorts(cluster, defaultPhonehomePort)
 	replaceMap := map[string]string{
 		configParameterApplianceID:          cluster.Status.ClusterUID,
+		configParameterApplianceName:        cluster.Status.ClusterName,
 		configParameterProductVersion:       pxutil.GetPortworxVersion(cluster).String(),
 		configParameterRestProxyURL:         getArcusRestProxyURL(cluster),
 		configParameterRestCloudSupportPort: fmt.Sprint(cloudSupportPort),
@@ -701,6 +704,7 @@ func (t *telemetry) createCCMGoConfigMapCollectorProxyV2(
 	cloudSupportPort, tcpProxyPort, envoyRedirectPort := getCCMCloudSupportPorts(cluster, defaultCollectorPort)
 	replaceMap := map[string]string{
 		configParameterApplianceID:          cluster.Status.ClusterUID,
+		configParameterApplianceName:        cluster.Status.ClusterName,
 		configParameterProductVersion:       pxutil.GetPortworxVersion(cluster).String(),
 		configParameterRestProxyURL:         getArcusRestProxyURL(cluster),
 		configParameterRestCloudSupportPort: fmt.Sprint(cloudSupportPort),
@@ -830,6 +834,10 @@ func (t *telemetry) createDeploymentTelemetryRegistration(
 				Name:  configParameterApplianceID,
 				Value: cluster.Status.ClusterUID,
 			})
+			container.Env = append(container.Env, v1.EnvVar{
+				Name:  configParameterApplianceName,
+				Value: cluster.Status.ClusterName,
+			})
 		} else if container.Name == containerNameTelemetryProxy {
 			container.Image = proxyImage
 		}
@@ -893,6 +901,15 @@ func (t *telemetry) createDaemonSetTelemetryPhonehome(
 		container := &daemonset.Spec.Template.Spec.Containers[i]
 		if container.Name == containerNameLogUploader {
 			container.Image = logUploaderImage
+			// add APPLIANCE_ID env var
+			container.Env = append(container.Env, v1.EnvVar{
+				Name:  configParameterApplianceID,
+				Value: cluster.Status.ClusterUID,
+			})
+			container.Env = append(container.Env, v1.EnvVar{
+				Name:  configParameterApplianceName,
+				Value: cluster.Status.ClusterName,
+			})
 			for j := 0; j < len(container.Ports); j++ {
 				port := &container.Ports[j]
 				if port.Name == portNameLogUploaderContainer {

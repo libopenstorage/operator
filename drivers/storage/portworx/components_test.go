@@ -15189,7 +15189,8 @@ func TestTelemetryCCMGoEnableAndDisable(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			ClusterUID: "test-clusteruid",
+			ClusterUID:  "test-clusteruid",
+			ClusterName: "test-clustername",
 		},
 	}
 
@@ -15447,7 +15448,8 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 			},
 		},
 		Status: corev1.StorageClusterStatus{
-			ClusterUID: "test-clusteruid",
+			ClusterName: "test-clustername",
+			ClusterUID:  "test-clusteruid",
 		},
 	}
 
@@ -15466,7 +15468,7 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 	deployment := &appsv1.Deployment{}
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
 
 	// Compatible PX & Incompatible Telemetry Images
 	cluster.Spec.Image = "portworx/image:3.2.0"
@@ -15483,7 +15485,7 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 	// Validate deployments
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
 
 	// Incompatible PX & compatible Telemetry Images
 	cluster.Spec.Image = "portworx/image:3.0.0"
@@ -15500,7 +15502,7 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 	// Validate deployments
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 2)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
 
 	// Compatible PX & Telemetry Images
 	cluster.Spec.Image = "portworx/image:3.2.0"
@@ -15518,13 +15520,15 @@ func TestTelemetryContainerOrchestratorEnable(t *testing.T) {
 	// Validate deployments
 	err = testutil.Get(k8sClient, deployment, component.DeploymentNameTelemetryRegistration, cluster.Namespace)
 	require.NoError(t, err)
-	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 3)
+	require.Len(t, deployment.Spec.Template.Spec.Containers[0].Env, 4)
 	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[0].Name, "CONFIG")
 	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[0].Value, "config/config_properties_px.yaml")
 	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[1].Name, "APPLIANCE_ID")
 	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[1].Value, "test-clusteruid")
-	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[2].Name, "REFRESH_TOKEN")
-	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[2].Value, "")
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[2].Name, "APPLIANCE_NAME")
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[2].Value, "test-clustername")
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[3].Name, "REFRESH_TOKEN")
+	require.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[3].Value, "")
 
 	// Port shift on OCP
 	cluster.Annotations[pxutil.AnnotationIsOpenshift] = "true"
