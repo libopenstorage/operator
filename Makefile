@@ -181,7 +181,7 @@ operator:
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
-	docker build --pull --tag $(OPERATOR_IMG) -f build/Dockerfile .
+	docker build --no-cache --pull --tag $(OPERATOR_IMG) -f build/Dockerfile .
 
 DOCK_BUILD_CNT	:= golang:1.21
 

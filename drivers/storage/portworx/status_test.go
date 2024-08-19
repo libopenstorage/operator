@@ -62,7 +62,6 @@ func TestSetupContextWithToken(t *testing.T) {
 		initialSecrets    []v1.Secret
 		initialConfigMaps []v1.ConfigMap
 		securityEnabled   bool
-		skipSecurityCheck bool
 
 		expectError      bool
 		expectTokenAdded bool
@@ -73,7 +72,6 @@ func TestSetupContextWithToken(t *testing.T) {
 			pxSecretName:      "",
 			pxSharedSecretKey: "mysecret",
 			securityEnabled:   true,
-			skipSecurityCheck: false,
 
 			expectTokenAdded: true,
 			expectError:      false,
@@ -83,39 +81,17 @@ func TestSetupContextWithToken(t *testing.T) {
 			pxConfigMapName:   defaultConfigMap[0].Name,
 			initialConfigMaps: defaultConfigMap,
 			securityEnabled:   true,
-			skipSecurityCheck: false,
 
 			expectTokenAdded: true,
 			expectError:      false,
 		},
 		{
-			name:              "Default secret should generate and add token to context",
-			pxSecretName:      defaultSecret[0].Name,
-			initialSecrets:    defaultSecret,
-			securityEnabled:   true,
-			skipSecurityCheck: false,
+			name:            "Default secret should generate and add token to context",
+			pxSecretName:    defaultSecret[0].Name,
+			initialSecrets:  defaultSecret,
+			securityEnabled: true,
 
 			expectTokenAdded: true,
-			expectError:      false,
-		},
-		{
-			name:              "Default secret should generate and add token to context when security is disabled but security check is skipped",
-			pxSecretName:      defaultSecret[0].Name,
-			initialSecrets:    defaultSecret,
-			securityEnabled:   false,
-			skipSecurityCheck: true,
-
-			expectTokenAdded: true,
-			expectError:      false,
-		},
-		{
-			name:              "Default secret should not be generated when security is disabled and security check is not skipped",
-			pxSecretName:      defaultSecret[0].Name,
-			initialSecrets:    defaultSecret,
-			securityEnabled:   false,
-			skipSecurityCheck: false,
-
-			expectTokenAdded: false,
 			expectError:      false,
 		},
 	}
@@ -198,7 +174,7 @@ func TestSetupContextWithToken(t *testing.T) {
 			p := portworx{
 				k8sClient: k8sClient,
 			}
-			ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient, tc.skipSecurityCheck)
+			ctx, err := pxutil.SetupContextWithToken(context.Background(), cluster, p.k8sClient)
 			if tc.expectError {
 				assert.Error(t, err)
 				assert.EqualError(t, err, tc.expectedError)
