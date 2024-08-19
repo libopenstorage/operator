@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"path"
@@ -338,13 +339,21 @@ func DeepEqualObjects(
 // DeepEqualPodTemplate compares if two pod template specs are same.
 func DeepEqualPodTemplate(t1, t2 *v1.PodTemplateSpec) (bool, error) {
 	// DeepDerivative will return true if first argument is nil, hence check the length of volumes.
-	// The reason we don't2 use deepEqual for volumes is k8s API server may add defaultMode to it.
-	if !equality.Semantic.DeepDerivative(t1.Spec.Containers, t2.Spec.Containers) {
+	// The reason we don't use deepEqual for volumes is k8s API server may add defaultMode to it.
+	if len(t1.Spec.Containers) != len(t2.Spec.Containers) ||
+		!equality.Semantic.DeepDerivative(t1.Spec.Containers, t2.Spec.Containers) {
 		return false, fmt.Errorf("containers not equal, first: %+v, second: %+v", t1.Spec.Containers, t2.Spec.Containers)
 	}
 
-	if !(len(t1.Spec.Volumes) == len(t2.Spec.Volumes) &&
-		equality.Semantic.DeepDerivative(t1.Spec.Volumes, t2.Spec.Volumes)) {
+	for i := range t1.Spec.Containers {
+		if !equality.Semantic.DeepEqual(t1.Spec.Containers[i].Resources, t2.Spec.Containers[i].Resources) {
+			return false, fmt.Errorf("resources for container %s not equal, first: %+v, second: %+v",
+				t1.Spec.Containers[i].Name, t1.Spec.Containers[i].Resources, t2.Spec.Containers[i].Resources)
+		}
+	}
+
+	if len(t1.Spec.Volumes) != len(t2.Spec.Volumes) ||
+		!equality.Semantic.DeepDerivative(t1.Spec.Volumes, t2.Spec.Volumes) {
 		return false, fmt.Errorf("volumes not equal, first: %+v, second: %+v", t1.Spec.Volumes, t2.Spec.Volumes)
 	}
 
@@ -451,6 +460,59 @@ func GetCustomAnnotations(
 		return annotations
 	}
 	return nil
+}
+
+// GetCombinedAnnotations returns all annotations that are in the existing list and the custom annotations.
+// We store the custom annotations in a special annotation so that we can detect when an annotation that
+// was added by us is removed.
+func GetCombinedAnnotations(
+	cluster *corev1.StorageCluster,
+	k8sObjKind string,
+	componentName string,
+	existing map[string]string,
+) map[string]string {
+	newCustomAnnotations := GetCustomAnnotations(cluster, k8sObjKind, componentName)
+
+	var oldCustomAnnotations map[string]string
+	if encodedAnnotations, ok := existing[constants.AnnotationCustomAnnotations]; ok {
+		if err := json.Unmarshal([]byte(encodedAnnotations), &oldCustomAnnotations); err != nil {
+			logrus.Errorf("Failed to unmarshal custom annotations: %v", err)
+		}
+	}
+
+	output := make(map[string]string)
+	for k, v := range existing {
+		if k == constants.AnnotationCustomAnnotations {
+			continue
+		}
+		if newVal, ok := newCustomAnnotations[k]; ok {
+			// Use the newer value if it exists
+			output[k] = newVal
+		} else if _, ok := oldCustomAnnotations[k]; !ok {
+			// If the annotation does not exist in the new annotations, nor was it present in the previous
+			// custom annotations, then it is added by an external entity. We should keep that value.
+			output[k] = v
+		}
+		// Remove the annotation if it does not exist in the new annotations and was present in the previous.
+	}
+
+	// Copy the new annotations and give it's value more precedence in case of a matching key.
+	for k, v := range newCustomAnnotations {
+		output[k] = v
+	}
+
+	// Keep a copy of the current annotations, so we detect when an annotation
+	// is removed next time by comparing it with this copy.
+	if len(newCustomAnnotations) > 0 {
+		encodedAnnotations, err := json.Marshal(newCustomAnnotations)
+		if err != nil {
+			logrus.Errorf("Failed to marshal custom annotations: %v", err)
+		} else {
+			output[constants.AnnotationCustomAnnotations] = string(encodedAnnotations)
+		}
+	}
+
+	return output
 }
 
 // GetCustomLabels returns custom labels for different StorageCluster components from spec

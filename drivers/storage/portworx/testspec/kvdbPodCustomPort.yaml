@@ -12,14 +12,27 @@ spec:
       imagePullPolicy: Always
       livenessProbe:
         periodSeconds: 30
+        timeoutSeconds: 1
+        successThreshold: 1
+        failureThreshold: 3
         initialDelaySeconds: 840
         tcpSocket:
           host: 127.0.0.1
           port: 10016
       readinessProbe:
         periodSeconds: 10
+        timeoutSeconds: 1
+        successThreshold: 1
+        failureThreshold: 3
         tcpSocket:
           host: 127.0.0.1
           port: 10016
+      resources:
+        requests:
+          cpu: 100m
+          memory: 50Mi
+        limits:
+          cpu: 200m
+          memory: 100Mi
   restartPolicy: Always
   serviceAccountName: portworx

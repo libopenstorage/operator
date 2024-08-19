@@ -544,12 +544,15 @@ func (t *template) kvdbContainer() v1.Container {
 	if t.startPort != pxutil.DefaultStartPort {
 		kvdbTargetPort = t.startPort + 15
 	}
-	return v1.Container{
+	container := v1.Container{
 		Name:            pxKVDBContainerName,
 		Image:           kvdbProxyImage,
 		ImagePullPolicy: t.imagePullPolicy,
 		LivenessProbe: &v1.Probe{
 			PeriodSeconds:       30,
+			TimeoutSeconds:      int32(1),
+			SuccessThreshold:    int32(1),
+			FailureThreshold:    int32(3),
 			InitialDelaySeconds: 840,
 			ProbeHandler: v1.ProbeHandler{
 				TCPSocket: &v1.TCPSocketAction{
@@ -559,7 +562,10 @@ func (t *template) kvdbContainer() v1.Container {
 			},
 		},
 		ReadinessProbe: &v1.Probe{
-			PeriodSeconds: 10,
+			PeriodSeconds:    10,
+			TimeoutSeconds:   int32(1),
+			SuccessThreshold: int32(1),
+			FailureThreshold: int32(3),
 			ProbeHandler: v1.ProbeHandler{
 				TCPSocket: &v1.TCPSocketAction{
 					Port: intstr.FromInt(kvdbTargetPort),
@@ -568,6 +574,24 @@ func (t *template) kvdbContainer() v1.Container {
 			},
 		},
 	}
+
+	if t.cluster.Spec.Kvdb != nil &&
+		t.cluster.Spec.Kvdb.Resources != nil {
+		container.Resources = *t.cluster.Spec.Kvdb.Resources
+	} else {
+		container.Resources = v1.ResourceRequirements{
+			Requests: v1.ResourceList{
+				v1.ResourceMemory: resource.MustParse("50Mi"),
+				v1.ResourceCPU:    resource.MustParse("100m"),
+			},
+			Limits: v1.ResourceList{
+				v1.ResourceMemory: resource.MustParse("100Mi"),
+				v1.ResourceCPU:    resource.MustParse("200m"),
+			},
+		}
+	}
+
+	return container
 }
 
 func (t *template) csiRegistrarContainer() *v1.Container {

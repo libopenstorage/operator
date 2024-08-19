@@ -451,6 +451,25 @@ func TestGetKVDBPodSpec(t *testing.T) {
 	actual, err = driver.GetKVDBPodSpec(cluster, nodeName)
 	require.NoError(t, err)
 	assertPodSpecEqual(t, expected, &actual)
+
+	// custom resources
+	resources := v1.ResourceRequirements{
+		Requests: v1.ResourceList{
+			v1.ResourceMemory: resource.MustParse("300Mi"),
+			v1.ResourceCPU:    resource.MustParse("300m"),
+		},
+		Limits: v1.ResourceList{
+			v1.ResourceMemory: resource.MustParse("500Mi"),
+			v1.ResourceCPU:    resource.MustParse("500m"),
+		},
+	}
+	cluster.Spec.Kvdb = &corev1.KvdbSpec{
+		Resources: &resources,
+	}
+	expected.Containers[0].Resources = resources
+	actual, err = driver.GetKVDBPodSpec(cluster, nodeName)
+	require.NoError(t, err)
+	assertPodSpecEqual(t, expected, &actual)
 }
 
 func TestPodSpecWithCustomServiceAccount(t *testing.T) {

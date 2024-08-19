@@ -2,17 +2,15 @@ package storagenode
 
 import (
 	"context"
-	osdapi "github.com/libopenstorage/openstorage/api"
-	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"reflect"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
+	osdapi "github.com/libopenstorage/openstorage/api"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
 	coreops "github.com/portworx/sched-ops/k8s/core"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -31,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/client/clientset/versioned/scheme"
 	"github.com/libopenstorage/operator/pkg/constants"
@@ -270,7 +269,6 @@ func TestRegisterDeprecatedCRD(t *testing.T) {
 }
 
 func TestReconcile(t *testing.T) {
-	logrus.SetLevel(logrus.TraceLevel)
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	defaultQuantity, _ := resource.ParseQuantity("0")
@@ -849,9 +847,8 @@ func TestReconcileWithStorageLabel(t *testing.T) {
 
 // TestReconcileKVDB focuses on reconciling a StorageNode which is running KVDB
 func TestReconcileKVDB(t *testing.T) {
-	logrus.SetLevel(logrus.TraceLevel)
 	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
+
 	testNS := "test-ns"
 	clusterName := "test-cluster"
 	cluster := &corev1.StorageCluster{
@@ -983,8 +980,210 @@ func TestReconcileKVDB(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestReconcileKVDBOddSatusPodCleanup(t *testing.T) {
-	logrus.SetLevel(logrus.TraceLevel)
+func TestKVDBPodChanges(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+
+	testNS := "test-ns"
+	clusterName := "test-cluster"
+	cluster := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: testNS,
+		},
+		Spec: corev1.StorageClusterSpec{
+			Kvdb: &corev1.KvdbSpec{
+				Internal: true,
+			},
+		},
+	}
+
+	controllerKind := corev1.SchemeGroupVersion.WithKind("StorageCluster")
+	clusterRef := metav1.NewControllerRef(cluster, controllerKind)
+	// node1 will not have any kvdb pods. So test will create.
+	testKVDBNode := "node1"
+	trueValue := true
+	kvdbNode := &corev1.StorageNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            testKVDBNode,
+			Namespace:       cluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*clusterRef},
+		},
+		Status: corev1.NodeStatus{
+			Phase: string(corev1.NodeInitStatus),
+			NodeAttributes: &corev1.NodeAttributes{
+				KVDB: &trueValue,
+			},
+		},
+	}
+
+	k8sNode := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: testKVDBNode,
+		},
+		Status: v1.NodeStatus{
+			Phase: v1.NodeRunning,
+		},
+	}
+
+	coreops.SetInstance(coreops.New(fakek8sclient.NewSimpleClientset()))
+	k8sClient := testutil.FakeK8sClient(kvdbNode, k8sNode, cluster)
+	recorder := record.NewFakeRecorder(10)
+	driver := testutil.MockDriver(mockCtrl)
+	driver.EXPECT().GetSelectorLabels().Return(nil).AnyTimes()
+	driver.EXPECT().String().Return("portworx").AnyTimes()
+	kvdbPodSpec := v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Name: "px-kvdb",
+			},
+		},
+	}
+	kvdbPodSpec.NodeName = testKVDBNode
+	driver.EXPECT().GetKVDBPodSpec(gomock.Any(), testKVDBNode).Return(kvdbPodSpec, nil)
+
+	controller := Controller{
+		client:      k8sClient,
+		recorder:    recorder,
+		Driver:      driver,
+		nodeInfoMap: maps.MakeSyncMap[string, *k8s.NodeInfo](),
+	}
+
+	// TestCase: KVDB pod does not have any resources as the pod spec does not return any.
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      testKVDBNode,
+			Namespace: testNS,
+		},
+	}
+
+	_, err := controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	kvdbPods, err := coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
+	require.NoError(t, err)
+	require.Len(t, kvdbPods.Items, 1)
+	require.Empty(t, kvdbPods.Items[0].Spec.Containers[0].Resources)
+
+	// TestCase: KVDB pod has resources as given in the pod spec.
+	kvdbResources := v1.ResourceRequirements{
+		Requests: v1.ResourceList{
+			v1.ResourceCPU: resource.MustParse("200m"),
+		},
+	}
+	kvdbPodSpec.Containers[0].Resources = kvdbResources
+	driver.EXPECT().GetKVDBPodSpec(gomock.Any(), testKVDBNode).Return(kvdbPodSpec, nil).Times(2)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	kvdbPods, err = coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
+	require.NoError(t, err)
+	// The pod gets deleted first and then recreated with the new resources.
+	require.Len(t, kvdbPods.Items, 0)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	kvdbPods, err = coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
+	require.NoError(t, err)
+	require.Len(t, kvdbPods.Items, 1)
+	require.Equal(t, kvdbResources, kvdbPods.Items[0].Spec.Containers[0].Resources)
+
+	// TestCase: KVDB pod should not have any annotations by default
+	require.Empty(t, kvdbPods.Items[0].Annotations)
+
+	// TestCase: KVDB pod should have annotations if provided in the pod spec
+	driver.EXPECT().GetKVDBPodSpec(gomock.Any(), testKVDBNode).Return(kvdbPodSpec, nil).AnyTimes()
+	kvdbAnnotations := map[string]string{
+		"key1": "value1",
+	}
+	cluster.Spec.Metadata = &corev1.Metadata{
+		Annotations: map[string]map[string]string{
+			"pod/portworx-kvdb": kvdbAnnotations,
+		},
+	}
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	kvdbPods, err = coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
+	require.NoError(t, err)
+	require.Len(t, kvdbPods.Items, 1)
+	require.Equal(t, kvdbAnnotations, kvdbPods.Items[0].Annotations)
+
+	// TestCase: KVDB pod should have new annotations if added in the spec.
+	kvdbAnnotations["key2"] = "value2"
+	cluster.Spec.Metadata = &corev1.Metadata{
+		Annotations: map[string]map[string]string{
+			"pod/portworx-kvdb": kvdbAnnotations,
+		},
+	}
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	kvdbPods, err = coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
+	require.NoError(t, err)
+	require.Len(t, kvdbPods.Items, 1)
+	require.Equal(t, kvdbAnnotations, kvdbPods.Items[0].Annotations)
+
+	// TestCase: KVDB pod annotations should have updated values if changed in the spec.
+	kvdbAnnotations["key2"] = "value2-changed"
+	cluster.Spec.Metadata = &corev1.Metadata{
+		Annotations: map[string]map[string]string{
+			"pod/portworx-kvdb": kvdbAnnotations,
+		},
+	}
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	kvdbPods, err = coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
+	require.NoError(t, err)
+	require.Len(t, kvdbPods.Items, 1)
+	require.Equal(t, kvdbAnnotations, kvdbPods.Items[0].Annotations)
+
+	// TestCase: KVDB pod annotations should remove key if removed from the spec.
+	delete(kvdbAnnotations, "key2")
+	cluster.Spec.Metadata = &corev1.Metadata{
+		Annotations: map[string]map[string]string{
+			"pod/portworx-kvdb": kvdbAnnotations,
+		},
+	}
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	kvdbPods, err = coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
+	require.NoError(t, err)
+	require.Len(t, kvdbPods.Items, 1)
+	require.Equal(t, kvdbAnnotations, kvdbPods.Items[0].Annotations)
+
+	// TestCase: KVDB pod annotations should all annotations if not specified in the spec.
+	cluster.Spec.Metadata = &corev1.Metadata{
+		Annotations: map[string]map[string]string{},
+	}
+	err = testutil.Update(k8sClient, cluster)
+	require.NoError(t, err)
+
+	_, err = controller.Reconcile(context.TODO(), request)
+	require.NoError(t, err)
+
+	kvdbPods, err = coreops.Instance().GetPods(cluster.Namespace, controller.kvdbPodLabels(cluster))
+	require.NoError(t, err)
+	require.Len(t, kvdbPods.Items, 1)
+	require.Empty(t, kvdbPods.Items[0].Annotations)
+}
+
+func TestReconcileKVDBOddStatusPodCleanup(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	testNS := "test-ns"
@@ -1271,7 +1470,6 @@ func TestReconcileKVDBWithNodeChanges(t *testing.T) {
 }
 
 func TestSyncStorageNodeErrors(t *testing.T) {
-	logrus.SetLevel(logrus.TraceLevel)
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
