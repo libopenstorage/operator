@@ -11,6 +11,14 @@ const (
 	NodeStatusFailed     = "Failed"
 	NodeStatusCompleted  = "Completed"
 
+	//Pod Logs Statuses
+	PodLogStatusPending        = "Pending"
+	PodLogStatusInProgress     = "InProgress"
+	PodLogStatusFailed         = "Failed"
+	PodLogStatusCompleted      = "Completed"
+	PodLogStatusPartialFailure = "PartiallyFailed"
+	PodLogStatusUnknown        = "Unknown"
+
 	// Diag Statuses
 	DiagStatusPending        = "Pending"
 	DiagStatusInProgress     = "InProgress"
@@ -37,6 +45,9 @@ type PortworxComponent struct {
 	NodeSelector NodeSelector `json:"nodes,omitempty"`
 	// Volumes for which the diags need to be collected.
 	VolumeSelector VolumeSelector `json:"volumes,omitempty"`
+	// Collects all the pod logs. Used to specify whether Pod logs need to be
+	// collected or not.
+	CollectPodLogs bool `json:"collectPodLogs,omitempty"`
 	// Generates the core dump as well when collecting the diags. Could be useful
 	// to analyze the current state of the system.
 	GenerateCore bool `json:"generateCore,omitempty"`
@@ -76,6 +87,8 @@ type PortworxDiagStatus struct {
 	ClusterUUID string `json:"clusterUuid,omitempty"`
 	// Status of the diags collection from all the selected nodes.
 	NodeStatuses []NodeStatus `json:"nodes,omitempty"`
+	// Status of the diags collection from all the pods.
+	PodLogStatus string `json:"podLogsStatus,omitempty"`
 }
 
 // Status of the diags collection from a single node.
