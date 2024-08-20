@@ -16640,7 +16640,8 @@ func TestTelemetryCCMGoRestartPhonehome(t *testing.T) {
 			StartPort: &startPort,
 		},
 		Status: corev1.StorageClusterStatus{
-			ClusterUID: "test-clusteruid",
+			ClusterUID:  "test-clusteruid",
+			ClusterName: "test-clustername",
 		},
 	}
 
