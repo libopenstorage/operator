@@ -3498,6 +3498,219 @@ func TestAutopilotInstall(t *testing.T) {
 
 }
 
+func TestPresenceOfReadinessProbeForAutopilotValidImageTagGreaterThan1_3_15(t *testing.T) {
+	// Arrange
+	mockCtrl := gomock.NewController(t)
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.0",
+	}
+	setUpMockCoreOps(mockCtrl, versionClient)
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+
+	stcSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:1.3.16",
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+	cluster := stcSpec.DeepCopy()
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// Act
+	err = driver.PreInstall(cluster)
+
+	// Assert
+	require.NoError(t, err)
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, autopilotDeployment.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Path, "/ready")
+}
+
+func TestAbsenceOfReadinessProbeForAutopilotValidImageTagLesserThanOrEqual1_3_15(t *testing.T) {
+	// Arrange
+	mockCtrl := gomock.NewController(t)
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.0",
+	}
+	setUpMockCoreOps(mockCtrl, versionClient)
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	stcSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:1.3.15",
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+	cluster := stcSpec.DeepCopy()
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// Act
+	err = driver.PreInstall(cluster)
+
+	// Assert
+	require.NoError(t, err)
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, autopilotDeployment.Spec.Template.Spec.Containers[0].ReadinessProbe)
+}
+
+func TestAbsenceOfReadinessProbeForAutopilotInValidImageWithoutColon(t *testing.T) {
+	// Arrange
+	mockCtrl := gomock.NewController(t)
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.0",
+	}
+	setUpMockCoreOps(mockCtrl, versionClient)
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	stcSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot",
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+	cluster := stcSpec.DeepCopy()
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// Act
+	err = driver.PreInstall(cluster)
+
+	// Assert
+	require.NoError(t, err)
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, autopilotDeployment.Spec.Template.Spec.Containers[0].ReadinessProbe)
+}
+
+func TestAbsenceOfReadinessProbeForAutopilotInValidImageTag(t *testing.T) {
+	// Arrange
+	mockCtrl := gomock.NewController(t)
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.0",
+	}
+	setUpMockCoreOps(mockCtrl, versionClient)
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	stcSpec := &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}},
+			Autopilot: &corev1.AutopilotSpec{
+				Enabled: true,
+				Image:   "portworx/autopilot:77u",
+			},
+			Security: &corev1.SecuritySpec{
+				Enabled: true,
+				Auth: &corev1.AuthSpec{
+					SelfSigned: &corev1.SelfSignedSpec{
+						Issuer:        stringPtr(defaultSelfSignedIssuer),
+						TokenLifetime: stringPtr(defaultTokenLifetime),
+						SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+					},
+				},
+			},
+		},
+	}
+	cluster := stcSpec.DeepCopy()
+	err = driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	// Act
+	err = driver.PreInstall(cluster)
+
+	// Assert
+	require.NoError(t, err)
+	autopilotDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, autopilotDeployment, component.AutopilotDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Nil(t, autopilotDeployment.Spec.Template.Spec.Containers[0].ReadinessProbe)
+}
+
 func TestAutopilotWithoutImage(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())

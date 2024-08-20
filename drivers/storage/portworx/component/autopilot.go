@@ -3,13 +3,14 @@ package component
 import (
 	"context"
 	"fmt"
-	coreops "github.com/portworx/sched-ops/k8s/core"
-	authv1 "k8s.io/api/authentication/v1"
-	"k8s.io/kubernetes/pkg/apis/core"
 	"reflect"
 	"sort"
 	"strings"
 	"time"
+
+	coreops "github.com/portworx/sched-ops/k8s/core"
+	authv1 "k8s.io/api/authentication/v1"
+	"k8s.io/kubernetes/pkg/apis/core"
 
 	"github.com/sirupsen/logrus"
 
@@ -650,6 +651,31 @@ func (c *autopilot) createDeployment(
 	return nil
 }
 
+// Function to check if ReadinessProbe should be added to the autopilot container
+// Readiness probe is added to the autopilot container if the image version is greater than 1.3.15
+// as autopilot container has a /ready endpoint from 1.3.15 onwards
+func shouldAddReadinessProbe(image string) bool {
+	// Get the image tag using the existing function
+	imageVersion := pxutil.GetImageTag(image)
+
+	if imageVersion == "" {
+		logrus.Errorf("Could not extract version from image: %s", image)
+		return false
+	}
+
+	// Parse the image version and the threshold version using go-version
+	currentVersion, err := version.NewSemver(imageVersion)
+	if err != nil {
+		logrus.Errorf("Invalid version format: %s", imageVersion)
+		return false
+	}
+
+	thresholdVersion, _ := version.NewSemver("1.3.15")
+
+	// Compare the current version with the threshold version
+	return currentVersion.GreaterThan(thresholdVersion)
+}
+
 func (c *autopilot) getAutopilotDeploymentSpec(
 	cluster *corev1.StorageCluster,
 	ownerRef *metav1.OwnerReference,
@@ -677,6 +703,23 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromInt(1)
 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
+
+	var readinessProbe *v1.Probe
+	if shouldAddReadinessProbe(imageName) {
+		readinessProbe = &v1.Probe{
+			ProbeHandler: v1.ProbeHandler{
+				HTTPGet: &v1.HTTPGetAction{
+					Path: "/ready",
+					Port: intstr.FromInt(9628),
+				},
+			},
+			InitialDelaySeconds: 10,
+			PeriodSeconds:       10,
+			TimeoutSeconds:      5,
+			SuccessThreshold:    1,
+			FailureThreshold:    3,
+		}
+	}
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -754,6 +797,12 @@ func (c *autopilot) getAutopilotDeploymentSpec(
 				},
 			},
 		},
+	}
+
+	// Only assign the readiness probe if it's not nil
+	// and the container is the autopilot container
+	if readinessProbe != nil && deployment.Spec.Template.Spec.Containers[0].Name == AutopilotContainerName {
+		deployment.Spec.Template.Spec.Containers[0].ReadinessProbe = readinessProbe
 	}
 
 	if cluster.Spec.ImagePullSecret != nil && *cluster.Spec.ImagePullSecret != "" {
