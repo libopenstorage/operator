@@ -1395,7 +1395,7 @@ func (c *Controller) CreatePodTemplate(
 	addPxServiceAccountTokenSecretIfNotExist(&podSpec)
 	podSpec.NodeName = node.Name
 	labels := c.StorageClusterSelectorLabels(cluster)
-	labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
+	labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValuePortworx
 	newTemplate := v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:   cluster.Namespace,

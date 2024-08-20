@@ -1829,7 +1829,7 @@ func TestStoragePodGetsScheduled(t *testing.T) {
 			Labels: map[string]string{
 				constants.LabelKeyClusterName:       cluster.Name,
 				constants.LabelKeyDriverName:        driverName,
-				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
+				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValuePortworx,
 			},
 			Annotations: make(map[string]string),
 		},
@@ -1947,7 +1947,7 @@ func TestStoragePodGetsScheduledK8s1_24(t *testing.T) {
 			Labels: map[string]string{
 				constants.LabelKeyClusterName:       cluster.Name,
 				constants.LabelKeyDriverName:        driverName,
-				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
+				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValuePortworx,
 			},
 			Annotations: make(map[string]string),
 		},
@@ -2338,7 +2338,7 @@ func TestStoragePodGetsScheduledWithCustomNodeSpecs(t *testing.T) {
 			Labels: map[string]string{
 				constants.LabelKeyClusterName:       cluster.Name,
 				constants.LabelKeyDriverName:        driverName,
-				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
+				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValuePortworx,
 			},
 		},
 		Spec: expectedPodSpec,

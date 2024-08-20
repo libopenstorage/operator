@@ -492,6 +492,8 @@ type AutopilotSpec struct {
 type PxResourceGatewaySpec struct {
 	// Enabled decides whether PxResourceGateway needs to be enabled
 	Enabled bool `json:"enabled,omitempty"`
+	// Image is docker image of the PxResourceGateway
+	Image string `json:"image,omitempty"`
 	// Args is a map of arguments given to PxResourceGateway
 	Args map[string]string `json:"args,omitempty"`
 	// Resources requests and limits (like CPU and memory) for PxResourceGateway pod
@@ -610,7 +612,6 @@ type ComponentImages struct {
 	Stork                      string `json:"stork,omitempty"`
 	UserInterface              string `json:"userInterface,omitempty"`
 	Autopilot                  string `json:"autopilot,omitempty"`
-	PxResourceGateway          string `json:"pxResourceGateway,omitempty"`
 	CSINodeDriverRegistrar     string `json:"csiNodeDriverRegistrar,omitempty"`
 	CSIDriverRegistrar         string `json:"csiDriverRegistrar,omitempty"`
 	CSIProvisioner             string `json:"csiProvisioner,omitempty"`
@@ -635,6 +636,7 @@ type ComponentImages struct {
 	Pause                      string `json:"pause,omitempty"`
 	DynamicPlugin              string `json:"dynamicPlugin,omitempty"`
 	DynamicPluginProxy         string `json:"dynamicPluginProxy,omitempty"`
+	PxResourceGateway          string `json:"pxResourceGateway,omitempty"`
 }
 
 // Storage represents cluster storage details

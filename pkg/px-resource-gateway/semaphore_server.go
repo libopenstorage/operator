@@ -2,11 +2,15 @@ package px_resource_gateway
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/libopenstorage/operator/pkg/constants"
 	pb "github.com/libopenstorage/operator/proto"
+	"github.com/portworx/sched-ops/k8s/core"
 	"github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -20,7 +24,29 @@ type semaphoreServer struct {
 
 func NewSemaphoreServer(semaphoreConfig *SemaphoreConfig) *semaphoreServer {
 	semaphoreConfigCommon = semaphoreConfig
+	semaphoreConfigCommon.ConfigMapLabels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValuePxResourceGateway
 	return &semaphoreServer{}
+}
+
+func (s *semaphoreServer) createResource(req *pb.CreateResourceRequest) {
+	configMapLabels := make(map[string]string)
+	for k, v := range semaphoreConfigCommon.ConfigMapLabels {
+		configMapLabels[k] = v
+	}
+	semaphoreConfig := &SemaphoreConfig{
+		NLocks:                req.GetNLocks(),
+		ConfigMapName:         semaphoreConfigCommon.ConfigMapName + "-" + req.GetResourceId(),
+		ConfigMapNamespace:    semaphoreConfigCommon.ConfigMapNamespace,
+		ConfigMapLabels:       configMapLabels,
+		ConfigMapUpdatePeriod: semaphoreConfigCommon.ConfigMapUpdatePeriod,
+		DeadNodeTimeout:       semaphoreConfigCommon.DeadNodeTimeout,
+		LockHoldTimeout:       time.Duration(req.GetLockHoldTimeout()) * time.Second,
+		MaxQueueSize:          semaphoreConfigCommon.MaxQueueSize,
+	}
+	logrus.Infof("Creating semaphore with config: %v", semaphoreConfig)
+
+	semaphore := CreateSemaphorePriorityQueue(semaphoreConfig)
+	s.semaphoreMap.Store(req.GetResourceId(), semaphore)
 }
 
 func (s *semaphoreServer) CreateResource(ctx context.Context, req *pb.CreateResourceRequest) (*pb.CreateResourceResponse, error) {
@@ -41,26 +67,31 @@ func (s *semaphoreServer) CreateResource(ctx context.Context, req *pb.CreateReso
 		return &pb.CreateResourceResponse{}, status.Error(codes.AlreadyExists, "Resource already exists")
 	}
 
-	// TODO: add lock hold timeout to semaphore
-	configMapLabels := make(map[string]string)
-	for k, v := range semaphoreConfigCommon.ConfigMapLabels {
-		configMapLabels[k] = v
-	}
-	semaphoreConfig := &SemaphoreConfig{
-		NLocks:                req.GetNLocks(),
-		ConfigMapName:         semaphoreConfigCommon.ConfigMapName + "-" + req.GetResourceId(),
-		ConfigMapNamespace:    semaphoreConfigCommon.ConfigMapNamespace,
-		ConfigMapLabels:       configMapLabels,
-		ConfigMapUpdatePeriod: semaphoreConfigCommon.ConfigMapUpdatePeriod,
-		DeadNodeTimeout:       semaphoreConfigCommon.DeadNodeTimeout,
-		LockHoldTimeout:       time.Duration(req.GetLockHoldTimeout()),
-	}
-	logrus.Infof("Creating semaphore with config: %v", semaphoreConfig)
-
-	semaphore := NewSemaphorePriorityQueue(semaphoreConfig)
-	s.semaphoreMap.Store(req.GetResourceId(), semaphore)
-
+	s.createResource(req)
 	return &pb.CreateResourceResponse{}, nil
+}
+
+func (s *semaphoreServer) LoadResources() error {
+	configMapList, err := core.Instance().ListConfigMap(
+		semaphoreConfigCommon.ConfigMapNamespace,
+		metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s=%s",
+				constants.OperatorLabelManagedByKey, constants.OperatorLabelManagedByValuePxResourceGateway),
+		})
+	if err != nil {
+		return err
+	}
+	for _, configMap := range configMapList.Items {
+		// other config values will be populated later from the configMap data
+		semaphoreConfig := &SemaphoreConfig{
+			ConfigMapUpdatePeriod: semaphoreConfigCommon.ConfigMapUpdatePeriod,
+			DeadNodeTimeout:       semaphoreConfigCommon.DeadNodeTimeout,
+		}
+		semaphore := NewSemaphorePriorityQueue(semaphoreConfig, &configMap)
+		resourceId := configMap.Name[len(semaphoreConfigCommon.ConfigMapName+"-"):]
+		s.semaphoreMap.Store(resourceId, semaphore)
+	}
+	return nil
 }
 
 func (s *semaphoreServer) AcquireLock(ctx context.Context, req *pb.AcquireLockRequest) (*pb.AcquireLockResponse, error) {
@@ -131,6 +162,9 @@ func (s *semaphoreServer) KeepAlive(ctx context.Context, req *pb.KeepAliveReques
 	}
 	semaphorePQ := item.(SemaphorePriorityQueue)
 
-	semaphorePQ.KeepAlive(req.ClientId)
-	return &pb.KeepAliveResponse{}, nil
+	accessStatus := semaphorePQ.KeepAlive(req.ClientId)
+	response := &pb.KeepAliveResponse{
+		AccessStatus: accessStatus,
+	}
+	return response, nil
 }

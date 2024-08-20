@@ -2,6 +2,7 @@ package px_resource_gateway
 
 import (
 	"container/list"
+	"fmt"
 	"sync"
 
 	pb "github.com/libopenstorage/operator/proto"
@@ -16,42 +17,52 @@ var (
 )
 
 type PriorityQueue interface {
-	Enqueue(clientId string, priority pb.SemaphoreAccessPriority_Type)
-	Dequeue(priority pb.SemaphoreAccessPriority_Type)
-	Front() (string, pb.SemaphoreAccessPriority_Type)
-	Remove(clientId string)
+	Enqueue(clientId string, priority pb.SemaphoreAccessPriority_Type) error
+	Dequeue(priority pb.SemaphoreAccessPriority_Type) error
+	Front() (clientId string, accessPriority pb.SemaphoreAccessPriority_Type)
+	Remove(clientId string) error
 }
 
 type priorityQueue struct {
 	sync.Mutex
 	// using list.List for effecicient implementation of queues
-	queues map[pb.SemaphoreAccessPriority_Type]*list.List
+	queues       map[pb.SemaphoreAccessPriority_Type]*list.List
+	maxQueueSize uint
 }
 
-func NewPriorityQueue() PriorityQueue {
+func NewPriorityQueue(maxQueueSize uint) PriorityQueue {
 	queues := make(map[pb.SemaphoreAccessPriority_Type]*list.List)
 	for _, priority := range priorityDescendingOrder {
 		queues[priority] = list.New()
 	}
 	return &priorityQueue{
-		queues: queues,
+		queues:       queues,
+		maxQueueSize: maxQueueSize,
 	}
 }
 
-func (pq *priorityQueue) Enqueue(clientId string, priority pb.SemaphoreAccessPriority_Type) {
+func (pq *priorityQueue) Enqueue(clientId string, priority pb.SemaphoreAccessPriority_Type) error {
 	pq.Lock()
 	defer pq.Unlock()
+
+	if pq.lengthWithLock() == pq.maxQueueSize {
+		return fmt.Errorf("queue is full")
+	}
 
 	pq.queues[priority].PushBack(clientId)
+	return nil
 }
 
-func (pq *priorityQueue) Dequeue(priority pb.SemaphoreAccessPriority_Type) {
+func (pq *priorityQueue) Dequeue(priority pb.SemaphoreAccessPriority_Type) error {
 	pq.Lock()
 	defer pq.Unlock()
 
-	if pq.queues[priority].Front() != nil {
-		pq.queues[priority].Remove(pq.queues[priority].Front())
+	if pq.queues[priority].Front() == nil {
+		return fmt.Errorf("queue %v is empty", priority)
 	}
+
+	pq.queues[priority].Remove(pq.queues[priority].Front())
+	return nil
 }
 
 func (pq *priorityQueue) Front() (string, pb.SemaphoreAccessPriority_Type) {
@@ -66,7 +77,7 @@ func (pq *priorityQueue) Front() (string, pb.SemaphoreAccessPriority_Type) {
 	return "", pb.SemaphoreAccessPriority_LOW
 }
 
-func (pq *priorityQueue) Remove(clientId string) {
+func (pq *priorityQueue) Remove(clientId string) error {
 	pq.Lock()
 	defer pq.Unlock()
 
@@ -74,8 +85,19 @@ func (pq *priorityQueue) Remove(clientId string) {
 		for e := q.Front(); e != nil; e = e.Next() {
 			if e.Value.(string) == clientId {
 				q.Remove(e)
-				return
+				return nil
 			}
 		}
 	}
+	return fmt.Errorf("client %v not found in the queue", clientId)
+}
+
+// lengthWithLock returns the total number of elements across all queues
+// and expects the caller to hold the lock
+func (pq *priorityQueue) lengthWithLock() uint {
+	var length uint
+	for _, q := range pq.queues {
+		length += uint(q.Len())
+	}
+	return length
 }

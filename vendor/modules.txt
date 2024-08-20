@@ -263,7 +263,9 @@ github.com/libopenstorage/grpc-framework/server
 github.com/libopenstorage/openstorage/api
 github.com/libopenstorage/openstorage/pkg/auth
 github.com/libopenstorage/openstorage/pkg/correlation
+github.com/libopenstorage/openstorage/pkg/dbg
 github.com/libopenstorage/openstorage/pkg/grpcserver
+github.com/libopenstorage/openstorage/pkg/sched
 # github.com/libopenstorage/secrets v0.0.0-20220413195519-57d1c446c5e9
 ## explicit; go 1.13
 github.com/libopenstorage/secrets/aws/credentials

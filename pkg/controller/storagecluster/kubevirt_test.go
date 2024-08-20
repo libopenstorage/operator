@@ -202,7 +202,7 @@ func TestStartEvictingVMPods(t *testing.T) {
 		constants.AnnotationControllerRevisionHashKey: hash,
 	}
 	expectedLabels := map[string]string{
-		constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
+		constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValuePortworx,
 	}
 	// Test case: no migration exists
 	virtLauncherPod, vmi := getTestVirtLauncherPodAndVMI("virt-launcher-1", "node1")
@@ -308,7 +308,7 @@ func TestStartEvictingVMPods(t *testing.T) {
 				constants.AnnotationControllerRevisionHashKey: "different-hash",
 			},
 			Labels: map[string]string{
-				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
+				constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValuePortworx,
 			},
 			SourceNode: virtLauncherPod.Spec.NodeName,
 		},

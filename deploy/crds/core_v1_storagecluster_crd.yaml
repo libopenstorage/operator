@@ -3941,6 +3941,9 @@ spec:
                   dynamicPluginProxy:
                     type: string
                     description: Desired image for nginx proxy image.
+                  pxResourceGateway:
+                    type: string
+                    description: Desired image for px resource gateway.
               conditions:
                 type: array
                 description: Contains details for the current condition of this cluster.

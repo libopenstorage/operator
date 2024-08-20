@@ -3,11 +3,12 @@ package storagenode
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/libopenstorage/openstorage/api"
 	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	"google.golang.org/grpc"
-	"strings"
-	"time"
 
 	"github.com/hashicorp/go-version"
 	apiextensionsops "github.com/portworx/sched-ops/k8s/apiextensions"
@@ -379,11 +380,11 @@ func (c *Controller) syncStorage(
 			}
 
 			value, present := podCopy.Labels[constants.OperatorLabelManagedByKey]
-			if !present || value != constants.OperatorLabelManagedByValue {
+			if !present || value != constants.OperatorLabelManagedByValuePortworx {
 				if podCopy.Labels == nil {
 					podCopy.Labels = make(map[string]string)
 				}
-				podCopy.Labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValue
+				podCopy.Labels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValuePortworx
 				updateNeeded = true
 			}
 
@@ -424,7 +425,7 @@ func (c *Controller) createKVDBPod(
 
 func (c *Controller) kvdbPodLabels(cluster *corev1.StorageCluster) map[string]string {
 	podLabels := map[string]string{
-		constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
+		constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValuePortworx,
 	}
 	for k, v := range c.kvdbOldPodLabels(cluster) {
 		podLabels[k] = v

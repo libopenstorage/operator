@@ -1533,3 +1533,75 @@ func ShouldUseClusterDomain(node *api.StorageNode) (bool, error) {
 	}
 	return true, nil
 }
+
+func PopulateSecurityEnvironmentVariables(
+	cluster *corev1.StorageCluster,
+	envMap map[string]*v1.EnvVar,
+) {
+	if !SecurityEnabled(cluster) {
+		return
+	}
+	envMap[EnvKeyPortworxAuthJwtSharedSecret] = &v1.EnvVar{
+		Name: EnvKeyPortworxAuthJwtSharedSecret,
+		ValueFrom: &v1.EnvVarSource{
+			SecretKeyRef: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: *cluster.Spec.Security.Auth.SelfSigned.SharedSecret,
+				},
+				Key: SecuritySharedSecretKey,
+			},
+		},
+	}
+	envMap[EnvKeyPortworxAuthSystemKey] = &v1.EnvVar{
+		Name: EnvKeyPortworxAuthSystemKey,
+		ValueFrom: &v1.EnvVarSource{
+			SecretKeyRef: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: SecurityPXSystemSecretsSecretName,
+				},
+				Key: SecuritySystemSecretKey,
+			},
+		},
+	}
+	envMap[EnvKeyPortworxAuthJwtIssuer] = &v1.EnvVar{
+		Name:  EnvKeyPortworxAuthJwtIssuer,
+		Value: *cluster.Spec.Security.Auth.SelfSigned.Issuer,
+	}
+	pxVersion := GetPortworxVersion(cluster)
+	storkVersion := GetStorkVersion(cluster)
+	pxAppsIssuerVersion, err := version.NewVersion("2.6.0")
+	if err != nil {
+		logrus.Errorf("failed to create PX version variable 2.6.0: %s", err.Error())
+	}
+	storkIssuerVersion, err := version.NewVersion("2.5.0")
+	if err != nil {
+		logrus.Errorf("failed to create Stork version variable 2.5.0: %s", err.Error())
+	}
+	// apps issuer was added in PX version 2.6.0
+	if pxVersion.GreaterThanOrEqual(pxAppsIssuerVersion) && storkVersion.GreaterThanOrEqual(storkIssuerVersion) {
+		envMap[EnvKeyPortworxAuthSystemAppsKey] = &v1.EnvVar{
+			Name: EnvKeyPortworxAuthSystemAppsKey,
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: SecurityPXSystemSecretsSecretName,
+					},
+					Key: SecurityAppsSecretKey,
+				},
+			},
+		}
+	} else {
+		// otherwise, use the stork issuer for pre-2.6 support
+		envMap[EnvKeyPortworxAuthStorkKey] = &v1.EnvVar{
+			Name: EnvKeyPortworxAuthStorkKey,
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: SecurityPXSystemSecretsSecretName,
+					},
+					Key: SecurityAppsSecretKey,
+				},
+			},
+		}
+	}
+}

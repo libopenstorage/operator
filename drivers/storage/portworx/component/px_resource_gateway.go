@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/go-version"
@@ -62,16 +63,23 @@ const (
 	// configuration values for px-resource-gateway server
 	//
 	// PxResourceGatewayConfigmapName is the name of the configmap used by px-resource-gateway
-	PxResourceGatewayConfigmapName = "px-resource-gateway"
+	PxResourceGatewayConfigmapName = PxResourceGatewayStr
 	// PxResourceGatewayConfigmapUpdatePeriod is the time period between configmap updates
 	PxResourceGatewayConfigmapUpdatePeriod = "1s"
 	// PxResourceGatewayDeadNodeTimeout is the time period after which a dead node is removed
 	PxResourceGatewayDeadNodeTimeout = "5s"
+
+	// configuration for px-resource-gateway deployment liveliness probe
+	//
+	// PxResourceGatewayLivenessProbeInitialDelaySeconds is the initial delay for the px-resource-gateway liveness probe
+	PxResourceGatewayLivenessProbeInitialDelaySeconds = 10
+	// PxResourceGatewayLivenessProbePeriodSeconds is the period for the px-resource-gateway liveness probe
+	PxResourceGatewayLivenessProbePeriodSeconds = 2
 )
 
 var defaultPxResourceGatewayCommandArgs = map[string]string{
 	"serverHost":            PxResourceGatewayDeploymentHost,
-	"serverPort":            string(PxResourceGatewayPort),
+	"serverPort":            strconv.Itoa(PxResourceGatewayPort),
 	"configMapName":         PxResourceGatewayConfigmapName,
 	"namespace":             "",
 	"configMapUpdatePeriod": PxResourceGatewayConfigmapUpdatePeriod,
@@ -142,7 +150,9 @@ func (p *pxResourceGateway) Delete(cluster *corev1.StorageCluster) error {
 	if err := k8sutil.DeleteDeployment(p.k8sClient, PxResourceGatewayDeploymentName, cluster.Namespace, *ownerRef); err != nil {
 		return err
 	}
-	p.MarkDeleted()
+	if err := k8sutil.DeleteService(p.k8sClient, PxResourceGatewayServiceName, cluster.Namespace, *ownerRef); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -215,6 +225,17 @@ func (p *pxResourceGateway) createRoleBinding(
 	)
 }
 
+func (p *pxResourceGateway) getImage(cluster *corev1.StorageCluster) string {
+	image := cluster.Spec.PxResourceGateway.Image
+	if image == "" {
+		image = cluster.Status.DesiredImages.PxResourceGateway
+	}
+	if image != "" {
+		image = util.GetImageURN(cluster, image)
+	}
+	return image
+}
+
 // getCommand returns the command to run the px-resource-gateway server with custom configuration
 // it uses the configuration values from the StorageCluster spec and sets default values if not present
 func (p *pxResourceGateway) getCommand(cluster *corev1.StorageCluster) []string {
@@ -268,8 +289,10 @@ func (p *pxResourceGateway) createDeployment(
 	}
 
 	// get the target deployment
-	imageName := cluster.Status.DesiredImages.PxResourceGateway
-	imageName = util.GetImageURN(cluster, imageName)
+	imageName := p.getImage(cluster)
+	if imageName == "" {
+		return fmt.Errorf("px reosurce gateway image cannot be empty")
+	}
 	command := p.getCommand(cluster)
 	targetDeployment := p.getPxResourceGatewayDeploymentSpec(cluster, ownerRef, imageName, command)
 
@@ -328,6 +351,14 @@ func (p *pxResourceGateway) getPxResourceGatewayDeploymentSpec(
 	replicas := int32(1)
 	imagePullPolicy := pxutil.ImagePullPolicy(cluster)
 
+	// get the security environment variables
+	envMap := map[string]*v1.EnvVar{}
+	pxutil.PopulateSecurityEnvironmentVariables(cluster, envMap)
+	envList := make([]v1.EnvVar, 0)
+	for _, env := range envMap {
+		envList = append(envList, *env)
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            PxResourceGatewayDeploymentName,
@@ -351,6 +382,7 @@ func (p *pxResourceGateway) getPxResourceGatewayDeploymentSpec(
 							Name:            PxResourceGatewayContainerName,
 							Image:           imageName,
 							ImagePullPolicy: imagePullPolicy,
+							Env:             envList,
 							Command:         command,
 							SecurityContext: &v1.SecurityContext{
 								AllowPrivilegeEscalation: boolPtr(false),
@@ -362,6 +394,15 @@ func (p *pxResourceGateway) getPxResourceGatewayDeploymentSpec(
 									ContainerPort: PxResourceGatewayDeploymentPort,
 									Protocol:      v1.ProtocolTCP,
 								},
+							},
+							LivenessProbe: &v1.Probe{
+								ProbeHandler: v1.ProbeHandler{
+									GRPC: &v1.GRPCAction{
+										Port: PxResourceGatewayServicePort,
+									},
+								},
+								InitialDelaySeconds: PxResourceGatewayLivenessProbeInitialDelaySeconds,
+								PeriodSeconds:       PxResourceGatewayLivenessProbePeriodSeconds,
 							},
 						},
 					},

@@ -8,8 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libopenstorage/grpc-framework/pkg/auth"
 	"github.com/libopenstorage/grpc-framework/pkg/util"
 	grpcFramework "github.com/libopenstorage/grpc-framework/server"
+	"github.com/libopenstorage/openstorage/pkg/sched"
+
+	pxutil "github.com/libopenstorage/operator/drivers/storage/portworx/util"
 	pxResourceGateway "github.com/libopenstorage/operator/pkg/px-resource-gateway"
 	"github.com/libopenstorage/operator/pkg/version"
 	pb "github.com/libopenstorage/operator/proto"
@@ -38,16 +42,18 @@ const (
 	defaultServerHost = "127.0.0.1"
 	// defaultServerPort is the default port for px-resource-gateway service
 	defaultServerPort = "50051"
+	// defaultNamespace is the default namespace to create semaphore configmap
+	defaultNamespace = "kube-system"
 	// defaultConfigMapName is the default name for semaphore configmap
 	defaultConfigMapName = pxResourceGatewayStr
-	// defaultConfigMapNamespace is the default namespace to create semaphore configmap
-	defaultConfigMapNamespace = "kube-system"
 	// defaultConfigMapLabels are the default labels applied to semaphore configmap
 	defaultConfigMapLabels = "name=px-resource-gateway"
 	// defaultConfigMapUpdatePeriod is the default time period between configmap updates
-	defaultConfigMapUpdatePeriod = 5 * time.Second
+	defaultConfigMapUpdatePeriod = 1 * time.Second
 	// defaultDeadNodeTimeout is the default time period after which a node is considered dead
 	defaultDeadNodeTimeout = 10 * time.Second
+	// defaultMaxQueueSize is the default max queue size for semaphore server
+	defaultMaxQueueSize = 5000
 )
 
 func main() {
@@ -69,14 +75,14 @@ func main() {
 			Value: defaultServerPort,
 		},
 		cli.StringFlag{
+			Name:  "namespace",
+			Usage: "Name of the configmap to use for semaphore",
+			Value: defaultNamespace,
+		},
+		cli.StringFlag{
 			Name:  "configMapName",
 			Usage: "Name of the configmap to use for semaphore",
 			Value: defaultConfigMapName,
-		},
-		cli.StringFlag{
-			Name:  "configMapNamespace",
-			Usage: "Name of the configmap to use for semaphore",
-			Value: defaultConfigMapNamespace,
 		},
 		cli.StringFlag{
 			Name:  "configMapLabels",
@@ -119,7 +125,26 @@ func run(c *cli.Context) {
 	}
 	logrus.Debugf("Running on k8s version: %s", version.String())
 
-	// TODO: add security
+	// initialize scheduler
+	sched.Init(time.Second)
+
+	// if Px security is enabled, then Issuer and SharedSecret will be set in the environment
+	authIssuer := os.Getenv(pxutil.EnvKeyPortworxAuthJwtIssuer)
+	authSharedSecret := os.Getenv(pxutil.EnvKeyPortworxAuthJwtSharedSecret)
+	security := &grpcFramework.SecurityConfig{}
+	if authIssuer != "" && authSharedSecret != "" {
+		authenticator, err := auth.NewJwtAuthenticator(
+			&auth.JwtAuthConfig{
+				SharedSecret: []byte(authSharedSecret),
+			})
+		if err != nil {
+			log.Fatalf("unable to create shared key authenticator")
+		}
+		security.Authenticators = map[string]auth.Authenticator{
+			authIssuer: authenticator,
+		}
+	}
+
 	// create the config for px-resource-gateway gRPC server
 	pxResourceGatewayServerConfig := &grpcFramework.ServerConfig{
 		Name:         serverName,
@@ -127,6 +152,7 @@ func run(c *cli.Context) {
 		Socket:       socket,
 		AuditOutput:  os.Stdout,
 		AccessOutput: os.Stdout,
+		Security:     security,
 	}
 
 	// register the various services with px-resource-gateway gRPC server
@@ -186,10 +212,11 @@ func newSemaphoreServer(c *cli.Context) pb.SemaphoreServiceServer {
 	}
 	semaphoreServerConfig := &pxResourceGateway.SemaphoreConfig{
 		ConfigMapName:         c.String("configMapName"),
-		ConfigMapNamespace:    c.String("configMapNamespace"),
+		ConfigMapNamespace:    c.String("namespace"),
 		ConfigMapLabels:       configMapLabels,
 		ConfigMapUpdatePeriod: c.Duration("configMapUpdatePeriod"),
 		DeadNodeTimeout:       c.Duration("deadNodeTimeout"),
+		MaxQueueSize:          defaultMaxQueueSize,
 	}
 	semaphoreServer := pxResourceGateway.NewSemaphoreServer(semaphoreServerConfig)
 	return semaphoreServer

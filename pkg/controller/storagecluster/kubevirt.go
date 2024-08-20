@@ -148,7 +148,7 @@ OUTER:
 		}
 		// All checks passed. Start the live-migration.
 		labels := map[string]string{
-			constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValue,
+			constants.OperatorLabelManagedByKey: constants.OperatorLabelManagedByValuePortworx,
 		}
 		annotations := map[string]string{
 			constants.AnnotationControllerRevisionHashKey: controllerRevisionHash,

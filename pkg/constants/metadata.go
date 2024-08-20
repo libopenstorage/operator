@@ -50,8 +50,10 @@ const (
 	// OperatorLabelManagedByKey is a label key that is added to any object that is
 	// managed the Portworx operator.
 	OperatorLabelManagedByKey = OperatorPrefix + "/managed-by"
-	// OperatorLabelManagedByValue indicates that the object is managed by portworx.
-	OperatorLabelManagedByValue = "portworx"
+	// OperatorLabelManagedByValuePortworx indicates that the object is managed by portworx.
+	OperatorLabelManagedByValuePortworx = "portworx"
+	// OperatorLabelManagedByValuePxResourceGateway indicates that the object is managed by Px Resource Gateway.
+	OperatorLabelManagedByValuePxResourceGateway = "px-resource-gateway"
 )
 
 const (
