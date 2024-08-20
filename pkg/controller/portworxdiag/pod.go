@@ -45,7 +45,7 @@ func volumeMounts() []v1.VolumeMount {
 	}
 }
 
-func makeDiagPodTemplate(cluster *corev1.StorageCluster, diag *portworxv1.PortworxDiag, ns string, nodeName string, nodeID string) (*v1.PodTemplateSpec, error) {
+func makeDiagPodTemplate(cluster *corev1.StorageCluster, diag *portworxv1.PortworxDiag, ns string, nodeName string, nodeID string, label string) (*v1.PodTemplateSpec, error) {
 	terminationGP := int64(10)
 	privileged := true
 
@@ -96,6 +96,8 @@ func makeDiagPodTemplate(cluster *corev1.StorageCluster, diag *portworxv1.Portwo
 						diag.Namespace,
 						"--diags-node-id",
 						nodeID,
+						"--diags-pod-label",
+						label,
 					},
 					SecurityContext: &v1.SecurityContext{
 						Privileged: &privileged,

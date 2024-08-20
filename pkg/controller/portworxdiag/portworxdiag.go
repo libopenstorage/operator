@@ -761,7 +761,7 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 		// Create pods for these nodes
 		for _, nodeName := range prs.nodesToCreatePodsFor {
 			nodeID := nodeNameToNodeID[nodeName]
-			podTemplate, err := makeDiagPodTemplate(stc, diag, stc.Namespace, nodeName, nodeID)
+			podTemplate, err := makeDiagPodTemplate(stc, diag, stc.Namespace, nodeName, nodeID, "")
 			if err != nil {
 				logrus.WithError(err).Errorf("Failed to create diags collection pod template")
 				k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod template: %v", err))
@@ -776,6 +776,21 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 			}
 		}
 	}
+
+	if diag.Spec.Portworx.CollectPodLogs {
+		podTemplate, err := makeDiagPodTemplate(stc, diag, stc.Namespace, "", "", "portworx")
+		if err != nil {
+			logrus.WithError(err).Errorf("Failed to create diags collection pod template")
+			k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod template: %v", err))
+		} else {
+			err = c.podControl.CreatePods(context.TODO(), diag.Namespace, podTemplate, diag, metav1.NewControllerRef(diag, controllerKind))
+			if err != nil {
+				logrus.WithError(err).Warnf("Failed to create diags collection pod")
+				k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod: %v", err))
+			}
+		}
+	}
+
 	// TODO: what do we do if there are extra untracked pods? Unlikely, but possible
 	if len(prs.podsToDelete) > 0 {
 		logrus.Infof("Need to delete %d completed diag pods", len(prs.podsToDelete))
