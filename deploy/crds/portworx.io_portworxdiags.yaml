@@ -89,6 +89,9 @@ spec:
                         description: Labels of the volumes to be selected.
                         type: object
                     type: object
+                  collectPodLogs:
+                    description: Flag indicating whether we want to collect pod logs too or not.
+                    type: boolean  
                 type: object
             type: object
           status:
@@ -120,6 +123,16 @@ spec:
                       type: string
                   type: object
                 type: array
+              collectPodLogs:
+                description: Status of the diags collection from all the pods with label 'portworx'.
+                properties:
+                  message:
+                    description: Optional message used to give the reason for any failure.
+                    type: string
+                  status:
+                    description: One word status of the diags collection on the pod.
+                    type: string
+                type: object  
               phase:
                 description: One word status of the entire diags collection job.
                 type: string
