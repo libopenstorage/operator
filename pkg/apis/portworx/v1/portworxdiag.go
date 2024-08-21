@@ -12,12 +12,10 @@ const (
 	NodeStatusCompleted  = "Completed"
 
 	//Pod Logs Statuses
-	PodLogStatusPending        = "Pending"
-	PodLogStatusInProgress     = "InProgress"
-	PodLogStatusFailed         = "Failed"
-	PodLogStatusCompleted      = "Completed"
-	PodLogStatusPartialFailure = "PartiallyFailed"
-	PodLogStatusUnknown        = "Unknown"
+	PodLogStatusPending    = "Pending"
+	PodLogStatusInProgress = "InProgress"
+	PodLogStatusFailed     = "Failed"
+	PodLogStatusCompleted  = "Completed"
 
 	// Diag Statuses
 	DiagStatusPending        = "Pending"

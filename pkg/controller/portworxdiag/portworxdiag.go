@@ -778,16 +778,20 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 	}
 
 	if diag.Spec.Portworx.CollectPodLogs {
-		podTemplate, err := makeDiagPodTemplate(stc, diag, stc.Namespace, "", "", "portworx")
-		if err != nil {
-			logrus.WithError(err).Errorf("Failed to create diags collection pod template")
-			k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod template: %v", err))
-		} else {
-			err = c.podControl.CreatePods(context.TODO(), diag.Namespace, podTemplate, diag, metav1.NewControllerRef(diag, controllerKind))
+		for _, nodeName := range prs.nodesToCreatePodsFor {
+			nodeID := nodeNameToNodeID[nodeName]
+			podTemplate, err := makeDiagPodTemplate(stc, diag, stc.Namespace, nodeName, nodeID, "portworx")
 			if err != nil {
-				logrus.WithError(err).Warnf("Failed to create diags collection pod")
-				k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod: %v", err))
+				logrus.WithError(err).Errorf("Failed to create diags collection pod template")
+				k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod template: %v", err))
+			} else {
+				err = c.podControl.CreatePods(context.TODO(), diag.Namespace, podTemplate, diag, metav1.NewControllerRef(diag, controllerKind))
+				if err != nil {
+					logrus.WithError(err).Warnf("Failed to create diags collection pod")
+					k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod: %v", err))
+				}
 			}
+			break
 		}
 	}
 
