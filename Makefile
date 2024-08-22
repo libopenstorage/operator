@@ -80,8 +80,11 @@ BUILD_OPTIONS := -ldflags=$(LDFLAGS)
 
 all: operator pretest downloads
 
+# This target incorrectly updates the go.mod and causes errors when
+# running the staticchecker. It shouldn't be used anyways, so we are making
+# it a no-op.
 vendor-update:
-	go mod download
+	@echo "skip: go mod download"
 
 vendor:
 	go mod vendor
@@ -176,8 +179,8 @@ codegen:
 
 operator:
 	@echo "Building the cluster operator binary"
-	@cd cmd/operator && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
-	@cd cmd/dryrun && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/dryrun
+	@cd cmd/operator && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(BUILD_OPTIONS) -o $(BIN)/operator
+	@cd cmd/dryrun && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(BUILD_OPTIONS) -o $(BIN)/dryrun
 
 container:
 	@echo "Building operator image $(OPERATOR_IMG)"
@@ -280,6 +283,8 @@ get-release-manifest: clean-release-manifest
 	wget -q --no-check-certificate '$(PX_INSTALLER_HOST)/versions' -O manifests/portworx-releases-local.yaml
 
 mockgen: $(GOPATH)/bin/mockgen
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/kubernetesinterface.mock.go -package=mock "k8s.io/client-go/kubernetes" Interface
+	$(GOPATH)/bin/mockgen -destination=pkg/mock/kubernetesdiscovery.mock.go -package=mock "k8s.io/client-go/discovery" DiscoveryInterface,ServerVersionInterface
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/portworxsdk.mock.go -package=mock github.com/libopenstorage/operator/api/px PortworxServiceServer
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/openstoragesdk.mock.go -package=mock github.com/libopenstorage/openstorage/api OpenStorageRoleServer,OpenStorageNodeServer,OpenStorageClusterServer,OpenStorageNodeClient,OpenStorageVolumeServer,OpenStorageClusterDomainsServer
 	$(GOPATH)/bin/mockgen -destination=pkg/mock/storagedriver.mock.go -package=mock github.com/libopenstorage/operator/drivers/storage Driver
@@ -298,3 +303,11 @@ clean: clean-release-manifest clean-bundle
 	@go clean -i $(PKGS)
 	@echo "Deleting image "$(OPERATOR_IMG)
 	@docker rmi -f $(OPERATOR_IMG) registry.access.redhat.com/ubi9-minimal:latest
+
+jenkins-devenv:
+	docker run -ti --rm --privileged=true \
+		-e RELEASE_VER=99.9.9 \
+		-v $(PWD):/go/src/github.com/libopenstorage/operator \
+		-w /go/src/github.com/libopenstorage/operator \
+		golang:1.21 \
+		/bin/bash

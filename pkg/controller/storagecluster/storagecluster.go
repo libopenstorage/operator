@@ -56,6 +56,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/libopenstorage/operator/px/px-health-check/pkg/healthcheck"
+	hcstates "github.com/libopenstorage/operator/px/px-health-check/pkg/states"
+
 	storageapi "github.com/libopenstorage/openstorage/api"
 	"github.com/libopenstorage/operator/drivers/storage"
 	component "github.com/libopenstorage/operator/drivers/storage/portworx/component"
@@ -63,6 +66,8 @@ import (
 	corev1 "github.com/libopenstorage/operator/pkg/apis/core/v1"
 	"github.com/libopenstorage/operator/pkg/cloudprovider"
 	"github.com/libopenstorage/operator/pkg/constants"
+	operatorhc "github.com/libopenstorage/operator/pkg/healthcheck"
+	kuberneteshc "github.com/libopenstorage/operator/pkg/healthcheck/checks/kubernetes"
 	"github.com/libopenstorage/operator/pkg/preflight"
 	"github.com/libopenstorage/operator/pkg/util"
 	"github.com/libopenstorage/operator/pkg/util/k8s"
@@ -73,19 +78,20 @@ const (
 	// ControllerName is the name of the controller
 	ControllerName = "storagecluster-controller"
 	// ComponentName is the component name of the storage cluster
-	ComponentName               = "storage"
-	slowStartInitialBatchSize   = 1
-	validateCRDInterval         = 5 * time.Second
-	validateCRDTimeout          = 1 * time.Minute
-	deleteFinalizerName         = constants.OperatorPrefix + "/delete"
-	nodeNameIndex               = "nodeName"
-	defaultRevisionHistoryLimit = 10
-	defaultMaxUnavailablePods   = 1
-	failureDomainZoneKey        = v1.LabelZoneFailureDomainStable
-	crdBasePath                 = "/crds"
-	deprecatedCRDBasePath       = "/crds/deprecated"
-	storageClusterCRDFile       = "core_v1_storagecluster_crd.yaml"
-	minSupportedK8sVersion      = "1.21.0"
+	ComponentName                = "storage"
+	slowStartInitialBatchSize    = 1
+	validateCRDInterval          = 5 * time.Second
+	validateCRDTimeout           = 1 * time.Minute
+	periodicHealthCheckInternval = 1 * time.Minute
+	deleteFinalizerName          = constants.OperatorPrefix + "/delete"
+	nodeNameIndex                = "nodeName"
+	defaultRevisionHistoryLimit  = 10
+	defaultMaxUnavailablePods    = 1
+	failureDomainZoneKey         = v1.LabelZoneFailureDomainStable
+	crdBasePath                  = "/crds"
+	deprecatedCRDBasePath        = "/crds/deprecated"
+	storageClusterCRDFile        = "core_v1_storagecluster_crd.yaml"
+	minSupportedK8sVersion       = "1.21.0"
 )
 
 var _ reconcile.Reconciler = &Controller{}
@@ -105,7 +111,12 @@ var (
 type Controller struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client                        client.Client
+	client client.Client
+
+	// Only use on special calls like getting Kubernetes version. Everything,
+	// else should use the `client`
+	k8sSimpleClient kubernetes.Interface
+
 	scheme                        *runtime.Scheme
 	recorder                      record.EventRecorder
 	podControl                    k8scontroller.PodControlInterface
@@ -128,6 +139,11 @@ func (c *Controller) Init(mgr manager.Manager) error {
 	c.recorder = mgr.GetEventRecorderFor(ControllerName)
 	c.nodeInfoMap = maps.MakeSyncMap[string, *k8s.NodeInfo]()
 	c.kubevirt = newKubevirtManager()
+
+	c.k8sSimpleClient, err = kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return err
+	}
 
 	// Create a new controller
 	c.ctrl, err = controller.New(ControllerName, mgr, controller.Options{Reconciler: c})
@@ -247,6 +263,30 @@ func (c *Controller) Reconcile(ctx context.Context, request reconcile.Request) (
 			logrus.Errorf("Failed to update StorageCluster status. %v", updateErr)
 		}
 		return reconcile.Result{}, err
+	}
+
+	// Run once during first install of the StorageCluster object.
+	// Suggestion: If you want to run periodic health checks, make a separate, new health checker
+	// after the installation of PxE.
+	// The reason that we run it in the reconciler is for two reasons:
+	// 1. We want to make sure that the environment is healthy before we start the installation
+	// 2. We want wait until the StorageCluster CR exists, so that we can add the annotation.
+	// TODO:
+	// - Instead of using annotations for tracking, use Status.Conditions
+	// - Could add results to the readiness probe of the StorageCluster
+	// You can still use the annotation to skip the health check.
+	if err := c.preInstallHealthChecks(cluster); err != nil {
+		k8s.WarningEvent(c.recorder, cluster, util.FailedSyncReason, err.Error())
+		if updateErr := util.UpdateLiveStorageClusterLifecycle(c.client, cluster, corev1.ClusterStateDegraded); updateErr != nil {
+			logrus.Errorf("Failed to update StorageCluster status. %v", updateErr)
+		}
+
+		// Even though health check failed, we do not need to keep requeuing the present request.
+		// Instead, there are two ways to re-run the health check:
+		// 1. Remove the annotation and reapply the StorageCluster CR
+		// 2. Set the value of the annotation from "failed" to "skip".
+		// Setting any of these two values will restart a reconcile request because the object has changed.
+		return reconcile.Result{}, nil
 	}
 
 	if c.waitingForMigrationApproval(cluster) {
@@ -788,6 +828,115 @@ func (c *Controller) miscCleanUp(cluster *corev1.StorageCluster) error {
 	return nil
 }
 
+func (c *Controller) preInstallHealthChecks(cluster *corev1.StorageCluster) error {
+
+	// Determine if we should run the health checks
+	// If not set, then run the health checks
+	check := cluster.Annotations[pxutil.AnnotationHealthCheck]
+	check = strings.TrimSpace(strings.ToLower(check))
+	if strings.EqualFold(check, operatorhc.AnnotationHealthCheckValueSkip) ||
+		strings.EqualFold(check, operatorhc.AnnotationHealthCheckValuePassed) {
+		return nil
+	}
+
+	errorMsg := fmt.Errorf(
+		"preflight health check failed for StorageCluster %v/%v. "+
+			"Please rectify the issue then remove annotation %s to retry the tests",
+		cluster.Namespace,
+		cluster.Name,
+		pxutil.AnnotationHealthCheck,
+	)
+	if strings.EqualFold(check, operatorhc.AnnotationHealthCheckValueFailed) {
+		return errorMsg
+	}
+
+	// Set up the categories, in other words, the list of health check groups
+	categories := []*healthcheck.Category{
+		operatorhc.RequiredHealthChecks(),
+		operatorhc.GatherFactsHealthChecks(c.client, cluster),
+		kuberneteshc.KubernetesHealthPreChecks(),
+	}
+
+	// Create a health checker
+	hc := healthcheck.NewHealthChecker(categories).
+		WithContextTimeout(time.Second * 10)
+	hcstates.WithKubernetesClientSet(hc.State(), c.k8sSimpleClient)
+	hcstates.WithKubernetesManagerClient(hc.State(), c.client)
+
+	// Run the health checks
+	reporter := hc.Run()
+
+	// message is a simple function which returns a formatted error string
+	message := func(title string, check *healthcheck.CheckResult) string {
+		return fmt.Sprintf(
+			"Health check notification from [%s/%s]:%s %s: See %s",
+			check.Category,
+			check.Description,
+			title,
+			check.Err,
+			check.HintURL,
+		)
+	}
+
+	var err error
+	// observer provides a function for the Replay to check each of the
+	// check results and appropriately notify the user
+	// TODO:
+	//    In addition to using ephemeral events in Kubernets, the information could be saved in
+	//    a new CR or status in the StorageCluster.
+	observer := func(check *healthcheck.CheckResult) {
+		if check.Err != nil {
+			if check.Warning {
+				k8s.WarningEvent(
+					c.recorder,
+					cluster,
+					util.WarnPreFlight,
+					message("Warning: ", check),
+				)
+			} else {
+				err = errorMsg
+				k8s.WarningEvent(
+					c.recorder,
+					cluster,
+					util.FailedPreFlight,
+					message("Error: ", check),
+				)
+			}
+		}
+	}
+
+	if !reporter.Successful() || reporter.HasWarning() {
+		// For each result call the observer
+		reporter.Replay(observer)
+	}
+
+	// err will only be set if an error was found.
+	var status string
+	if err == nil {
+		logrus.Info("health check passed")
+		status = operatorhc.AnnotationHealthCheckValuePassed
+	} else {
+		logrus.Infof("health check failed: %v", err)
+		status = operatorhc.AnnotationHealthCheckValueFailed
+	}
+
+	// Update the cluster to indicate that the preflight check has been completed
+	toUpdate := cluster.DeepCopy()
+	if toUpdate.Annotations == nil {
+		toUpdate.Annotations = make(map[string]string)
+	}
+	toUpdate.Annotations[pxutil.AnnotationHealthCheck] = status
+	if e := k8s.UpdateStorageCluster(c.client, toUpdate); e != nil {
+		logrus.Errorf("failed to update StorageCluster %v/%v with health check status of %s: %v",
+			toUpdate.Namespace, toUpdate.Name, status, e)
+		if err == nil {
+			err = e
+		}
+	}
+
+	return err
+}
+
 func (c *Controller) syncStorageCluster(
 	cluster *corev1.StorageCluster,
 ) error {
@@ -807,7 +956,6 @@ func (c *Controller) syncStorageCluster(
 			cluster.Namespace, cluster.Name, err)
 	}
 
-	// If preflight failed, or previous check failed, reconcile would stop here until issues got resolved
 	if err := c.runPreflightCheck(cluster); err != nil {
 		return fmt.Errorf("preflight check failed for StorageCluster %v/%v: %v", cluster.Namespace, cluster.Name, err)
 	}
