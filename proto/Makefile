@@ -1,11 +1,11 @@
 # set defaults
-ifndef DOCKER_HUB_PX_RESOURCE_GATEWAY_PROTO_IMG
-    DOCKER_HUB_PX_RESOURCE_GATEWAY_PROTO_IMG := px-resource-gateway-proto
-    $(warning DOCKER_HUB_PX_RESOURCE_GATEWAY_PROTO_IMG not defined, using '$(DOCKER_HUB_PX_RESOURCE_GATEWAY_PROTO_IMG)' instead)
+ifndef DOCKER_HUB_RESOURCE_GATEWAY_PROTO_IMG
+    DOCKER_HUB_RESOURCE_GATEWAY_PROTO_IMG := resource-gateway-proto
+    $(warning DOCKER_HUB_RESOURCE_GATEWAY_PROTO_IMG not defined, using '$(DOCKER_HUB_RESOURCE_GATEWAY_PROTO_IMG)' instead)
 endif
-ifndef DOCKER_HUB_PX_RESOURCE_GATEWAY_PROTO_TAG
-    DOCKER_HUB_PX_RESOURCE_GATEWAY_PROTO_TAG := latest
-    $(warning DOCKER_HUB_PX_RESOURCE_GATEWAY_PROTO_TAG not defined, using '$(DOCKER_HUB_PX_RESOURCE_GATEWAY_PROTO_TAG)' instead)
+ifndef DOCKER_HUB_RESOURCE_GATEWAY_PROTO_TAG
+    DOCKER_HUB_RESOURCE_GATEWAY_PROTO_TAG := latest
+    $(warning DOCKER_HUB_RESOURCE_GATEWAY_PROTO_TAG not defined, using '$(DOCKER_HUB_RESOURCE_GATEWAY_PROTO_TAG)' instead)
 endif
 
 ifndef PROTOC
@@ -20,11 +20,11 @@ ifndef PROTOSRC_PATH
 PROTOSRC_PATH = $(PROTOS_PATH)/github.com/libopenstorage/operator/proto
 endif
 
-PX_RESOURCE_GATEWAY_PROTO_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_PX_RESOURCE_GATEWAY_PROTO_IMG):$(DOCKER_HUB_PX_RESOURCE_GATEWAY_PROTO_TAG)
+RESOURCE_GATEWAY_PROTO_IMG=$(DOCKER_HUB_REPO)/$(DOCKER_HUB_RESOURCE_GATEWAY_PROTO_IMG):$(DOCKER_HUB_RESOURCE_GATEWAY_PROTO_TAG)
 
 # builds the container to compile proto files
 build-docker:
-	docker build -t $(PX_RESOURCE_GATEWAY_PROTO_IMG) .
+	docker build -t $(RESOURCE_GATEWAY_PROTO_IMG) .
 
 # builds the proto target inside the build container
 docker-proto:
@@ -34,7 +34,7 @@ docker-proto:
 		-e "GOPATH=/go" \
 		-e "DOCKER_PROTO=yes" \
 		-e "PATH=/bin:/usr/bin:/usr/local/bin:/go/bin:/usr/local/go/bin" \
-		$(PX_RESOURCE_GATEWAY_PROTO_IMG) \
+		$(RESOURCE_GATEWAY_PROTO_IMG) \
 		make proto
 
 # compiles the proto files - should be run inside the build container
@@ -47,7 +47,7 @@ endif
 		-I /usr/local/include \
 		-I $(PROTOS_PATH)/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
 		--go_out=plugins=grpc:. \
-		$(PROTOSRC_PATH)/px_resource_gateway.proto
+		$(PROTOSRC_PATH)/resource_gateway.proto
 
 clean:
-	rm -f px_resource_gateway.pb.go
+	rm -f resource_gateway.pb.go

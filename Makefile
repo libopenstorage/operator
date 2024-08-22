@@ -79,8 +79,8 @@ BUILD_OPTIONS := -ldflags=$(LDFLAGS)
 .DEFAULT_GOAL=all
 .PHONY: operator deploy clean vendor vendor-update test generate manifests tools-check
 
-all: operator px-resource-gateway pretest downloads
-dev: operator px-resource-gateway container deploy
+all: operator resource-gateway pretest downloads
+dev: operator resource-gateway container deploy
 
 vendor-update:
 	go mod download
@@ -176,11 +176,11 @@ codegen:
 	@echo "Generating CRD"
 	(GOFLAGS="" hack/update-codegen.sh)
 
-px-resource-gateway:
-	@echo "Building the px-resource-gateway binary"
-	@cd cmd/px-resource-gateway && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/px-resource-gateway
+resource-gateway:
+	@echo "Building the resource-gateway binary"
+	@cd cmd/resource-gateway && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/resource-gateway
 
-operator: px-resource-gateway
+operator: resource-gateway
 	@echo "Building the cluster operator binary"
 	@cd cmd/operator && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/operator
 	@cd cmd/dryrun && CGO_ENABLED=0 go build $(BUILD_OPTIONS) -o $(BIN)/dryrun
@@ -306,5 +306,5 @@ clean: clean-release-manifest clean-bundle
 	@echo "Deleting image "$(OPERATOR_IMG)
 	@docker rmi -f $(OPERATOR_IMG) registry.access.redhat.com/ubi9-minimal:latest
 
-px-resource-gateway-proto:
+resource-gateway-proto:
 	$(MAKE) -C proto docker-proto

@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+package operator.resourcegateway;
+
+option go_package = "/;resourcegateway";
+option java_multiple_files = true;
+option java_package = "com.operator.resourcegateway";
+option java_outer_classname = "ResourceGatewayProto";
+
+// SemaphoreService provides a counting semaphore to limit access to resources
+// and a priority queue to distinguish between different types of clients/requests
+service SemaphoreService {
+  // Create creates a new semaphore resource
+  // It initializes a semaphore for the resource in memory and persists it in the backend
+  // 
+  // resource_id and n_permits are required fields
+  // the other fields are optional and if skipped will be set to default values
+  //
+  // The first request every client makes to the semaphore service should be a create request
+  //
+  // Only the first request received by the semaphore service will create the resource
+  // Any subsequent requests will be ignored
+  rpc Create(CreateRequest)
+    returns (CreateResponse) {}
+
+  // Acquire acquires a lease for the resource or reserves a place in the queue
+  //
+  // Clients will poll this endpoint to acquire a lease for the resource
+  // On the first poll, they will either be granted a lease or enqueued
+  // If enqueued, the client should poll periodically to check if the lease is granted
+  //
+  // The client is enqueued in the priority queue corresponding to the access_priority
+  // Leases are granted according to priority that is,
+  // first all high priority clients are granted leases followed by the others in order
+  //
+  // A client can be starved by other clients with higher priority
+  // Consider implementing a client-side timeout for how long to wait for the lease
+  // before bypassing the semaphore access (if possible)
+  // The priority can not be bumped up once the client is enqueued (Future work)
+  //
+  // No need to send a heartbeat while the client is enqueued
+  // Heartbeats are updated implicitly on every Acquire request
+  rpc Acquire(AcquireRequest)
+    returns (AcquireResponse) {}
+
+  // Release releases the lease on the resource
+  //
+  // If the lease has expired, the release request will be a noop
+rpc Release (ReleaseRequest)
+  returns (ReleaseResponse) {}
+
+  // Heartbeat keeps the lease alive for the resource
+  //
+  // Clients should periodically send heartbeats once they have acquired the lease
+  // If no heartbeat is received within the dead_node_timeout, the lease will be revoked
+  //
+  // Client should monitor the access status returned to check if the lease is still valid
+  // if the lease is lost the client should take the necessary action
+  //
+  // 
+  rpc Heartbeat (HeartbeatRequest)
+  returns (HeartbeatResponse) {}
+}
+
+// AccessPriority specifies the priority of a client's access to a semaphore resource
+message AccessPriority {
+  // Type of priority
+  enum Type {
+    // Unspecified, do NOT use
+    TYPE_UNSPECIFIED = 0;
+    // Enqueued to low priority queue
+    LOW = 1;
+    // Enqueued to medium priority queue
+    MEDIUM = 2;
+    // Enqueued to high priority queue
+    HIGH = 3;
+  }
+}
+
+// AccessStatus specifies the status of a client's access to a semaphore resource
+message AccessStatus{
+  // Type of status
+  enum Type {
+    // Unspecified, do NOT use
+    TYPE_UNSPECIFIED = 0;
+    // Enqueued for access to the resource
+    QUEUED = 1;
+    // Lease acquired for the resource
+    LEASED = 2;
+  }
+}
+
+// CreateRequest is the request to create a new semaphore resource
+// 
+// resource_id and n_permits are required fields
+// the other fields are optional and if skipped will be set to default values
+message CreateRequest {
+  // Resource Id of the new semaphore resource
+  string resource_id = 1;
+  // Number of permits that can be leased out for a resource
+  uint32 n_permits = 2;
+  // Max duration for which a lease can be held
+  uint64 lease_timeout = 3;
+  // Max duration after which a client is considered dead if there is no heartbeat
+  uint64 dead_node_timeout = 4;
+}
+
+// CreateResponse is the response to create a new semaphore resource
+message CreateResponse {}
+
+// AcquireRequest is the request to acquire a lease for a semaphore resource
+message AcquireRequest {
+  // Resource Id to acquire the lease for
+  // It should be the same as the resource_id in the CreateRequest
+  string resource_id = 1;
+  // Client Id who is acquiring the lease
+  // client_id can be any unique identifier for the client
+  string client_id = 2;
+  // Priority of the client's access to the resource
+  AccessPriority.Type access_priority = 3;
+}
+
+// AcquireResponse is the response to acquire a semaphore lock
+message AcquireResponse {
+  // Status of the client's access to the resource
+  AccessStatus.Type access_status = 1;
+}
+
+// ReleaseRequest is the request to release a semaphore lock
+message ReleaseRequest {
+  // Resource Id to release the lease for
+  string resource_id = 1;
+  // Client Id who is releasing the lease
+  string client_id = 2;
+}
+
+// ReleaseResponse is the response to release a semaphore lock
+message ReleaseResponse {}
+
+// HeartbeatRequest is the request to send a heartbeat to the semaphore service
+message HeartbeatRequest {
+  // Resource ID to keep the lease alive for
+  string resource_id = 1;
+  // Client ID to keep the lease alive for
+  string client_id = 2;
+}
+
+// HeartbeatLockResponse is the response to keep a semaphore lock alive
+message HeartbeatResponse {
+  // Status of the client's access to the resource
+  AccessStatus.Type access_status = 1;
+}
