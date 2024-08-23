@@ -103,8 +103,8 @@ type StorageClusterSpec struct {
 	// to the storage driver. The autopilot component could augment the storage
 	// driver to take intelligent actions based on the current state of the cluster.
 	Autopilot *AutopilotSpec `json:"autopilot,omitempty"`
-	// PxResourceGateway limits Px access to external resources to prevent throttling
-	PxResourceGateway *PxResourceGatewaySpec `json:"pxResourceGateway,omitempty"`
+	// ResourceGateway limits Px access to external resources to prevent throttling
+	ResourceGateway *ResourceGatewaySpec `json:"resourceGateway,omitempty"`
 	// Monitoring contains monitoring configuration for the storage cluster.
 	Monitoring *MonitoringSpec `json:"monitoring,omitempty"`
 	// Security configurations for setting up an auth enabled or disabled cluster
@@ -488,15 +488,15 @@ type AutopilotSpec struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// PxResourceGatewaySpec contains details of an PxResourceGateway component
-type PxResourceGatewaySpec struct {
-	// Enabled decides whether PxResourceGateway needs to be enabled
+// ResourceGatewaySpec contains details of an ResourceGateway component
+type ResourceGatewaySpec struct {
+	// Enabled decides whether ResourceGateway needs to be enabled
 	Enabled bool `json:"enabled,omitempty"`
-	// Image is docker image of the PxResourceGateway
+	// Image is docker image of the ResourceGateway
 	Image string `json:"image,omitempty"`
-	// Args is a map of arguments given to PxResourceGateway
+	// Args is a map of arguments given to ResourceGateway
 	Args map[string]string `json:"args,omitempty"`
-	// Resources requests and limits (like CPU and memory) for PxResourceGateway pod
+	// Resources requests and limits (like CPU and memory) for ResourceGateway pod
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
@@ -636,7 +636,7 @@ type ComponentImages struct {
 	Pause                      string `json:"pause,omitempty"`
 	DynamicPlugin              string `json:"dynamicPlugin,omitempty"`
 	DynamicPluginProxy         string `json:"dynamicPluginProxy,omitempty"`
-	PxResourceGateway          string `json:"pxResourceGateway,omitempty"`
+	ResourceGateway            string `json:"resourceGateway,omitempty"`
 }
 
 // Storage represents cluster storage details

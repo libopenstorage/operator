@@ -52,8 +52,8 @@ const (
 	OperatorLabelManagedByKey = OperatorPrefix + "/managed-by"
 	// OperatorLabelManagedByValuePortworx indicates that the object is managed by portworx.
 	OperatorLabelManagedByValuePortworx = "portworx"
-	// OperatorLabelManagedByValuePxResourceGateway indicates that the object is managed by Px Resource Gateway.
-	OperatorLabelManagedByValuePxResourceGateway = "px-resource-gateway"
+	// OperatorLabelManagedByValueResourceGateway indicates that the object is managed by Px Resource Gateway.
+	OperatorLabelManagedByValueResourceGateway = "resource-gateway"
 )
 
 const (

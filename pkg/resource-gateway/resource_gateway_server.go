@@ -25,7 +25,7 @@ const (
 	defaultServerPort = "50051"
 )
 
-// ResourceGatewayServer is the main struct for px-resource-gateway gRPC server
+// ResourceGatewayServer is the main struct for resource-gateway gRPC server
 //
 // It contains the gRPC server instance and various component servers like semaphore and health check
 type ResourceGatewayServer struct {
@@ -35,14 +35,14 @@ type ResourceGatewayServer struct {
 	healthCheckServer *health.Server
 }
 
-// NewResourceGatewayServer creates a new px-resource-gateway gRPC server instance
+// NewResourceGatewayServer creates a new resource-gateway gRPC server instance
 func NewResourceGatewayServer(
 	resourceGatewayConfig *grpcFramework.ServerConfig,
 	semaphoreConfig *SemaphoreConfig,
 ) *ResourceGatewayServer {
 	// create component servers
 	healthCheckServer := health.NewServer()
-	semaphoreServer := newSemaphoreServer(semaphoreConfig)
+	semaphoreServer := NewSemaphoreServer(semaphoreConfig)
 
 	// register the component servers with the gRPC server config
 	resourceGatewayConfig.
@@ -92,7 +92,7 @@ func (r *ResourceGatewayServer) SetupSigIntHandler() error {
 	return signal_handler.Start()
 }
 
-// Start starts the px-resource-gateway gRPC server
+// Start starts the resource-gateway gRPC server
 func (r *ResourceGatewayServer) Start() error {
 	// Initialize the k8s client
 	_, err := core.Instance().GetVersion()

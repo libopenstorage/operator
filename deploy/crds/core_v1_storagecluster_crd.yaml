@@ -931,24 +931,24 @@ spec:
                           cpu:
                             type: string
                             description: CPU limit.
-              pxResourceGateway:
+              resourceGateway:
                 type: object
-                description: Contains spec of px-resource-gateway component for storage driver.
+                description: Contains spec of resource-gateway component for storage driver.
                 properties:
                   enabled:
                     type: boolean
-                    description: Flag indicating whether px-resource-gateway needs to be enabled.
+                    description: Flag indicating whether resource-gateway needs to be enabled.
                   image:
                     type: string
-                    description: Docker image of the px-resource-gateway container.
+                    description: Docker image of the resource-gateway container.
                   args:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                     description: >-
-                      It is a map of arguments provided to px-resource-gateway. Example: log-level: debug
+                      It is a map of arguments provided to resource-gateway. Example: log-level: debug
                   resources:
                     type: object
-                    description: Specifies the resource requirements for the px-resource-gateway pod.
+                    description: Specifies the resource requirements for the resource-gateway pod.
                     properties:
                       requests:
                         type: object
@@ -3941,7 +3941,7 @@ spec:
                   dynamicPluginProxy:
                     type: string
                     description: Desired image for nginx proxy image.
-                  pxResourceGateway:
+                  resourceGateway:
                     type: string
                     description: Desired image for px resource gateway.
               conditions:

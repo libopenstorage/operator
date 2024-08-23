@@ -3,6 +3,7 @@ package resource_gateway
 import (
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,15 +15,17 @@ import (
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-const (
-	testConfigMapName         = "px-resource-gateway-test"
+var (
+	once sync.Once
+
+	testConfigMapName         = "resource-gateway-test"
 	testConfigMapNamespace    = "kube-system"
 	testConfigMapUpdatePeriod = 1 * time.Second
-	testDeadNodeTimeout       = 20 * time.Second
+	testDeadClientTimeout     = 20 * time.Second
 	testLeaseTimeout          = 40 * time.Second
 )
 
-func newSemaphorePriorityQueueTest() *semaphorePriorityQueue {
+func newSemaphorePriorityQueueTest() SemaphorePriorityQueue {
 	semaphoreConfig := &SemaphoreConfig{
 		NPermits:           uint32(2),
 		ConfigMapName:      testConfigMapName,
@@ -31,11 +34,11 @@ func newSemaphorePriorityQueueTest() *semaphorePriorityQueue {
 			"name": testConfigMapName,
 		},
 		ConfigMapUpdatePeriod: testConfigMapUpdatePeriod,
-		DeadClientTimeout:     testDeadNodeTimeout,
+		DeadClientTimeout:     testDeadClientTimeout,
 		LeaseTimeout:          testLeaseTimeout,
 		MaxQueueSize:          1000,
 	}
-	return createSemaphorePriorityQueue(semaphoreConfig)
+	return NewSemaphorePriorityQueueWithConfig(semaphoreConfig)
 }
 
 func deleteConfigMap(t *testing.T) (err error) {
@@ -57,27 +60,26 @@ func deleteConfigMap(t *testing.T) (err error) {
 	return err
 }
 
-func TestSemaphore(t *testing.T) {
+func setup(t *testing.T) {
 	// init
-	sched.Init(time.Second)
+	once.Do(func() {
+		if sched.Instance() == nil {
+			sched.Init(time.Second)
+		}
 
-	// validate kubeconfig is set
-	if os.Getenv("KUBECONFIG") == "" {
-		fmt.Println("KUBECONFIG not set. Cannot run Semaphore UT.")
-		return
-	}
-	logrus.SetLevel(logrus.DebugLevel)
+		// validate kubeconfig is set
+		if os.Getenv("KUBECONFIG") == "" {
+			fmt.Println("KUBECONFIG not set. Cannot run Semaphore UT.")
+			return
+		}
+		logrus.SetLevel(logrus.DebugLevel)
+	})
 
-	tests := map[string]func(*testing.T){
-		"testAcquireAndRelease": testAcquireAndRelease,
-	}
-	for tName, tFunc := range tests {
-		deleteConfigMap(t) // cleanup
-		t.Run(tName, tFunc)
-	}
+	deleteConfigMap(t) // cleanup
 }
 
-func testAcquireAndRelease(t *testing.T) {
+func TestSemaphoreAcquireAndRelease(t *testing.T) {
+	setup(t)
 
 	const (
 		// methods
@@ -169,27 +171,132 @@ func testAcquireAndRelease(t *testing.T) {
 	}
 }
 
-// func testKeepAlive(t *testing.T) {
-// 	semPQ := newSemaphorePriorityQueueTest()
+func TestSemaphoreHeartbeat(t *testing.T) {
+	setup(t)
 
-// 	// acquire lease
-// 	status, err := semPQ.Acquire("node-1", pb.AccessPriority_LOW)
-// 	require.NoError(t, err, "Unexpected error on Acquire")
-// 	require.Equal(t, pb.AccessStatus_LEASED, status)
+	defaultTestDeadClientTimeout := testDeadClientTimeout
+	testDeadClientTimeout = 5 * time.Second
+	defer func() { testDeadClientTimeout = defaultTestDeadClientTimeout }()
+	semPQ := newSemaphorePriorityQueueTest()
 
-// 	// keep alive
-// 	time.Sleep(testDeadNodeTimeout / 2)
-// 	semPQ.KeepAlive("node-1")
-// 	require.NoError(t, err, "Unexpected error on KeepAlive")
+	// acquire lease
+	status, err := semPQ.Acquire("node-1", pb.AccessPriority_LOW)
+	require.NoError(t, err, "Unexpected error on Acquire")
+	require.Equal(t, pb.AccessStatus_LEASED, status)
 
-// 	time.Sleep(testDeadNodeTimeout)
-// 	semPQ.KeepAlive("node-1")
-// 	require.NoError(t, err, "Unexpected error on KeepAlive")
+	// heartbeat
+	time.Sleep(time.Second * 2)
+	accessStatus := semPQ.Heartbeat("node-1")
+	require.NoError(t, err, "Unexpected error on Heartbeat")
+	require.Equal(t, pb.AccessStatus_LEASED, accessStatus)
 
-// 	// validate configmap
-// 	cm, err := core.Instance().GetConfigMap(testConfigMapName, testConfigMapNamespace)
-// 	require.NoError(t, err, "Unexpected error on GetConfigMap")
-// 	logrus.Infof("ConfigMap: %v", cm)
-// 	require.Equal(t, 1, len(cm.Data))
-// 	require.Equal(t, "1", cm.Data["node-1"])
-// }
+	// heartbeat
+	time.Sleep(time.Second * 3)
+	accessStatus = semPQ.Heartbeat("node-1")
+	require.NoError(t, err, "Unexpected error on Heartbeat")
+	require.Equal(t, pb.AccessStatus_LEASED, accessStatus)
+}
+
+func TestSemaphoreCleanupDeadClients(t *testing.T) {
+	setup(t)
+
+	// set dead client timeout to a low value
+	defaultTestDeadClientTimeout := testDeadClientTimeout
+	testDeadClientTimeout = 3 * time.Second
+	defer func() { testDeadClientTimeout = defaultTestDeadClientTimeout }()
+	semPQ := newSemaphorePriorityQueueTest()
+
+	// acquire lease for a client
+	status, err := semPQ.Acquire("node-1", pb.AccessPriority_LOW)
+	require.NoError(t, err, "Unexpected error on Acquire")
+	require.Equal(t, pb.AccessStatus_LEASED, status)
+
+	// do first heartbeat after 1 second (withtin the dead client timeout)
+	// heartbeat will return the lease status as LEASED
+	time.Sleep(time.Second * 1)
+	accessStatus := semPQ.Heartbeat("node-1")
+	require.NoError(t, err, "Unexpected error on Heartbeat")
+	require.Equal(t, pb.AccessStatus_LEASED, accessStatus)
+
+	// validate that configmap has the lease
+	remoteConfigMap, err := core.Instance().GetConfigMap(testConfigMapName, testConfigMapNamespace)
+	cm := configMap{
+		cm: remoteConfigMap,
+	}
+	require.NoError(t, err, "Unexpected error on GetConfigMap")
+	leases, err := cm.ActiveLeases()
+	require.NoError(t, err, "Unexpected error on fetch active leases from configmap")
+	require.Equal(t, 1, len(leases))
+
+	// do second heartbeat after the dead client timeout has passed
+	// wait long enough for cleanup to run once at least once
+	// heartbeat will return the lease status as UNSPECIFIED
+	time.Sleep(time.Second * 7)
+	accessStatus = semPQ.Heartbeat("node-1")
+	require.NoError(t, err, "Unexpected error on Heartbeat")
+	require.Equal(t, pb.AccessStatus_TYPE_UNSPECIFIED, accessStatus)
+
+	// validate that configmap has no leases
+	err = cm.Refresh()
+	require.NoError(t, err, "Unexpected error on configMap Refresh")
+	require.NoError(t, err, "Unexpected error on GetConfigMap")
+	leases, err = cm.ActiveLeases()
+	require.NoError(t, err, "Unexpected error on fetch active leases from configmap")
+	require.Equal(t, 0, len(leases))
+}
+
+func TestSemaphoreReclaimExpiredLeases(t *testing.T) {
+	setup(t)
+
+	// set dead client timeout to a low value
+	defaultTestLeaseTimeout := testLeaseTimeout
+	testLeaseTimeout = 6 * time.Second
+	defer func() { testLeaseTimeout = defaultTestLeaseTimeout }()
+	semPQ := newSemaphorePriorityQueueTest()
+
+	// acquire lease for a client
+	status, err := semPQ.Acquire("node-1", pb.AccessPriority_LOW)
+	require.NoError(t, err, "Unexpected error on Acquire")
+	require.Equal(t, pb.AccessStatus_LEASED, status)
+
+	// do first heartbeat after 1 second (withtin the lease timeout)
+	// heartbeat will return the lease status as LEASED
+	time.Sleep(time.Second * 1)
+	accessStatus := semPQ.Heartbeat("node-1")
+	require.NoError(t, err, "Unexpected error on Heartbeat")
+	require.Equal(t, pb.AccessStatus_LEASED, accessStatus)
+
+	// validate that configmap has the lease
+	remoteConfigMap, err := core.Instance().GetConfigMap(testConfigMapName, testConfigMapNamespace)
+	cm := configMap{
+		cm: remoteConfigMap,
+	}
+	require.NoError(t, err, "Unexpected error on GetConfigMap")
+	leases, err := cm.ActiveLeases()
+	require.NoError(t, err, "Unexpected error on fetch active leases from configmap")
+	require.Equal(t, 1, len(leases))
+
+	// do two more heartbeats before the lease timeout has passed
+	// each after 1 second sleep
+	for i := 0; i < 2; i++ {
+		time.Sleep(time.Second * 1)
+		accessStatus = semPQ.Heartbeat("node-1")
+		require.NoError(t, err, "Unexpected error on Heartbeat")
+		require.Equal(t, pb.AccessStatus_LEASED, accessStatus)
+	}
+
+	// wait for the lease timeout to pass
+	// heartbeat will return the lease status as UNSPECIFIED
+	time.Sleep(time.Second * 5)
+	accessStatus = semPQ.Heartbeat("node-1")
+	require.NoError(t, err, "Unexpected error on Heartbeat")
+	require.Equal(t, pb.AccessStatus_TYPE_UNSPECIFIED, accessStatus)
+
+	// validate that configmap has no leases
+	err = cm.Refresh()
+	require.NoError(t, err, "Unexpected error on configMap Refresh")
+	require.NoError(t, err, "Unexpected error on GetConfigMap")
+	leases, err = cm.ActiveLeases()
+	require.NoError(t, err, "Unexpected error on fetch active leases from configmap")
+	require.Equal(t, 0, len(leases))
+}

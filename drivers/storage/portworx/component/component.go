@@ -59,6 +59,7 @@ func Register(name string, c PortworxComponent) {
 	registerLock.Lock()
 	defer registerLock.Unlock()
 	components[name] = c
+	
 }
 
 // Get returns a PortworxComponent if present else returns (nil, false)

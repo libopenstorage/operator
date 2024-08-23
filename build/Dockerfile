@@ -22,4 +22,4 @@ COPY manifests /manifests
 COPY bin/configs /configs
 COPY bin/operator /
 COPY bin/dryrun /
-COPY bin/px-resource-gateway /
+COPY bin/resource-gateway /

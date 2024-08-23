@@ -21,15 +21,15 @@ type semaphoreServer struct {
 	semaphoreConfig *SemaphoreConfig
 }
 
-// newSemaphoreServer creates a new semaphore server instance with the provided config.
-func newSemaphoreServer(semaphoreConfig *SemaphoreConfig) *semaphoreServer {
-	semaphoreConfig.ConfigMapLabels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValuePxResourceGateway
+// NewSemaphoreServer creates a new semaphore server instance with the provided config.
+func NewSemaphoreServer(semaphoreConfig *SemaphoreConfig) *semaphoreServer {
+	semaphoreConfig.ConfigMapLabels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValueResourceGateway
 	return &semaphoreServer{
 		semaphoreConfig: semaphoreConfig,
 	}
 }
 
-func (s *semaphoreServer) createSemaphore(req *pb.CreateRequest) {
+func (s *semaphoreServer) newSemaphoreConfig(req *pb.CreateRequest) *SemaphoreConfig {
 	// create a copy of the common semaphore config
 	semaphoreConfig := copySemaphoreConfig(s.semaphoreConfig)
 
@@ -38,16 +38,20 @@ func (s *semaphoreServer) createSemaphore(req *pb.CreateRequest) {
 	semaphoreConfig.ConfigMapName = fmt.Sprintf("%s-%s", semaphoreConfig.ConfigMapName, req.GetResourceId())
 
 	// override config values if optional request parameters are provided
+	// if req.GetConfigMapUpdatePeriod() > 0 {
+	// 	semaphoreConfig.ConfigMapUpdatePeriod = time.Duration(req.GetConfigMapUpdatePeriod()) * time.Second
+	// }
 	if req.GetLeaseTimeout() > 0 {
 		semaphoreConfig.LeaseTimeout = time.Duration(req.GetLeaseTimeout()) * time.Second
 	}
 	if req.GetDeadNodeTimeout() > 0 {
 		semaphoreConfig.DeadClientTimeout = time.Duration(req.GetDeadNodeTimeout()) * time.Second
 	}
+	// if req.GetMaxQueueSize() > 0 {
+	// 	semaphoreConfig.MaxQueueSize = req.GetMaxQueueSize()
+	// }
 
-	logrus.Infof("Create semaphore with config: %v", semaphoreConfig)
-	semaphore := CreateSemaphorePriorityQueue(semaphoreConfig)
-	s.semaphoreMap.Store(req.GetResourceId(), semaphore)
+	return semaphoreConfig
 }
 
 // Create implements the Create RPC method of the SemaphoreService.
@@ -63,28 +67,33 @@ func (s *semaphoreServer) Create(ctx context.Context, req *pb.CreateRequest) (*p
 	if req.GetNPermits() == 0 {
 		return &pb.CreateResponse{}, status.Error(codes.InvalidArgument, "Number of leases should be greater than 0")
 	}
+	semaphoreConfig := s.newSemaphoreConfig(req)
 
 	// check if semaphore instance already exists
-	_, ok := s.semaphoreMap.Load(req.GetResourceId())
-	if ok {
-		return &pb.CreateResponse{}, status.Error(codes.AlreadyExists, "Resource already exists")
+	item, ok := s.semaphoreMap.Load(req.GetResourceId())
+	if !ok {
+		logrus.Infof("Create semaphore with config: %v", semaphoreConfig)
+		semaphore := NewSemaphorePriorityQueueWithConfig(semaphoreConfig)
+		s.semaphoreMap.Store(req.GetResourceId(), semaphore)
+		return &pb.CreateResponse{}, nil
 	}
 
-	// process request to create resource
-	s.createSemaphore(req)
-	return &pb.CreateResponse{}, nil
+	semaphorePQ := item.(SemaphorePriorityQueue)
+	semaphorePQ.Update(semaphoreConfig)
+	return &pb.CreateResponse{}, status.Error(codes.AlreadyExists, "Resource already exists")
+
 }
 
 // Load loads the semaphore instances that are already created in the system.
 //
-// It fetches all the configmaps with the label managed by px-resource-gateway
+// It fetches all the configmaps with the label managed by resource-gateway
 // and creates semaphore instances for each of them.
 func (s *semaphoreServer) Load() error {
 	configMapList, err := core.Instance().ListConfigMap(
 		s.semaphoreConfig.ConfigMapName,
 		metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s",
-				constants.OperatorLabelManagedByKey, constants.OperatorLabelManagedByValuePxResourceGateway),
+				constants.OperatorLabelManagedByKey, constants.OperatorLabelManagedByValueResourceGateway),
 		})
 	if err != nil {
 		return err
@@ -92,10 +101,10 @@ func (s *semaphoreServer) Load() error {
 	for _, configMap := range configMapList.Items {
 		// other config values will be populated later from the configMap data
 		semaphoreConfig := &SemaphoreConfig{
-			ConfigMapUpdatePeriod: s.semaphoreConfig.ConfigMapUpdatePeriod,
-			DeadClientTimeout:     s.semaphoreConfig.DeadClientTimeout,
+			ConfigMapName:      s.semaphoreConfig.ConfigMapName,
+			ConfigMapNamespace: s.semaphoreConfig.ConfigMapNamespace,
 		}
-		semaphore := NewSemaphorePriorityQueue(semaphoreConfig, &configMap)
+		semaphore := NewSemaphorePriorityQueueWithConfigMap(semaphoreConfig)
 		resourceId := configMap.Name[len(s.semaphoreConfig.ConfigMapName+"-"):]
 		s.semaphoreMap.Store(resourceId, semaphore)
 	}

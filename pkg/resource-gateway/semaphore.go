@@ -9,7 +9,6 @@ import (
 	"github.com/libopenstorage/openstorage/pkg/sched"
 	pb "github.com/libopenstorage/operator/proto"
 	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -20,6 +19,8 @@ type SemaphorePriorityQueue interface {
 	Acquire(clientId string, priority pb.AccessPriority_Type) (pb.AccessStatus_Type, error)
 	Release(clientId string) error
 	Heartbeat(clientId string) pb.AccessStatus_Type
+
+	Update(config *SemaphoreConfig)
 }
 
 // activeLease struct holds the lease Id and the time
@@ -29,7 +30,7 @@ type SemaphorePriorityQueue interface {
 // the fields are exported to enable json marshalling
 type activeLease struct {
 	PermitId     uint32
-	TimeAcquired time.Time
+	TimeAcquired int64
 }
 
 // semaphorePriorityQueue implements the SemaphorePriorityQueue interface
@@ -44,50 +45,25 @@ type semaphorePriorityQueue struct {
 	priorityQueue    PriorityQueue
 	activeLeases     map[string]activeLease
 	availablePermits *list.List
-	heartbeats       map[string]time.Time
+	heartbeats       map[string]int64
 
 	// persistent state
 	configMap           *configMap
 	configMapUpdateDone chan struct{}
 }
 
-// CreateSemaphorePriorityQueue creates a new semaphore priority queue
+// NewSemaphorePriorityQueue creates a new or loads an existing semaphore priority queue
 // if the backing configmap does not exist then it creates a new one
-//
-// This method can be used to create a new or load an existing semaphore priority queue
-func CreateSemaphorePriorityQueue(config *SemaphoreConfig) SemaphorePriorityQueue {
-	return createSemaphorePriorityQueue(config)
-}
-
-// createSemaphorePriorityQueue creates a new semaphore priority queue
-// if the backing configmap does not exist then it creates a new one
-//
-// It returns the struct object instead of interface to
-// enable testing semaphorePriorityQueue struct
-func createSemaphorePriorityQueue(config *SemaphoreConfig) *semaphorePriorityQueue {
-	configMap := createConfigMap(config)
-	return newSemaphorePriorityQueue(config, configMap)
-}
-
-// NewSemaphorePriorityQueue takes input a semaphore config and associated configmap,
-// and initializes a new semaphore priority queue object with it
-//
-// This method loads an existing semaphore priority queue, should NOT be used to create a new one
-func NewSemaphorePriorityQueue(config *SemaphoreConfig, remoteConfigMap *corev1.ConfigMap) *semaphorePriorityQueue {
-	configMap := &configMap{
-		cm: remoteConfigMap,
+func NewSemaphorePriorityQueueWithConfig(config *SemaphoreConfig) *semaphorePriorityQueue {
+	// create or update the configmap
+	configMap, err := createOrUpdateConfigMap(config)
+	if err != nil {
+		panic(err)
 	}
-	return newSemaphorePriorityQueue(config, configMap)
-}
 
-// newSemaphorePriorityQueue takes input a semaphore config and associated configmap,
-// and initializes a new semaphore priority queue object with it
-//
-// It returns the struct object instead of interface to enable testing private methods.
-func newSemaphorePriorityQueue(config *SemaphoreConfig, configMap *configMap) *semaphorePriorityQueue {
 	semPQ := &semaphorePriorityQueue{
 		priorityQueue:       NewPriorityQueue(config.MaxQueueSize),
-		heartbeats:          map[string]time.Time{},
+		heartbeats:          map[string]int64{},
 		configMapUpdateDone: make(chan struct{}),
 		config:              config,
 		configMap:           configMap,
@@ -98,6 +74,43 @@ func newSemaphorePriorityQueue(config *SemaphoreConfig, configMap *configMap) *s
 	semPQ.startBackgroundTasks()
 
 	return semPQ
+}
+
+// NewSemaphorePriorityQueue creates a new or loads an existing semaphore priority queue
+// if the backing configmap does not exist then it creates a new one
+func NewSemaphorePriorityQueueWithConfigMap(config *SemaphoreConfig) *semaphorePriorityQueue {
+	// create or update the configmap
+	configMap, err := getConfigMap(config)
+	if err != nil {
+		panic(err)
+	}
+
+	semPQ := &semaphorePriorityQueue{
+		priorityQueue:       NewPriorityQueue(config.MaxQueueSize),
+		heartbeats:          map[string]int64{},
+		configMapUpdateDone: make(chan struct{}),
+		config:              config,
+		configMap:           configMap,
+	}
+
+	semPQ.populateSemaphoreConfig()
+	semPQ.initPermitsAndLeases()
+	semPQ.startBackgroundTasks()
+
+	return semPQ
+}
+
+func (s *semaphorePriorityQueue) Update(config *SemaphoreConfig) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	logrus.Infof("Update semaphore config: %v", config)
+	s.config = config
+	s.configMap.update(config)
+
+	// TODO: update the internal state based on the new config
+	s.populateSemaphoreConfig()
+	s.initPermitsAndLeases()
 }
 
 // populateSemaphoreConfig fetches the latest copy of configmap from kubernetes
@@ -150,8 +163,8 @@ func (s *semaphorePriorityQueue) startBackgroundTasks() {
 		interval time.Duration
 	}{
 		{"updateConfigMap", s.updateConfigMap, s.config.ConfigMapUpdatePeriod},
-		{"cleanupDeadClients", s.cleanupDeadClients, s.config.DeadClientTimeout},
-		{"reclaimExpiredLeases", s.reclaimExpiredLeases, s.config.LeaseTimeout},
+		{"cleanupDeadClients", s.cleanupDeadClients, s.config.DeadClientTimeout / 2},
+		{"reclaimExpiredLeases", s.reclaimExpiredLeases, s.config.LeaseTimeout / 2},
 	}
 
 	for _, bgTask := range bgTasks {
@@ -200,7 +213,7 @@ func (s *semaphorePriorityQueue) Acquire(clientId string, priority pb.AccessPrio
 	}
 
 	// update the heartbeat of the client
-	s.heartbeats[clientId] = time.Now()
+	s.heartbeats[clientId] = time.Now().Unix()
 
 	// try to acquire the lease
 	if hasAcquiredLease := s.tryAcquire(clientId); hasAcquiredLease {
@@ -252,7 +265,11 @@ func (s *semaphorePriorityQueue) Heartbeat(clientId string) pb.AccessStatus_Type
 	defer s.mutex.Unlock()
 
 	logrus.Debugf("Received Heartbeat request for client %v", clientId)
-	s.heartbeats[clientId] = time.Now()
+	_, exists := s.heartbeats[clientId]
+	if !exists {
+		return pb.AccessStatus_TYPE_UNSPECIFIED
+	}
+	s.heartbeats[clientId] = time.Now().Unix()
 
 	_, hasLease := s.activeLeases[clientId]
 	if hasLease {
@@ -303,7 +320,7 @@ func (s *semaphorePriorityQueue) tryAcquire(clientId string) bool {
 	}
 	s.activeLeases[clientId] = activeLease{
 		PermitId:     permitId,
-		TimeAcquired: time.Now(),
+		TimeAcquired: time.Now().Unix(),
 	}
 
 	return true
@@ -319,7 +336,10 @@ func (s *semaphorePriorityQueue) updateConfigMap() {
 	defer s.mutex.Unlock()
 	logrus.Debugf("Running updateConfigMap background task")
 
-	s.configMap.Update(s.activeLeases)
+	err := s.configMap.UpdateLeases(s.activeLeases)
+	if err != nil {
+		logrus.Fatalf("Failed to update configmap: %v", err)
+	}
 
 	// notify all the goroutines waiting that the update is done
 	close(s.configMapUpdateDone)
@@ -347,7 +367,7 @@ func (s *semaphorePriorityQueue) cleanupDeadClients() {
 	logrus.Debugf("Running cleanupDeadClients background task")
 
 	for clientId, lastHeartbeat := range s.heartbeats {
-		if time.Since(lastHeartbeat) > s.config.DeadClientTimeout {
+		if time.Since(time.Unix(lastHeartbeat, 0)) > s.config.DeadClientTimeout {
 			deadClients = append(deadClients, clientId)
 		}
 	}
@@ -382,7 +402,7 @@ func (s *semaphorePriorityQueue) reclaimExpiredLeases() {
 	expiredLeases := map[string]activeLease{}
 
 	for clientId, lease := range s.activeLeases {
-		if time.Since(lease.TimeAcquired) > s.config.LeaseTimeout {
+		if time.Since(time.Unix(lease.TimeAcquired, 0)) > s.config.LeaseTimeout {
 			expiredLeases[clientId] = lease
 		}
 	}

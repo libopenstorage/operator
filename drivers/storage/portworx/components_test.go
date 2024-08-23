@@ -3345,6 +3345,221 @@ func TestLighthouseSidecarsOverrideWithEnv(t *testing.T) {
 	require.Equal(t, "docker.io/test/stork-connector:t2", image)
 }
 
+func setupTestEnv(t *testing.T) (portworx, client.Client) {
+	// Start test with newer version (1.25 beyond) of Kubernetes first, on which PodSecurityPolicy is no longer existing
+	mockCtrl := gomock.NewController(t)
+	versionClient := fakek8sclient.NewSimpleClientset()
+	versionClient.Discovery().(*fakediscovery.FakeDiscovery).FakedServerVersion = &version.Info{
+		GitVersion: "v1.25.0",
+	}
+	setUpMockCoreOps(mockCtrl, versionClient)
+	fakeExtClient := fakeextclient.NewSimpleClientset()
+	apiextensionsops.SetInstance(apiextensionsops.New(fakeExtClient))
+	reregisterComponents()
+	k8sClient := testutil.FakeK8sClient()
+	driver := portworx{}
+	err := driver.Init(k8sClient, runtime.NewScheme(), record.NewFakeRecorder(0))
+	require.NoError(t, err)
+	return driver, k8sClient
+}
+
+func createStorageClusterWithResourceGateway() *corev1.StorageCluster {
+	return &corev1.StorageCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "px-cluster",
+			Namespace: "kube-test",
+		},
+		Spec: corev1.StorageClusterSpec{
+			Monitoring: &corev1.MonitoringSpec{Telemetry: &corev1.TelemetrySpec{}}, // required to run test
+			ResourceGateway: &corev1.ResourceGatewaySpec{
+				Enabled: true,
+				Image:   "portworx/operator:1.1.1",
+			},
+		},
+	}
+}
+
+func TestResourceGatewayBasicInstall(t *testing.T) {
+	logrus.SetLevel(logrus.DebugLevel)
+	driver, k8sClient := setupTestEnv(t)
+
+	// create StorageCluster with ResourceGateway enabled
+	cluster := createStorageClusterWithResourceGateway()
+
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Resource Gateway ServiceAccount
+	serviceAccount := &v1.ServiceAccount{}
+	err = testutil.Get(k8sClient, serviceAccount, component.ResourceGatewayServiceAccountName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, component.ResourceGatewayServiceAccountName, serviceAccount.Name)
+	require.Equal(t, cluster.Namespace, serviceAccount.Namespace)
+	require.Len(t, serviceAccount.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, serviceAccount.OwnerReferences[0].Name)
+
+	// Resource Gateway Role
+	expectedRole := testutil.GetExpectedRole(t, "resourceGatewayRole.yaml")
+	actualRole := &rbacv1.Role{}
+	err = testutil.Get(k8sClient, actualRole, component.ResourceGatewayRoleName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedRole.Name, actualRole.Name)
+	require.Empty(t, actualRole.OwnerReferences)
+	require.ElementsMatch(t, expectedRole.Rules, actualRole.Rules)
+
+	// Resource Gateway RoleBinding
+	expectedRoleBinding := testutil.GetExpectedRoleBinding(t, "resourceGatewayRoleBinding.yaml")
+	actualRoleBinding := &rbacv1.RoleBinding{}
+	err = testutil.Get(k8sClient, actualRoleBinding, component.ResourceGatewayRoleBindingName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedRoleBinding.Name, actualRoleBinding.Name)
+	require.Empty(t, actualRoleBinding.OwnerReferences)
+	require.ElementsMatch(t, expectedRoleBinding.Subjects, actualRoleBinding.Subjects)
+	require.Equal(t, expectedRoleBinding.RoleRef, actualRoleBinding.RoleRef)
+
+	// Resource Gateway Deployment
+	expectedDeployment := testutil.GetExpectedDeployment(t, "resourceGatewayDeployment.yaml")
+	resourceGatewayDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, resourceGatewayDeployment, component.ResourceGatewayDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+	resourceGatewayDeployment.ResourceVersion = ""
+	require.Equal(t, expectedDeployment, resourceGatewayDeployment)
+
+	// Resource Gateway Service
+	expectedService := testutil.GetExpectedService(t, "resourceGatewayService.yaml")
+	actualService := &v1.Service{}
+	err = testutil.Get(k8sClient, actualService, component.ResourceGatewayServiceName, cluster.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, expectedService.Name, actualService.Name)
+	require.Equal(t, expectedService.Namespace, actualService.Namespace)
+	require.Len(t, actualService.OwnerReferences, 1)
+	require.Equal(t, cluster.Name, actualService.OwnerReferences[0].Name)
+	require.Equal(t, expectedService.Labels, actualService.Labels)
+	require.Equal(t, expectedService.Spec, actualService.Spec)
+}
+
+func TestResourceGatewayWithSecurity(t *testing.T) {
+	logrus.SetLevel(logrus.DebugLevel)
+	driver, k8sClient := setupTestEnv(t)
+
+	// create StorageCluster with ResourceGateway and Security enabled
+	cluster := createStorageClusterWithResourceGateway()
+	cluster.Spec.Security = &corev1.SecuritySpec{
+		Enabled: true,
+		Auth: &corev1.AuthSpec{
+			SelfSigned: &corev1.SelfSignedSpec{
+				Issuer:        stringPtr(defaultSelfSignedIssuer),
+				TokenLifetime: stringPtr(defaultTokenLifetime),
+				SharedSecret:  stringPtr(pxutil.SecurityPXSharedSecretSecretName),
+			},
+		},
+	}
+
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Resource Gateway Deployment
+	resourceGatewayDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, resourceGatewayDeployment, component.ResourceGatewayDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	jwtIssuer := ""
+	var sharedSecretSet, appsSecretSet, systemSecretSet bool
+	actualContainer := resourceGatewayDeployment.Spec.Template.Spec.Containers[0]
+
+	for _, env := range actualContainer.Env {
+		if env.Name == pxutil.EnvKeyPortworxAuthJwtIssuer {
+			jwtIssuer = env.Value
+		}
+		if env.Name == pxutil.EnvKeyPortworxAuthJwtSharedSecret {
+			sharedSecretSet = true
+		}
+		if env.Name == pxutil.EnvKeyPortworxAuthSystemKey {
+			systemSecretSet = true
+		}
+		if env.Name == pxutil.EnvKeyPortworxAuthSystemAppsKey {
+			appsSecretSet = true
+		}
+	}
+	assert.Equal(t, defaultSelfSignedIssuer, jwtIssuer)
+	assert.True(t, sharedSecretSet)
+	assert.True(t, systemSecretSet)
+	assert.True(t, appsSecretSet)
+}
+
+func TestResourceGatewayWithCustomArguments(t *testing.T) {
+	logrus.SetLevel(logrus.DebugLevel)
+	driver, k8sClient := setupTestEnv(t)
+
+	// create StorageCluster with ResourceGateway with custom arguments provided
+	cluster := createStorageClusterWithResourceGateway()
+	cluster.Spec.ResourceGateway.Args = map[string]string{
+		"configMapUpdatePeriod": "10s",
+		"deadClientTimeout":     "30s",
+	}
+
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Resource Gateway Deployment
+	resourceGatewayDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, resourceGatewayDeployment, component.ResourceGatewayDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	expectedCommand := []string{
+		"/resource-gateway",
+		"--configMapUpdatePeriod=10s",
+		"--deadClientTimeout=30s",
+		"--namespace=kube-test",
+		"--serverHost=0.0.0.0",
+		"--serverPort=50051",
+	}
+
+	actualCommand := resourceGatewayDeployment.Spec.Template.Spec.Containers[0].Command
+	require.Equal(t, expectedCommand, actualCommand)
+}
+
+func TestResourceGatewayWithCustomResources(t *testing.T) {
+	logrus.SetLevel(logrus.DebugLevel)
+	driver, k8sClient := setupTestEnv(t)
+
+	// create StorageCluster with ResourceGateway with custom resources limits and requests
+	cluster := createStorageClusterWithResourceGateway()
+	cluster.Spec.ResourceGateway.Resources = &v1.ResourceRequirements{
+		Limits: v1.ResourceList{
+			v1.ResourceCPU:    resource.MustParse("2"),
+			v1.ResourceMemory: resource.MustParse("2Gi"),
+		},
+		Requests: v1.ResourceList{
+			v1.ResourceCPU:    resource.MustParse("1"),
+			v1.ResourceMemory: resource.MustParse("1Gi"),
+		},
+	}
+
+	err := driver.SetDefaultsOnStorageCluster(cluster)
+	require.NoError(t, err)
+
+	err = driver.PreInstall(cluster)
+	require.NoError(t, err)
+
+	// Resource Gateway Deployment
+	resourceGatewayDeployment := &appsv1.Deployment{}
+	err = testutil.Get(k8sClient, resourceGatewayDeployment, component.ResourceGatewayDeploymentName, cluster.Namespace)
+	require.NoError(t, err)
+
+	require.Equal(t, *cluster.Spec.ResourceGateway.Resources, resourceGatewayDeployment.Spec.Template.Spec.Containers[0].Resources)
+
+}
+
 func TestAutopilotInstall(t *testing.T) {
 	// Start test with newer version (1.25 beyond) of Kubernetes first, on which PodSecurityPolicy is no longer existing
 	mockCtrl := gomock.NewController(t)
@@ -3496,7 +3711,6 @@ func TestAutopilotInstall(t *testing.T) {
 	require.Equal(t, expectedCR.Name, actualCR.Name)
 	require.Empty(t, actualCR.OwnerReferences)
 	require.ElementsMatch(t, expectedCR.Rules, actualCR.Rules)
-
 }
 
 func TestAutopilotWithoutImage(t *testing.T) {
@@ -17816,6 +18030,7 @@ func reregisterComponents() {
 	component.RegisterTelemetryComponent()
 	component.RegisterSCCComponent()
 	component.RegisterPortworxPluginComponent()
+	component.RegisterResourceGatewayComponent()
 	pxutil.SpecsBaseDir = func() string {
 		return "../../../bin/configs"
 	}
