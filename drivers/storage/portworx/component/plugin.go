@@ -171,37 +171,41 @@ func (p *plugin) Reconcile(cluster *corev1.StorageCluster) error {
 }
 
 func (p *plugin) Delete(cluster *corev1.StorageCluster) error {
-	var errList []string
-	ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
-	// delete plugin configs
-	if err := k8s.DeleteDeployment(p.client, PluginDeploymentName, cluster.Namespace, *ownerRef); err != nil {
-		errList = append(errList, err.Error())
-	}
-	if err := k8s.DeleteConfigMap(p.client, PluginConfigMapName, cluster.Namespace, *ownerRef); err != nil {
-		errList = append(errList, err.Error())
-	}
-	if err := k8s.DeleteService(p.client, PluginServiceName, cluster.Namespace, *ownerRef); err != nil {
-		errList = append(errList, err.Error())
-	}
+	if p.isPluginSupported != nil && *p.isPluginSupported {
+		var errList []string
+		ownerRef := metav1.NewControllerRef(cluster, pxutil.StorageClusterKind())
 
-	// delete nginx configs
-	if err := k8s.DeleteDeployment(p.client, NginxDeploymentName, cluster.Namespace, *ownerRef); err != nil {
-		errList = append(errList, err.Error())
-	}
-	if err := k8s.DeleteConfigMap(p.client, NginxConfigMapName, cluster.Namespace, *ownerRef); err != nil {
-		errList = append(errList, err.Error())
-	}
-	if err := k8s.DeleteService(p.client, NginxServiceName, cluster.Namespace, *ownerRef); err != nil {
-		errList = append(errList, err.Error())
-	}
+		// delete plugin configs
+		if err := k8s.DeleteDeployment(p.client, PluginDeploymentName, cluster.Namespace, *ownerRef); err != nil {
+			errList = append(errList, err.Error())
+		}
+		if err := k8s.DeleteConfigMap(p.client, PluginConfigMapName, cluster.Namespace, *ownerRef); err != nil {
+			errList = append(errList, err.Error())
+		}
+		if err := k8s.DeleteService(p.client, PluginServiceName, cluster.Namespace, *ownerRef); err != nil {
+			errList = append(errList, err.Error())
+		}
 
-	// delete console plugin
-	if err := k8s.DeleteConsolePlugin(p.client, PluginName, cluster.Namespace, *ownerRef); err != nil {
-		errList = append(errList, err.Error())
-	}
-	if len(errList) > 0 {
-		return commonerrors.New(strings.Join(errList, " , "))
+		// delete nginx configs
+		if err := k8s.DeleteDeployment(p.client, NginxDeploymentName, cluster.Namespace, *ownerRef); err != nil {
+			errList = append(errList, err.Error())
+		}
+		if err := k8s.DeleteConfigMap(p.client, NginxConfigMapName, cluster.Namespace, *ownerRef); err != nil {
+			errList = append(errList, err.Error())
+		}
+		if err := k8s.DeleteService(p.client, NginxServiceName, cluster.Namespace, *ownerRef); err != nil {
+			errList = append(errList, err.Error())
+		}
+
+		// delete console plugin
+		if err := k8s.DeleteConsolePlugin(p.client, PluginName, cluster.Namespace, *ownerRef); err != nil {
+			errList = append(errList, err.Error())
+		}
+		if len(errList) > 0 {
+			return commonerrors.New(strings.Join(errList, " , "))
+		}
+		p.MarkDeleted()
 	}
 	return nil
 }
