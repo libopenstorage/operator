@@ -23,6 +23,9 @@ type semaphoreServer struct {
 
 // NewSemaphoreServer creates a new semaphore server instance with the provided config.
 func NewSemaphoreServer(semaphoreConfig *SemaphoreConfig) *semaphoreServer {
+	if semaphoreConfig.ConfigMapLabels == nil {
+		semaphoreConfig.ConfigMapLabels = make(map[string]string)
+	}
 	semaphoreConfig.ConfigMapLabels[constants.OperatorLabelManagedByKey] = constants.OperatorLabelManagedByValueResourceGateway
 	return &semaphoreServer{
 		semaphoreConfig: semaphoreConfig,
@@ -90,7 +93,7 @@ func (s *semaphoreServer) Create(ctx context.Context, req *pb.CreateRequest) (*p
 // and creates semaphore instances for each of them.
 func (s *semaphoreServer) Load() error {
 	configMapList, err := core.Instance().ListConfigMap(
-		s.semaphoreConfig.ConfigMapName,
+		s.semaphoreConfig.ConfigMapNamespace,
 		metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s",
 				constants.OperatorLabelManagedByKey, constants.OperatorLabelManagedByValueResourceGateway),
@@ -98,14 +101,15 @@ func (s *semaphoreServer) Load() error {
 	if err != nil {
 		return err
 	}
-	for _, configMap := range configMapList.Items {
+	for _, remoteConfigMap := range configMapList.Items {
+		resourceId := remoteConfigMap.Name[len(s.semaphoreConfig.ConfigMapName+"-"):]
+		logrus.Infof("Loading semaphore for configmap %s and resource Id %s", remoteConfigMap.Name, resourceId)
 		// other config values will be populated later from the configMap data
 		semaphoreConfig := &SemaphoreConfig{
-			ConfigMapName:      s.semaphoreConfig.ConfigMapName,
-			ConfigMapNamespace: s.semaphoreConfig.ConfigMapNamespace,
+			ConfigMapName:      remoteConfigMap.Name,
+			ConfigMapNamespace: remoteConfigMap.Namespace,
 		}
 		semaphore := NewSemaphorePriorityQueueWithConfigMap(semaphoreConfig)
-		resourceId := configMap.Name[len(s.semaphoreConfig.ConfigMapName+"-"):]
 		s.semaphoreMap.Store(resourceId, semaphore)
 	}
 	return nil

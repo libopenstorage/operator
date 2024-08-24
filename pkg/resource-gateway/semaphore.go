@@ -71,6 +71,7 @@ func NewSemaphorePriorityQueueWithConfig(config *SemaphoreConfig) *semaphorePrio
 
 	semPQ.populateSemaphoreConfig()
 	semPQ.initPermitsAndLeases()
+	// TODO cancel and restart background tasks
 	semPQ.startBackgroundTasks()
 
 	return semPQ

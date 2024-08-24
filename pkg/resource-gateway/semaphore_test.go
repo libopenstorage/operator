@@ -41,17 +41,17 @@ func newSemaphorePriorityQueueTest() SemaphorePriorityQueue {
 	return NewSemaphorePriorityQueueWithConfig(semaphoreConfig)
 }
 
-func deleteConfigMap(t *testing.T) (err error) {
+func deleteConfigMap(t *testing.T, suffix string) (err error) {
 	defer require.NoError(t, err, "Unable to delete configmap")
-
-	err = core.Instance().DeleteConfigMap(testConfigMapName, testConfigMapNamespace)
+	configMapName := fmt.Sprintf("%s-%s", testConfigMapName, suffix)
+	err = core.Instance().DeleteConfigMap(configMapName, testConfigMapNamespace)
 	if err != nil && !k8s_errors.IsNotFound(err) {
 		return err
 	}
 
 	// wait for the configmap to be deleted and check every second upto 5s
 	for i := 0; i < 5; i++ {
-		_, err = core.Instance().GetConfigMap(testConfigMapName, testConfigMapNamespace)
+		_, err = core.Instance().GetConfigMap(configMapName, testConfigMapNamespace)
 		if k8s_errors.IsNotFound(err) {
 			return nil
 		}
@@ -75,7 +75,7 @@ func setup(t *testing.T) {
 		logrus.SetLevel(logrus.DebugLevel)
 	})
 
-	deleteConfigMap(t) // cleanup
+	deleteConfigMap(t, "") // cleanup
 }
 
 func TestSemaphoreAcquireAndRelease(t *testing.T) {

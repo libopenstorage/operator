@@ -41,11 +41,12 @@ func createOrUpdateConfigMap(config *SemaphoreConfig) (*configMap, error) {
 				Labels:    config.ConfigMapLabels,
 			},
 			Data: map[string]string{
-				activeLeasesKey:      "",
-				nPermitsKey:          fmt.Sprintf("%d", config.NPermits),
-				leaseTimeoutKey:      config.LeaseTimeout.String(),
-				deadClientTimeoutKey: config.DeadClientTimeout.String(),
-				maxQueueSizeKey:      strconv.FormatUint(uint64(config.MaxQueueSize), 10),
+				activeLeasesKey:          "",
+				nPermitsKey:              fmt.Sprintf("%d", config.NPermits),
+				configMapUpdatePeriodKey: config.ConfigMapUpdatePeriod.String(),
+				leaseTimeoutKey:          config.LeaseTimeout.String(),
+				deadClientTimeoutKey:     config.DeadClientTimeout.String(),
+				maxQueueSizeKey:          fmt.Sprintf("%d", config.MaxQueueSize),
 			},
 		}
 
@@ -64,6 +65,7 @@ func createOrUpdateConfigMap(config *SemaphoreConfig) (*configMap, error) {
 func updateRemoteConfigMap(remoteConfigMap *corev1.ConfigMap, config *SemaphoreConfig) {
 	// update the configmap with the latest values
 	remoteConfigMap.Data[nPermitsKey] = fmt.Sprintf("%d", config.NPermits)
+	remoteConfigMap.Data[configMapUpdatePeriodKey] = config.ConfigMapUpdatePeriod.String()
 	remoteConfigMap.Data[leaseTimeoutKey] = config.LeaseTimeout.String()
 	remoteConfigMap.Data[deadClientTimeoutKey] = config.DeadClientTimeout.String()
 	remoteConfigMap.Data[maxQueueSizeKey] = strconv.FormatUint(uint64(config.MaxQueueSize), 10)
