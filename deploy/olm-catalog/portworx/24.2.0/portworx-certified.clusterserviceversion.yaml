@@ -192,8 +192,6 @@ spec:
           resources:
           - securitycontextconstraints
           resourceNames:
-          - anyuid
-          - privileged
           - portworx
           verbs:
           - use
