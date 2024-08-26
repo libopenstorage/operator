@@ -15,14 +15,33 @@ import (
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 )
 
+const (
+	// methods
+	noaction  = "NoAction"
+	acquire   = "Acquire"
+	release   = "Release"
+	heartbeat = "Heartbeat"
+
+	// priorities
+	nopriority = pb.AccessPriority_TYPE_UNSPECIFIED
+	low        = pb.AccessPriority_LOW
+	med        = pb.AccessPriority_MEDIUM
+	high       = pb.AccessPriority_HIGH
+
+	// access statuses
+	nostatus = pb.AccessStatus_TYPE_UNSPECIFIED
+	leased   = pb.AccessStatus_LEASED
+	queued   = pb.AccessStatus_QUEUED
+)
+
 var (
 	once sync.Once
 
 	testConfigMapName         = "resource-gateway-test"
 	testConfigMapNamespace    = "kube-system"
 	testConfigMapUpdatePeriod = 1 * time.Second
-	testDeadClientTimeout     = 20 * time.Second
-	testLeaseTimeout          = 40 * time.Second
+	testLeaseTimeout          = 25 * time.Second
+	testDeadClientTimeout     = 15 * time.Second
 )
 
 func newSemaphorePriorityQueueTest() SemaphorePriorityQueue {
@@ -34,8 +53,8 @@ func newSemaphorePriorityQueueTest() SemaphorePriorityQueue {
 			"name": testConfigMapName,
 		},
 		ConfigMapUpdatePeriod: testConfigMapUpdatePeriod,
-		DeadClientTimeout:     testDeadClientTimeout,
 		LeaseTimeout:          testLeaseTimeout,
+		DeadClientTimeout:     testDeadClientTimeout,
 		MaxQueueSize:          1000,
 	}
 	return NewSemaphorePriorityQueueWithConfig(semaphoreConfig)
@@ -43,7 +62,10 @@ func newSemaphorePriorityQueueTest() SemaphorePriorityQueue {
 
 func deleteConfigMap(t *testing.T, suffix string) (err error) {
 	defer require.NoError(t, err, "Unable to delete configmap")
-	configMapName := fmt.Sprintf("%s-%s", testConfigMapName, suffix)
+	configMapName := testConfigMapName
+	if suffix != "" {
+		configMapName = fmt.Sprintf("%s-%s", testConfigMapName, suffix)
+	}
 	err = core.Instance().DeleteConfigMap(configMapName, testConfigMapNamespace)
 	if err != nil && !k8s_errors.IsNotFound(err) {
 		return err
@@ -73,74 +95,110 @@ func setup(t *testing.T) {
 			return
 		}
 		logrus.SetLevel(logrus.DebugLevel)
+		testOverride = true
 	})
 
 	deleteConfigMap(t, "") // cleanup
 }
 
-func TestSemaphoreAcquireAndRelease(t *testing.T) {
-	setup(t)
-
-	const (
-		// methods
-		acquire = "Acquire"
-		release = "Release"
-
-		// priorities
-		nopriority = pb.AccessPriority_TYPE_UNSPECIFIED
-		low        = pb.AccessPriority_LOW
-		med        = pb.AccessPriority_MEDIUM
-		high       = pb.AccessPriority_HIGH
-
-		// access statuses
-		nostatus = pb.AccessStatus_TYPE_UNSPECIFIED
-		leased   = pb.AccessStatus_LEASED
-		queued   = pb.AccessStatus_QUEUED
-	)
-
-	// getCM (getConfigMap) returns map of clients and their lease ids
-	// to validate the configmap values for each test case
-	getCM := func(clients ...string) map[string]uint32 {
-		cm := make(map[string]uint32)
-		for i, client := range clients {
-			if client == "" {
-				continue
-			}
-			cm[client] = uint32(i + 1)
-		}
-		return cm
+func validateConfigMap(t *testing.T, activeLeasesList []string) {
+	remoteConfigMap, err := core.Instance().GetConfigMap(testConfigMapName, testConfigMapNamespace)
+	cm := configMap{
+		cm: remoteConfigMap,
 	}
+	require.NoError(t, err, "Unexpected error on get configmap")
+	activeLeases, err := cm.ActiveLeases()
+	require.NoError(t, err, "Unexpected error on fetch active leases from configmap")
+	require.Equal(t, len(activeLeasesList), len(activeLeases))
+	for _, expectedClient := range activeLeasesList {
+		_, exists := activeLeases[expectedClient]
+		require.True(t, exists, "Client %s not found in configmap", expectedClient)
+	}
+}
+
+func TestSemaphore_AcquireAndRelease(t *testing.T) {
 
 	testCases := []struct {
-		name      string
-		method    string
-		client    string
-		priority  pb.AccessPriority_Type
-		status    pb.AccessStatus_Type
-		configMap map[string]uint32
+		name             string
+		method           string
+		delay            time.Duration
+		client           string
+		priority         pb.AccessPriority_Type
+		status           pb.AccessStatus_Type
+		activeLeasesList []string
 	}{
-		{"node-1 is granted lease", acquire, "node-1", low, leased, getCM("node-1", "")},             // tests a client can take the first lease
-		{"node-2 is granted lease", acquire, "node-2", low, leased, getCM("node-1", "node-2")},       // tests a client can simultaneously take the second / last lease
-		{"node-3 is queued to low", acquire, "node-3", low, queued, getCM("node-1", "node-2")},       // tests a client can be queued to low priority
-		{"node-4 is queued to med", acquire, "node-4", med, queued, getCM("node-1", "node-2")},       // tests a client can be queued to medium priority
-		{"node-5 is queued to high", acquire, "node-5", high, queued, getCM("node-1", "node-2")},     // tests a client can be queued to high priority
-		{"node-6 is queued to high", acquire, "node-6", high, queued, getCM("node-1", "node-2")},     // tests a client can be queued to high priority behind another high priority client
-		{"node-1 is already leased", acquire, "node-1", low, leased, getCM("node-1", "node-2")},      // tests the request will be noop if the client already has the lease
-		{"node-5 cannot take the lease", acquire, "node-5", high, queued, getCM("node-1", "node-2")}, // tests the request will be noop if the client is already queued and no lease is available
-		{"node-1 releases the lease", release, "node-1", 0, 0, getCM("", "node-2")},                  // tests client is able to release the lease
-		{"node-3 cannot take the lease", acquire, "node-3", low, queued, getCM("", "node-2")},        // tests the client with lower priority will NOT get the lease if a client with higher priority is in the queue
-		{"node-5 is granted the lease", acquire, "node-5", high, leased, getCM("node-5", "node-2")},  // tests the client with highest priority at the front of the queue will get the lease
-		{"node-2 releases the lease", release, "node-2", 0, 0, getCM("node-5")},                      // tests the client is able to release the last lease
-		{"node-6 is granted the lease", acquire, "node-6", high, leased, getCM("node-5", "node-6")},  //
-		{"node-5 releases the lease", release, "node-5", 0, 0, getCM("", "node-6")},                  //
-		{"node-6 releases the lease", release, "node-6", 0, 0, getCM("", "")},                        // tests the client is able to release the last lease
-		{"node-4 is granted the lease", acquire, "node-4", med, leased, getCM("node-4")},             // tests the client with medium priority will get the lease
-		{"node-3 is granted the lease", acquire, "node-3", low, leased, getCM("node-4", "node-3")},   // tests the last client (with low priority) will get the lease
+		// configMapUpdatePeriod = 1s, leaseTimeout = 25s, deadClientTimeout = 15s
+		// test acquire and release
+		// tests a client can take the first lease
+		{"client-1 is granted lease", acquire, 0, "client-1", low, leased, []string{"client-1"}},
+		// 2 seconds elapsed
+		// tests a client can take the second / last lease
+		{"client-2 is granted lease", acquire, 0, "client-2", low, leased, []string{"client-1", "client-2"}},
+		// 4 seconds elapsed
+		// tests a client can be queued to low priority
+		{"client-3 is queued to low", acquire, 0, "client-3", low, queued, []string{"client-1", "client-2"}},
+		// tests a client can be queued to medium priority
+		{"client-4 is queued to med", acquire, 0, "client-4", med, queued, []string{"client-1", "client-2"}},
+		// tests a client can be queued to high priority
+		{"client-5 is queued to high", acquire, 0, "client-5", high, queued, []string{"client-1", "client-2"}},
+		// tests a client can be queued to high priority behind another high priority client
+		{"client-6 is queued to high", acquire, 0, "client-6", high, queued, []string{"client-1", "client-2"}},
+		// tests the acquire will be noop and return correct status if the client already has the lease
+		{"client-1 is already leased", acquire, 0, "client-1", low, leased, []string{"client-1", "client-2"}},
+		// tests the acquire will be noop if the client is already queued and no lease is available
+		{"client-5 cannot take the lease", acquire, 0, "client-5", high, queued, []string{"client-1", "client-2"}},
+		// tests client is able to release the lease
+		{"client-1 releases the lease", release, 0, "client-1", nopriority, nostatus, []string{"client-2"}},
+		// 6 seconds elapsed
+		// tests that heartbeats return the correct status
+		// heartbeat to keep client-2 lease alive till 21 seconds elapsed
+		{"client-2 heartbeats within lease timeout", heartbeat, 0, "client-2", nopriority, leased, []string{"client-2"}},
+		// do acquire poll for clients in queue for implicit heartbeat
+		// keeps client 3 and 4 alive till 21 seconds elapsed
+		// tests the client with lower priority will NOT get the lease if a client with higher priority is in the queue
+		{"client-3 cannot take the lease", acquire, 0, "client-3", low, queued, []string{"client-2"}},
+		{"client-4 cannot take the lease", acquire, 0, "client-4", med, queued, []string{"client-2"}},
+		// tests the client with highest priority at the front of the queue will get the lease
+		{"client-5 is granted the lease", acquire, 0, "client-5", high, leased, []string{"client-5", "client-2"}},
+		// 8 seconds elapsed
+		// keep client 6 alive till 23 seconds elapsed
+		{"client-6 cannot take the lease", acquire, 0, "client-6", high, queued, []string{"client-2", "client-5"}},
+		{"client-5 releases the lease", release, 0, "client-5", nopriority, nostatus, []string{"client-2"}},
+		// 10 seconds elapsed
+		{"client-6 is granted the lease", acquire, 0, "client-6", high, leased, []string{"client-2", "client-6"}},
+		// 12 seconds elapsed
+		// tests that heartbeats return the correct status
+		{"client-2 heartbeats within lease timeout", heartbeat, 0, "client-2", nopriority, leased, []string{"client-2", "client-6"}},
+		{"client-6 heartbeats", heartbeat, 0, "client-6", nopriority, leased, []string{"client-2", "client-6"}},
+		{"client-6 releases the lease", release, 0, "client-6", nopriority, nostatus, []string{"client-2"}},
+		// 14 seconds elapsed
+		// tests the client with medium priority will get the lease
+		{"client-4 is granted the lease", acquire, 0, "client-4", med, leased, []string{"client-2", "client-4"}},
+		// 16 seconds elasped
+		// tests that client in queue that has not polled within dead client timeout will be removed the queue
+		// sleep 7 seconds
+		{"client-3 heartbeats outside dead client timeout", heartbeat, time.Second * 7, "client-3", nopriority, nostatus, []string{"client-2", "client-4"}},
+		// 23 seconds elapsed
+		// tests that client that has held the lease for longer than the lease timeout will lose the lease
+		// sleep 5 seconds
+		{"client-2 heartbeats outside lease timeout", heartbeat, time.Second * 7, "client-2", nopriority, nostatus, []string{"client-4"}},
+		// 30 seconds elapsed
+		// tests that client that has a lease and has not heartbeated within dead client timeout will lose the lease
+		// sleep 5 seconds
+		{"client-4 heartbeats outside dead client timeout", heartbeat, time.Second * 5, "client-4", nopriority, nostatus, []string{}},
+		// 35 seconds elapsed
 	}
 
+	setup(t)
 	semPQ := newSemaphorePriorityQueueTest()
 
+	startTime := time.Now()
+
 	for _, tc := range testCases {
+		if tc.delay > 0 {
+			time.Sleep(tc.delay)
+			fmt.Println("Elapsed time (after sleep): ", time.Since(startTime).Seconds())
+		}
 		if tc.method == acquire {
 			t.Run(tc.name, func(t *testing.T) {
 				status, err := semPQ.Acquire(tc.client, tc.priority)
@@ -152,151 +210,15 @@ func TestSemaphoreAcquireAndRelease(t *testing.T) {
 				err := semPQ.Release(tc.client)
 				require.NoError(t, err, "Unexpected error on Release")
 			})
+		} else if tc.method == heartbeat {
+			t.Run(tc.name, func(t *testing.T) {
+				status := semPQ.Heartbeat(tc.client)
+				require.Equal(t, tc.status, status)
+			})
 		}
 
-		// validate configmap
-		remoteConfigMap, err := core.Instance().GetConfigMap(testConfigMapName, testConfigMapNamespace)
-		cm := configMap{
-			cm: remoteConfigMap,
-		}
-		require.NoError(t, err, "Unexpected error on GetConfigMap")
-		leases, err := cm.ActiveLeases()
-		require.NoError(t, err, "Unexpected error on fetch active leases from configmap")
-		require.Equal(t, len(tc.configMap), len(leases))
-		for client, expectedPermitId := range tc.configMap {
-			lease, exists := leases[client]
-			require.True(t, exists, "Client %s not found in configmap", client)
-			require.Equal(t, expectedPermitId, lease.PermitId)
-		}
+		validateConfigMap(t, tc.activeLeasesList)
+
+		fmt.Println("Elapsed time (after exec): ", time.Since(startTime).Seconds())
 	}
-}
-
-func TestSemaphoreHeartbeat(t *testing.T) {
-	setup(t)
-
-	defaultTestDeadClientTimeout := testDeadClientTimeout
-	testDeadClientTimeout = 5 * time.Second
-	defer func() { testDeadClientTimeout = defaultTestDeadClientTimeout }()
-	semPQ := newSemaphorePriorityQueueTest()
-
-	// acquire lease
-	status, err := semPQ.Acquire("node-1", pb.AccessPriority_LOW)
-	require.NoError(t, err, "Unexpected error on Acquire")
-	require.Equal(t, pb.AccessStatus_LEASED, status)
-
-	// heartbeat
-	time.Sleep(time.Second * 2)
-	accessStatus := semPQ.Heartbeat("node-1")
-	require.NoError(t, err, "Unexpected error on Heartbeat")
-	require.Equal(t, pb.AccessStatus_LEASED, accessStatus)
-
-	// heartbeat
-	time.Sleep(time.Second * 3)
-	accessStatus = semPQ.Heartbeat("node-1")
-	require.NoError(t, err, "Unexpected error on Heartbeat")
-	require.Equal(t, pb.AccessStatus_LEASED, accessStatus)
-}
-
-func TestSemaphoreCleanupDeadClients(t *testing.T) {
-	setup(t)
-
-	// set dead client timeout to a low value
-	defaultTestDeadClientTimeout := testDeadClientTimeout
-	testDeadClientTimeout = 3 * time.Second
-	defer func() { testDeadClientTimeout = defaultTestDeadClientTimeout }()
-	semPQ := newSemaphorePriorityQueueTest()
-
-	// acquire lease for a client
-	status, err := semPQ.Acquire("node-1", pb.AccessPriority_LOW)
-	require.NoError(t, err, "Unexpected error on Acquire")
-	require.Equal(t, pb.AccessStatus_LEASED, status)
-
-	// do first heartbeat after 1 second (withtin the dead client timeout)
-	// heartbeat will return the lease status as LEASED
-	time.Sleep(time.Second * 1)
-	accessStatus := semPQ.Heartbeat("node-1")
-	require.NoError(t, err, "Unexpected error on Heartbeat")
-	require.Equal(t, pb.AccessStatus_LEASED, accessStatus)
-
-	// validate that configmap has the lease
-	remoteConfigMap, err := core.Instance().GetConfigMap(testConfigMapName, testConfigMapNamespace)
-	cm := configMap{
-		cm: remoteConfigMap,
-	}
-	require.NoError(t, err, "Unexpected error on GetConfigMap")
-	leases, err := cm.ActiveLeases()
-	require.NoError(t, err, "Unexpected error on fetch active leases from configmap")
-	require.Equal(t, 1, len(leases))
-
-	// do second heartbeat after the dead client timeout has passed
-	// wait long enough for cleanup to run once at least once
-	// heartbeat will return the lease status as UNSPECIFIED
-	time.Sleep(time.Second * 7)
-	accessStatus = semPQ.Heartbeat("node-1")
-	require.NoError(t, err, "Unexpected error on Heartbeat")
-	require.Equal(t, pb.AccessStatus_TYPE_UNSPECIFIED, accessStatus)
-
-	// validate that configmap has no leases
-	err = cm.Refresh()
-	require.NoError(t, err, "Unexpected error on configMap Refresh")
-	require.NoError(t, err, "Unexpected error on GetConfigMap")
-	leases, err = cm.ActiveLeases()
-	require.NoError(t, err, "Unexpected error on fetch active leases from configmap")
-	require.Equal(t, 0, len(leases))
-}
-
-func TestSemaphoreReclaimExpiredLeases(t *testing.T) {
-	setup(t)
-
-	// set dead client timeout to a low value
-	defaultTestLeaseTimeout := testLeaseTimeout
-	testLeaseTimeout = 6 * time.Second
-	defer func() { testLeaseTimeout = defaultTestLeaseTimeout }()
-	semPQ := newSemaphorePriorityQueueTest()
-
-	// acquire lease for a client
-	status, err := semPQ.Acquire("node-1", pb.AccessPriority_LOW)
-	require.NoError(t, err, "Unexpected error on Acquire")
-	require.Equal(t, pb.AccessStatus_LEASED, status)
-
-	// do first heartbeat after 1 second (withtin the lease timeout)
-	// heartbeat will return the lease status as LEASED
-	time.Sleep(time.Second * 1)
-	accessStatus := semPQ.Heartbeat("node-1")
-	require.NoError(t, err, "Unexpected error on Heartbeat")
-	require.Equal(t, pb.AccessStatus_LEASED, accessStatus)
-
-	// validate that configmap has the lease
-	remoteConfigMap, err := core.Instance().GetConfigMap(testConfigMapName, testConfigMapNamespace)
-	cm := configMap{
-		cm: remoteConfigMap,
-	}
-	require.NoError(t, err, "Unexpected error on GetConfigMap")
-	leases, err := cm.ActiveLeases()
-	require.NoError(t, err, "Unexpected error on fetch active leases from configmap")
-	require.Equal(t, 1, len(leases))
-
-	// do two more heartbeats before the lease timeout has passed
-	// each after 1 second sleep
-	for i := 0; i < 2; i++ {
-		time.Sleep(time.Second * 1)
-		accessStatus = semPQ.Heartbeat("node-1")
-		require.NoError(t, err, "Unexpected error on Heartbeat")
-		require.Equal(t, pb.AccessStatus_LEASED, accessStatus)
-	}
-
-	// wait for the lease timeout to pass
-	// heartbeat will return the lease status as UNSPECIFIED
-	time.Sleep(time.Second * 5)
-	accessStatus = semPQ.Heartbeat("node-1")
-	require.NoError(t, err, "Unexpected error on Heartbeat")
-	require.Equal(t, pb.AccessStatus_TYPE_UNSPECIFIED, accessStatus)
-
-	// validate that configmap has no leases
-	err = cm.Refresh()
-	require.NoError(t, err, "Unexpected error on configMap Refresh")
-	require.NoError(t, err, "Unexpected error on GetConfigMap")
-	leases, err = cm.ActiveLeases()
-	require.NoError(t, err, "Unexpected error on fetch active leases from configmap")
-	require.Equal(t, 0, len(leases))
 }

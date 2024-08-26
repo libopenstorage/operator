@@ -23,7 +23,9 @@ const (
 )
 
 type configMap struct {
-	cm *corev1.ConfigMap
+	// activeLeases is the cache for fetching active leases persisted in configmap
+	activeLeases activeLeasesMap
+	cm           *corev1.ConfigMap
 }
 
 func createOrUpdateConfigMap(config *SemaphoreConfig) (*configMap, error) {
@@ -58,6 +60,10 @@ func createOrUpdateConfigMap(config *SemaphoreConfig) (*configMap, error) {
 
 	cm := &configMap{
 		cm: remoteConfigMap,
+	}
+	cm.activeLeases, err = cm.ActiveLeases()
+	if err != nil {
+		return nil, err
 	}
 	return cm, nil
 }
@@ -123,6 +129,10 @@ func getConfigMap(config *SemaphoreConfig) (*configMap, error) {
 	cm := &configMap{
 		cm: remoteConfigMap,
 	}
+	cm.activeLeases, err = cm.ActiveLeases()
+	if err != nil {
+		return nil, err
+	}
 	return cm, nil
 }
 
@@ -164,20 +174,35 @@ func (c *configMap) LeaseTimeout() (time.Duration, error) {
 	return leaseTimeout, nil
 }
 
-func (c *configMap) ActiveLeases() (map[string]activeLease, error) {
-	leases := map[string]activeLease{}
-	aActiveLeasesValue := c.cm.Data[activeLeasesKey]
-	if aActiveLeasesValue == "" {
-		return leases, nil
+func (c *configMap) DeadClientTimeout() (time.Duration, error) {
+	deadClientTimeout, err := time.ParseDuration(c.cm.Data[deadClientTimeoutKey])
+	if err != nil {
+		return 0, err
 	}
-	if err := json.Unmarshal([]byte(aActiveLeasesValue), &leases); err != nil {
-		return nil, err
+	return deadClientTimeout, nil
+}
+
+func (c *configMap) ActiveLeases() (activeLeasesMap, error) {
+	if c.activeLeases == nil {
+		c.activeLeases = activeLeasesMap{}
+		activeLeasesValue := c.cm.Data[activeLeasesKey]
+		if activeLeasesValue != "" {
+			err := json.Unmarshal([]byte(activeLeasesValue), &c.activeLeases)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
-	return leases, nil
+
+	returnActiveLeases := activeLeasesMap{}
+	for key, val := range c.activeLeases {
+		returnActiveLeases[key] = val
+	}
+	return returnActiveLeases, nil
 }
 
 // isConfigMapUpdateRequired compares two maps and returns true if they are different
-func isConfigMapUpdateRequired(map1, map2 map[string]activeLease) bool {
+func isConfigMapUpdateRequired(map1, map2 activeLeasesMap) bool {
 	if len(map1) != len(map2) {
 		return true
 	}
@@ -193,7 +218,7 @@ func isConfigMapUpdateRequired(map1, map2 map[string]activeLease) bool {
 
 // Update replaces active leases in the configmap with the provided active leases
 // it only makes an update call if the active leases have changed
-func (c *configMap) UpdateLeases(newActiveLeases map[string]activeLease) error {
+func (c *configMap) UpdateLeases(newActiveLeases activeLeasesMap) error {
 	currentActiveLeases, err := c.ActiveLeases()
 	if err != nil {
 		panic(err)
@@ -202,11 +227,13 @@ func (c *configMap) UpdateLeases(newActiveLeases map[string]activeLease) error {
 		return nil
 	}
 
-	leases := map[string]string{}
-	for clientId, lease := range newActiveLeases {
-		leases[clientId] = fmt.Sprintf("%d", lease.PermitId)
+	logrus.Infof("Updating configmap: %v", newActiveLeases)
+
+	// update the cache
+	c.activeLeases = activeLeasesMap{}
+	for key, val := range newActiveLeases {
+		c.activeLeases[key] = val
 	}
-	logrus.Infof("Updating configmap: %v", leases)
 
 	activeLeasesValue, err := json.Marshal(newActiveLeases)
 	if err != nil {
@@ -218,15 +245,5 @@ func (c *configMap) UpdateLeases(newActiveLeases map[string]activeLease) error {
 	if err != nil {
 		return err
 	}
-
-	return nil
-}
-
-func (c *configMap) Refresh() error {
-	cm, err := core.Instance().GetConfigMap(c.Name(), c.Namespace())
-	if err != nil {
-		return err
-	}
-	c.cm = cm
 	return nil
 }

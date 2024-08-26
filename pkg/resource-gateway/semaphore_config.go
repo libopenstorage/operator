@@ -13,7 +13,10 @@ const (
 	defaultConfigMapLabels = "name=resource-gateway"
 	// defaultConfigMapUpdatePeriod is the default time period between configmap updates
 	defaultConfigMapUpdatePeriod = 1 * time.Second
-	// defaultDeadClientTimeout is the default time period after which a node is considered dead
+	// defaultLeaseTimeout is the default time period after which a lease will force expire
+	defaultLeaseTimeout = 30 * time.Second
+	// defaultDeadClientTimeout is the default time period after which a node
+	// is considered dead if no heartbeats were received in this duration
 	defaultDeadClientTimeout = 10 * time.Second
 	// defaultMaxQueueSize is the default max queue size for semaphore server
 	defaultMaxQueueSize = 5000
@@ -36,6 +39,7 @@ func NewSemaphoreConfig() *SemaphoreConfig {
 		ConfigMapName:         defaultConfigMapName,
 		ConfigMapLabels:       map[string]string{"name": resourceGatewayStr},
 		ConfigMapUpdatePeriod: defaultConfigMapUpdatePeriod,
+		LeaseTimeout:          defaultLeaseTimeout,
 		DeadClientTimeout:     defaultDeadClientTimeout,
 		MaxQueueSize:          defaultMaxQueueSize,
 	}
@@ -52,8 +56,8 @@ func copySemaphoreConfig(semaphoreConfig *SemaphoreConfig) *SemaphoreConfig {
 		ConfigMapNamespace:    semaphoreConfig.ConfigMapNamespace,
 		ConfigMapLabels:       configMapLabels,
 		ConfigMapUpdatePeriod: semaphoreConfig.ConfigMapUpdatePeriod,
-		DeadClientTimeout:     semaphoreConfig.DeadClientTimeout,
 		LeaseTimeout:          semaphoreConfig.LeaseTimeout,
+		DeadClientTimeout:     semaphoreConfig.DeadClientTimeout,
 		MaxQueueSize:          semaphoreConfig.MaxQueueSize,
 	}
 }

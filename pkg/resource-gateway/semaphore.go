@@ -2,7 +2,6 @@
 package resource_gateway
 
 import (
-	"container/list"
 	"sync"
 	"time"
 
@@ -15,6 +14,10 @@ const (
 	nullPermit uint32 = 0
 )
 
+var (
+	testOverride = false
+)
+
 type SemaphorePriorityQueue interface {
 	Acquire(clientId string, priority pb.AccessPriority_Type) (pb.AccessStatus_Type, error)
 	Release(clientId string) error
@@ -23,15 +26,7 @@ type SemaphorePriorityQueue interface {
 	Update(config *SemaphoreConfig)
 }
 
-// activeLease struct holds the lease Id and the time
-// at which the lease was acquired for actives leases
-//
-// The struct is marshalled to json and stored in the configmap;
-// the fields are exported to enable json marshalling
-type activeLease struct {
-	PermitId     uint32
-	TimeAcquired int64
-}
+type activeLeasesMap map[string]int64
 
 // semaphorePriorityQueue implements the SemaphorePriorityQueue interface
 type semaphorePriorityQueue struct {
@@ -43,8 +38,8 @@ type semaphorePriorityQueue struct {
 
 	// internal state
 	priorityQueue    PriorityQueue
-	activeLeases     map[string]activeLease
-	availablePermits *list.List
+	activeLeases     activeLeasesMap
+	availablePermits uint
 	heartbeats       map[string]int64
 
 	// persistent state
@@ -136,28 +131,18 @@ func (s *semaphorePriorityQueue) populateSemaphoreConfig() {
 
 // populate structures for active leases and available permits
 func (s *semaphorePriorityQueue) initPermitsAndLeases() {
-	mapIsPermitGranted := map[uint32]bool{}
-
 	activeLeases, err := s.configMap.ActiveLeases()
 	if err != nil {
 		panic(err)
 	}
-
 	s.activeLeases = activeLeases
-	for _, lease := range activeLeases {
-		mapIsPermitGranted[lease.PermitId] = true
-	}
-
-	s.availablePermits = list.New()
-	for i := nullPermit + 1; i <= s.config.NPermits; i++ {
-		if _, isGranted := mapIsPermitGranted[i]; !isGranted {
-			s.availablePermits.PushBack(i)
-		}
-	}
+	s.availablePermits = uint(s.config.NPermits) - uint(len(activeLeases))
 }
 
-// start background workers
+// startBackgroundTasks starts background workers for updating the configmap,
+// cleaning up dead clients and reclaiming expired leases
 func (s *semaphorePriorityQueue) startBackgroundTasks() {
+	// TODO: cancel and restart background tasks
 	bgTasks := []struct {
 		name     string
 		f        func()
@@ -170,9 +155,13 @@ func (s *semaphorePriorityQueue) startBackgroundTasks() {
 
 	for _, bgTask := range bgTasks {
 		f := bgTask.f
+		intv := bgTask.interval
+		if testOverride {
+			intv = time.Second
+		}
 		taskID, err := sched.Instance().Schedule(
 			func(_ sched.Interval) { f() },
-			sched.Periodic(bgTask.interval),
+			sched.Periodic(intv),
 			time.Now(), false,
 		)
 		if err != nil {
@@ -196,8 +185,7 @@ func (s *semaphorePriorityQueue) Acquire(clientId string, priority pb.AccessPrio
 	logrus.Debugf("Received Acquire request for client %v", clientId)
 
 	// check if the client already has a lease, if yes return
-	_, hasLease := s.activeLeases[clientId]
-	if hasLease {
+	if s.hasActiveLease(clientId) {
 		logrus.Debugf("Already acquired lease for client %v", clientId)
 		return pb.AccessStatus_LEASED, nil
 	}
@@ -207,7 +195,6 @@ func (s *semaphorePriorityQueue) Acquire(clientId string, priority pb.AccessPrio
 	if _, isQueued := s.heartbeats[clientId]; !isQueued {
 		logrus.Debugf("Enqueueing client %v with priority %v", clientId, priority)
 		err := s.priorityQueue.Enqueue(clientId, priority)
-		logrus.Debugf("Error: %v", err)
 		if err != nil {
 			return pb.AccessStatus_TYPE_UNSPECIFIED, err
 		}
@@ -222,17 +209,19 @@ func (s *semaphorePriorityQueue) Acquire(clientId string, priority pb.AccessPrio
 		updateDone = true
 		return pb.AccessStatus_LEASED, nil
 	}
+
+	logrus.Debugf("Client %v is waiting in queue", clientId)
 	return pb.AccessStatus_QUEUED, nil
 }
 
-// removeClientWithLease removes the client from the heartbeats and activeLeases map
+// removeActiveLease removes the client from the heartbeats and activeLeases map
 // and adds the respective permit back to the available permits list
 //
-// removeClientWithLease should be called with mutex locked
-func (s *semaphorePriorityQueue) removeClientWithLease(clientId string, lease activeLease) {
+// removeActiveLease should be called with mutex locked
+func (s *semaphorePriorityQueue) removeActiveLease(clientId string) {
 	delete(s.heartbeats, clientId)
 	delete(s.activeLeases, clientId)
-	s.availablePermits.PushBack(lease.PermitId)
+	s.availablePermits++
 }
 
 // Release releases the lease held by the client
@@ -248,13 +237,12 @@ func (s *semaphorePriorityQueue) Release(clientId string) error {
 	logrus.Debugf("Received Release request for client %v", clientId)
 
 	// check if the client has an active lease, if not return
-	lease, hasLease := s.activeLeases[clientId]
-	if !hasLease {
+	if !s.hasActiveLease(clientId) {
 		logrus.Warnf("Did NOT find an active lease for the client %v!", clientId)
 		return nil
 	}
 
-	s.removeClientWithLease(clientId, lease)
+	s.removeActiveLease(clientId)
 	updateDone = true
 
 	return nil
@@ -272,24 +260,10 @@ func (s *semaphorePriorityQueue) Heartbeat(clientId string) pb.AccessStatus_Type
 	}
 	s.heartbeats[clientId] = time.Now().Unix()
 
-	_, hasLease := s.activeLeases[clientId]
-	if hasLease {
+	if s.hasActiveLease(clientId) {
 		return pb.AccessStatus_LEASED
 	}
 	return pb.AccessStatus_QUEUED
-}
-
-// fetchAvailablePermit returns the next available permit id
-// from the list of available permits if any else returns nullPermit
-//
-// fetchAvailablePermit should be called with mutex locked
-func (s *semaphorePriorityQueue) fetchAvailablePermit() uint32 {
-	if s.availablePermits.Len() == 0 {
-		return nullPermit
-	}
-	nextClientId := s.availablePermits.Front()
-	s.availablePermits.Remove(nextClientId)
-	return nextClientId.Value.(uint32)
 }
 
 // tryAcquire checks if a given client is at the front of the queue and if there is an available permit,
@@ -308,21 +282,17 @@ func (s *semaphorePriorityQueue) tryAcquire(clientId string) bool {
 	logrus.Debugf("Next resource in queue: %v", nextResouceId)
 
 	// check if any permit is available
-	permitId := s.fetchAvailablePermit()
-	if permitId == nullPermit {
+	if s.availablePermits == 0 {
 		return false
 	}
-	logrus.Debugf("Permit %v is available to take", permitId)
+	s.availablePermits--
 
 	// remove the client from the queue and assign it the permit
 	err := s.priorityQueue.Dequeue(priority)
 	if err != nil {
 		panic(err)
 	}
-	s.activeLeases[clientId] = activeLease{
-		PermitId:     permitId,
-		TimeAcquired: time.Now().Unix(),
-	}
+	s.activeLeases[clientId] = time.Now().Unix()
 
 	return true
 }
@@ -378,9 +348,8 @@ func (s *semaphorePriorityQueue) cleanupDeadClients() {
 
 	logrus.Warnf("Cleaning up dead clients: %v", deadClients)
 	for _, clientId := range deadClients {
-		lease, hasLease := s.activeLeases[clientId]
-		if hasLease {
-			s.removeClientWithLease(clientId, lease)
+		if s.hasActiveLease(clientId) {
+			s.removeActiveLease(clientId)
 		} else {
 			delete(s.heartbeats, clientId)
 			err := s.priorityQueue.Remove(clientId)
@@ -396,15 +365,22 @@ func (s *semaphorePriorityQueue) cleanupDeadClients() {
 //
 // reclaimExpiredLeases is scheduled as a background task
 func (s *semaphorePriorityQueue) reclaimExpiredLeases() {
+	expiredLeases := []string{}
+
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	defer func() {
+		s.mutex.Unlock()
+		if len(expiredLeases) != 0 {
+			<-s.configMapUpdateDone // wait for the next update to complete
+		}
+	}()
+
 	logrus.Debugf("Running reclaimExpiredLeases background task")
 
-	expiredLeases := map[string]activeLease{}
-
-	for clientId, lease := range s.activeLeases {
-		if time.Since(time.Unix(lease.TimeAcquired, 0)) > s.config.LeaseTimeout {
-			expiredLeases[clientId] = lease
+	for clientId, leaseTimeAcquired := range s.activeLeases {
+		timeSinceAcquire := time.Since(time.Unix(leaseTimeAcquired, 0))
+		if timeSinceAcquire > s.config.LeaseTimeout {
+			expiredLeases = append(expiredLeases, clientId)
 		}
 	}
 	if len(expiredLeases) == 0 {
@@ -412,7 +388,12 @@ func (s *semaphorePriorityQueue) reclaimExpiredLeases() {
 	}
 
 	logrus.Warnf("Reclaiming expired leases: %v", expiredLeases)
-	for clientId, lease := range expiredLeases {
-		s.removeClientWithLease(clientId, lease)
+	for _, clientId := range expiredLeases {
+		s.removeActiveLease(clientId)
 	}
+}
+
+func (s *semaphorePriorityQueue) hasActiveLease(clientId string) bool {
+	_, hasLease := s.activeLeases[clientId]
+	return hasLease
 }
