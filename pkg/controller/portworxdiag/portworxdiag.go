@@ -664,8 +664,8 @@ func (c *Controller) updateDiagFields(diag *diagv1.PortworxDiag, stc *corev1.Sto
 		patches = append(patches, phasePatches...)
 	}
 
-	if phasePatch := getMissingPodLogsStatusPatch(diag, prs.podLogsStatusToAdd); len(phasePatch) > 0 {
-		patches = append(patches, phasePatch)
+	if podLogsStatusPatch := getMissingPodLogsStatusPatch(diag, prs.podLogsStatusToAdd); podLogsStatusPatch != nil {
+		patches = append(patches, podLogsStatusPatch)
 	}
 
 	logrus.Infof("patches: %v", patches)
