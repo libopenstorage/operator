@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -313,9 +314,11 @@ func (c *Controller) getNodeIDsWithSelectedVolumes(diag *diagv1.PortworxDiag, st
 }
 
 type podReconcileStatus struct {
-	podsToDelete         []*v1.Pod
-	nodesToCreatePodsFor []string
-	nodeStatusesToAdd    []*diagv1.NodeStatus
+	podsToDelete                []*v1.Pod
+	nodesToCreatePodsFor        []string
+	nodesToCreatePodsForPodLogs string
+	nodeStatusesToAdd           []*diagv1.NodeStatus
+	podLogsStatusToAdd          diagv1.PodLogStatus
 }
 
 func shouldPodBeOnNode(targetNodeID string, targetNodeName string, k8sNodes []v1.Node, nodeIDsWithReplicas []string, diag *diagv1.PortworxDiag) bool {
@@ -425,13 +428,16 @@ func (c *Controller) getNodesToHavePods(nodes *v1.NodeList, diag *diagv1.Portwor
 func (c *Controller) getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *diagv1.PortworxDiag, stc *corev1.StorageCluster, nodeIDToNodeName map[string]string) (podReconcileStatus, error) {
 	// Check on all of our storage nodes
 	prs := podReconcileStatus{
-		podsToDelete:         make([]*v1.Pod, 0),
-		nodesToCreatePodsFor: make([]string, 0),
-		nodeStatusesToAdd:    make([]*diagv1.NodeStatus, 0),
+		podsToDelete:                make([]*v1.Pod, 0),
+		nodesToCreatePodsFor:        make([]string, 0),
+		nodesToCreatePodsForPodLogs: "",
+		nodeStatusesToAdd:           make([]*diagv1.NodeStatus, 0),
+		podLogsStatusToAdd:          diagv1.PodLogStatus{},
 	}
 
 	nodeToPod := getNodeToPodMap(pods)
 	nodeIDToStatus := getNodeIDToStatusMap(diag.Status.NodeStatuses)
+	podLogsStatus := diag.Status.PodLogsStatus
 
 	nodesToHavePods, err := c.getNodesToHavePods(nodes, diag, stc, nodeIDToNodeName, nodeIDToStatus)
 	if err != nil {
@@ -439,6 +445,7 @@ func (c *Controller) getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *dia
 	}
 
 	for nodeID, nodeName := range nodeIDToNodeName {
+
 		existingPod := nodeToPod[nodeName]
 
 		_, shouldExist := nodesToHavePods[nodeID]
@@ -477,6 +484,12 @@ func (c *Controller) getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *dia
 			prs.nodesToCreatePodsFor = append(prs.nodesToCreatePodsFor, nodeName)
 		}
 		continue
+	}
+
+	shouldExist := diag.Spec.Portworx.CollectPodLogs
+
+	if podLogsStatus == diag.Status.PodLogsStatus && shouldExist {
+		prs.podLogsStatusToAdd = diagv1.PodLogStatus{Status: diagv1.PodLogStatusPending, Message: ""}
 	}
 
 	return prs, nil
@@ -543,13 +556,13 @@ func getOverallPhase(statuses []diagv1.NodeStatus) (string, string) {
 }
 
 func getMissingStatusPatch(diag *diagv1.PortworxDiag) map[string]interface{} {
-	if diag.Status.Phase != "" || diag.Status.ClusterUUID != "" || diag.Status.NodeStatuses != nil {
+	if diag.Status.Phase != "" || diag.Status.ClusterUUID != "" || diag.Status.NodeStatuses != nil || !reflect.DeepEqual(diag.Status.PodLogsStatus, diagv1.PodLogStatus{}) {
 		return nil
 	}
 	return map[string]interface{}{
 		"op":    "add",
 		"path":  "/status",
-		"value": diagv1.PortworxDiagStatus{Phase: diagv1.DiagStatusPending, NodeStatuses: []diagv1.NodeStatus{}},
+		"value": diagv1.PortworxDiagStatus{Phase: diagv1.DiagStatusPending, NodeStatuses: []diagv1.NodeStatus{}, PodLogsStatus: diagv1.PodLogStatus{}},
 	}
 }
 
@@ -567,6 +580,7 @@ func getChangedClusterUUIDPatch(diag *diagv1.PortworxDiag, stc *corev1.StorageCl
 func getOverallPhasePatch(diag *diagv1.PortworxDiag) []map[string]interface{} {
 	patches := []map[string]interface{}{}
 	newPhase, newMessage := getOverallPhase(diag.Status.NodeStatuses)
+
 	logrus.Debugf("New phase for PortworxDiag is '%s'", newPhase)
 	if diag.Status.Phase != newPhase {
 		op := "add"
@@ -607,13 +621,28 @@ func getMissingNodeStatusesPatch(diag *diagv1.PortworxDiag, nodeStatusesToAdd []
 		})
 	}
 	for _, toAdd := range nodeStatusesToAdd {
+		logrus.Infof("toAdd: %v", toAdd)
 		patches = append(patches, map[string]interface{}{
 			"op":    "add",
 			"path":  "/status/nodes/-",
 			"value": toAdd,
 		})
 	}
+	logrus.Infof("patches: %v", patches)
 	return patches
+}
+
+func getMissingPodLogsStatusPatch(diag *diagv1.PortworxDiag, podLogsStatusToAdd diagv1.PodLogStatus) map[string]interface{} {
+	if reflect.DeepEqual(podLogsStatusToAdd, diagv1.PodLogStatus{}) {
+		return nil
+	}
+
+	logrus.Infof("PodLogsStatusToAdd: %v", podLogsStatusToAdd)
+	return map[string]interface{}{
+		"op":    "add",
+		"path":  "/status/podLogsStatus",
+		"value": podLogsStatusToAdd,
+	}
 }
 
 func (c *Controller) updateDiagFields(diag *diagv1.PortworxDiag, stc *corev1.StorageCluster, prs *podReconcileStatus) error {
@@ -635,11 +664,17 @@ func (c *Controller) updateDiagFields(diag *diagv1.PortworxDiag, stc *corev1.Sto
 		patches = append(patches, phasePatches...)
 	}
 
+	if phasePatch := getMissingPodLogsStatusPatch(diag, prs.podLogsStatusToAdd); len(phasePatch) > 0 {
+		patches = append(patches, phasePatch)
+	}
+
+	logrus.Infof("patches: %v", patches)
 	body, err := json.Marshal(patches)
 	if err != nil {
 		return fmt.Errorf("failed to marshal json patch to JSON: %v", err)
 	}
 
+	logrus.Infof("body: %v", body)
 	err = c.client.Status().Patch(context.TODO(), diag, client.RawPatch(types.JSONPatchType, body))
 	if err != nil {
 		return fmt.Errorf("failed to update phase for PortworxDiag CR: %v", err)
