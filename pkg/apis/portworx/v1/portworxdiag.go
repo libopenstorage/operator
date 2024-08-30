@@ -86,7 +86,7 @@ type PortworxDiagStatus struct {
 	// Status of the diags collection from all the selected nodes.
 	NodeStatuses []NodeStatus `json:"nodes,omitempty"`
 	// Status of the diags collection from all the pods.
-	PodLogsStatus PodLogStatus `json:"podLogsStatus,omitempty"`
+	PodLogsStatus PodLogStatus `json:"collectPodLogs,omitempty"`
 }
 
 // Status of the pod logs collection for all the pods.

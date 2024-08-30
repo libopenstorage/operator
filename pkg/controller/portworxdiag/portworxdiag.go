@@ -637,10 +637,9 @@ func getMissingPodLogsStatusPatch(diag *diagv1.PortworxDiag, podLogsStatusToAdd 
 		return nil
 	}
 
-	logrus.Infof("PodLogsStatusToAdd: %v", podLogsStatusToAdd)
 	return map[string]interface{}{
 		"op":    "add",
-		"path":  "/status/podLogsStatus",
+		"path":  "/status/collectPodLogs",
 		"value": podLogsStatusToAdd,
 	}
 }
@@ -668,13 +667,11 @@ func (c *Controller) updateDiagFields(diag *diagv1.PortworxDiag, stc *corev1.Sto
 		patches = append(patches, podLogsStatusPatch)
 	}
 
-	logrus.Infof("patches: %v", patches)
 	body, err := json.Marshal(patches)
 	if err != nil {
 		return fmt.Errorf("failed to marshal json patch to JSON: %v", err)
 	}
 
-	logrus.Infof("body: %v", body)
 	err = c.client.Status().Patch(context.TODO(), diag, client.RawPatch(types.JSONPatchType, body))
 	if err != nil {
 		return fmt.Errorf("failed to update phase for PortworxDiag CR: %v", err)
