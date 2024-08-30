@@ -12,12 +12,10 @@ const (
 	NodeStatusCompleted  = "Completed"
 
 	//Pod Logs Statuses
-	PodLogStatusPending        = "Pending"
-	PodLogStatusInProgress     = "InProgress"
-	PodLogStatusFailed         = "Failed"
-	PodLogStatusCompleted      = "Completed"
-	PodLogStatusPartialFailure = "PartiallyFailed"
-	PodLogStatusUnknown        = "Unknown"
+	PodLogStatusPending    = "Pending"
+	PodLogStatusInProgress = "InProgress"
+	PodLogStatusFailed     = "Failed"
+	PodLogStatusCompleted  = "Completed"
 
 	// Diag Statuses
 	DiagStatusPending        = "Pending"
@@ -88,7 +86,15 @@ type PortworxDiagStatus struct {
 	// Status of the diags collection from all the selected nodes.
 	NodeStatuses []NodeStatus `json:"nodes,omitempty"`
 	// Status of the diags collection from all the pods.
-	PodLogStatus string `json:"podLogsStatus,omitempty"`
+	PodLogsStatus PodLogStatus `json:"collectPodLogs,omitempty"`
+}
+
+// Status of the pod logs collection for all the pods.
+type PodLogStatus struct {
+	// One word status of the pod logs collection.
+	Status string `json:"status,omitempty"`
+	// Optional message used to give the reason for any failure.
+	Message string `json:"message,omitempty"`
 }
 
 // Status of the diags collection from a single node.
