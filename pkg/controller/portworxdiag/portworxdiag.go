@@ -658,7 +658,7 @@ func (c *Controller) updateDiagFields(diag *diagv1.PortworxDiag, stc *corev1.Sto
 	if phasePatches := getOverallPhasePatch(diag); len(phasePatches) > 0 {
 		patches = append(patches, phasePatches...)
 	}
-
+	
 	if phasePatches := getMissingNodeStatusesPatch(diag, prs.nodeStatusesToAdd); len(phasePatches) > 0 {
 		patches = append(patches, phasePatches...)
 	}
