@@ -592,9 +592,9 @@ type PrometheusSpec struct {
 	Retention string `json:"retention,omitempty"`
 	// RetentionSize specifies maximum amount of disk space used by blocks.*
 	RetentionSize string `json:"retentionSize,omitempty"`
-	// StorageSpec defines the configured storage for a group Prometheus servers. If no storage option is
-	// specified, then by default an EmptyDir will be used. If multiple storage options are specified,
-	// priority will be given as follows: EmptyDir, Ephemeral, and lastly VolumeClaimTemplate.
+	// // StorageSpec defines the configured storage for a group Prometheus servers. If no storage option is
+	// // specified, then by default an EmptyDir will be used. If multiple storage options are specified,
+	// // priority will be given as follows: EmptyDir, Ephemeral, and lastly VolumeClaimTemplate.
 	// Storage *monitoringv1.StorageSpec `json:"storage,omitempty"`
 	// Volumes allows configuration of additional volumes on the output StatefulSet definition. Volumes specified will
 	// be appended to other volumes that are generated as a result of StorageSpec objects.
