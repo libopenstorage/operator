@@ -437,7 +437,6 @@ func (c *Controller) getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *dia
 
 	nodeToPod := getNodeToPodMap(pods)
 	nodeIDToStatus := getNodeIDToStatusMap(diag.Status.NodeStatuses)
-	podLogsStatus := diag.Status.PodLogsStatus
 
 	nodesToHavePods, err := c.getNodesToHavePods(nodes, diag, stc, nodeIDToNodeName, nodeIDToStatus)
 	if err != nil {
@@ -484,12 +483,6 @@ func (c *Controller) getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *dia
 			prs.nodesToCreatePodsFor = append(prs.nodesToCreatePodsFor, nodeName)
 		}
 		continue
-	}
-
-	shouldExist := diag.Spec.Portworx.CollectPodLogs
-
-	if podLogsStatus == diag.Status.PodLogsStatus && shouldExist {
-		prs.podLogsStatusToAdd = diagv1.PodLogStatus{Status: diagv1.PodLogStatusPending, Message: ""}
 	}
 
 	return prs, nil
@@ -632,18 +625,6 @@ func getMissingNodeStatusesPatch(diag *diagv1.PortworxDiag, nodeStatusesToAdd []
 	return patches
 }
 
-func getMissingPodLogsStatusPatch(diag *diagv1.PortworxDiag, podLogsStatusToAdd diagv1.PodLogStatus) map[string]interface{} {
-	if reflect.DeepEqual(podLogsStatusToAdd, diagv1.PodLogStatus{}) {
-		return nil
-	}
-
-	return map[string]interface{}{
-		"op":    "add",
-		"path":  "/status/collectPodLogs",
-		"value": podLogsStatusToAdd,
-	}
-}
-
 func (c *Controller) updateDiagFields(diag *diagv1.PortworxDiag, stc *corev1.StorageCluster, prs *podReconcileStatus) error {
 	patches := []map[string]interface{}{}
 
@@ -658,13 +639,9 @@ func (c *Controller) updateDiagFields(diag *diagv1.PortworxDiag, stc *corev1.Sto
 	if phasePatches := getOverallPhasePatch(diag); len(phasePatches) > 0 {
 		patches = append(patches, phasePatches...)
 	}
-	
+
 	if phasePatches := getMissingNodeStatusesPatch(diag, prs.nodeStatusesToAdd); len(phasePatches) > 0 {
 		patches = append(patches, phasePatches...)
-	}
-
-	if podLogsStatusPatch := getMissingPodLogsStatusPatch(diag, prs.podLogsStatusToAdd); podLogsStatusPatch != nil {
-		patches = append(patches, podLogsStatusPatch)
 	}
 
 	body, err := json.Marshal(patches)
