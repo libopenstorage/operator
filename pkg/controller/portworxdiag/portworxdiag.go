@@ -574,6 +574,34 @@ func getOverallPhasePatch(diag *diagv1.PortworxDiag) []map[string]interface{} {
 	patches := []map[string]interface{}{}
 	newPhase, newMessage := getOverallPhase(diag.Status.NodeStatuses)
 
+	if diag.Spec.Portworx.CollectPodLogs {
+		if newPhase == diagv1.DiagStatusFailed {
+			if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusInProgress {
+				newPhase = diagv1.DiagStatusPartialFailure
+				newMessage = "Failed to collect node diags, pod logs colelction is in progress"
+			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusCompleted {
+				newPhase = diagv1.DiagStatusPartialFailure
+				newMessage = "Pod logs colelction is completed, but failed to collect node diags"
+			}
+		}
+		if newPhase == diagv1.DiagStatusCompleted {
+			if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusFailed {
+				newPhase = diagv1.DiagStatusPartialFailure
+				newMessage = "All diags collected successfully, but failed to collect pod logs"
+			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusInProgress {
+				newPhase = diagv1.DiagStatusInProgress
+				newMessage = "All diags collected successfully, but pod logs colelction is in progress"
+			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusPending {
+				newPhase = diagv1.DiagStatusInProgress
+				newMessage = "All diags collected successfully, pod logs colelction is pending"
+			}
+		}
+		if len(diag.Status.NodeStatuses) == 0 {
+			newPhase = diag.Status.PodLogsStatus.Status
+			newMessage = "No node diags to collect, pod logs collection is " + diag.Status.PodLogsStatus.Status
+		}
+	}
+
 	logrus.Debugf("New phase for PortworxDiag is '%s'", newPhase)
 	if diag.Status.Phase != newPhase {
 		op := "add"
