@@ -318,7 +318,7 @@ type podReconcileStatus struct {
 	nodesToCreatePodsFor        []string
 	nodesToCreatePodsForPodLogs string
 	nodeStatusesToAdd           []*diagv1.NodeStatus
-	podLogsStatusToAdd          diagv1.PodLogStatus
+	podLogsStatusToAdd          *diagv1.PodLogStatus
 }
 
 func shouldPodBeOnNode(targetNodeID string, targetNodeName string, k8sNodes []v1.Node, nodeIDsWithReplicas []string, diag *diagv1.PortworxDiag) bool {
@@ -432,7 +432,7 @@ func (c *Controller) getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *dia
 		nodesToCreatePodsFor:        make([]string, 0),
 		nodesToCreatePodsForPodLogs: "",
 		nodeStatusesToAdd:           make([]*diagv1.NodeStatus, 0),
-		podLogsStatusToAdd:          diagv1.PodLogStatus{},
+		podLogsStatusToAdd:          &diagv1.PodLogStatus{},
 	}
 
 	nodeToPod := getNodeToPodMap(pods)
@@ -444,7 +444,6 @@ func (c *Controller) getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *dia
 	}
 
 	for nodeID, nodeName := range nodeIDToNodeName {
-
 		existingPod := nodeToPod[nodeName]
 
 		_, shouldExist := nodesToHavePods[nodeID]
@@ -486,6 +485,30 @@ func (c *Controller) getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *dia
 	}
 
 	return prs, nil
+}
+
+func (c *Controller) getPodsDiffForPodLogs(nodeToPodMapForPodLogs map[string]*v1.Pod, diag *diagv1.PortworxDiag, nodeIDToNodeName map[string]string, prs *podReconcileStatus) {
+	for _, nodeName := range nodeIDToNodeName {
+		if diag.Spec.Portworx.CollectPodLogs && diag.Status.PodLogsStatus == (diagv1.PodLogStatus{}) {
+			prs.podLogsStatusToAdd = &diagv1.PodLogStatus{Status: diagv1.PodLogStatusPending, Message: ""}
+			if nodeToPodMapForPodLogs[nodeName] == nil {
+				prs.nodesToCreatePodsForPodLogs = nodeName
+			}
+			return
+		}
+		if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusFailed || diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusCompleted {
+			if nodeToPodMapForPodLogs[nodeName] != nil {
+				prs.podsToDelete = append(prs.podsToDelete, nodeToPodMapForPodLogs[nodeName])
+			}
+			return
+		}
+		if !diag.Spec.Portworx.CollectPodLogs {
+			if nodeToPodMapForPodLogs[nodeName] != nil {
+				prs.podsToDelete = append(prs.podsToDelete, nodeToPodMapForPodLogs[nodeName])
+			}
+			return
+		}
+	}
 }
 
 func getOverallPhase(statuses []diagv1.NodeStatus) (string, string) {
@@ -672,6 +695,10 @@ func (c *Controller) updateDiagFields(diag *diagv1.PortworxDiag, stc *corev1.Sto
 		patches = append(patches, phasePatches...)
 	}
 
+	if podLogsStatusPatch := getMissingPodLogsStatusPatch(diag, prs.podLogsStatusToAdd); podLogsStatusPatch != nil {
+		patches = append(patches, podLogsStatusPatch)
+	}
+
 	body, err := json.Marshal(patches)
 	if err != nil {
 		return fmt.Errorf("failed to marshal json patch to JSON: %v", err)
@@ -682,6 +709,18 @@ func (c *Controller) updateDiagFields(diag *diagv1.PortworxDiag, stc *corev1.Sto
 		return fmt.Errorf("failed to update phase for PortworxDiag CR: %v", err)
 	}
 	return nil
+}
+
+func getMissingPodLogsStatusPatch(diag *diagv1.PortworxDiag, podLogsStatusToAdd *diagv1.PodLogStatus) map[string]interface{} {
+	if podLogsStatusToAdd == nil || diag.Status.PodLogsStatus != (diagv1.PodLogStatus{}) {
+		return nil
+	}
+
+	return map[string]interface{}{
+		"op":    "add",
+		"path":  "/status/collectPodLogs",
+		"value": podLogsStatusToAdd,
+	}
 }
 
 func (c *Controller) patchPhase(diag *diagv1.PortworxDiag, newPhase string, newMessage string) error {
@@ -768,6 +807,23 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 		return err
 	}
 
+	var podLogsPod *v1.Pod
+	nodeDiagPods := &v1.PodList{}
+
+	for _, pod := range pods.Items {
+		if pod.Spec.Containers[0].Args[7] == "portworx" {
+			podLogsPod = &pod
+		} else {
+			nodeDiagPods.Items = append(nodeDiagPods.Items, pod)
+		}
+	}
+
+	podsForPodLogs := make(map[string]*v1.Pod)
+	if podLogsPod != nil {
+		podsForPodLogs[podLogsPod.Spec.NodeName] = podLogsPod
+	}
+	logrus.Infof("Pods for pod logs: %v", podsForPodLogs)
+
 	// List all k8s nodes in the cluster, but only if we have a label selector
 	// Otherwise just pass an empty list through
 	nodes := &v1.NodeList{Items: []v1.Node{}}
@@ -780,11 +836,13 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 	}
 
 	// Get what changes we need to make between real and desired
-	prs, err := c.getPodsDiff(pods, nodes, diag, stc, nodeIDToNodeName)
+	prs, err := c.getPodsDiff(nodeDiagPods, nodes, diag, stc, nodeIDToNodeName)
 	if err != nil {
 		logrus.WithError(err).Error("Failed to check pods for required operations")
 		return err
 	}
+
+	c.getPodsDiffForPodLogs(podsForPodLogs, diag, nodeIDToNodeName, &prs)
 
 	err = c.updateDiagFields(diag, stc, &prs)
 	if err != nil {
@@ -814,21 +872,18 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 		}
 	}
 
-	if diag.Spec.Portworx.CollectPodLogs {
-		for _, nodeName := range prs.nodesToCreatePodsFor {
-			nodeID := nodeNameToNodeID[nodeName]
-			podTemplate, err := makeDiagPodTemplate(stc, diag, stc.Namespace, nodeName, nodeID, "portworx")
+	if diag.Spec.Portworx.CollectPodLogs && prs.nodesToCreatePodsForPodLogs != "" {
+		nodeID := nodeNameToNodeID[prs.nodesToCreatePodsForPodLogs]
+		podTemplate, err := makeDiagPodTemplate(stc, diag, stc.Namespace, prs.nodesToCreatePodsForPodLogs, nodeID, "portworx")
+		if err != nil {
+			logrus.WithError(err).Errorf("Failed to create diags collection pod template")
+			k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod template: %v", err))
+		} else {
+			err = c.podControl.CreatePods(context.TODO(), diag.Namespace, podTemplate, diag, metav1.NewControllerRef(diag, controllerKind))
 			if err != nil {
-				logrus.WithError(err).Errorf("Failed to create diags collection pod template")
-				k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod template: %v", err))
-			} else {
-				err = c.podControl.CreatePods(context.TODO(), diag.Namespace, podTemplate, diag, metav1.NewControllerRef(diag, controllerKind))
-				if err != nil {
-					logrus.WithError(err).Warnf("Failed to create diags collection pod")
-					k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod: %v", err))
-				}
+				logrus.WithError(err).Warnf("Failed to create diags collection pod")
+				k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod: %v", err))
 			}
-			break
 		}
 	}
 
