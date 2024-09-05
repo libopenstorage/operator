@@ -63,7 +63,7 @@ func makeDiagPodTemplate(cluster *corev1.StorageCluster, diag *portworxv1.Portwo
 			GenerateName: "px-diag",
 			Namespace:    ns,
 			Labels: map[string]string{
-				"name":                           PortworxDiagLabel,
+				"name":                           PortworxDiagLabel + label,
 				portworxv1.LabelPortworxDiagName: diag.Name,
 			},
 			OwnerReferences: []metav1.OwnerReference{

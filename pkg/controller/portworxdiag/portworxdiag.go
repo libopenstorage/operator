@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -212,6 +211,21 @@ func (c *Controller) getDiagPods(ns, diagName string) (*v1.PodList, error) {
 	err := c.client.List(context.TODO(), pods, &client.ListOptions{
 		LabelSelector: labels.SelectorFromSet(map[string]string{
 			"name":                       PortworxDiagLabel,
+			diagv1.LabelPortworxDiagName: diagName,
+		}),
+		Namespace: ns,
+	})
+	if err == nil || errors.IsNotFound(err) {
+		return pods, nil
+	}
+	return nil, fmt.Errorf("failed to list existing diag pods: %v", err)
+}
+
+func (c *Controller) getDiagPodsForPodLogs(ns, diagName string) (*v1.PodList, error) {
+	pods := &v1.PodList{}
+	err := c.client.List(context.TODO(), pods, &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(map[string]string{
+			"name":                       PortworxDiagLabel + "-px-pod-logs",
 			diagv1.LabelPortworxDiagName: diagName,
 		}),
 		Namespace: ns,
@@ -463,6 +477,7 @@ func (c *Controller) getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *dia
 		// Delete any pods that are complete/failed
 		if status == diagv1.NodeStatusCompleted || status == diagv1.NodeStatusFailed {
 			if existingPod != nil {
+				logrus.Infof("Node %s is already in status %s, deleting pod %s", nodeName, status, existingPod.Name)
 				prs.podsToDelete = append(prs.podsToDelete, existingPod)
 			}
 			continue
@@ -472,6 +487,7 @@ func (c *Controller) getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *dia
 		if !shouldExist {
 			// Delete any pods that shouldn't exist (shouldn't ever happen, but just in case)
 			if existingPod != nil {
+				logrus.Infof("Node %s should not have a pod, deleting pod %s", nodeName, existingPod.Name)
 				prs.podsToDelete = append(prs.podsToDelete, existingPod)
 			}
 			continue
@@ -498,14 +514,20 @@ func (c *Controller) getPodsDiffForPodLogs(nodeToPodMapForPodLogs map[string]*v1
 		}
 		if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusFailed || diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusCompleted {
 			if nodeToPodMapForPodLogs[nodeName] != nil {
+				logrus.Infof("Pod logs collection is completed or failed, deleting pod %s", nodeToPodMapForPodLogs[nodeName].Name)
 				prs.podsToDelete = append(prs.podsToDelete, nodeToPodMapForPodLogs[nodeName])
 			}
 			return
 		}
 		if !diag.Spec.Portworx.CollectPodLogs {
 			if nodeToPodMapForPodLogs[nodeName] != nil {
+				logrus.Infof("Pod logs collection is disabled, deleting pod %s", nodeToPodMapForPodLogs[nodeName].Name)
 				prs.podsToDelete = append(prs.podsToDelete, nodeToPodMapForPodLogs[nodeName])
 			}
+			return
+		}
+		if prs.podLogsStatusToAdd.Status == diagv1.PodLogStatusInProgress && nodeToPodMapForPodLogs[nodeName] == nil {
+			prs.nodesToCreatePodsForPodLogs = nodeName
 			return
 		}
 	}
@@ -572,7 +594,7 @@ func getOverallPhase(statuses []diagv1.NodeStatus) (string, string) {
 }
 
 func getMissingStatusPatch(diag *diagv1.PortworxDiag) map[string]interface{} {
-	if diag.Status.Phase != "" || diag.Status.ClusterUUID != "" || diag.Status.NodeStatuses != nil || !reflect.DeepEqual(diag.Status.PodLogsStatus, diagv1.PodLogStatus{}) {
+	if diag.Status.Phase != "" || diag.Status.ClusterUUID != "" || diag.Status.NodeStatuses != nil || diag.Status.PodLogsStatus != (diagv1.PodLogStatus{}) {
 		return nil
 	}
 	return map[string]interface{}{
@@ -616,7 +638,7 @@ func getOverallPhasePatch(diag *diagv1.PortworxDiag) []map[string]interface{} {
 				newMessage = "All diags collected successfully, but pod logs colelction is in progress"
 			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusPending {
 				newPhase = diagv1.DiagStatusInProgress
-				newMessage = "All diags collected successfully, pod logs colelction is pending"
+				newMessage = "All diags collected successfully, pod logs collection is pending"
 			}
 		}
 		if len(diag.Status.NodeStatuses) == 0 {
@@ -802,27 +824,41 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 		return err
 	}
 
-	pods, err := c.getDiagPods(diag.Namespace, diag.Name)
+	podsForNodeDiags, err := c.getDiagPods(diag.Namespace, diag.Name)
 	if err != nil {
 		return err
 	}
 
-	var podLogsPod *v1.Pod
-	nodeDiagPods := &v1.PodList{}
+	podsForPodLogs, err := c.getDiagPodsForPodLogs(diag.Namespace, diag.Name)
+	if err != nil {
+		return err
+	}
 
-	for _, pod := range pods.Items {
-		if pod.Spec.Containers[0].Args[7] == "portworx" {
-			podLogsPod = &pod
-		} else {
-			nodeDiagPods.Items = append(nodeDiagPods.Items, pod)
+	NodeToPodMapforPodLogs := make(map[string]*v1.Pod)
+	if podsForPodLogs != nil {
+		for _, p := range podsForPodLogs.Items {
+			tmp := p // To avoid referencing the loop variable
+			NodeToPodMapforPodLogs[p.Spec.NodeName] = &tmp
 		}
 	}
 
-	podsForPodLogs := make(map[string]*v1.Pod)
-	if podLogsPod != nil {
-		podsForPodLogs[podLogsPod.Spec.NodeName] = podLogsPod
-	}
-	logrus.Infof("Pods for pod logs: %v", podsForPodLogs)
+	// var podLogsPod *v1.Pod
+	// nodeDiagPods := &v1.PodList{}
+
+	// for _, pod := range pods.Items {
+	// 	if pod.Spec.Containers[0].Args[7] == "portworx" {
+	// 		podLogsPod = &pod
+	// 	} else {
+	// 		nodeDiagPods.Items = append(nodeDiagPods.Items, pod)
+	// 	}
+	// }
+
+	// podsForPodLogs := make(map[string]*v1.Pod)
+	// if podLogsPod != nil {
+	// 	logrus.Infof("podLogsPod's node: %v", podLogsPod.Spec.NodeName)
+	// 	podsForPodLogs[podLogsPod.Spec.NodeName] = podLogsPod
+	// }
+	// logrus.Infof("Pods for pod logs: %v", &podsForPodLogs)
 
 	// List all k8s nodes in the cluster, but only if we have a label selector
 	// Otherwise just pass an empty list through
@@ -836,13 +872,15 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 	}
 
 	// Get what changes we need to make between real and desired
-	prs, err := c.getPodsDiff(nodeDiagPods, nodes, diag, stc, nodeIDToNodeName)
+	prs, err := c.getPodsDiff(podsForNodeDiags, nodes, diag, stc, nodeIDToNodeName)
 	if err != nil {
 		logrus.WithError(err).Error("Failed to check pods for required operations")
 		return err
 	}
 
-	c.getPodsDiffForPodLogs(podsForPodLogs, diag, nodeIDToNodeName, &prs)
+	c.getPodsDiffForPodLogs(NodeToPodMapforPodLogs, diag, nodeIDToNodeName, &prs)
+
+	logrus.Infof("prs: %v", prs)
 
 	err = c.updateDiagFields(diag, stc, &prs)
 	if err != nil {
@@ -874,12 +912,14 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 
 	if diag.Spec.Portworx.CollectPodLogs && prs.nodesToCreatePodsForPodLogs != "" {
 		nodeID := nodeNameToNodeID[prs.nodesToCreatePodsForPodLogs]
-		podTemplate, err := makeDiagPodTemplate(stc, diag, stc.Namespace, prs.nodesToCreatePodsForPodLogs, nodeID, "portworx")
+		podTemplate, err := makeDiagPodTemplate(stc, diag, stc.Namespace, prs.nodesToCreatePodsForPodLogs, nodeID, "-px-pod-logs")
 		if err != nil {
 			logrus.WithError(err).Errorf("Failed to create diags collection pod template")
 			k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod template: %v", err))
 		} else {
 			err = c.podControl.CreatePods(context.TODO(), diag.Namespace, podTemplate, diag, metav1.NewControllerRef(diag, controllerKind))
+			logrus.Infof("Created diag pods for pod logs: %v", prs.nodesToCreatePodsForPodLogs)
+			logrus.Infof("Pod name: %s", podTemplate.Name)
 			if err != nil {
 				logrus.WithError(err).Warnf("Failed to create diags collection pod")
 				k8s.WarningEvent(c.recorder, diag, "PodCreateFailed", fmt.Sprintf("Failed to create diags collection pod: %v", err))
