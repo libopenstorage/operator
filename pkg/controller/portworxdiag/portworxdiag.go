@@ -504,27 +504,27 @@ func (c *Controller) getPodsDiff(pods *v1.PodList, nodes *v1.NodeList, diag *dia
 func (c *Controller) getPodsDiffForPodLogs(pods *v1.PodList, diag *diagv1.PortworxDiag, nodeIDToNodeName map[string]string, prs *podReconcileStatus) {
 	nodeToPodMapForPodLogs := getNodeToPodMap(pods)
 	for _, nodeName := range nodeIDToNodeName {
-		podExists := nodeToPodMapForPodLogs[nodeName]
+		existingPod := nodeToPodMapForPodLogs[nodeName]
 		if diag.Spec.Portworx.CollectPodLogs && diag.Status.PodLogsStatus == (diagv1.PodLogStatus{}) {
 			prs.podLogsStatusToAdd = &diagv1.PodLogStatus{Status: diagv1.PodLogStatusPending, Message: ""}
-			if podExists == nil {
+			if existingPod == nil {
 				prs.nodesToCreatePodsForPodLogs = nodeName
 			}
 			return
 		}
-		if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusFailed || diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusCompleted || podExists.Status.Phase == v1.PodSucceeded {
-			if podExists != nil {
-				prs.podsToDelete = append(prs.podsToDelete, nodeToPodMapForPodLogs[nodeName])
+		if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusFailed || diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusCompleted {
+			if existingPod != nil {
+				prs.podsToDelete = append(prs.podsToDelete, existingPod)
 			}
 			return
 		}
 		if !diag.Spec.Portworx.CollectPodLogs {
-			if podExists != nil {
-				prs.podsToDelete = append(prs.podsToDelete, nodeToPodMapForPodLogs[nodeName])
+			if existingPod != nil {
+				prs.podsToDelete = append(prs.podsToDelete, existingPod)
 			}
 			return
 		}
-		if prs.podLogsStatusToAdd.Status == diagv1.PodLogStatusInProgress && podExists == nil {
+		if prs.podLogsStatusToAdd.Status == diagv1.PodLogStatusInProgress && existingPod == nil {
 			prs.nodesToCreatePodsForPodLogs = nodeName
 			return
 		}
@@ -624,21 +624,52 @@ func getOverallPhasePatch(diag *diagv1.PortworxDiag) []map[string]interface{} {
 		} else if newPhase == diagv1.DiagStatusFailed {
 			if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusInProgress {
 				newPhase = diagv1.DiagStatusPartialFailure
-				newMessage = "Failed to collect node diags, pod logs colelction is in progress"
+				newMessage = "Failed to collect node diags, pod logs collection is in progress"
 			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusCompleted {
 				newPhase = diagv1.DiagStatusPartialFailure
-				newMessage = "Pod logs colelction is completed, but failed to collect node diags"
+				newMessage = "Pod logs collection is completed, but failed to collect node diags"
+			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusPending {
+				newPhase = diagv1.DiagStatusPartialFailure
+				newMessage = "Failed to collect node diags, pod logs collection is pending"
 			}
 		} else if newPhase == diagv1.DiagStatusCompleted {
 			if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusFailed {
 				newPhase = diagv1.DiagStatusPartialFailure
-				newMessage = "All diags collected successfully, but failed to collect pod logs"
+				newMessage = "All node diags collected successfully, but failed to collect pod logs"
 			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusInProgress {
 				newPhase = diagv1.DiagStatusInProgress
-				newMessage = "All diags collected successfully, but pod logs colelction is in progress"
+				newMessage = "All node diags collected successfully, pod logs collection is in progress"
 			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusPending {
 				newPhase = diagv1.DiagStatusInProgress
-				newMessage = "All diags collected successfully, pod logs collection is pending"
+				newMessage = "All node diags collected successfully, pod logs collection is pending"
+			}
+		} else if newPhase == diagv1.DiagStatusInProgress {
+			if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusFailed {
+				newPhase = diagv1.DiagStatusPartialFailure
+				newMessage = "Node diags collection is in progress, but failed to collect pod logs"
+			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusCompleted {
+				newMessage = "Node diags collection is in progress, Pod logs collection is completed"
+			}
+		} else if newPhase == diagv1.DiagStatusPending {
+			if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusFailed {
+				newPhase = diagv1.DiagStatusPartialFailure
+				newMessage = "Node diags collection is pending, but failed to collect pod logs"
+			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusCompleted {
+				newPhase = diagv1.DiagStatusInProgress
+				newMessage = "Node diags collection is pending, Pod logs collection is completed"
+			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusInProgress {
+				newPhase = diagv1.DiagStatusInProgress
+				newMessage = "Node diags collection is pending, Pod logs collection is in progress"
+			}
+		} else if newPhase == diagv1.DiagStatusPartialFailure {
+			if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusFailed {
+				newMessage = "Node diags collection is partially failed, but failed to collect pod logs"
+			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusInProgress {
+				newMessage = "Node diags collection is partially failed, pod logs collection is in progress"
+			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusPending {
+				newMessage = "Node diags collection is partially failed, pod logs collection is pending"
+			} else if diag.Status.PodLogsStatus.Status == diagv1.PodLogStatusCompleted {
+				newMessage = "Node diags collection is partially failed, pod logs collection is completed"
 			}
 		}
 	}
@@ -846,6 +877,7 @@ func (c *Controller) syncPortworxDiag(diag *diagv1.PortworxDiag) error {
 		return err
 	}
 
+	// Get what changes we need to make between real and desired for pod logs
 	c.getPodsDiffForPodLogs(podsForPodLogs, diag, nodeIDToNodeName, &prs)
 
 	err = c.updateDiagFields(diag, stc, &prs)
