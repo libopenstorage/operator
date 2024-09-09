@@ -1250,7 +1250,7 @@ func getStorageNodeMappingFromRPC(
 	k8sClient client.Client,
 ) (map[string]string, map[string]string, error) {
 	nodeClient := api.NewOpenStorageNodeClient(sdkConn)
-	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient, false)
+	ctx, err := SetupContextWithToken(context.Background(), cluster, k8sClient)
 	if err != nil {
 		return nil, nil, err
 	}

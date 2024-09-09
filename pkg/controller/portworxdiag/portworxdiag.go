@@ -267,7 +267,7 @@ func (c *Controller) getNodeIDsWithSelectedVolumes(diag *diagv1.PortworxDiag, st
 	nodeIDMap := map[string]bool{}
 
 	volumeClient := api.NewOpenStorageVolumeClient(c.grpcConn)
-	ctx, err := pxutil.SetupContextWithToken(context.Background(), stc, c.client, false)
+	ctx, err := pxutil.SetupContextWithToken(context.Background(), stc, c.client)
 	if err != nil {
 		return nil, err
 	}
