@@ -132,7 +132,7 @@ spec:
             - name: dbusmount
               mountPath: /var/run/dbus
         - name: csi-node-driver-registrar
-          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.8.0
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.12.0
           imagePullPolicy: Always
           args:
             - "--v=5"
@@ -317,14 +317,16 @@ spec:
       serviceAccount: px-csi-account
       containers:
         - name: csi-external-provisioner
-          image: docker.io/openstorage/csi-provisioner:v1.6.1-1
+          image: registry.k8s.io/sig-storage/csi-provisioner:v5.1.0
           imagePullPolicy: Always
           args:
             - "--v=3"
-            - "--provisioner=pxd.portworx.com"
             - "--csi-address=$(ADDRESS)"
-            - "--enable-leader-election"
-            - "--leader-election-type=leases"
+            - "--leader-election=true"
+            - "--default-fstype=ext4"
+            - "--extra-create-metadata=true"
+            - "--timeout=5m"
+            - "--feature-gates=Topology=false"  
           env:
             - name: ADDRESS
               value: /csi/csi.sock
@@ -334,7 +336,7 @@ spec:
             - name: socket-dir
               mountPath: /csi
         - name: csi-snapshotter
-          image: registry.k8s.io/sig-storage/csi-snapshotter:v4.0.0
+          image: registry.k8s.io/sig-storage/csi-snapshotter:v8.1.0
           imagePullPolicy: Always
           args:
             - "--v=3"
@@ -349,7 +351,7 @@ spec:
             - name: socket-dir
               mountPath: /csi
         - name: csi-snapshot-controller
-          image: registry.k8s.io/sig-storage/snapshot-controller:v4.0.0
+          image: registry.k8s.io/sig-storage/snapshot-controller:v8.1.0
           imagePullPolicy: Always
           args:
             - "--v=3"
@@ -363,7 +365,7 @@ spec:
             - name: socket-dir
               mountPath: /csi
         - name: csi-resizer
-          image: registry.k8s.io/sig-storage/csi-resizer:v1.8.0
+          image: registry.k8s.io/sig-storage/csi-resizer:v1.12.0
           imagePullPolicy: Always
           args:
             - "--v=3"

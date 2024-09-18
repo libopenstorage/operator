@@ -629,8 +629,13 @@ func getCSIDeploymentSpec(
 		}
 	}
 
+	// For external provisioner images with a major version >= 5,
+	// the Topology Feature Gate is enabled by default. Override this if
+	// CSI topology is explicitly enabled or not in the cluster spec.
 	if cluster.Spec.CSI.Topology != nil && cluster.Spec.CSI.Topology.Enabled {
 		args = append(args, "--feature-gates=Topology=true")
+	} else if util.GetImageMajorVersion(provisionerImage) >= 5 {
+		args = append(args, "--feature-gates=Topology=false")
 	}
 
 	sc := &v1.SecurityContext{
