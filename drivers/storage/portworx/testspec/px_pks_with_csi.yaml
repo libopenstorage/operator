@@ -105,6 +105,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
           volumeMounts:
             - name: csi-driver-path
               mountPath: /csi

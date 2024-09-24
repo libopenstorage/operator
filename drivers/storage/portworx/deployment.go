@@ -597,6 +597,9 @@ func (t *template) csiRegistrarContainer() *v1.Container {
 				MountPath: "/registration",
 			},
 		},
+		SecurityContext: &v1.SecurityContext{
+			Privileged: boolPtr(true),
+		},
 	}
 
 	if t.cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {

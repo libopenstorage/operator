@@ -56,6 +56,8 @@ spec:
           imagePullPolicy: Always
           name: csi-node-driver-registrar
           resources: {}
+          securityContext:
+            privileged: true
           terminationMessagePath: ""
           terminationMessagePolicy: ""
           volumeMounts:

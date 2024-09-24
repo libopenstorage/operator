@@ -396,6 +396,9 @@ func csiRegistrarContainer(cluster *corev1.StorageCluster) *v1.Container {
 				MountPath: "/registration",
 			},
 		},
+		SecurityContext: &v1.SecurityContext{
+			Privileged: boolPtr(true),
+		},
 	}
 
 	if cluster.Status.DesiredImages.CSINodeDriverRegistrar != "" {

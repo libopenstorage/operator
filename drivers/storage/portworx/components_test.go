@@ -168,6 +168,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	setUpFakeRootCert(t)
+	defer os.Remove(fakeRootCertPath)
 	logrus.SetLevel(logrus.TraceLevel)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
@@ -1118,6 +1119,7 @@ func TestUpdateServiceAccountTokenSecretCaCrt(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	setUpMockCoreOps(mockCtrl, fakek8sclient.NewSimpleClientset())
 	setUpFakeRootCert(t)
+	defer os.Remove(fakeRootCertPath)
 	reregisterComponents()
 	k8sClient := testutil.FakeK8sClient()
 	driver := portworx{}
