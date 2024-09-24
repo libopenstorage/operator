@@ -59,6 +59,7 @@ import (
 	"github.com/libopenstorage/operator/pkg/mock/mockcore"
 	"github.com/libopenstorage/operator/pkg/util"
 	k8sutil "github.com/libopenstorage/operator/pkg/util/k8s"
+	"github.com/libopenstorage/operator/pkg/util/maps"
 	testutil "github.com/libopenstorage/operator/pkg/util/test"
 )
 
@@ -287,7 +288,7 @@ func TestBasicComponentsInstall(t *testing.T) {
 	require.Equal(t, expectedPXSaTokenSecret.Namespace, saTokenSecret.Namespace)
 	require.Len(t, saTokenSecret.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, saTokenSecret.OwnerReferences[0].Name)
-	require.Equal(t, len(expectedPXSaTokenSecret.Data), len(saTokenSecret.Data))
+	require.Equal(t, maps.KeysSorted(expectedPXSaTokenSecret.Data), maps.KeysSorted(saTokenSecret.Data))
 	require.Equal(t, []byte(cluster.Namespace), saTokenSecret.Data["namespace"])
 	require.Equal(t, []byte("dG9rZW4tdmFsdWU="), saTokenSecret.Data["token"])
 
@@ -556,7 +557,7 @@ func TestPortworxWithCustomSecretsNamespace(t *testing.T) {
 	require.Equal(t, expectedSecret.Namespace, actualSecret.Namespace)
 	require.Len(t, actualSecret.OwnerReferences, 1)
 	require.Equal(t, cluster.Name, actualSecret.OwnerReferences[0].Name)
-	require.Equal(t, len(expectedSecret.Data), len(actualSecret.Data))
+	require.Equal(t, maps.KeysSorted(expectedSecret.Data), maps.KeysSorted(actualSecret.Data))
 	require.Equal(t, []byte(cluster.Namespace), actualSecret.Data["namespace"])
 
 	// Disable storage should result in deleting objects even from secrets namespace
