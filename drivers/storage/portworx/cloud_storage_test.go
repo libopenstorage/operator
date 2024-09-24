@@ -582,9 +582,15 @@ func TestCreateStorageDistributionMatrixAlreadyExists(t *testing.T) {
 
 func matrixSetup(t *testing.T) {
 	linkPath := path.Join(os.Getenv("GOPATH"), "src/github.com/libopenstorage/operator/vendor/github.com/libopenstorage/cloudops/specs")
-	matrixCleanup(t)
-	err := os.Symlink(linkPath, "specs")
-	require.NoError(t, err, "failed to create symlink")
+	cwd, err := os.Getwd()
+	require.NoError(t, err, "failed to get current working directory")
+
+	specsPath := path.Join(cwd, "specs")
+	os.Remove(specsPath) // don't care about the error
+	err = os.Symlink(linkPath, specsPath)
+	require.NoError(t, err, "failed to create symlink at %s", specsPath)
+	_, err = os.ReadFile(path.Join(specsPath, "decisionmatrix/azure.yaml"))
+	require.NoError(t, err, "failed to read azure.yaml")
 }
 
 func matrixCleanup(t *testing.T) {
