@@ -582,6 +582,7 @@ func TestCreateStorageDistributionMatrixAlreadyExists(t *testing.T) {
 
 func matrixSetup(t *testing.T) {
 	linkPath := path.Join(os.Getenv("GOPATH"), "src/github.com/libopenstorage/operator/vendor/github.com/libopenstorage/cloudops/specs")
+	matrixCleanup(t)
 	err := os.Symlink(linkPath, "specs")
 	require.NoError(t, err, "failed to create symlink")
 }
