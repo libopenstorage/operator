@@ -482,16 +482,6 @@ func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 		cluster, ok := testSpec.(*corev1.StorageCluster)
 		require.True(t, ok)
 
-		verifyTokenRefreshed := func(oldToken string) string {
-			pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
-			require.NoError(t, err)
-			newToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
-			require.Eventually(t, func() bool {
-				return oldToken != newToken
-			}, 10*time.Minute, 15*time.Second, "the token did not get refreshed")
-			return newToken
-		}
-
 		cluster = ci_utils.DeployAndValidateStorageCluster(cluster, ci_utils.PxSpecImages, t)
 		pxSaSecret, err := coreops.Instance().GetSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 		require.NoError(t, err)
@@ -499,15 +489,19 @@ func BasicInstallWithPxSaTokenRefresh(tc *types.TestCase) func(*testing.T) {
 
 		time.Sleep(5 * time.Minute)
 
-		refreshedToken := verifyTokenRefreshed(startupToken)
+		refreshedToken, err := testutil.ValidateTokenRefreshed(startupToken, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval)
+		require.NoError(t, err)
 		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
 
 		err = coreops.Instance().DeleteSecret(pxutil.PortworxServiceAccountTokenSecretName, cluster.Namespace)
 		require.NoError(t, err)
 		time.Sleep(2 * time.Minute)
 
-		verifyTokenRefreshed(refreshedToken)
+		_, err = testutil.ValidateTokenRefreshed(refreshedToken, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval)
+		require.NoError(t, err)
 		err = testutil.ValidateStorageCluster(ci_utils.PxSpecImages, cluster, ci_utils.DefaultValidateDeployTimeout, ci_utils.DefaultValidateDeployRetryInterval, true, "")
+		require.NoError(t, err)
 
 		// Delete and validate the deletion
 		ci_utils.UninstallAndValidateStorageCluster(cluster, t)

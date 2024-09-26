@@ -1899,6 +1899,29 @@ func validatePortworxTokenRefresh(cluster *corev1.StorageCluster, timeout, inter
 	return nil
 }
 
+func ValidateTokenRefreshed(oldToken string, cluster *corev1.StorageCluster, timeout, interval time.Duration) (string, error) {
+	t := func() (interface{}, bool, error) {
+		pxSaSecret, err := coreops.Instance().GetSecret(pxSaTokenSecretName, cluster.Namespace)
+		if err != nil {
+			return nil, true, err
+		}
+		newToken := string(pxSaSecret.Data[core.ServiceAccountTokenKey])
+		if newToken == oldToken {
+			return nil, true, fmt.Errorf("serviceaccount token hasn't been refreshed")
+		}
+		return newToken, false, nil
+	}
+	newToken, err := task.DoRetryWithTimeout(t, timeout, interval)
+	if err != nil {
+		return "", err
+	}
+	token, ok := newToken.(string)
+	if !ok {
+		return "", fmt.Errorf("%v cannot be cast to string", token)
+	}
+	return token, nil
+}
+
 // GetExpectedPxNodeList will get the list of nodes that should be included
 // in the given Portworx cluster, by seeing if each non-master node matches the given
 // node selectors and affinities.
