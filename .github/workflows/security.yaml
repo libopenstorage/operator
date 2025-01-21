@@ -8,7 +8,7 @@ jobs:
     name: Security AI Code Agent
     steps:
       - name: Security AI
-        uses: dlidstrom/genai-code-review@v3
+        uses: dlidstrom/genai-code-review@v3.0.2
         with:
           openai_api_key: ${{ secrets.openai_api_key }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
